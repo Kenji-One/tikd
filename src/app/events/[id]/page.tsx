@@ -82,8 +82,6 @@ const events: Event[] = [
 ];
 
 export default function EventDetail() {
-  const ticketQty = 1;
-
   return (
     <>
       {/* ───────── Hero Section ───────── */}
@@ -317,13 +315,5 @@ export default function EventDetail() {
         <EventCarouselSection events={events} title="Similar Events" />
       </section>
     </>
-  );
-}
-
-function SectionHeading({ title }: { title: string }) {
-  return (
-    <h2 className="mb-4 border-b border-neutral-800 pb-1 text-xl font-semibold text-neutral-0">
-      {title}
-    </h2>
   );
 }

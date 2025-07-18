@@ -4,8 +4,6 @@
 "use client";
 
 import Image from "next/image";
-import { useRef } from "react";
-import { ChevronLeft, ChevronRight, MessageCircle, Plus } from "lucide-react";
 import InfoRow from "@/components/ui/InfoRow";
 
 import { Button } from "@/components/ui/Button";

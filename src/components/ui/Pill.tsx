@@ -1,6 +1,6 @@
 "use client";
 
-import { cloneElement, ReactElement } from "react";
+import { cloneElement, ReactElement, isValidElement } from "react";
 import clsx from "classnames";
 
 /* -------------------------------------------------------------------------- */
@@ -8,7 +8,7 @@ import clsx from "classnames";
 /* -------------------------------------------------------------------------- */
 
 /** Convert #RRGGBB → rgba(r,g,b,a) */
-function hexToRgba(hex: string, alpha: number) {
+function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace("#", "");
   const [r, g, b] = [
     parseInt(h.slice(0, 2), 16),
@@ -22,10 +22,16 @@ function hexToRgba(hex: string, alpha: number) {
 /*  Types                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/** Minimal props we need to read from an SVG icon
+ *  (`className` is the only one we touch). */
+interface IconProps {
+  className?: string;
+}
+
 export interface PillProps {
   text: string;
   /** SVG icon must use `stroke="currentColor"` / `fill="currentColor"` */
-  icon?: ReactElement<any>;
+  icon?: ReactElement<IconProps>;
   /** Foreground colour (#FFEA2D, rgb(), etc.).
    *  BG = this colour @ 16 % opacity. */
   color?: string;
@@ -51,13 +57,11 @@ export function Pill({ icon, text, color, className }: PillProps) {
 
   /* make icon inherit currentColor + unified size */
   const renderedIcon =
-    icon &&
-    cloneElement(
-      icon as ReactElement<any>,
-      {
-        className: clsx((icon.props as any)?.className, "w-4 h-4"),
-      } as any
-    );
+    icon && isValidElement<IconProps>(icon)
+      ? cloneElement<IconProps>(icon, {
+          className: clsx(icon.props.className, "w-4 h-4"),
+        })
+      : null;
 
   return (
     <span

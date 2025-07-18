@@ -1,5 +1,3 @@
-import { Minus, Plus } from "lucide-react";
-
 interface Props {
   label: string;
   price: number;

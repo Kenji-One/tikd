@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EventCard } from "@/components/ui/EventCard";

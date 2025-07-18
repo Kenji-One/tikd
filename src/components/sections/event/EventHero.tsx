@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { Calendar, MapPin } from "lucide-react";
 import TicketSelector from "@/components/ui/TicketSelector";
 import Pill from "@/components/ui/Pill";
 import { CATEGORY_COLOURS } from "@/lib/constants";

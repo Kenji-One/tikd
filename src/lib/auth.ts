@@ -1,9 +1,17 @@
-import NextAuth, { AuthOptions, getServerSession } from "next-auth";
+import NextAuth, {
+  AuthOptions,
+  getServerSession,
+  User as NextAuthUser,
+} from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 import { connectDB } from "@/lib/db";
 import User, { IUser } from "@/models/User";
+
+/* -------------------------------------------------------------------------- */
+/*  Auth options                                                              */
+/* -------------------------------------------------------------------------- */
 
 export const authOptions: AuthOptions = {
   session: { strategy: "jwt" },
@@ -38,18 +46,22 @@ export const authOptions: AuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.role = (user as any).role;
+      if (user) token.role = (user as NextAuthUser).role; // no `any`
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub as string;
-        session.user.role = (token.role as "user" | "admin") ?? "user";
+        session.user.role = token.role ?? "user";
       }
       return session;
     },
   },
 };
 
+/* -------------------------------------------------------------------------- */
+/*  Helpers                                                                   */
+/* -------------------------------------------------------------------------- */
+
 export const auth = () => getServerSession(authOptions);
-export const handler = NextAuth(authOptions); // handy export if needed elsewhere
+export const handler = NextAuth(authOptions);

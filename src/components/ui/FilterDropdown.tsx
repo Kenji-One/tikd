@@ -2,7 +2,6 @@
 
 import { Fragment } from "react";
 import { Menu, Transition } from "@headlessui/react";
-import { ChevronDown } from "lucide-react";
 import clsx from "clsx";
 
 type Props = {

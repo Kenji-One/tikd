@@ -18,12 +18,12 @@ export function Sheet({ side = "left", open, onClose, children }: SheetProps) {
 
   if (typeof window === "undefined" || !open) return null;
 
-  const translate =
-    side === "left"
-      ? "-translate-x-full"
-      : side === "right"
-        ? "translate-x-full"
-        : "translate-y-full";
+  // const translate =
+  //   side === "left"
+  //     ? "-translate-x-full"
+  //     : side === "right"
+  //       ? "translate-x-full"
+  //       : "translate-y-full";
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex">

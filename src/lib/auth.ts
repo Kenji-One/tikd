@@ -8,7 +8,10 @@ import bcrypt from "bcryptjs";
 
 import { connectDB } from "@/lib/db";
 import User, { IUser } from "@/models/User";
+import { JWT } from "next-auth/jwt";
 
+// helper type just for this file
+type TokenWithRole = JWT & { role?: "user" | "admin" };
 /* -------------------------------------------------------------------------- */
 /*  Auth options                                                              */
 /* -------------------------------------------------------------------------- */
@@ -50,9 +53,11 @@ export const authOptions: AuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      const t = token as TokenWithRole;
+
       if (session.user) {
-        session.user.id = token.sub as string;
-        session.user.role = token.role ?? "user";
+        session.user.id = token.sub ?? "";
+        session.user.role = t.role ?? "user";
       }
       return session;
     },

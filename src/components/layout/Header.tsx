@@ -25,7 +25,7 @@ export default function Header() {
       <div className="mx-auto flex max-w-[1200px] items-center justify-between px-4 pt-4">
         {/* Logo */}
         <Link href="/" className="flex items-center">
-          <Image src="/logo.svg" alt="Tikd." width={72} height={24} priority />
+          <Image src="/Logo.svg" alt="Tikd." width={72} height={24} priority />
         </Link>
 
         {/* Search + Desktop Nav */}

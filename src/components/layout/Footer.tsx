@@ -39,7 +39,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10 pb-14">
           {/* Left: Logo + copyright */}
           <div>
-            <Image src="/logo.svg" width={67} height={24} alt="Tikd Logo" />
+            <Image src="/Logo.svg" width={67} height={24} alt="Tikd Logo" />
             <p className="mt-6 text-neutral-0">
               Copyright© 2025 TIKD. All rights reserved.
             </p>

@@ -1,11 +1,13 @@
 // src/components/sections/InstagramGallery.tsx
+"use client";
+
+import Image from "next/image";
 import React from "react";
 
-/**
- * List every image you want to show (14 cells in the grid).
- * – Path is relative to NEXT_PUBLIC_URL, so `/dummy/foo.png` maps to /public/dummy/foo.png
- * – If you have fewer than 14 unique PNGs, just repeat some of them.
- */
+/* -------------------------------------------------------------------------- */
+/*  Assets                                                                    */
+/* -------------------------------------------------------------------------- */
+
 const IMAGES = [
   "/dummy/event-1.png",
   "/dummy/event-2.png",
@@ -23,50 +25,57 @@ const IMAGES = [
   "/dummy/event-4.png",
 ];
 
-/* -------------------------------------------------------------------------- */
-/*  Grid slot definitions (col, row, colSpan, rowSpan)                        */
-/* -------------------------------------------------------------------------- */
-const POSITIONS = [
-  [1, 1, 1, 1], //  0 – small
-  [2, 1, 2, 2], //  1 – HERO (The Motet-like poster)
-  [4, 1, 1, 1], //  2 – small
-  [5, 1, 1, 1], //  3 – small
-  [1, 2, 1, 1], //  4 – small
-  [4, 2, 1, 1], //  5 – small
-  [5, 2, 1, 1], //  6 – small
-  [1, 3, 1, 1], //  7 – small
-  [2, 3, 1, 1], //  8 – small
-  [3, 3, 1, 1], //  9 – small
-  [4, 3, 2, 2], // 10 – FEATURE (World-Pride-like poster)
-  [1, 4, 1, 1], // 11 – small
-  [2, 4, 1, 1], // 12 – small
-  [3, 4, 1, 1], // 13 – small
-] as const;
+/* col, row, colSpan, rowSpan */
+const POSITIONS: Readonly<[number, number, number, number][]> = [
+  [1, 1, 1, 1],
+  [2, 1, 2, 2], // hero
+  [4, 1, 1, 1],
+  [5, 1, 1, 1],
+  [1, 2, 1, 1],
+  [4, 2, 1, 1],
+  [5, 2, 1, 1],
+  [1, 3, 1, 1],
+  [2, 3, 1, 1],
+  [3, 3, 1, 1],
+  [4, 3, 2, 2], // feature
+  [1, 4, 1, 1],
+  [2, 4, 1, 1],
+  [3, 4, 1, 1],
+];
 
 /* -------------------------------------------------------------------------- */
 /*  Component                                                                 */
 /* -------------------------------------------------------------------------- */
+
 export default function InstagramGallery() {
   return (
-    <section className="py-20 max-w-[1440px] mx-auto px-4">
+    <section className="mx-auto max-w-[1440px] px-4 py-20">
       <h2 className="mx-auto mb-8 w-full max-w-[1201px] text-2xl font-semibold text-white">
         Instagram Posts Reel
       </h2>
 
       <div className="grid grid-cols-2 auto-rows-[288px] md:grid-cols-5">
-        {POSITIONS.map(([c, r, cs, rs], i) => (
+        {POSITIONS.map(([col, row, colSpan, rowSpan], i) => (
           <div
             key={i}
-            className={`
-              overflow-hidden 
-              md:col-start-${c} md:row-start-${r}
-              md:col-span-${cs} md:row-span-${rs}
-            `}
+            /* Inline grid placement ─ safely typed / no Tailwind needed */
+            style={{
+              gridColumnStart: col,
+              gridRowStart: row,
+              gridColumnEnd: `span ${colSpan}`,
+              gridRowEnd: `span ${rowSpan}`,
+            }}
+            /* `relative` ensures the fill Image knows its box,
+     just in case the parent grid item ever gets `position: static` resets */
+            className="relative overflow-hidden"
           >
-            <img
-              src={IMAGES[i % IMAGES.length]} // cycle if positions > images
-              alt={`Gallery item ${i + 1}`}
-              className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+            <Image
+              src={IMAGES[i % IMAGES.length]} // make sure this 200-OKs
+              alt={`Instagram post ${i + 1}`}
+              fill
+              sizes="(max-width: 768px) 50vw, 20vw"
+              className="object-cover transition-transform duration-300 hover:scale-105"
+              priority={i < 3} // optional: eager-load first few
             />
           </div>
         ))}

@@ -1,0 +1,179 @@
+/* ------------------------------------------------------------------
+   Tikd. Global Styles / Tailwind v4.1 CSS-first configuration
+   ------------------------------------------------------------------ */
+
+/* 1) Load Tailwind's layers */
+@import "tailwindcss";
+
+/* 2) Load legacy plugins (v4-compatible) */
+@plugin "@tailwindcss/forms";
+/* ------------------------------------------------------------------
+   Autofill override – keep dark theme even when browser fills fields
+   ------------------------------------------------------------------ */
+
+/* 3) Font-face registrations (must be top-level; served from /public/fonts/...) */
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-Black.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Gilroy";
+  src: url("/fonts/gilroy/Gilroy-Heavy.ttf") format("truetype");
+  font-weight: 950;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 4) Tikd Design Tokens -> Tailwind utilities via @theme
+      NOTE: Naming pattern is --color-{group}-{step}, --font-*, --radius-*
+      These become classes like bg-primary-500, text-neutral-200, rounded-card, font-sans, etc.
+*/
+@theme {
+  /* Fonts */
+  --font-sans: "Gilroy", "Inter", sans-serif;
+
+  /* Neutral scale */
+  --color-neutral-950: #08080f;
+  --color-neutral-948: #121220;
+  --color-neutral-900: #181828;
+  --color-neutral-800: #2c2c44;
+  --color-neutral-700: #414162;
+  --color-neutral-600: #59597d;
+  --color-neutral-500: #727293;
+  --color-neutral-400: #8c8ca8;
+  --color-neutral-300: #a6a7bc;
+  --color-neutral-200: #c2c3d1;
+  --color-neutral-100: #dfdfe6;
+  --color-neutral-50: #f0f0f4;
+  --color-neutral-0: #ffffff; /* Optional “0” step */
+
+  /* Primary scale */
+  --color-primary-952: #a670ff;
+  --color-primary-951: #9a51ff;
+  --color-primary-950: #1c0c3a;
+  --color-primary-900: #28005d;
+  --color-primary-800: #3a0083;
+  --color-primary-700: #5a00c7;
+  --color-primary-600: #7b00ff;
+  --color-primary-500: #8f4aff;
+  --color-primary-400: #aa73ff;
+  --color-primary-300: #bd99ff;
+  --color-primary-200: #d1bcff;
+  --color-primary-100: #e7deff;
+  --color-primary-50: #f3eeff;
+
+  /* Success scale */
+  --color-success-950: #001f06;
+  --color-success-900: #00340f;
+  --color-success-800: #006324;
+  --color-success-700: #009339;
+  --color-success-600: #00c951;
+  --color-success-500: #45ff79;
+  --color-success-400: #80ff9b;
+  --color-success-300: #a6ffb6;
+  --color-success-200: #d1ffd8;
+  --color-success-100: #e9ffec;
+  --color-success-50: #f4fff6;
+
+  /* Warning scale */
+  --color-warning-950: #2b0c00;
+  --color-warning-900: #3f1400;
+  --color-warning-800: #6f2a00;
+  --color-warning-700: #a04100;
+  --color-warning-600: #d45800;
+  --color-warning-500: #ff7b45;
+  --color-warning-400: #ff987a;
+  --color-warning-300: #ffb4a3;
+  --color-warning-200: #ffcfc5;
+  --color-warning-100: #ffe5e1;
+  --color-warning-50: #fff4f2;
+
+  /* Error scale */
+  --color-error-950: #310001;
+  --color-error-900: #490002;
+  --color-error-800: #750006;
+  --color-error-700: #a9000c;
+  --color-error-600: #dc0013;
+  --color-error-500: #ff454a;
+  --color-error-400: #ff7577;
+  --color-error-300: #ff9e9f;
+  --color-error-200: #ffbfbf;
+  --color-error-100: #ffdadb;
+  --color-error-50: #ffeced;
+
+  /* Card radius */
+  --radius-card: 1.25rem; /* yields class: rounded-card */
+}
+
+/* 5) Project-level CSS custom properties (NOT utilities unless also declared in @theme) */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* Dark preference fallback */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #08080f;
+    --foreground: #ededed;
+  }
+}
+
+/* 6) Base element resets that consume our vars */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans); /* use Tikd sans by default */
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 100%;
+  letter-spacing: -0.28px;
+}
+/* p {
+  line-height: 100%;
+} */

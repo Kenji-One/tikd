@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  src/app/api/events/[id]/route.ts                                   */
+/*  src/app/api/events/[id]/route.ts                                  */
 /* ------------------------------------------------------------------ */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -10,7 +10,6 @@ import Artist, { IArtist } from "@/models/Artist";
 import Organization, { IOrganization } from "@/models/Organization";
 import Ticket from "@/models/Ticket";
 import type { Types } from "mongoose";
-// import User from "@/models/User";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -24,21 +23,13 @@ type EventLean = Omit<IEvent, "organizationId" | "artists"> & {
   _id: Types.ObjectId;
 };
 
-/* Utility: normalise Next 14 **or** Next 15 context */
-const resolveParams = async (
-  ctx: { params: { id: string } } | { params: () => Promise<{ id: string }> }
-) => (typeof ctx.params === "function" ? await ctx.params() : ctx.params);
+type RouteContext = { params: { id: string } };
 
 /* ------------------------------------------------------------------ */
 /*  GET /api/events/:id                                               */
 /* ------------------------------------------------------------------ */
-export async function GET(
-  _req: NextRequest,
-  ctx:
-    | { params: { id: string } } // ← Next 14
-    | { params: () => Promise<{ id: string }> } // ← Next 15
-) {
-  const { id } = await resolveParams(ctx);
+export async function GET(_req: NextRequest, { params }: RouteContext) {
+  const { id } = params;
 
   if (!isObjectId(id)) {
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
@@ -75,7 +66,6 @@ export async function GET(
     { $sample: { size: 4 } }, // random 0-4
     {
       $lookup: {
-        // join user
         from: "users",
         localField: "_id",
         foreignField: "_id",

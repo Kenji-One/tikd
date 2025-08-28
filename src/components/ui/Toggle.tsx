@@ -22,6 +22,9 @@ const TRACK_H: Record<Size, number> = { sm: 32, md: 36, lg: 42 };
 const PAD: Record<Size, number> = { sm: 4, md: 3, lg: 4 }; // inner gap
 const KNOB: Record<Size, number> = { sm: 24, md: 28, lg: 32 }; // knob size
 
+type CSSVarKeys = "--w" | "--h" | "--p" | "--k" | "--tx";
+type CSSVarStyle = React.CSSProperties & Record<CSSVarKeys, string>;
+
 export default function Toggle({
   id,
   name,
@@ -35,7 +38,9 @@ export default function Toggle({
   label,
   ...rest
 }: ToggleProps) {
-  const inputId = id ?? React.useId();
+  const reactId = React.useId();
+  const inputId = id ?? reactId;
+
   const controlled = typeof checked === "boolean";
   const [internal, setInternal] = React.useState<boolean>(!!defaultChecked);
   const isOn = controlled ? !!checked : internal;
@@ -47,12 +52,12 @@ export default function Toggle({
   }
 
   // CSS vars power both the visuals and the exact travel distance.
-  const cssVars: React.CSSProperties = {
-    ["--w" as any]: `${TRACK_W[size]}px`,
-    ["--h" as any]: `${TRACK_H[size]}px`,
-    ["--p" as any]: `${PAD[size]}px`,
-    ["--k" as any]: `${KNOB[size]}px`,
-    ["--tx" as any]: isOn
+  const cssVars: CSSVarStyle = {
+    "--w": `${TRACK_W[size]}px`,
+    "--h": `${TRACK_H[size]}px`,
+    "--p": `${PAD[size]}px`,
+    "--k": `${KNOB[size]}px`,
+    "--tx": isOn
       ? `calc(var(--w) - var(--k) - var(--p) * 2)` // right stop
       : "0px", // left stop
   };

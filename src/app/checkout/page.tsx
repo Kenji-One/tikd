@@ -2,6 +2,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useMemo, useState, useEffect } from "react";
 import { useCart } from "@/store/useCart";
 import { calcPrices } from "@/lib/pricing";
@@ -126,9 +127,9 @@ export default function CheckoutPage() {
         </h1>
         <div className="rounded-2xl bg-neutral-900 p-8 text-center text-neutral-200">
           Your selection is empty.{" "}
-          <a href="/events" className="text-primary-952 underline">
+          <Link href="/events" className="text-primary-952 underline">
             Browse events
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -482,7 +483,7 @@ function Row({
   );
 }
 
-function OfferBanner({
+export function OfferBanner({
   title,
   badge,
   img,

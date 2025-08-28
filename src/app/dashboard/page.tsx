@@ -5,7 +5,6 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -26,7 +25,59 @@ import TicketDialog from "@/components/ui/TicketDialog";
 /* --------------------------------------------------------------- */
 /*  Small fetch helper                                             */
 /* --------------------------------------------------------------- */
-const fetchJSON = (url: string) => fetch(url).then((r) => r.json());
+async function fetchJSON<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  return (await res.json()) as T;
+}
+
+type Org = { _id: string; name: string; logo?: string; website?: string };
+
+type Ticket = {
+  _id: string;
+  eventTitle?: string;
+  event?: { title?: string };
+  date?: string;
+  dateLabel?: string;
+  venue?: string;
+  location?: string;
+  eventImg?: string;
+  image?: string;
+  qty?: number;
+  quantity?: number;
+  badge?: string;
+  qrUrl?: string;
+  qrSvg?: string;
+  reference?: string;
+  refCode?: string;
+};
+
+type MyEvent = {
+  _id: string;
+  title: string;
+  image?: string;
+  date: string;
+  location: string;
+  category?: string;
+};
+
+type DialogTicket = {
+  title: string;
+  dateLabel: string;
+  venue: string;
+  img: string;
+  qty?: number;
+  badge?: string;
+  qrUrl?: string;
+  qrSvg?: string;
+  refCode?: string;
+};
+
+type TabDef = {
+  id: string;
+  label: React.ReactNode;
+  badge?: number;
+  content: React.ReactNode;
+};
 
 /* --------------------------------------------------------------- */
 /*  Small presentational bits                                      */
@@ -103,25 +154,24 @@ function OrgCard({
 /*  Page                                                            */
 /* --------------------------------------------------------------- */
 export default function DashboardPage() {
-  const router = useRouter();
   const { data: session } = useSession();
 
   /* ---------------- react-query calls -------------------------- */
-  const { data: orgs, isLoading: orgsLoading } = useQuery({
+  const { data: orgs, isLoading: orgsLoading } = useQuery<Org[]>({
     queryKey: ["orgs"],
-    queryFn: () => fetchJSON("/api/organizations"),
+    queryFn: () => fetchJSON<Org[]>("/api/organizations"),
     enabled: !!session,
   });
 
-  const { data: tickets, isLoading: tixLoading } = useQuery({
+  const { data: tickets, isLoading: tixLoading } = useQuery<Ticket[]>({
     queryKey: ["tickets"],
-    queryFn: () => fetchJSON("/api/tickets?scope=self"),
+    queryFn: () => fetchJSON<Ticket[]>("/api/tickets?scope=self"),
     enabled: !!session,
   });
 
-  const { data: myEvents, isLoading: eventsLoading } = useQuery({
+  const { data: myEvents, isLoading: eventsLoading } = useQuery<MyEvent[]>({
     queryKey: ["myEvents"],
-    queryFn: () => fetchJSON("/api/events?owned=1"),
+    queryFn: () => fetchJSON<MyEvent[]>("/api/events?owned=1"),
     enabled: !!session,
   });
 
@@ -131,10 +181,10 @@ export default function DashboardPage() {
 
   /* ---------------- local UI state ----------------------------- */
   const [activeId, setActiveId] = useState<string>("tickets");
-  const [openTicket, setOpenTicket] = useState<any | null>(null);
+  const [openTicket, setOpenTicket] = useState<DialogTicket | null>(null);
 
   /* ---------------- tab definitions --------------------------- */
-  const tabs = [
+  const tabs: TabDef[] = [
     {
       id: "tickets",
       label: `Tickets`,
@@ -149,7 +199,7 @@ export default function DashboardPage() {
             </div>
           ) : ticketsCount ? (
             <div className="grid [grid-template-columns:repeat(auto-fill,minmax(186.5px,186.5px))] gap-4">
-              {tickets.map((t: any) => {
+              {tickets.map((t: Ticket) => {
                 const title = t.eventTitle ?? t.event?.title ?? "Event";
                 const dateLabel =
                   t.dateLabel ??
@@ -165,6 +215,17 @@ export default function DashboardPage() {
                 const venue = t.venue ?? t.location ?? "TBA";
                 const img = t.eventImg ?? "/placeholder.jpg";
                 const qty = t.qty ?? t.quantity ?? 1;
+                const dialogTicket: DialogTicket = {
+                  title,
+                  dateLabel,
+                  venue,
+                  img,
+                  qty,
+                  badge: t.badge,
+                  qrUrl: t.qrUrl,
+                  qrSvg: t.qrSvg,
+                  refCode: t.reference ?? t.refCode,
+                };
 
                 return (
                   <TicketCard
@@ -175,9 +236,7 @@ export default function DashboardPage() {
                     img={img}
                     qty={qty}
                     badge={t.badge}
-                    onDetails={() =>
-                      setOpenTicket({ ...t, title, dateLabel, venue, img, qty })
-                    }
+                    onDetails={() => setOpenTicket(dialogTicket)}
                   />
                 );
               })}
@@ -228,7 +287,7 @@ export default function DashboardPage() {
             </div>
           ) : orgsCount ? (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {orgs.map((o: any) => (
+              {orgs.map((o: Org) => (
                 <OrgCard key={o._id} org={o} />
               ))}
               <Link
@@ -271,7 +330,7 @@ export default function DashboardPage() {
             </div>
           ) : eventsCount ? (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3 xl:grid-cols-4">
-              {myEvents.map((ev: any) => (
+              {myEvents.map((ev: MyEvent) => (
                 <div key={ev._id} className="flex flex-col">
                   <EventCard
                     id={ev._id}
@@ -362,7 +421,7 @@ export default function DashboardPage() {
       <section className="mx-auto max-w-[1232px] px-4 pb-20 pt-6">
         {/* Tabs header row with floating right button (events only) */}
         <div className="relative mb-6 min-h-[56px]">
-          <Tabs tabs={tabs as any} activeId={activeId} onChange={setActiveId} />
+          <Tabs tabs={tabs} activeId={activeId} onChange={setActiveId} />
         </div>
       </section>
     </main>

@@ -1,3 +1,4 @@
+// src/context/AuthContext.tsx
 "use client";
 
 import { createContext, useContext, useState, ReactNode } from "react";
@@ -109,11 +110,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }),
       });
 
-      const j = await r.json().catch(() => ({}) as any);
+      type RegisterResponse = { error?: string; errors?: FieldErrors };
+      const j: RegisterResponse = await r
+        .json()
+        .catch(() => ({}) as RegisterResponse);
 
       if (!r.ok) {
         if (j?.errors && typeof j.errors === "object") {
-          setFieldErrors(j.errors as FieldErrors);
+          setFieldErrors(j.errors);
         } else {
           setError(j?.error || "Registration failed.");
         }

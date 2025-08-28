@@ -62,9 +62,10 @@ export default function ProfileSettings() {
           setForm((s) => ({ ...s, ...data }));
         }
         setError(null);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load profile");
-        toast.error(e?.message || "Failed to load profile");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to load profile";
+        setError(msg);
+        toast.error(msg);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -90,8 +91,8 @@ export default function ProfileSettings() {
       }
       setSavedAt(Date.now());
       toast.success("Your profile was saved.");
-    } catch (e: any) {
-      const msg = e?.message || "Save failed";
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Save failed";
       setError(msg);
       toast.error(msg);
     } finally {

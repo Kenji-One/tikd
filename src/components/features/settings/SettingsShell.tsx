@@ -9,7 +9,6 @@ import SecuritySettings from "./SecuritySettings";
 import ChangePassword from "./ChangePassword";
 import NotificationSettings from "./NotificationSettings";
 import PaymentMethods from "./PaymentMethods";
-import { Button } from "@/components/ui/Button";
 import AvatarDialog from "./AvatarDialog";
 
 /**

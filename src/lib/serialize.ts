@@ -1,20 +1,35 @@
+// src/lib/serialize.ts
 import { Types } from "mongoose";
 
 /** Convert any lean() doc to plain JSON with _id / foreign keys as strings */
-export const serialize = <T extends Record<string, any>>(doc: T) => {
-  const out: Record<string, any> = {};
+type Serialized<T extends Record<string, unknown>> = {
+  [K in keyof T]: T[K] extends Types.ObjectId
+    ? string
+    : T[K] extends (infer U)[]
+      ? U extends Types.ObjectId
+        ? string[]
+        : T[K]
+      : T[K];
+};
 
-  for (const [k, v] of Object.entries(doc)) {
-    if (v instanceof Types.ObjectId) {
-      out[k] = v.toString();
+const isObjectId = (val: unknown): val is Types.ObjectId =>
+  val instanceof Types.ObjectId;
+
+export const serialize = <T extends Record<string, unknown>>(
+  doc: T
+): Serialized<T> => {
+  const out: Partial<Record<keyof T, unknown>> = {};
+
+  for (const key in doc) {
+    const v = doc[key];
+    if (isObjectId(v)) {
+      out[key] = v.toString();
     } else if (Array.isArray(v)) {
-      out[k] = v.map((i) => (i instanceof Types.ObjectId ? i.toString() : i));
+      out[key] = v.map((i) => (isObjectId(i) ? i.toString() : i)) as unknown;
     } else {
-      out[k] = v;
+      out[key] = v;
     }
   }
 
-  return out as unknown as {
-    [K in keyof T]: T[K] extends Types.ObjectId ? string : T[K];
-  };
+  return out as Serialized<T>;
 };

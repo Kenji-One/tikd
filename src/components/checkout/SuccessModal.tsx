@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 interface Props {
   open: boolean;
@@ -61,18 +62,18 @@ export default function SuccessModal({ open, onClose }: Props) {
         </p>
 
         <div className="mt-6 flex items-center justify-center gap-3">
-          <a
+          <Link
             href="/dashboard"
             className="rounded-full bg-neutral-0 px-6 py-3 font-semibold text-neutral-950"
           >
             View Tickets
-          </a>
-          <a
+          </Link>
+          <Link
             href="/"
             className="rounded-full border border-neutral-700 px-6 py-3 font-semibold text-neutral-0"
           >
             Explore Events
-          </a>
+          </Link>
         </div>
       </div>
     </div>

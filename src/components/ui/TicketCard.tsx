@@ -1,7 +1,6 @@
 // src/components/ui/TicketCard.tsx
 "use client";
 
-import { CalendarClock, MapPin } from "lucide-react";
 import clsx from "clsx";
 
 export type TicketStatus = "upcoming" | "past" | "refunded" | "transferred";

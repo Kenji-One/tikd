@@ -10,7 +10,7 @@ import Artist, { IArtist } from "@/models/Artist";
 import Organization, { IOrganization } from "@/models/Organization";
 import Ticket from "@/models/Ticket";
 import type { Types } from "mongoose";
-import User from "@/models/User";
+// import User from "@/models/User";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */

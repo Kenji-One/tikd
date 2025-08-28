@@ -18,7 +18,7 @@ export type CartStore = CartState & Actions;
 
 export const useCart = create<CartStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       items: [],
       coupon: undefined,
 

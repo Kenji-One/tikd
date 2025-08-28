@@ -10,17 +10,17 @@ import {
   FaTelegram,
 } from "react-icons/fa";
 import { Button } from "@/components/ui/Button";
-const footerLinks = {
-  Company: ["Sell on TIKD", "About", "Blog", "Discover", "Fan Support"],
-  Legal: [
-    "Cookie Policy",
-    "Manage Cookies",
-    "Privacy Policy",
-    "Privacy Choices",
-    "Do not sell my info",
-    "Terms",
-  ],
-};
+// const footerLinks = {
+//   Company: ["Sell on TIKD", "About", "Blog", "Discover", "Fan Support"],
+//   Legal: [
+//     "Cookie Policy",
+//     "Manage Cookies",
+//     "Privacy Policy",
+//     "Privacy Choices",
+//     "Do not sell my info",
+//     "Terms",
+//   ],
+// };
 
 const socialIcons = [
   { href: "https://discord.com", icon: <FaDiscord />, label: "Discord" },

@@ -36,9 +36,14 @@ export default function ChangePassword() {
         body: JSON.stringify({ current, next }),
       });
 
-      const j = await r.json().catch(() => ({}) as any);
+      type PasswordResponse = { error?: string };
+
+      const j: PasswordResponse = await r
+        .json()
+        .catch(() => ({}) as PasswordResponse);
+
       if (!r.ok) {
-        setError(j?.error || "Failed to update password.");
+        setError(j.error || "Failed to update password.");
         return;
       }
 

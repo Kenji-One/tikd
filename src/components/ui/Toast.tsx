@@ -26,10 +26,21 @@ export type ToastOptions = {
   action?: { label: string; onClick: () => void };
 };
 
-/* ────────────────────── Simple global store ────────────────────── */
 type Listener = () => void;
-type ToastState = { toasts: Required<ToastOptions>[] };
 
+/** Internal, normalized shape kept in the store */
+type ToastRecord = {
+  id: string;
+  title: string;
+  description: string;
+  type: ToastType;
+  duration: number;
+  action?: { label: string; onClick: () => void };
+};
+
+type ToastState = { toasts: ToastRecord[] };
+
+/* ────────────────────── Simple global store ────────────────────── */
 const store = (() => {
   let state: ToastState = { toasts: [] };
   const listeners = new Set<Listener>();
@@ -41,7 +52,7 @@ const store = (() => {
     listeners.add(l);
     return () => listeners.delete(l);
   }
-  function getSnapshot() {
+  function getSnapshot(): ToastState {
     return state;
   }
   function add(t: ToastOptions) {
@@ -49,19 +60,15 @@ const store = (() => {
       t.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const duration = t.duration ?? 3000;
     const type = t.type ?? "info";
-    state = {
-      toasts: [
-        ...state.toasts,
-        {
-          id,
-          duration,
-          type,
-          title: t.title ?? defaultTitle(type),
-          description: t.description ?? "",
-          action: t.action ?? ({} as any),
-        },
-      ],
+    const rec: ToastRecord = {
+      id,
+      duration,
+      type,
+      title: t.title ?? defaultTitle(type),
+      description: t.description ?? "",
+      ...(t.action ? { action: t.action } : {}),
     };
+    state = { toasts: [...state.toasts, rec] };
     emit();
     return id;
   }
@@ -120,21 +127,21 @@ export function useToast() {
 
 /* ─────────────────────────── UI Parts ──────────────────────────── */
 function Toaster() {
-  // ✅ bail out during SSR so we never call createPortal without a real DOM
-  if (typeof window === "undefined") return null;
-
-  const { toasts } = useSyncExternalStore(
+  // Call hooks unconditionally (no early returns before hooks)
+  const snapshot = useSyncExternalStore(
     store.subscribe,
     store.getSnapshot,
     store.getSnapshot
   );
 
-  // ✅ delay portal render until after first client paint
+  const toasts = snapshot.toasts;
+
+  // Delay portal render until after mount (avoids SSR container issues)
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
 
-  // If you add <div id="toast-root" /> in app/layout.tsx, we’ll use it. Otherwise fall back to body.
+  // If you add <div id="toast-root" /> in app/layout.tsx, prefer it
   const container =
     document.getElementById("toast-root") ?? (document.body as HTMLElement);
 
@@ -154,7 +161,7 @@ function Toaster() {
   );
 }
 
-function ToastItem(t: Required<ToastOptions>) {
+function ToastItem(t: ToastRecord) {
   const [hover, setHover] = useState(false);
   const timer = useRef<number | null>(null);
 

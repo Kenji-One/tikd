@@ -1,3 +1,4 @@
+// src/lib/auth.ts
 import NextAuth, {
   AuthOptions,
   getServerSession,
@@ -62,22 +63,24 @@ export const authOptions: AuthOptions = {
           remember?: boolean;
           image?: string;
         };
-        token.role = u.role;
-        (token as TokenWithRole).image = u.image ?? "";
-        (token as TokenWithRole).remember = u.remember ?? true;
+        const t = token as TokenWithRole;
+        t.role = u.role;
+        t.image = u.image ?? "";
+        t.remember = u.remember ?? true;
 
         const now = Math.floor(Date.now() / 1000);
-        const max = (token as TokenWithRole).remember
-          ? 30 * 24 * 60 * 60
-          : 24 * 60 * 60;
+        const max = t.remember ? 30 * 24 * 60 * 60 : 24 * 60 * 60;
         token.iat = now;
         token.exp = now + max;
       }
 
       // live updates from useSession().update(...)
       if (trigger === "update" && session) {
-        if (typeof (session as any).image !== "undefined") {
-          (token as TokenWithRole).image = (session as any).image ?? "";
+        // Only image is currently updated from the client
+        const s = session as { image?: string };
+        const t = token as TokenWithRole;
+        if (typeof s.image !== "undefined") {
+          t.image = s.image ?? "";
         }
       }
 
@@ -85,12 +88,18 @@ export const authOptions: AuthOptions = {
     },
     async session({ session, token }) {
       const t = token as TokenWithRole;
+
       if (session.user) {
-        session.user.id = token.sub ?? "";
-        (session.user as any).role = t.role ?? "user";
-        (session.user as any).image = t.image ?? "";
+        // add id
+        (session.user as { id?: string }).id = token.sub ?? "";
+        // propagate role and image from token
+        (session.user as { role?: "user" | "admin" }).role = t.role ?? "user";
+        (session.user as { image?: string }).image = t.image ?? "";
       }
-      (session as any).remember = t.remember ?? true;
+
+      // expose remember on the session object
+      (session as { remember?: boolean }).remember = t.remember ?? true;
+
       return session;
     },
   },

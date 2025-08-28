@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
 import ResetToken from "@/models/ResetToken";
-import crypto from "crypto";
 import { sendMail } from "@/lib/mail"; // your mailer util
 
 export async function POST(req: Request) {

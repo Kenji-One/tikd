@@ -158,8 +158,10 @@ export default function AvatarDialog({ open, onClose }: Props) {
 
       await update?.({ image: "" }); // triggers jwt callback "update" branch
       closeAll();
-    } catch (err: any) {
-      setError(err?.message || "Couldn’t remove avatar.");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Couldn’t remove avatar.";
+      setError(message);
       setState("idle");
     }
   }

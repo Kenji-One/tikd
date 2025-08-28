@@ -49,7 +49,9 @@ export default function Checkbox({
   error,
   ...rest
 }: CheckboxProps) {
-  const inputId = id ?? React.useId();
+  const reactId = React.useId();
+  const inputId = id ?? reactId;
+
   const controlled = typeof checked === "boolean";
   const [internal, setInternal] = React.useState(!!defaultChecked);
 

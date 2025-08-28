@@ -107,13 +107,11 @@ const fallbackZones = [
   "Asia/Tokyo",
 ];
 function getTimezones(): string[] {
-  // @ts-ignore - supportedValuesOf is not in older TS lib dom types
   if (
     typeof Intl !== "undefined" &&
-    typeof Intl.supportedValuesOf === "function"
+    typeof (Intl as any).supportedValuesOf === "function"
   ) {
-    // @ts-ignore
-    const list = Intl.supportedValuesOf("timeZone") as string[];
+    const list = (Intl as any).supportedValuesOf("timeZone") as string[];
     return list ?? fallbackZones;
   }
   return fallbackZones;
@@ -161,15 +159,6 @@ export default function BookADemoPage() {
       }));
     }
   }, [session?.user, reset]);
-
-  const interests = [
-    "Sell tickets & payouts",
-    "Migrate from Eventbrite",
-    "Guest list & RSVPs",
-    "POS / door scanning",
-    "Promotions / codes",
-    "White-label / API",
-  ];
 
   const onSubmit: SubmitHandler<DemoForm> = async (data) => {
     try {

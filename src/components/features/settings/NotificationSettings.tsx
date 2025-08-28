@@ -16,6 +16,15 @@ type SettingsPayload = {
   marketing: Record<MarketingKey, boolean>;
 };
 
+type MatrixUpdate = {
+  type: "matrix";
+  row: RowKey;
+  channel: Channel;
+  value: boolean;
+};
+type ToggleUpdate = { type: "toggle"; key: MarketingKey; value: boolean };
+type MutationBody = MatrixUpdate | ToggleUpdate;
+
 /* display labels */
 const rowMeta: Array<{ key: RowKey; label: string }> = [
   { key: "apiLimits", label: "API Limits" },
@@ -78,8 +87,8 @@ export default function NotificationSettings() {
     if (data?.marketing) setToggles(data.marketing);
   }, [data?.channels, data?.marketing]);
 
-  const patchMutation = useMutation({
-    mutationFn: async (body: any) => {
+  const patchMutation = useMutation<SettingsPayload, Error, MutationBody>({
+    mutationFn: async (body: MutationBody) => {
       const r = await fetch("/api/settings/notifications", {
         method: "PATCH",
         credentials: "same-origin",
@@ -90,17 +99,17 @@ export default function NotificationSettings() {
         const msg = await r.text().catch(() => "");
         throw new Error(msg || "Failed to update");
       }
-      return r.json();
+      return (await r.json()) as SettingsPayload;
     },
-    onSuccess: (server: SettingsPayload) => {
+    onSuccess: (server) => {
       setMatrix(server.channels);
       setToggles(server.marketing);
       qc.setQueryData(["settings", "notifications"], server);
       toast.success("Notification preference updated.");
     },
-    onError: (err: any) => {
+    onError: (err) => {
       toast.error(
-        typeof err?.message === "string"
+        typeof err.message === "string"
           ? err.message
           : "Could not update preference."
       );

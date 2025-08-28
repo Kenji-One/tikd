@@ -106,12 +106,19 @@ const fallbackZones = [
   "Asia/Tbilisi",
   "Asia/Tokyo",
 ];
+
+type IntlWithSupportedValuesOf = typeof Intl & {
+  supportedValuesOf?: (key: "timeZone") => string[];
+};
+
 function getTimezones(): string[] {
+  const intl = Intl as IntlWithSupportedValuesOf;
+
   if (
-    typeof Intl !== "undefined" &&
-    typeof (Intl as any).supportedValuesOf === "function"
+    typeof intl !== "undefined" &&
+    typeof intl.supportedValuesOf === "function"
   ) {
-    const list = (Intl as any).supportedValuesOf("timeZone") as string[];
+    const list = intl.supportedValuesOf("timeZone");
     return list ?? fallbackZones;
   }
   return fallbackZones;

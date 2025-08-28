@@ -1,14 +1,8 @@
-/* ------------------------------------------------------------------ */
-/*  ImageUpload component                                             */
-/*  - Supports deterministic public_id & overwriting                  */
-/*  - Requires two NEXT_PUBLIC env vars:                              */
-/*      • NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME                           */
-/*      • NEXT_PUBLIC_CLOUDINARY_API_KEY                              */
-/* ------------------------------------------------------------------ */
-
+// src/components/ui/ImageUpload.tsx
 "use client";
 
 import { useRef, useState } from "react";
+import Image from "next/image";
 
 type Props = {
   /** Current image URL coming from the form */
@@ -17,9 +11,10 @@ type Props = {
   onChange: (url: string) => void;
   /** Optional label shown above the uploader */
   label?: string;
-  /** Deterministic Cloudinary public_id, e.g. "events/123/poster"      *
-   *  • Pass the same id again when user edits to overwrite the file.   *
-   *  • If omitted, a random id will be generated.                      */
+  /** Deterministic Cloudinary public_id, e.g. "events/123/poster"
+   *  • Pass the same id again when user edits to overwrite the file.
+   *  • If omitted, a random id will be generated.
+   */
   publicId?: string;
 };
 
@@ -40,26 +35,17 @@ export default function ImageUpload({
     if (!file) return;
     setLoading(true);
 
-    /* ------------------------------------------
-     * 1) Build public_id (deterministic or random)
-     * ------------------------------------------ */
-    const id = publicId ?? `uploads/${crypto.randomUUID()}`; // random fallback (browser-native)
+    const id = publicId ?? `uploads/${crypto.randomUUID()}`;
 
-    /* ------------------------------------------
-     * 2) Get timestamp + signature from our API
-     * ------------------------------------------ */
     const params = new URLSearchParams({
       public_id: id,
-      overwrite: "1", // always overwrite when id is reused
+      overwrite: "1",
     }).toString();
 
     const { timestamp, signature } = await fetch(
       `/api/cloudinary/sign?${params}`
     ).then((r) => r.json());
 
-    /* ------------------------------------------
-     * 3) POST the file to Cloudinary
-     * ------------------------------------------ */
     const form = new FormData();
     form.append("file", file);
     form.append("public_id", id);
@@ -89,22 +75,23 @@ export default function ImageUpload({
     setLoading(false);
   };
 
-  /* ------------------------------------------------------------------ */
-  /*  Render                                                            */
-  /* ------------------------------------------------------------------ */
-
   return (
     <div className="space-y-2">
       {label && <p className="text-sm text-white">{label}</p>}
 
       {preview ? (
-        /* preview + replace */
-        <img
-          src={preview}
-          alt="preview"
-          className="h-40 w-full cursor-pointer rounded-lg object-cover"
+        <div
+          className="relative h-40 w-full cursor-pointer rounded-lg overflow-hidden"
           onClick={handleSelect}
-        />
+        >
+          <Image
+            src={preview}
+            alt="preview"
+            fill
+            sizes="100%"
+            className="object-cover rounded-lg"
+          />
+        </div>
       ) : (
         <button
           type="button"

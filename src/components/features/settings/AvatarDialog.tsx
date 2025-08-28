@@ -1,3 +1,4 @@
+// src/components/features/settings/AvatarDialog.tsx
 "use client";
 
 import { Fragment, useMemo, useRef, useState } from "react";
@@ -140,8 +141,10 @@ export default function AvatarDialog({ open, onClose }: Props) {
       await update?.({ image: imageUrl });
 
       closeAll();
-    } catch (err: any) {
-      setError(err?.message || "Something went wrong.");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong.";
+      setError(message);
       setState("idle");
     }
   }

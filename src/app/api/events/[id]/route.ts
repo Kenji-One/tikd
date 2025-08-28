@@ -3,7 +3,6 @@
 /* ------------------------------------------------------------------ */
 
 import { NextRequest, NextResponse } from "next/server";
-import type { RouteContext } from "next";
 import "@/lib/mongoose";
 
 import Event, { IEvent } from "@/models/Event";
@@ -24,20 +23,14 @@ type EventLean = Omit<IEvent, "organizationId" | "artists"> & {
   _id: Types.ObjectId;
 };
 
-type Params = { id: string };
-type Ctx = RouteContext<Params>;
-
-/** Normalise Next 14 (object) and Next 15 (async function) params */
-async function resolveParams(ctx: Ctx): Promise<Params> {
-  const p = ctx.params;
-  return typeof p === "function" ? await p() : p;
-}
-
 /* ------------------------------------------------------------------ */
 /*  GET /api/events/:id                                               */
 /* ------------------------------------------------------------------ */
-export async function GET(_req: NextRequest, ctx: Ctx) {
-  const { id } = await resolveParams(ctx);
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { id } = params;
 
   if (!isObjectId(id)) {
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });

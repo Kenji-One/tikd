@@ -175,9 +175,14 @@ export default function DashboardPage() {
     enabled: !!session,
   });
 
-  const ticketsCount = tickets?.length ?? 0;
-  const orgsCount = orgs?.length ?? 0;
-  const eventsCount = myEvents?.length ?? 0;
+  // Normalize possibly-undefined data to empty arrays for safe mapping
+  const ticketsList = tickets ?? [];
+  const orgsList = orgs ?? [];
+  const eventsList = myEvents ?? [];
+
+  const ticketsCount = ticketsList.length;
+  const orgsCount = orgsList.length;
+  const eventsCount = eventsList.length;
 
   /* ---------------- local UI state ----------------------------- */
   const [activeId, setActiveId] = useState<string>("tickets");
@@ -199,7 +204,7 @@ export default function DashboardPage() {
             </div>
           ) : ticketsCount ? (
             <div className="grid [grid-template-columns:repeat(auto-fill,minmax(186.5px,186.5px))] gap-4">
-              {tickets.map((t: Ticket) => {
+              {ticketsList.map((t: Ticket) => {
                 const title = t.eventTitle ?? t.event?.title ?? "Event";
                 const dateLabel =
                   t.dateLabel ??
@@ -267,7 +272,7 @@ export default function DashboardPage() {
               badge: openTicket?.badge,
               qrUrl: openTicket?.qrUrl,
               qrSvg: openTicket?.qrSvg,
-              refCode: openTicket?.reference ?? openTicket?.refCode,
+              refCode: openTicket?.refCode,
             }}
           />
         </>
@@ -287,7 +292,7 @@ export default function DashboardPage() {
             </div>
           ) : orgsCount ? (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {orgs.map((o: Org) => (
+              {orgsList.map((o: Org) => (
                 <OrgCard key={o._id} org={o} />
               ))}
               <Link
@@ -330,7 +335,7 @@ export default function DashboardPage() {
             </div>
           ) : eventsCount ? (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3 xl:grid-cols-4">
-              {myEvents.map((ev: MyEvent) => (
+              {eventsList.map((ev: MyEvent) => (
                 <div key={ev._id} className="flex flex-col">
                   <EventCard
                     id={ev._id}

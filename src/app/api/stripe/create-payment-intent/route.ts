@@ -1,7 +1,9 @@
+// src/app/api/stripe/create-payment-intent/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { connectDB } from "@/lib/db";
 import Event from "@/models/Event";
+import type mongoose from "mongoose";
 import type { CartItem } from "@/types/cart";
 import { calcPrices } from "@/lib/pricing";
 import { findCoupon } from "@/lib/coupons";
@@ -10,6 +12,17 @@ type Body = {
   items: CartItem[];
   couponCode?: string | null;
   customerEmail?: string | null;
+};
+
+/** Minimal shape we need from Event for validation */
+type TicketTypeLean = {
+  _id: mongoose.Types.ObjectId;
+  price: number;
+  currency: string;
+};
+type EventTicketsLean = {
+  _id: mongoose.Types.ObjectId;
+  ticketTypes: TicketTypeLean[];
 };
 
 export async function POST(req: NextRequest) {
@@ -33,22 +46,29 @@ export async function POST(req: NextRequest) {
 
     // Validate against DB event.ticketTypes (price + existence)
     for (const it of items) {
-      const ev = await Event.findById(it.eventId).lean();
-      if (!ev)
+      const ev = await Event.findById(it.eventId)
+        .select({ ticketTypes: 1 }) // only what we need
+        .lean<EventTicketsLean | null>()
+        .exec();
+
+      if (!ev) {
         return NextResponse.json(
           { error: "Event not found." },
           { status: 404 }
         );
+      }
 
       const tt = ev.ticketTypes.find((t) => String(t._id) === it.ticketTypeId);
-      if (!tt)
+      if (!tt) {
         return NextResponse.json(
           { error: "Ticket type not found." },
           { status: 404 }
         );
+      }
 
       const priceChanged =
         Number(tt.price) !== it.unitPrice || tt.currency !== it.currency;
+
       if (priceChanged) {
         return NextResponse.json(
           { error: "Ticket price changed. Please refresh." },
@@ -67,7 +87,7 @@ export async function POST(req: NextRequest) {
       amount: amountInCents,
       currency: currency.toLowerCase(),
       description: "Tikd order",
-      automatic_payment_methods: { enabled: true }, // Card + wallets, smart by Stripe
+      automatic_payment_methods: { enabled: true },
       receipt_email: customerEmail || undefined,
       metadata: {
         primaryEventId: items[0].eventId,

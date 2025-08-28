@@ -35,6 +35,7 @@ export interface PillProps {
   /** Foreground colour (#FFEA2D, rgb(), etc.).
    *  BG = this colour @ 16 % opacity. */
   color?: string;
+  textColor?: string;
   className?: string;
 }
 
@@ -42,18 +43,23 @@ export interface PillProps {
 /*  Component                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export function Pill({ icon, text, color, className }: PillProps) {
-  /* foreground + background styles */
-  const style = color
-    ? {
-        color, // text / icon
-        backgroundColor: hexToRgba(color, 0.16),
-      }
-    : undefined;
+export function Pill({ icon, text, color, textColor, className }: PillProps) {
+  /* --------- foreground / background logic --------- */
+  // 1. text / icon colour: textColor > color > theme fallback
+  const fg = textColor ?? color;
 
-  /* fallback classes if no colour given */
+  // 2. background tint only when `color` is given
+  const style =
+    fg || color
+      ? {
+          ...(fg ? { color: fg } : {}),
+          ...(color ? { backgroundColor: hexToRgba(color, 0.16) } : {}),
+        }
+      : undefined;
+
+  /* fallback classes if nothing specified */
   const bgClass = color ? "" : "bg-white/16";
-  const textClass = color ? "" : "text-white";
+  const textClass = fg ? "" : "text-white";
 
   /* make icon inherit currentColor + unified size */
   const renderedIcon =

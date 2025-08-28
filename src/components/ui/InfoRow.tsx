@@ -11,6 +11,9 @@ export interface InfoRowProps {
   /** Additional classes on the container */
   className?: string;
   classNameCont?: string;
+
+  /** Split title into two lines if it has two words */
+  splitTitle?: boolean;
 }
 
 export function InfoRow({
@@ -18,16 +21,25 @@ export function InfoRow({
   children,
   className,
   classNameCont,
+  splitTitle = false,
 }: InfoRowProps) {
   return (
     <div
       className={clsx(
-        "w-full flex items-start justify-between gap-4 border-b border-[#FFFFFF1A] py-8",
+        "w-full flex items-start gap-[112px] border-b border-[#FFFFFF1A] py-8",
         className
       )}
     >
-      <h2 className="text-2xl font-semibold leading-[90%] tracking-[-0.48px] text-neutral-0 text-right lg:w-[187px]">
-        {title}
+      <h2 className="text-2xl font-medium leading-[90%] tracking-[-0.48px] text-neutral-0 text-right w-full max-w-[187px]">
+        {title.split(" ").length === 2 && splitTitle ? (
+          <>
+            {title.split(" ")[0]}
+            <br />
+            {title.split(" ")[1]}
+          </>
+        ) : (
+          title
+        )}
       </h2>
       {children && (
         <div className={clsx("w-full max-w-[694px]", classNameCont)}>

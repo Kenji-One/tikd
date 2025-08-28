@@ -113,7 +113,7 @@ function FAQSection() {
   const current = FAQ_CATEGORIES.find((c) => c.id === activeCat)!;
 
   return (
-    <section className="mt-14 lg:mt-20 w-full max-w-[1232px] mx-auto px-4">
+    <section className="mt-14 mb-7 lg:mt-20 w-full max-w-[1232px] mx-auto px-4">
       <h2 className="mb-13 text-center text-2xl italic font-extrabold leading-[90%] tracking-[-0.64px] uppercase lg:text-[32px]">
         F.A.Q.
       </h2>
@@ -180,10 +180,7 @@ function FAQSection() {
             {current.faqs.map(({ q, a }, idx) => {
               const open = openQ === idx;
               return (
-                <li
-                  key={q}
-                  className="border-b border-white/10 last:border-none"
-                >
+                <li key={q} className="border-b border-white/10 ">
                   <button
                     onClick={() => setOpenQ(open ? null : idx /* toggle */)}
                     className={clsx(
@@ -250,25 +247,27 @@ export default function HelpPage() {
   };
 
   return (
-    <PageWrapper className="relative overflow-hidden">
-      {/* grid texture */}
-      {/* <Image
-        src="/assets/boxes.svg"
-        alt=""
-        fill
-        priority
-        className="pointer-events-none select-none object-cover opacity-5"
-      /> */}
+    <PageWrapper className="relative ">
+      <Container className="z-10">
+        <div className="absolute left-1/2 top-[-36.5%] -translate-x-1/2 z-[-1] w-[1264px] h-[1264px] ">
+          <Image
+            src="/assets/boxes.png"
+            alt=""
+            fill
+            sizes="1264px"
+            quality={100}
+            priority
+            className="object-contain select-none"
+          />
+        </div>
 
-      <Container className="relative z-10 pt-16 lg:pt-[106px]">
-        {/* HEADER ----------------------------------------------------- */}
-        <h1 className="mb-12 text-center text-2xl font-black uppercase text-neutral-0 md:text-[40px] leading-[90%] tracking-[-0.8px] italic">
+        <h1 className="mb-18 text-center text-2xl font-black uppercase text-neutral-0 md:text-[40px] leading-[90%] tracking-[-0.8px] italic">
           HELP CENTER
         </h1>
 
         {/* CONTACT + FORM -------------------------------------------- */}
-        <div className="flex flex-col gap-12 lg:flex-row lg:gap-20">
-          <section className="flex shrink-0 flex-col gap-10 lg:w-[340px]">
+        <div className="flex flex-col gap-12 lg:flex-row lg:justify-between lg:gap-20">
+          <section className="flex shrink-0 flex-col gap-4 lg:w-full lg:max-w-[237px]">
             <ContactItem
               icon={
                 <svg
@@ -310,9 +309,9 @@ export default function HelpPage() {
                 </svg>
               }
               label="Email Address"
-              value="hi@tikd.com"
+              value="admin@tikd.vip"
             />
-            <ContactItem
+            {/* <ContactItem
               icon={
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -329,12 +328,12 @@ export default function HelpPage() {
               }
               label="Location"
               value="Time Square Building, NY, USA"
-            />
+            /> */}
           </section>
 
           <form
             onSubmit={handleSubmit}
-            className="rounded-lg bg-[#FFFFFF08] p-6 md:p-8 lg:flex-1"
+            className="rounded-lg bg-white/3 p-6 md:p-8 lg:flex-1 w-full lg:max-w-[592px]"
           >
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="flex flex-col">

@@ -1,3 +1,4 @@
+// src/components/sections/Landing/EventCarouselSection.tsx
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -5,6 +6,7 @@ import clsx from "clsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EventCard } from "@/components/ui/EventCard";
 import { Button } from "@/components/ui/Button";
+
 /* -------------------------------------------------- */
 /*  Data shape your EventCard requires                */
 /* -------------------------------------------------- */
@@ -22,15 +24,16 @@ export type Event = {
 /* -------------------------------------------------- */
 const GAP_PX = 7;
 const CARD_WIDTHS = [229, 171] as const;
-const MAX_VISIBLE = 5;
-const SIDE_SAFE = 64;
+
+const SIDE_PADDING = 120; // px per side
+const SHADOW_W = 64; // px
 const TRANSITION_MS = 300;
 
 const calcLayout = (winW: number) => {
+  const safe = Math.max(0, winW - SIDE_PADDING * 2);
   for (const cw of CARD_WIDTHS) {
-    const safe = winW - SIDE_SAFE;
     const vis = Math.floor((safe + GAP_PX) / (cw + GAP_PX));
-    if (vis >= 2) return { cardW: cw, visible: Math.min(vis, MAX_VISIBLE) };
+    if (vis >= 1) return { cardW: cw, visible: vis };
   }
   return { cardW: CARD_WIDTHS.at(-1)!, visible: 1 };
 };
@@ -56,10 +59,9 @@ export default function EventCarouselSection({
   /* responsive sizing */
   const [{ cardW, visible }, setLayout] = useState(() =>
     typeof window === "undefined"
-      ? { cardW: 260, visible: MAX_VISIBLE }
+      ? { cardW: 260, visible: 3 }
       : calcLayout(window.innerWidth)
   );
-  // const cardH = Math.round(cardW * (286 / 229));
   const STEP = cardW + GAP_PX;
   const viewportW = visible * cardW + (visible - 1) * GAP_PX;
 
@@ -86,15 +88,17 @@ export default function EventCarouselSection({
     () => canLeft && !anim && (setAnim(true), setIdx((i) => i + 1)),
     [canLeft, anim]
   );
-  const shiftRight = () =>
-    canRight && !anim && (setAnim(true), setIdx((i) => i - 1));
+  const shiftRight = useCallback(
+    () => canRight && !anim && (setAnim(true), setIdx((i) => i - 1)),
+    [canRight, anim]
+  );
   const onEnd = () => setAnim(false);
 
   /* render */
   return (
     <div className="mb-16">
       {/* header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between px-4 lg:px-8 xl:px-[120px]">
         <div className="flex items-center gap-2">
           <span>{icon}</span>
           <h2 className="text-2xl font-semibold text-neutral-0">{title}</h2>
@@ -102,7 +106,13 @@ export default function EventCarouselSection({
 
         <div className="flex items-center gap-3">
           {onViewAll && (
-            <Button variant="ghost" size="xs" type="button" onClick={onViewAll}>
+            <Button
+              variant="ghost"
+              size="xs"
+              type="button"
+              onClick={onViewAll}
+              className="hidden md:inline-flex border border-transparent hover:border-primary-500 transition duration-200"
+            >
               View all
             </Button>
           )}
@@ -110,8 +120,8 @@ export default function EventCarouselSection({
             onClick={shiftRight}
             disabled={!canRight}
             className={clsx(
-              "rounded-full border border-neutral-700/70 p-3 hover:bg-neutral-800/60",
-              !canRight && "opacity-30 cursor-default hover:bg-transparent"
+              "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
+              !canRight && "cursor-default opacity-30 hover:bg-transparent"
             )}
           >
             <ChevronLeft size={20} />
@@ -120,8 +130,8 @@ export default function EventCarouselSection({
             onClick={shiftLeft}
             disabled={!canLeft}
             className={clsx(
-              "rounded-full border border-neutral-700/70 p-3 hover:bg-neutral-800/60",
-              !canLeft && "opacity-30 cursor-default hover:bg-transparent"
+              "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
+              !canLeft && "cursor-default opacity-30 hover:bg-transparent"
             )}
           >
             <ChevronRight size={20} />
@@ -129,28 +139,67 @@ export default function EventCarouselSection({
         </div>
       </div>
 
-      {/* row */}
-      <div className="flex items-start gap-6">
-        <div className="relative " style={{ width: viewportW }}>
-          <div
-            onTransitionEnd={onEnd}
-            className="flex group/row"
-            style={{
-              columnGap: GAP_PX,
-              transform: `translateX(-${idx * STEP}px)`,
-              transition: anim ? `transform ${TRANSITION_MS}ms ease` : "none",
-            }}
-          >
-            {events.map((ev) => (
-              <div
-                key={ev.id}
-                style={{ width: cardW }}
-                className="flex-shrink-0 cursor-pointer"
-                onClick={() => onSelect?.(ev)}
-              >
-                <EventCard {...ev} className="h-full" />
-              </div>
-            ))}
+      {/* row (no overflow clipping) */}
+      <div className="relative px-4 lg:px-8 xl:px-[120px]">
+        {/* gradient fades – anchored to the INNER padding edge */}
+        {/* left fade */}
+        <div
+          aria-hidden
+          className={clsx(
+            "pointer-events-none absolute top-0 bottom-0 z-10",
+            canRight ? "opacity-100" : "opacity-0"
+          )}
+          style={{
+            left: 0, // ✅ at the very start of content (padding edge)
+            width: SHADOW_W,
+            backgroundColor: "var(--background)",
+            WebkitMaskImage:
+              "linear-gradient(to right, black 0%, transparent 100%)",
+            maskImage: "linear-gradient(to right, black 0%, transparent 100%)",
+            transition: "opacity 200ms ease",
+          }}
+        />
+        {/* right fade */}
+        <div
+          aria-hidden
+          className={clsx(
+            "pointer-events-none absolute top-0 bottom-0 z-10",
+            canLeft ? "opacity-100" : "opacity-0"
+          )}
+          style={{
+            right: 0, // ✅ flush with the end of content (padding edge)
+            width: SHADOW_W,
+            backgroundColor: "var(--background)",
+            WebkitMaskImage:
+              "linear-gradient(to left, black 0%, transparent 100%)",
+            maskImage: "linear-gradient(to left, black 0%, transparent 100%)",
+            transition: "opacity 200ms ease",
+          }}
+        />
+
+        {/* track */}
+        <div className="flex items-start">
+          <div className="relative" style={{ width: viewportW }}>
+            <div
+              onTransitionEnd={onEnd}
+              className="group/row flex"
+              style={{
+                columnGap: GAP_PX,
+                transform: `translateX(-${idx * STEP}px)`,
+                transition: anim ? `transform ${TRANSITION_MS}ms ease` : "none",
+              }}
+            >
+              {events.map((ev) => (
+                <div
+                  key={ev.id}
+                  style={{ width: cardW }}
+                  className="flex-shrink-0 cursor-pointer"
+                  onClick={() => onSelect?.(ev)}
+                >
+                  <EventCard {...ev} className="h-full" />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

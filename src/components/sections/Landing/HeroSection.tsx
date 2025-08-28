@@ -9,7 +9,6 @@ import clsx from "classnames";
 
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
-import { CATEGORY_COLOURS } from "@/lib/constants";
 /* -------------------------------------------------------------------------- */
 /*  Types & mock data                                                         */
 /* -------------------------------------------------------------------------- */
@@ -220,7 +219,8 @@ function Card({
                   </svg>
                 }
                 text={slide.dateLabel}
-                color={CATEGORY_COLOURS[slide.category || "music"]}
+                color={"#9A51FF"}
+                textColor="#C7A0FF"
               />
             </div>
 

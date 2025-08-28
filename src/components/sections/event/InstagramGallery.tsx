@@ -49,7 +49,7 @@ const POSITIONS: Readonly<[number, number, number, number][]> = [
 
 export default function InstagramGallery() {
   return (
-    <section className="mx-auto max-w-[1440px] px-4 py-20">
+    <section className="mx-auto max-w-[1440px] px-4 pb-20">
       <h2 className="mx-auto mb-8 w-full max-w-[1201px] text-2xl font-semibold text-white">
         Instagram Posts Reel
       </h2>

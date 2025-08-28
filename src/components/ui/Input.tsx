@@ -1,67 +1,56 @@
 "use client";
 
-import { forwardRef, InputHTMLAttributes, ReactNode } from "react";
+import {
+  forwardRef,
+  InputHTMLAttributes,
+  ReactNode,
+  ComponentPropsWithoutRef,
+} from "react";
 import clsx from "classnames";
 
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                     */
 /* -------------------------------------------------------------------------- */
-
 type NativeInput = Omit<InputHTMLAttributes<HTMLInputElement>, "size">;
 
 export interface InputProps extends NativeInput {
-  /**
-   * visual treatment
-   * • `transparent` – no bg, 1 px subtle border (form fields)
-   * • `frosted`     – bg-white/7 % + 15 px blur (header search)
-   */
-  variant?: "transparent" | "frosted";
-  /** corner-radius */
+  variant?: "transparent" | "frosted" | "full";
   shape?: "default" | "pill";
-  /** padding / height presets */
   size?: "sm" | "md" | "lg";
-  /** optional leading icon */
-  icon?: ReactNode;
-  /**
-   * Limit the component’s max-width (px / rem / % / Tailwind arbitrary value).
-   * e.g. `maxWidth={480}` → 480 px, `maxWidth="32rem"` or `maxWidth="max-w-md"`
-   */
+  icon?: ReactNode; // left icon (unchanged)
+  endAdornment?: ReactNode; // 🔹 right icon/adornment (e.g., eye)
   maxWidth?: number | string;
   iconClassName?: string;
+  className?: string;
+  // NOTE: `className` is not passed to the input element, but to the wrapper div
+  // around it. This is to allow for more flexible styling of the input.
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Class maps                                                                */
+/*  Static wrapper component (🔑 identity is now stable)                      */
 /* -------------------------------------------------------------------------- */
+interface WrapperProps extends ComponentPropsWithoutRef<"div"> {
+  children: ReactNode;
+}
+const InputWrapper = ({ children, ...rest }: WrapperProps) => (
+  <div {...rest}>{children}</div>
+);
 
-const base = [
-  "relative",
-  "z-8",
-  "w-full",
-  "text-white",
-  'font-["Gilroy"]', // ensure Gilroy even if ancestor changes font
-  "font-medium",
-  "text-[14px]",
-  "leading-none",
-  "tracking-[-0.28px]",
-
-  /* placeholder variants */
-  "placeholder:font-medium",
-  "placeholder:text-[14px]",
-  "peer-placeholder",
-  "placeholder:leading-none",
-  "placeholder:tracking-[-0.28px]",
-  "placeholder:[color:rgba(255,255,255,0.4)]",
-
-  /* focus ring */
-  "focus:outline-none",
-  "focus-visible:ring-1",
-  "focus-visible:ring-white/40",
-].join(" ");
+/* -------------------------------------------------------------------------- */
+/*  Class maps (unchanged, with ARIA error styles)                            */
+/* -------------------------------------------------------------------------- */
+const base =
+  "w-full font-[Gilroy] text-white font-normal text-[14px] leading-[100%] tracking-[-0.28px] " +
+  "placeholder:text-white/40 focus:outline-none " +
+  "focus-visible:ring focus-visible:ring-primary-500 " +
+  "aria-[invalid=true]:border-error-500 " +
+  "focus:aria-[invalid=true]:border-error-500 " +
+  "focus-visible:aria-[invalid=true]:ring-error-500";
 
 const variantMap: Record<NonNullable<InputProps["variant"]>, string> = {
   transparent: "bg-transparent border border-white/10",
-  frosted: "bg-[#FFFFFF12] backdrop-blur-[15px] border border-transparent",
+  frosted: "bg-white/5 backdrop-blur-[15px] border border-transparent",
+  full: "bg-neutral-900 placeholder:text-neutral-400 border border-transparent min-h-[40px]",
 };
 
 const shapeMap: Record<NonNullable<InputProps["shape"]>, string> = {
@@ -73,18 +62,21 @@ const paddingMap: Record<
   NonNullable<InputProps["size"]>,
   { base: string; iconLeft: string }
 > = {
-  sm: { base: "py-[10px] px-4", iconLeft: "py-[10px] pl-[58px] pr-3" },
-  md: {
-    base: "py-[10px] px-2 text-base",
-    iconLeft: "py-3 pl-[46px] pr-4",
-  },
+  sm: { base: "py-[8px] px-4", iconLeft: "py-[10px] pl-[58px] pr-3" },
+  md: { base: "py-3 px-4", iconLeft: "py-3 pl-[46px] pr-4" },
   lg: { base: "py-4 px-6 text-lg", iconLeft: "py-4 pl-14 pr-5" },
+};
+
+/* extra right padding when endAdornment is present */
+const rightPadMap: Record<NonNullable<InputProps["size"]>, string> = {
+  sm: "pr-12",
+  md: "pr-12",
+  lg: "pr-14",
 };
 
 /* -------------------------------------------------------------------------- */
 /*  Component                                                                 */
 /* -------------------------------------------------------------------------- */
-
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   (
     {
@@ -94,23 +86,29 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       shape = "default",
       size = "md",
       icon,
+      endAdornment,
       maxWidth,
       ...props
     },
     ref
   ) => {
-    /* choose padding string based on whether we render an icon */
     const padding = icon ? paddingMap[size].iconLeft : paddingMap[size].base;
+    const rightPad = endAdornment ? rightPadMap[size] : undefined;
 
-    /* optional max-width */
+    /* width utilities preserved exactly */
     const widthStyle =
       maxWidth === undefined
         ? undefined
         : typeof maxWidth === "number"
           ? { maxWidth: `${maxWidth}px` }
-          : maxWidth.startsWith("max-w-") // Tailwind utility
+          : maxWidth.startsWith("max-w-")
             ? undefined
             : { maxWidth };
+
+    const utilityWidthClass =
+      typeof maxWidth === "string" && maxWidth.startsWith("max-w-")
+        ? maxWidth
+        : undefined;
 
     const inputElement = (
       <input
@@ -120,45 +118,38 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           variantMap[variant],
           shapeMap[shape],
           padding,
+          rightPad, // 🔹 add space when endAdornment exists
           className
         )}
         {...props}
       />
     );
 
-    /* Tailwind max-w-* utility? attach to outer div for both cases */
-    const utilityWidthClass =
-      typeof maxWidth === "string" && maxWidth.startsWith("max-w-")
-        ? maxWidth
-        : undefined;
-
-    /* render with/without icon but always honour width limits */
-    const Wrapper = ({ children }: { children: ReactNode }) => (
-      <div
-        className={clsx("relative w-full", utilityWidthClass)}
+    return (
+      <InputWrapper
+        className={clsx("relative w-full", utilityWidthClass, className)}
         style={widthStyle}
       >
-        {children}
-      </div>
-    );
-
-    if (icon) {
-      return (
-        <Wrapper>
+        {icon ? (
           <span
             className={clsx(
-              "z-10 pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 flex items-center justify-center text-white",
+              "pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 flex items-center justify-center text-white",
               iconClassName
             )}
           >
             {icon}
           </span>
-          {inputElement}
-        </Wrapper>
-      );
-    }
+        ) : null}
 
-    return <Wrapper>{inputElement}</Wrapper>;
+        {inputElement}
+
+        {endAdornment ? (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2">
+            {endAdornment}
+          </span>
+        ) : null}
+      </InputWrapper>
+    );
   }
 );
 

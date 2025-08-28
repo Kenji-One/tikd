@@ -1,52 +1,51 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, ReactNode } from "react";
 import clsx from "classnames";
 import { Slot } from "@radix-ui/react-slot";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  /**
-   * • `primary`    → solid white (✱ Sign up)
-   * • `secondary`  → transparent + subtle white border (✱ Log in / Load More)
-   * • `ghost`      → solid dark bg (✱ View all)
-   * • `destructive`→ solid red (kept for future)
-   */
-  variant?: "primary" | "secondary" | "ghost" | "destructive";
-  /**
-   * sm ≈ 32 h md ≈ 44 h lg ≈ 52 h
-   * All pills share the same 999 px radius.
-   */
-  size?: "sm" | "md" | "lg" | "xs";
+  variant?:
+    | "primary"
+    | "secondary"
+    | "ghost"
+    | "destructive"
+    | "brand"
+    | "social"
+    | "default";
+  size?: "sm" | "md" | "lg" | "xs" | "icon";
   loading?: boolean;
   asChild?: boolean;
+  /** optional leading icon (renders before children) */
+  icon?: ReactNode;
 }
 
-/* ────────────────────────────────── */
-/*  Style maps                                                             */
-/* ────────────────────────────────── */
+/* ─────────── style maps ─────────── */
 
 const base =
-  "inline-flex items-center justify-center gap-2 text-sm leading-[100%] font-medium tracking-[-0.28px] rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50 cursor-pointer";
+  "inline-flex items-center justify-center gap-2 text-sm leading-[90%] font-medium tracking-[-0.28px] rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
 
 const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
   primary: "bg-white text-black hover:bg-neutral-100",
   secondary:
     "border border-white/10 text-white bg-transparent hover:bg-white/5",
   ghost: "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffffc]",
-  destructive: "bg-red-600 text-white hover:bg-red-700",
+  destructive: "bg-error-600 text-white hover:bg-error-700",
+  brand: "bg-primary-500 text-white hover:bg-primary-700",
+  social: "bg-[#ffffff12] text-white hover:bg-white/20",
+  default: "bg-button-primary text-white ",
 };
 
 const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
-  sm: "py-2 px-4 text-sm",
-  md: "py-3 px-6 text-base",
-  lg: "py-4 px-8 text-lg",
+  sm: "py-2 px-4",
+  md: "py-3 px-6",
+  lg: "py-4 px-8",
   xs: "py-[13px] px-4",
+  icon: "p-2 w-9 h-9",
 };
 
-/* ────────────────────────────────── */
-/*  Component                                                              */
-/* ────────────────────────────────── */
+/* ─────────── component ─────────── */
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
@@ -57,13 +56,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       loading,
       children,
       asChild = false,
+      icon,
       ...props
     },
     ref
   ) => {
     const Comp = asChild ? Slot : "button";
 
-    /* A tiny unobtrusive spinner */
     const Spinner = (
       <svg
         className="-ml-1 h-4 w-4 animate-spin text-current"
@@ -91,8 +90,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     return (
       <Comp ref={ref} className={combined} {...props}>
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-2 ">
           {loading && Spinner}
+          {icon}
           {children}
         </span>
       </Comp>

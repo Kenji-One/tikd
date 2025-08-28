@@ -126,7 +126,7 @@ export default function CategoryFilter({
               "flex items-center gap-[6px] rounded-full px-6 py-[11px] transition cursor-pointer",
               isActive
                 ? "bg-neutral-0 text-neutral-950"
-                : "border border-[#FFFFFF1A] text-neutral-0 hover:bg-primary-950"
+                : "border border-[#FFFFFF1A] text-neutral-0 hover:border-primary-500"
             )}
           >
             {icon}

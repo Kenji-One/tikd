@@ -6,33 +6,6 @@ import { Calendar } from "lucide-react";
 import clsx from "classnames";
 
 /* -------------------------------------------------------------------------- */
-/*  Category → colour utility                                                 */
-/* -------------------------------------------------------------------------- */
-const COLOR_BY_CATEGORY: Record<string, string> = {
-  Shows: "text-primary-400",
-  Party: "text-warning-300",
-  Comedy: "text-warning-400",
-  Social: "text-error-400",
-  "Listing Party": "text-primary-300",
-};
-
-const BG_GLOW_BY_CATEGORY: Record<string, string> = {
-  Shows: "bg-[rgba(170,115,255,0.6)]", // Example for primary-400
-  Party: "bg-[rgba(255,180,163,0.6)]", // warning-300
-  Comedy: "bg-[rgba(255,152,122,0.6)]", // warning-400
-  Social: "bg-[rgba(255,117,119,0.6)]", // error-400
-  "Listing Party": "bg-[rgba(189,153,255,0.6)]", // primary-300
-};
-
-const BORDER_BY_CATEGORY: Record<string, string> = {
-  Shows: "hover:border-primary-400",
-  Party: "hover:border-warning-300",
-  Comedy: "hover:border-warning-400",
-  Social: "hover:border-error-400",
-  "Listing Party": "hover:border-primary-300",
-};
-
-/* -------------------------------------------------------------------------- */
 /*  Props                                                                     */
 /* -------------------------------------------------------------------------- */
 export interface EventCardProps {
@@ -44,6 +17,7 @@ export interface EventCardProps {
   category: string;
   /** extra classes from parent (e.g. w-full h-full) */
   className?: string;
+  clickable?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -57,16 +31,15 @@ export function EventCard({
   img,
   category,
   className,
+  clickable = true,
 }: EventCardProps) {
-  const dateColour = COLOR_BY_CATEGORY[category] ?? "text-warning-300";
-  const ellipseBg =
-    BG_GLOW_BY_CATEGORY[category] ?? "bg-[rgba(154,81,255,0.6)]";
-  const borderHover =
-    BORDER_BY_CATEGORY[category] ?? "hover:border-warning-300";
+  const dateColour = "text-primary-951";
+  const ellipseBg = "bg-[rgba(154,81,255,0.6)]";
+  const borderHover = "hover:border-primary-951";
 
   return (
     <Link
-      href={`/events/${id}`}
+      href={clickable ? `/events/${id}` : "#"}
       /*  group/card lets this card know its own hover,
           group-hover/row dims siblings when any card is hovered */
       className={clsx(

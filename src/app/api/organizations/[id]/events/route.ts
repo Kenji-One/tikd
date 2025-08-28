@@ -1,3 +1,4 @@
+// src/app/api/organizations/[id]/events/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import "@/lib/mongoose";
@@ -12,9 +13,10 @@ type EventLean = Omit<IEvent, "_id" | "organizationId" | "createdByUserId"> & {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await params;
+
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }

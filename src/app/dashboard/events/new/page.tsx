@@ -41,12 +41,13 @@ import { EventCard } from "@/components/ui/EventCard";
 const ticketTypeSchema = z.object({
   slug: z.string().min(1, "Slug is required"),
   label: z.string().min(1, "Ticket label is required"),
-  price: z.coerce.number().nonnegative("Price cannot be negative"),
+  // Use plain number and let RHF coerce via valueAsNumber
+  price: z.number().nonnegative("Price cannot be negative"),
   currency: z
     .string()
     .length(3, "Use 3-letter currency code")
     .transform((v) => v.toUpperCase()),
-  quantity: z.coerce.number().int().nonnegative("Quantity must be ≥ 0"),
+  quantity: z.number().int().nonnegative("Quantity must be ≥ 0"),
 });
 
 const FormSchema = z.object({
@@ -56,6 +57,7 @@ const FormSchema = z.object({
   location: z.string().min(2, "Location is required"),
   image: z.string().url().optional(),
   organizationId: z.string().min(1, "Pick an organization"),
+  // default([]) makes input optional but output always an array
   artists: z
     .array(
       z.object({
@@ -66,7 +68,11 @@ const FormSchema = z.object({
     .default([]),
   ticketTypes: z.array(ticketTypeSchema).min(1, "Add at least 1 ticket type"),
 });
-type FormData = z.infer<typeof FormSchema>;
+
+type Schema = typeof FormSchema;
+// RHF 3-generic pattern: <Input, Context, Output>
+type FormInput = z.input<Schema>; // what the resolver accepts (artists may be undefined before default, numbers are numbers thanks to valueAsNumber)
+type FormValues = z.output<Schema>; // what you get in onSubmit after parsing (artists is always [], numbers are numbers)
 
 /* ------------------------------------------------------------------ */
 /*  Tiny helpers                                                      */
@@ -130,7 +136,7 @@ export default function NewEventPage() {
     watch,
     setValue,
     formState: { isSubmitting, errors, submitCount },
-  } = useForm<FormData>({
+  } = useForm<FormInput, any, FormValues>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
       ticketTypes: [
@@ -161,16 +167,16 @@ export default function NewEventPage() {
     fields: artistFields,
     append: addArtist,
     remove: removeArtist,
-  } = useFieldArray({ control, name: "artists" });
+  } = useFieldArray({ control, name: "artists" as const });
 
   const {
     fields: ticketFields,
     append: addTicketType,
     remove: removeTicketType,
-  } = useFieldArray({ control, name: "ticketTypes" });
+  } = useFieldArray({ control, name: "ticketTypes" as const });
 
   /* ---------- Submit ---------------------------------------------- */
-  const onSubmit: SubmitHandler<FormData> = async (data) => {
+  const onSubmit: SubmitHandler<FormValues> = async (data) => {
     const res = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -503,7 +509,9 @@ export default function NewEventPage() {
                       step="0.01"
                       min="0"
                       placeholder="Price"
-                      {...register(`ticketTypes.${idx}.price` as const)}
+                      {...register(`ticketTypes.${idx}.price` as const, {
+                        valueAsNumber: true,
+                      })}
                       size="sm"
                       variant="transparent"
                     />
@@ -538,7 +546,9 @@ export default function NewEventPage() {
                       step="1"
                       min="0"
                       placeholder="Qty"
-                      {...register(`ticketTypes.${idx}.quantity` as const)}
+                      {...register(`ticketTypes.${idx}.quantity` as const, {
+                        valueAsNumber: true,
+                      })}
                       size="sm"
                       variant="transparent"
                     />

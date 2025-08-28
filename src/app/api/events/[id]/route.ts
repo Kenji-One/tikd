@@ -25,12 +25,13 @@ type EventLean = Omit<IEvent, "organizationId" | "artists"> & {
 
 /* ------------------------------------------------------------------ */
 /*  GET /api/events/:id                                               */
+/*  Note: In Next.js 15, context.params is a Promise.                 */
 /* ------------------------------------------------------------------ */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params;
+  const { id } = await params;
 
   if (!isObjectId(id)) {
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });

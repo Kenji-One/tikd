@@ -136,7 +136,7 @@ export default function NewEventPage() {
     watch,
     setValue,
     formState: { isSubmitting, errors, submitCount },
-  } = useForm<FormInput, any, FormValues>({
+  } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
       ticketTypes: [

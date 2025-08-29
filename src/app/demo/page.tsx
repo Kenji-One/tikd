@@ -1,9 +1,5 @@
 /* ------------------------------------------------------------------ */
 /*  src/app/book-a-demo/page.tsx – Book a Demo (Tikd.)               */
-/*  - Brand mesh hero                                                 */
-/*  - Zod + RHF validated form                                        */
-/*  - Helpful copy + beautiful cards                                  */
-/*  - Success state with optional .ics download                       */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -20,7 +16,6 @@ import LabelledInput from "@/components/ui/LabelledInput";
 import { TextArea } from "@/components/ui/TextArea";
 
 /* ----------------------------- schema ----------------------------- */
-/** Proper enum signature: use errorMap (not required_error) */
 const VolumeEnum = z.enum(["<1k", "1k-10k", "10k-50k", "50k+"] as const, {
   message: "Pick your monthly ticket volume",
 });
@@ -42,7 +37,9 @@ const DemoSchema = z.object({
   marketingOptIn: z.boolean().default(false),
 });
 
-type DemoForm = z.infer<typeof DemoSchema>;
+type Schema = typeof DemoSchema;
+type DemoInput = z.input<Schema>; // resolver input (marketingOptIn may be undefined)
+type DemoValues = z.output<Schema>; // parsed output (marketingOptIn always boolean)
 
 /* ------------------------ tiny UI helpers ------------------------- */
 function Kicker({ children }: { children: React.ReactNode }) {
@@ -127,7 +124,7 @@ function getTimezones(): string[] {
 /* ------------------------------ page ------------------------------ */
 export default function BookADemoPage() {
   const { data: session } = useSession();
-  const [submitted, setSubmitted] = useState<DemoForm | null>(null);
+  const [submitted, setSubmitted] = useState<DemoValues | null>(null);
   const zones = useMemo(getTimezones, []);
   const defaultTz =
     (typeof Intl !== "undefined" &&
@@ -139,7 +136,7 @@ export default function BookADemoPage() {
     handleSubmit,
     formState: { errors, isSubmitting },
     reset,
-  } = useForm<DemoForm>({
+  } = useForm<DemoInput, unknown, DemoValues>({
     resolver: zodResolver(DemoSchema),
     defaultValues: {
       name: session?.user?.name ?? "",
@@ -167,7 +164,7 @@ export default function BookADemoPage() {
     }
   }, [session?.user, reset]);
 
-  const onSubmit: SubmitHandler<DemoForm> = async (data) => {
+  const onSubmit: SubmitHandler<DemoValues> = async (data) => {
     try {
       await fetch("/api/demo-requests", {
         method: "POST",
@@ -176,7 +173,19 @@ export default function BookADemoPage() {
       }).catch(() => {});
     } finally {
       setSubmitted(data);
-      reset({ ...data, message: "" });
+      // reset expects DemoInput; supply fields explicitly
+      reset({
+        name: data.name,
+        email: data.email,
+        company: data.company,
+        website: data.website ?? "",
+        role: data.role,
+        timezone: data.timezone,
+        volume: data.volume,
+        interests: data.interests,
+        message: "", // clear message only
+        marketingOptIn: data.marketingOptIn,
+      });
     }
   };
 

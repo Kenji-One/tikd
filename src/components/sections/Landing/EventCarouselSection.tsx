@@ -111,7 +111,7 @@ export default function EventCarouselSection({
               size="xs"
               type="button"
               onClick={onViewAll}
-              className="hidden md:inline-flex border border-transparent hover:border-primary-500 transition duration-200"
+              className="!hidden md:!inline-flex border border-transparent hover:border-primary-500 transition duration-200"
             >
               View all
             </Button>

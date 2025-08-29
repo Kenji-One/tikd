@@ -7,11 +7,10 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 import { Button } from "@/components/ui/Button";
-import { X, LogOut, LayoutDashboard } from "lucide-react";
-
+import { X, LogOut, LayoutDashboard, Search as SearchIcon } from "lucide-react";
 import clsx from "classnames";
-import { Input } from "@/components/ui/Input";
 import RegisterLoginModal from "@/components/ui/RegisterLoginModal";
+import SearchModal from "@/components/search/SearchModal";
 
 export default function Header() {
   /* ----- routing helpers ------------------------------------------------ */
@@ -31,6 +30,7 @@ export default function Header() {
   const [modalMode, setModalMode] = useState<"login" | "register">("register");
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [mobileAvatarOpen, setMobileAvatarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement | null>(null);
   const mobileAvatarRef = useRef<HTMLDivElement | null>(null);
 
@@ -73,6 +73,10 @@ export default function Header() {
     };
   }, []);
 
+  // Expose open() to global hotkeys inside the modal file
+  // @ts-ignore
+  (setSearchOpen as any)._open = () => setSearchOpen(true);
+
   /* ---------------------------------------------------------------------- */
   return (
     <>
@@ -84,7 +88,7 @@ export default function Header() {
       >
         <div className="flex items-center justify-between px-4 lg:px-8 xl:px-[120px] pt-4">
           {/* left: logo + desktop search ---------------------------------- */}
-          <div className="flex items-center gap-6 w-full max-w-[357px]">
+          <div className="flex items-center gap-6 w-full max-w-[420px]">
             <Link href="/" className="flex items-center">
               <Image
                 src="/Logo.svg"
@@ -95,52 +99,21 @@ export default function Header() {
               />
             </Link>
 
-            {/* search (desktop only) */}
+            {/* search trigger (desktop only) – opens modal */}
             <div className="hidden lg:block w-full">
-              {/* NEW: wrap in a real search form to isolate from credential autofill */}
-              <form
-                role="search"
-                autoComplete="off"
-                onSubmit={(e) => e.preventDefault()}
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Open search"
+                className="group flex h-[44px] w-full max-w-[320px] items-center gap-3 rounded-full border border-white/10 bg-neutral-900/70 px-4 text-left text-neutral-400 backdrop-blur hover:bg-neutral-900/80"
               >
-                <Input
-                  variant="frosted"
-                  shape="pill"
-                  size="sm"
-                  maxWidth={263}
-                  name="q"
-                  inputMode="search"
-                  enterKeyHint="search"
-                  autoComplete="off"
-                  placeholder="Search events"
-                  icon={
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="17"
-                      viewBox="0 0 16 17"
-                      fill="none"
-                      focusable="false"
-                      aria-hidden="true"
-                      className="h-4 w-4 shrink-0 text-white/70" // ← force visible color
-                    >
-                      <circle
-                        cx="7.824"
-                        cy="7.825"
-                        r="6.741"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      />
-                      <path
-                        d="M12.514 12.864 L 15.157 15.5"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  }
-                />
-              </form>
+                <SearchIcon className="h-4 w-4 text-white/70 shrink-0" />
+                <span className="flex-1 truncate">Search events</span>
+                <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-neutral-300">
+                  <kbd className="font-mono">/</kbd> <span>or</span>{" "}
+                  <kbd className="font-mono">⌘K</kbd>
+                </span>
+              </button>
             </div>
           </div>
 
@@ -312,7 +285,16 @@ export default function Header() {
 
           {/* right utilities (mobile): cart + avatar + hamburger ---------- */}
           <div className="flex items-center gap-3 lg:hidden">
-            {/* Cart always visible on mobile, outside the menu */}
+            {/* quick search icon on mobile */}
+            <button
+              className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center"
+              aria-label="Open search"
+              onClick={() => setSearchOpen(true)}
+            >
+              <SearchIcon className="h-4 w-4 text-white/80" />
+            </button>
+
+            {/* Cart always visible on mobile */}
             <Link
               href="/checkout"
               className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center cursor-pointer"
@@ -339,7 +321,7 @@ export default function Header() {
               </svg>
             </Link>
 
-            {/* Avatar outside the menu (only when logged in) */}
+            {/* Avatar (mobile) */}
             {loggedIn && (
               <div className="relative" ref={mobileAvatarRef}>
                 <button
@@ -440,52 +422,13 @@ export default function Header() {
         {mobileOpen && (
           <div className="lg:hidden fixed inset-0 z-40 bg-neutral-950/90 backdrop-blur">
             <div className="flex flex-col items-center justify-center h-full space-y-6 px-4">
-              {/* search moved into mobile menu */}
-              <div className="w-full max-w-[263px]">
-                {/* NEW: same search form guard on mobile */}
-                <form
-                  role="search"
-                  autoComplete="off"
-                  onSubmit={(e) => e.preventDefault()}
-                >
-                  <Input
-                    variant="frosted"
-                    shape="pill"
-                    size="sm"
-                    name="q"
-                    inputMode="search"
-                    enterKeyHint="search"
-                    autoComplete="off"
-                    placeholder="Search events"
-                    icon={
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="17"
-                        viewBox="0 0 16 17"
-                        fill="none"
-                        focusable="false"
-                        aria-hidden="true"
-                        className="h-4 w-4 shrink-0 text-white/70" // ← force visible color
-                      >
-                        <circle
-                          cx="7.824"
-                          cy="7.825"
-                          r="6.741"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                        />
-                        <path
-                          d="M12.514 12.864 L 15.157 15.5"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    }
-                  />
-                </form>
-              </div>
+              <Button
+                size="lg"
+                onClick={() => setSearchOpen(true)}
+                className="w-[263px]"
+              >
+                <SearchIcon className="mr-2 h-4 w-4" /> Search
+              </Button>
 
               {showDemo && (
                 <Link href="/demo" onClick={() => setMobileOpen(false)}>
@@ -529,7 +472,7 @@ export default function Header() {
         )}
       </header>
 
-      {/* register / login modal only available when not logged-in */}
+      {/* register / login modal */}
       {!loggedIn && (
         <RegisterLoginModal
           isOpen={modalOpen}
@@ -537,6 +480,9 @@ export default function Header() {
           initialMode={modalMode}
         />
       )}
+
+      {/* search modal */}
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   );
 }

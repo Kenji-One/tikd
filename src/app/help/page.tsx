@@ -247,8 +247,8 @@ export default function HelpPage() {
   };
 
   return (
-    <PageWrapper className="relative ">
-      <Container className="z-10">
+    <PageWrapper className="relative overflow-hidden">
+      <Container className="z-10 ">
         <div className="absolute left-1/2 top-[-36.5%] -translate-x-1/2 z-[-1] w-[1264px] h-[1264px] ">
           <Image
             src="/assets/boxes.png"
@@ -261,7 +261,7 @@ export default function HelpPage() {
           />
         </div>
 
-        <h1 className="mb-18 text-center text-2xl font-black uppercase text-neutral-0 md:text-[40px] leading-[90%] tracking-[-0.8px] italic">
+        <h1 className="mb-18 mt-12 text-center text-2xl font-black uppercase text-neutral-0 md:text-[40px] leading-[90%] tracking-[-0.8px] italic">
           HELP CENTER
         </h1>
 

@@ -1,4 +1,6 @@
+// src/components/search/SearchModal.tsx
 "use client";
+
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -15,15 +17,19 @@ import {
   Building2,
 } from "lucide-react";
 
+/* ────────────────────────────────────────────────────────────────
+   Types
+   ──────────────────────────────────────────────────────────────── */
 type Filter = "all" | "event" | "artist" | "org";
 
 type Item = {
   id: string;
   type: "event" | "artist" | "org";
   title: string;
-  subtitle?: string;
-  date?: string | null;
-  image?: string | null;
+  subtitle?: string; // for artists/orgs and also orgName for events
+  orgName?: string | null;
+  date?: string | null; // ISO string
+  image?: string | null; // poster/avatar/logo
   href: string;
 };
 
@@ -40,6 +46,9 @@ const FILTER_LABEL: Record<Filter, string> = {
   org: "Organization",
 };
 
+/* ────────────────────────────────────────────────────────────────
+   Helpers
+   ──────────────────────────────────────────────────────────────── */
 function highlight(text: string, query: string): ReactNode {
   if (!query) return text;
   const pattern = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -55,7 +64,7 @@ function highlight(text: string, query: string): ReactNode {
     parts.push(
       <mark
         key={`${start}-${end}`}
-        className="rounded px-0.5 py-0 text-primary-300 bg-primary-900/40"
+        className="rounded-[0.35rem] px-1 py-0.5 bg-primary-900/35 text-primary-200"
       >
         {text.slice(start, end)}
       </mark>
@@ -66,14 +75,40 @@ function highlight(text: string, query: string): ReactNode {
   return parts;
 }
 
-function Badge({ children }: { children: React.ReactNode }) {
+function Chip({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+}) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-neutral-200">
+    <button
+      type="button"
+      onClick={onClick}
+      className="group inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5/50 px-3 py-1.5 text-xs text-neutral-200 hover:bg-white/10 active:scale-[0.98] transition"
+    >
       {children}
-    </span>
+    </button>
   );
 }
 
+function formatDate(iso?: string | null) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Component
+   ──────────────────────────────────────────────────────────────── */
 export default function SearchModal({
   open,
   onClose,
@@ -83,6 +118,8 @@ export default function SearchModal({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null); // ⬅️ modal card ref
+
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(false);
@@ -102,9 +139,9 @@ export default function SearchModal({
     return items;
   }, [results, filter]);
 
+  /* recent search history */
   const HISTORY_KEY = "tikd:recent-searches:v1";
   const [recent, setRecent] = useState<string[]>([]);
-
   useEffect(() => {
     try {
       const raw = localStorage.getItem(HISTORY_KEY);
@@ -113,10 +150,9 @@ export default function SearchModal({
       /* ignore */
     }
   }, []);
-
   function pushRecent(q: string) {
     try {
-      const next = [q, ...recent.filter((x) => x !== q)].slice(0, 6);
+      const next = [q, ...recent.filter((x) => x !== q)].slice(0, 8);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
       setRecent(next);
     } catch {
@@ -124,7 +160,7 @@ export default function SearchModal({
     }
   }
 
-  /* focus + key nav while open */
+  /* key handling + focus */
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -153,7 +189,8 @@ export default function SearchModal({
       clearTimeout(t);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, flatResults, active, query, onClose, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, flatResults, active, query]);
 
   /* fetch (debounced) */
   useEffect(() => {
@@ -171,7 +208,7 @@ export default function SearchModal({
         const res = await fetch(
           `/api/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(
             filter
-          )}&limit=6`,
+          )}&limit=8`,
           { signal: ac.signal, cache: "no-store" }
         );
         const data: { results?: Results } = await res.json();
@@ -188,7 +225,7 @@ export default function SearchModal({
       } finally {
         setLoading(false);
       }
-    }, 250);
+    }, 220);
     return () => {
       clearTimeout(t);
       ac.abort();
@@ -197,222 +234,356 @@ export default function SearchModal({
 
   if (!open || typeof window === "undefined") return null;
 
+  /* ─────────────────────────── UI ─────────────────────────── */
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-neutral-950/80 backdrop-blur-sm"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+      className={clsx(
+        "fixed inset-0 z-[100] overflow-y-auto overscroll-contain",
+        "bg-gradient-to-b from-neutral-950/80 to-neutral-950/60 backdrop-blur-md"
+      )}
+      // Close when clicking/tapping anywhere outside the card
+      onPointerDown={(e) => {
+        const target = e.target as Node;
+        if (cardRef.current && !cardRef.current.contains(target)) {
+          onClose();
+        }
       }}
       aria-modal="true"
       role="dialog"
+      aria-label="Search"
     >
-      {/* top search bar */}
-      <div className="mx-auto max-w-3xl px-4 pt-12">
-        <div className="relative flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/90 backdrop-blur px-4 py-2.5 shadow-2xl focus-within:ring-2 focus-within:ring-primary-600/40 focus-within:border-primary-600/30">
-          <Search
-            className="h-5 w-5 shrink-0 text-neutral-300"
-            aria-hidden="true"
-          />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
-            aria-label="Search"
-            className="peer flex-1 bg-transparent text-neutral-0 placeholder:text-neutral-400 outline-none ring-0 focus:outline-none focus:ring-0"
-          />
-
-          {/* filter dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setDropdownOpen((v) => !v)}
-              className="group inline-flex h-9 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-neutral-200 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
-              aria-haspopup="listbox"
-              aria-expanded={dropdownOpen}
-            >
-              <span className="opacity-70">by</span>
-              <span className="font-medium">{FILTER_LABEL[filter]}</span>
-              <ChevronDown className="h-4 w-4 opacity-70 group-hover:opacity-100" />
-            </button>
-            {dropdownOpen && (
-              <div
-                role="listbox"
-                className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-neutral-900/95 shadow-xl"
-              >
-                {(["all", "event", "artist", "org"] as Filter[]).map((f) => (
-                  <button
-                    key={f}
-                    role="option"
-                    aria-selected={filter === f}
-                    onClick={() => {
-                      setFilter(f);
-                      setDropdownOpen(false);
-                    }}
-                    className={clsx(
-                      "flex w-full items-center gap-2 px-3.5 py-2.5 text-sm hover:bg-white/5 focus:outline-none",
-                      filter === f && "bg-white/5"
-                    )}
-                  >
-                    {f === "event" && (
-                      <Calendar className="h-4 w-4 opacity-80" />
-                    )}
-                    {f === "artist" && <Mic2 className="h-4 w-4 opacity-80" />}
-                    {f === "org" && (
-                      <Building2 className="h-4 w-4 opacity-80" />
-                    )}
-                    {f === "all" && <Search className="h-4 w-4 opacity-80" />}
-                    <span>{FILTER_LABEL[f]}</span>
-                  </button>
-                ))}
-              </div>
+      {/* safe-area padding + centering */}
+      <div className="min-h-screen w-full grid place-items-start sm:place-items-center pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),1rem)]">
+        <div className="w-full max-w-3xl px-3 sm:px-4">
+          {/* Command bar + results (the “card”) */}
+          <div
+            ref={cardRef}
+            className={clsx(
+              "relative rounded-2xl sm:rounded-[1.5rem] border border-white/8 bg-neutral-900/70 backdrop-blur-xl",
+              "shadow-[0_16px_40px_-12px_rgba(0,0,0,0.45),0_4px_16px_rgba(0,0,0,0.35)]"
             )}
-          </div>
-
-          {/* close */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
-            aria-label="Close search"
           >
-            <X className="h-4 w-4 text-neutral-300" />
-          </button>
-        </div>
-      </div>
+            {/* Top row */}
+            <div className="flex items-center gap-2 px-3.5 py-3 sm:px-5 sm:py-3.5">
+              <Search
+                className="h-5 w-5 shrink-0 text-neutral-300"
+                aria-hidden
+              />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search events, artists, organizers…"
+                aria-label="Search"
+                inputMode="search"
+                className={clsx(
+                  "w-full peer flex-1 bg-transparent text-neutral-0 placeholder:text-neutral-400",
+                  "outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 border-0",
+                  "text-[14px] sm:text-base"
+                )}
+              />
 
-      {/* results panel */}
-      <div className="mx-auto max-w-3xl px-4">
-        <div className="mt-3 overflow-hidden rounded-card border border-white/10 bg-neutral-900/90 backdrop-blur shadow-2xl">
-          {!query.trim() && (
-            <div className="p-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-neutral-100">
-                  Recent searches
-                </h4>
-                {recent.length > 0 && (
-                  <button
-                    className="text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none"
-                    onClick={() => {
-                      localStorage.removeItem(HISTORY_KEY);
-                      setRecent([]);
-                    }}
+              {/* Filter dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setDropdownOpen((v) => !v)}
+                  className={clsx(
+                    "group inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5",
+                    "h-7 sm:h-9 px-2 sm:px-3 text-[11px] sm:text-xs text-neutral-200",
+                    "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40"
+                  )}
+                  aria-haspopup="listbox"
+                  aria-expanded={dropdownOpen}
+                >
+                  <span className="hidden sm:inline opacity-70">by</span>
+                  <span className="font-medium">{FILTER_LABEL[filter]}</span>
+                  <ChevronDown className="h-4 w-4 opacity-70 group-hover:opacity-100" />
+                </button>
+
+                {dropdownOpen && (
+                  <div
+                    role="listbox"
+                    className={clsx(
+                      "absolute right-0 mt-2 w-44 sm:w-48 overflow-hidden rounded-xl border border-white/10",
+                      "bg-neutral-900/95 backdrop-blur-xl",
+                      "shadow-[0_22px_50px_-20px_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.35)]"
+                    )}
+                    onPointerDown={(e) => e.stopPropagation()} // prevent outside-close when interacting the menu
                   >
-                    Clear
-                  </button>
+                    {(["all", "event", "artist", "org"] as Filter[]).map(
+                      (f) => (
+                        <button
+                          key={f}
+                          role="option"
+                          aria-selected={filter === f}
+                          onClick={() => {
+                            setFilter(f);
+                            setDropdownOpen(false);
+                            inputRef.current?.focus();
+                          }}
+                          className={clsx(
+                            "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none",
+                            filter === f && "bg-white/7"
+                          )}
+                        >
+                          {f === "event" && (
+                            <Calendar className="h-4 w-4 opacity-80" />
+                          )}
+                          {f === "artist" && (
+                            <Mic2 className="h-4 w-4 opacity-80" />
+                          )}
+                          {f === "org" && (
+                            <Building2 className="h-4 w-4 opacity-80" />
+                          )}
+                          {f === "all" && (
+                            <Search className="h-4 w-4 opacity-80" />
+                          )}
+                          <span>{FILTER_LABEL[f]}</span>
+                        </button>
+                      )
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {recent.length === 0 ? (
-                  <p className="col-span-full text-sm text-neutral-400">
-                    Try “Jazz”, “Tbilisi”, or “Coldplay”.
-                  </p>
-                ) : (
-                  recent.map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => setQuery(r)}
-                      className="group flex items-center gap-2 rounded-lg border border-white/5 bg-white/2 px-3 py-2 text-left hover:bg-white/5 focus:outline-none"
-                    >
-                      <History className="h-4 w-4 text-neutral-400 group-hover:text-neutral-300" />
-                      <span className="truncate text-sm text-neutral-200">
-                        {r}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
 
-          {query.trim() && loading && (
-            <div className="flex items-center gap-3 p-4 text-neutral-300">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Searching…
+              {/* Close */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="ml-0.5 inline-flex h-6 w-6 sm:h-9 sm:w-9 items-center justify-center rounded-full hover:bg-white/7 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40"
+                aria-label="Close search"
+              >
+                <X className="h-5 w-5 text-neutral-300" />
+              </button>
             </div>
-          )}
 
-          {query.trim() && !loading && flatResults.length > 0 && (
-            <ul role="listbox" className="divide-y divide-white/5">
-              {flatResults.map((item) => {
-                const activeNow = active === item.id;
-                return (
-                  <li key={item.id}>
-                    <button
-                      role="option"
-                      aria-selected={activeNow}
-                      onMouseEnter={() => setActive(item.id)}
-                      onClick={() => {
-                        pushRecent(query);
-                        onClose();
-                        router.push(item.href);
-                      }}
-                      className={clsx(
-                        "flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5 focus:outline-none",
-                        activeNow && "bg-white/5"
-                      )}
-                    >
-                      <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5">
-                        {item.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={item.image}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-neutral-400">
-                            {item.type === "event" && (
-                              <Calendar className="h-4 w-4" />
+            {/* Divider */}
+            <div className="h-px w-full bg-gradient-to-r from-white/5 via-white/10 to-white/5" />
+
+            {/* Results panel */}
+            <div className="max-h-[70vh] sm:max-h-[60vh] overflow-auto rounded-b-2xl sm:rounded-b-[1.5rem]">
+              {/* Empty query → Recent */}
+              {!query.trim() && (
+                <div className="p-3.5 sm:p-5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[13px] sm:text-sm font-medium text-neutral-100">
+                      Recent searches
+                    </h4>
+                    {recent.length > 0 && (
+                      <button
+                        className="text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none"
+                        onClick={() => {
+                          localStorage.removeItem(HISTORY_KEY);
+                          setRecent([]);
+                        }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {recent.length === 0 ? (
+                      <>
+                        <Chip onClick={() => setQuery("Jazz")}>Jazz</Chip>
+                        <Chip onClick={() => setQuery("New York")}>
+                          New York
+                        </Chip>
+                        <Chip onClick={() => setQuery("Coldplay")}>
+                          Coldplay
+                        </Chip>
+                        <Chip onClick={() => setQuery("Theatre")}>Theatre</Chip>
+                      </>
+                    ) : (
+                      recent.map((r) => (
+                        <Chip key={r} onClick={() => setQuery(r)}>
+                          <History className="h-3.5 w-3.5 text-neutral-300" />
+                          <span className="truncate">{r}</span>
+                        </Chip>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Loading */}
+              {query.trim() && loading && (
+                <div className="flex items-center gap-3 px-3.5 sm:px-4 py-5 text-neutral-300">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Searching…
+                </div>
+              )}
+
+              {/* Results */}
+              {query.trim() && !loading && flatResults.length > 0 && (
+                <ul role="listbox" className="divide-y divide-white/5">
+                  {flatResults.map((item) => {
+                    const activeNow = active === item.id;
+
+                    if (item.type === "event") {
+                      return (
+                        <li key={item.id}>
+                          <button
+                            role="option"
+                            aria-selected={activeNow}
+                            onMouseEnter={() => setActive(item.id)}
+                            onClick={() => {
+                              pushRecent(query);
+                              onClose();
+                              router.push(item.href);
+                            }}
+                            className={clsx(
+                              "group grid w-full items-center text-left transition",
+                              "grid-cols-[48px_1fr_auto] sm:grid-cols-[56px_1fr_auto]",
+                              "gap-3 sm:gap-4 px-3.5 sm:px-4 py-3",
+                              "hover:bg-white/5 focus:outline-none",
+                              activeNow && "bg-white/6"
                             )}
-                            {item.type === "artist" && (
-                              <Mic2 className="h-4 w-4" />
+                          >
+                            <div
+                              className={clsx(
+                                "h-12 w-12 sm:h-14 sm:w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5",
+                                "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                              )}
+                            >
+                              {item.image ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={item.image}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-neutral-400">
+                                  <Calendar className="h-5 w-5" />
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="truncate text-[15px] sm:text-sm text-neutral-0">
+                                {highlight(item.title, query)}
+                              </div>
+                              <div className="mt-0.5 line-clamp-2 sm:line-clamp-1 text-xs text-neutral-400">
+                                {item.orgName || item.subtitle}
+                                {item.date && (
+                                  <span className="ml-2 text-neutral-500">
+                                    • {formatDate(item.date)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <span className="hidden sm:inline-flex rounded-full bg-primary-900/30 px-2 py-1 text-[10px] uppercase tracking-wide text-primary-300">
+                              Event
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    }
+
+                    // Artists / Orgs
+                    return (
+                      <li key={item.id}>
+                        <button
+                          role="option"
+                          aria-selected={activeNow}
+                          onMouseEnter={() => setActive(item.id)}
+                          onClick={() => {
+                            pushRecent(query);
+                            onClose();
+                            router.push(item.href);
+                          }}
+                          className={clsx(
+                            "group grid w-full items-center text-left transition",
+                            "grid-cols-[40px_1fr_auto] sm:grid-cols-[44px_1fr_auto]",
+                            "gap-3 sm:gap-3.5 px-3.5 sm:px-4 py-3",
+                            "hover:bg-white/5 focus:outline-none",
+                            activeNow && "bg-white/6"
+                          )}
+                        >
+                          <div
+                            className={clsx(
+                              "h-10 w-10 sm:h-11 sm:w-11 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5",
+                              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                             )}
-                            {item.type === "org" && (
-                              <Building2 className="h-4 w-4" />
+                          >
+                            {item.image ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={item.image}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-neutral-400">
+                                {item.type === "artist" ? (
+                                  <Mic2 className="h-4 w-4" />
+                                ) : (
+                                  <Building2 className="h-4 w-4" />
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm text-neutral-0">
-                          {highlight(item.title, query)}
-                        </div>
-                        <div className="truncate text-xs text-neutral-400">
-                          {item.subtitle}
-                          {item.type === "event" && item.date && (
-                            <span className="ml-2 text-neutral-500">
-                              • {new Date(item.date).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <span
-                        className={clsx(
-                          "rounded-full px-2 py-1 text-[10px] uppercase tracking-wide",
-                          item.type === "event" &&
-                            "bg-primary-900/30 text-primary-300",
-                          item.type === "artist" &&
-                            "bg-success-950 text-success-300",
-                          item.type === "org" &&
-                            "bg-warning-950 text-warning-300"
-                        )}
-                      >
-                        {item.type}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
 
-          {query.trim() && !loading && flatResults.length === 0 && (
-            <div className="p-6 text-center text-neutral-300">
-              No results for <span className="text-neutral-0">“{query}”</span>.
+                          <div className="min-w-0">
+                            <div className="truncate text-[15px] sm:text-sm text-neutral-0">
+                              {highlight(item.title, query)}
+                            </div>
+                            <div className="truncate text-xs text-neutral-400">
+                              {item.subtitle}
+                            </div>
+                          </div>
+
+                          <span
+                            className={clsx(
+                              "hidden sm:inline-flex rounded-full px-2 py-1 text-[10px] uppercase tracking-wide",
+                              item.type === "artist" &&
+                                "bg-success-950 text-success-300",
+                              item.type === "org" &&
+                                "bg-warning-950 text-warning-300"
+                            )}
+                          >
+                            {item.type}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {/* Empty state */}
+              {query.trim() && !loading && flatResults.length === 0 && (
+                <div className="p-8 text-center">
+                  <div className="inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-neutral-300">
+                    <Search className="h-5 w-5" />
+                  </div>
+                  <p className="mt-3 text-neutral-200">
+                    No results for{" "}
+                    <span className="text-neutral-0">“{query}”</span>
+                  </p>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    Try a different spelling, or use the filter for events,
+                    artists, or organizers.
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <Chip onClick={() => setFilter("event")}>Events only</Chip>
+                    <Chip onClick={() => setFilter("artist")}>
+                      Artists only
+                    </Chip>
+                    <Chip onClick={() => setFilter("org")}>
+                      Organizers only
+                    </Chip>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+          {/* end card */}
         </div>
       </div>
     </div>,

@@ -1,3 +1,4 @@
+// src/components/layout/Header.tsx
 "use client";
 
 import Link from "next/link";
@@ -15,10 +16,15 @@ import SearchModal from "@/components/search/SearchModal";
 export default function Header() {
   /* ----- routing helpers ------------------------------------------------ */
   const pathname = usePathname();
-  const isLanding = pathname === "/";
-  const isAbout = pathname === "/about";
-  const isDemo = pathname === "/demo";
-  const showDemo = pathname === "/" || pathname.startsWith("/help");
+
+  // pages that have a hero behind the header (transparent on top)
+  const hasHero =
+    pathname === "/" ||
+    pathname.startsWith("/events/") ||
+    pathname.startsWith("/organizations/") ||
+    pathname === "/about" ||
+    pathname === "/demo" ||
+    pathname === "/help";
 
   /* ----- auth state ----------------------------------------------------- */
   const { data: session, status } = useSession();
@@ -31,6 +37,8 @@ export default function Header() {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [mobileAvatarOpen, setMobileAvatarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
   const avatarRef = useRef<HTMLDivElement | null>(null);
   const mobileAvatarRef = useRef<HTMLDivElement | null>(null);
 
@@ -46,6 +54,7 @@ export default function Header() {
       ? session.user.image
       : `/api/avatar?seed=${encodeURIComponent(seed)}`;
 
+  /* close popovers on outside click / escape */
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       const target = e.target as Node;
@@ -63,6 +72,7 @@ export default function Header() {
       if (e.key === "Escape") {
         setAvatarOpen(false);
         setMobileAvatarOpen(false);
+        setMobileOpen(false);
       }
     }
     document.addEventListener("mousedown", onDocClick);
@@ -86,16 +96,28 @@ export default function Header() {
     return () => document.removeEventListener("keydown", onGlobal);
   }, []);
 
+  /* watch scroll to toggle glass bg */
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const headerShell = clsx(
+    "fixed inset-x-0 top-0 z-[100] transition-colors duration-300",
+    hasHero && !scrolled
+      ? "bg-transparent border-transparent"
+      : "border-b border-white/10 bg-neutral-950/70 backdrop-blur-md supports-[backdrop-filter]:bg-neutral-950/60"
+  );
+
+  const showDemo = pathname === "/" || pathname.startsWith("/help");
+
   /* ---------------------------------------------------------------------- */
   return (
     <>
-      <header
-        className={clsx(
-          isLanding || isAbout || isDemo ? "fixed top-0" : "relative top-0",
-          "z-50 w-full"
-        )}
-      >
-        <div className="flex items-center justify-between px-4 lg:px-8 xl:px-[120px] pt-4">
+      <header className={headerShell}>
+        <div className="flex items-center justify-between px-4 lg:px-8 xl:px-[120px] py-3 sm:py-4">
           {/* left: logo + desktop search ---------------------------------- */}
           <div className="flex items-center gap-6 w-full max-w-[420px]">
             <Link href="/" className="flex items-center">
@@ -114,10 +136,9 @@ export default function Header() {
                 type="button"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Open search"
-                className="group flex h-[44px] w-full max-w-[320px] items-center gap-3 rounded-full border border-white/10 bg-neutral-900/70 px-4 text-left text-neutral-400 backdrop-blur hover:bg-neutral-900/80
-                           outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40 focus-visible:ring-offset-0"
+                className="group flex h-[44px] w-full max-w-[320px] items-center gap-3 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 px-4 text-left text-neutral-300 outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
               >
-                <SearchIcon className="h-4 w-4 text-white/70 shrink-0" />
+                <SearchIcon className="h-4 w-4 text-white/80 shrink-0" />
                 <span className="flex-1 truncate">Search events</span>
                 <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-neutral-300">
                   <kbd className="font-mono">/</kbd> <span>or</span>{" "}
@@ -130,23 +151,14 @@ export default function Header() {
           {/* desktop nav --------------------------------------------------- */}
           <nav className="hidden lg:flex items-center space-x-6 text-neutral-0">
             {showDemo && (
-              <Link
-                href="/demo"
-                className="hover:text-primary-500 transition duration-200 ease-in-out"
-              >
+              <Link href="/demo" className="hover:text-primary-500 transition">
                 Book a Demo
               </Link>
             )}
-            <Link
-              href="/events"
-              className="hover:text-primary-500 transition duration-200 ease-in-out"
-            >
+            <Link href="/events" className="hover:text-primary-500 transition">
               Events
             </Link>
-            <Link
-              href="/about"
-              className="hover:text-primary-500 transition duration-200 ease-in-out"
-            >
+            <Link href="/about" className="hover:text-primary-500 transition">
               About us
             </Link>
 
@@ -169,7 +181,7 @@ export default function Header() {
                   {/* Cart icon – always visible */}
                   <Link
                     href="/checkout"
-                    className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition duration-200 flex items-center justify-center cursor-pointer"
+                    className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -198,7 +210,7 @@ export default function Header() {
                   {/* Cart icon – always visible */}
                   <Link
                     href="/checkout"
-                    className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition duration-200 flex items-center justify-center cursor-pointer"
+                    className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -267,7 +279,7 @@ export default function Header() {
                                 href="/dashboard"
                                 role="menuitem"
                                 onClick={() => setAvatarOpen(false)}
-                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg:white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                               >
                                 <LayoutDashboard className="h-4 w-4 opacity-80" />
                                 <span className="text-sm">Dashboard</span>
@@ -293,10 +305,10 @@ export default function Header() {
             </div>
           </nav>
 
-          {/* right utilities (mobile): cart + avatar + hamburger ---------- */}
+          {/* right utilities (mobile): search + cart + avatar + hamburger --- */}
           <div className="flex items-center gap-3 lg:hidden">
             <button
-              className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
+              className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
               aria-label="Open search"
               onClick={() => setSearchOpen(true)}
             >
@@ -349,7 +361,7 @@ export default function Header() {
                   />
                 </button>
                 {mobileAvatarOpen && (
-                  <div className="absolute right-0 mt-2 w-56 z-50">
+                  <div className="absolute right-0 mt-2 w-56 z-[130]">
                     <div className="relative">
                       {/* caret */}
                       <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 bg-neutral-900/95 border border-white/10 border-b-0 border-r-0"></span>
@@ -400,7 +412,7 @@ export default function Header() {
 
             {/* Hamburger toggle */}
             <button
-              className="block lg:hidden text-neutral-0 z-50"
+              className="block lg:hidden text-neutral-0 z-[140]"
               onClick={() => {
                 setMobileOpen(!mobileOpen);
                 setMobileAvatarOpen(false);
@@ -429,16 +441,8 @@ export default function Header() {
 
         {/* mobile menu ------------------------------------------------------ */}
         {mobileOpen && (
-          <div className="lg:hidden fixed inset-0 z-40 bg-neutral-950/90 backdrop-blur">
+          <div className="lg:hidden fixed inset-0 z-[120] bg-neutral-950/90 backdrop-blur">
             <div className="flex flex-col items-center justify-center h-full space-y-6 px-4">
-              <Button
-                size="lg"
-                onClick={() => setSearchOpen(true)}
-                className="w-[263px]"
-              >
-                <SearchIcon className="mr-2 h-4 w-4" /> Search
-              </Button>
-
               {showDemo && (
                 <Link href="/demo" onClick={() => setMobileOpen(false)}>
                   Book a Demo
@@ -480,6 +484,9 @@ export default function Header() {
           </div>
         )}
       </header>
+
+      {/* spacer so non-hero pages don't hide under fixed header */}
+      {!hasHero && <div className="h-[64px]" />}
 
       {/* register / login modal */}
       {!loggedIn && (

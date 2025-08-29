@@ -122,7 +122,7 @@ export default function CheckoutPage() {
   if (items.length === 0) {
     return (
       <main className="mx-auto w-full max-w-[1232px] px-4 py-10">
-        <h1 className="mb-6 text-center text-4xl font-extrabold uppercase tracking-tight text-neutral-0">
+        <h1 className="mb-6 text-center text-2xl lg:text-4xl font-extrabold uppercase tracking-tight text-neutral-0">
           CHECKOUT
         </h1>
         <div className="rounded-2xl bg-neutral-900 p-8 text-center text-neutral-200">

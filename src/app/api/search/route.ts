@@ -20,7 +20,8 @@ type SearchItemEvent = {
   id: string;
   type: "event";
   title: string;
-  subtitle: string;
+  subtitle: string; // org name duplicated here for backwards use
+  orgName: string | null; // explicit for UI
   date: string | null;
   image: string | null;
   href: string;
@@ -56,14 +57,21 @@ type Kind = "event" | "artist" | "org" | "all";
 /* ---------- minimal lean projections (typed) ----------------------- */
 type ObjId = Types.ObjectId | string;
 
+interface OrgLean {
+  _id: ObjId;
+  name: string;
+  slug?: string;
+  logo?: string | null;
+  city?: string | null;
+}
+
 interface EventLean {
   _id: ObjId;
   title: string;
-  slug?: string;
-  images?: { cover?: string | null } | null;
-  venue?: { name?: string | null } | null;
-  location?: { city?: string | null } | null;
-  startsAt?: Date | string | null;
+  image?: string | null;
+  date?: Date | string | null;
+  location?: string | null;
+  organizationId?: ObjId | OrgLean | null;
 }
 
 interface ArtistLean {
@@ -72,14 +80,6 @@ interface ArtistLean {
   slug?: string;
   avatar?: string | null;
   genres?: string[] | null;
-}
-
-interface OrgLean {
-  _id: ObjId;
-  name: string;
-  slug?: string;
-  logo?: string | null;
-  city?: string | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -110,25 +110,17 @@ export async function GET(req: NextRequest) {
       type === "event" || type === "all"
         ? Event.find<EventLean>(
             {
-              $or: [
-                { title: rx },
-                { subtitle: rx },
-                { "venue.name": rx },
-                { "location.city": rx },
-              ],
+              $or: [{ title: rx }, { location: rx }],
             },
-            {
-              _id: 1,
-              title: 1,
-              slug: 1,
-              "images.cover": 1,
-              "venue.name": 1,
-              "location.city": 1,
-              startsAt: 1,
-            }
+            { _id: 1, title: 1, image: 1, date: 1, organizationId: 1 }
           )
-            .sort({ startsAt: 1 })
+            .sort({ date: 1 })
             .limit(perType)
+            .populate({
+              path: "organizationId",
+              select: "_id name slug logo city",
+              model: Organization,
+            })
             .lean()
         : ([] as EventLean[]),
       type === "artist" || type === "all"
@@ -150,15 +142,23 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Uniform client shape + hrefs
-    const toEvent = (e: EventLean): SearchItemEvent => ({
-      id: String(e._id),
-      type: "event",
-      title: e.title,
-      subtitle: e.venue?.name || e.location?.city || "",
-      date: e.startsAt ? new Date(e.startsAt).toISOString() : null,
-      image: e.images?.cover ?? null,
-      href: `/events/${e.slug || e._id}`,
-    });
+    const toEvent = (e: EventLean): SearchItemEvent => {
+      const org =
+        e.organizationId && typeof e.organizationId === "object"
+          ? (e.organizationId as OrgLean)
+          : null;
+
+      return {
+        id: String(e._id),
+        type: "event",
+        title: e.title,
+        subtitle: org?.name || "", // for older UI parts
+        orgName: org?.name || null, // explicit for new UI
+        date: e.date ? new Date(e.date).toISOString() : null,
+        image: e.image ?? null,
+        href: `/events/${e._id}`, // fallback to id (no slug in Event schema)
+      };
+    };
 
     const toArtist = (a: ArtistLean): SearchItemArtist => ({
       id: String(a._id),
@@ -197,8 +197,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/* Index hints (create in Mongo/Atlas for perf)
-  db.events.createIndex({ title: "text", subtitle: "text", "venue.name": "text", "location.city": "text" })
+/* Index suggestions (create in Mongo/Atlas for perf)
+  db.events.createIndex({ title: "text", location: "text", date: 1 })
   db.artists.createIndex({ name: "text", genres: "text" })
   db.organizations.createIndex({ name: "text", city: "text" })
 */

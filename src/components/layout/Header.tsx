@@ -118,19 +118,24 @@ export default function Header() {
                       xmlns="http://www.w3.org/2000/svg"
                       width="16"
                       height="17"
+                      viewBox="0 0 16 17"
                       fill="none"
+                      focusable="false"
+                      aria-hidden="true"
+                      className="shrink-0"
                     >
                       <circle
                         cx="7.824"
                         cy="7.825"
                         r="6.741"
-                        stroke="white"
+                        stroke="currentColor"
                         strokeWidth="1.5"
                       />
                       <path
-                        d="M12.514 12.864 15.157 15.5"
-                        stroke="white"
+                        d="M12.514 12.864 L 15.157 15.5"
+                        stroke="currentColor"
                         strokeWidth="1.5"
+                        strokeLinecap="round"
                       />
                     </svg>
                   }
@@ -457,19 +462,24 @@ export default function Header() {
                         xmlns="http://www.w3.org/2000/svg"
                         width="16"
                         height="17"
+                        viewBox="0 0 16 17"
                         fill="none"
+                        focusable="false"
+                        aria-hidden="true"
+                        className="shrink-0"
                       >
                         <circle
                           cx="7.824"
                           cy="7.825"
                           r="6.741"
-                          stroke="white"
+                          stroke="currentColor"
                           strokeWidth="1.5"
                         />
                         <path
-                          d="M12.514 12.864 15.157 15.5"
-                          stroke="white"
+                          d="M12.514 12.864 L 15.157 15.5"
+                          stroke="currentColor"
                           strokeWidth="1.5"
+                          strokeLinecap="round"
                         />
                       </svg>
                     }

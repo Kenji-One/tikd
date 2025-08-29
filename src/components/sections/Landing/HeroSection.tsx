@@ -1,14 +1,15 @@
 /* -------------------------------------------------------------------------- */
-/*  HeroSection.tsx                                                           */
+/*  src/components/sections/Landing/HeroSection.tsx                           */
 /* -------------------------------------------------------------------------- */
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import clsx from "classnames";
 
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
+
 /* -------------------------------------------------------------------------- */
 /*  Types & mock data                                                         */
 /* -------------------------------------------------------------------------- */
@@ -19,7 +20,7 @@ interface Slide {
   venue: string;
   dateLabel: string;
   img: string;
-  category?: string; // optional category for styling
+  category?: string;
 }
 
 const slides: Slide[] = [
@@ -49,42 +50,75 @@ const slides: Slide[] = [
   },
 ];
 
-/* category → colour -------------------------------------------------------- */
-
 /* -------------------------------------------------------------------------- */
 /*  Main component                                                            */
 /* -------------------------------------------------------------------------- */
 
+const SLIDE_DURATION_MS = 14000; // progress bar + auto-advance duration
+
 export default function HeroSection() {
   const [idx, setIdx] = useState(0);
+  const [progress, setProgress] = useState(0); // 0..100
 
   const prev = (idx - 1 + slides.length) % slides.length;
   const next = (idx + 1) % slides.length;
 
+  // Keep progress bar and auto-advance in perfect sync
+  useEffect(() => {
+    setProgress(0); // hard reset on slide change
+
+    let rafId = 0;
+    const start = performance.now();
+
+    const tick = (now: number) => {
+      const pct = Math.min(1, (now - start) / SLIDE_DURATION_MS);
+      setProgress(pct * 100);
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+
+    const timeoutId = window.setTimeout(() => {
+      setIdx((i) => (i + 1) % slides.length);
+    }, SLIDE_DURATION_MS);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+    };
+  }, [idx]);
+
+  const jumpTo = (i: number) => {
+    setIdx(i);
+    setProgress(0);
+  };
+
   return (
-    <section className="relative w-full overflow-hidden pb-2">
-      {/* ── Viewport ------------------------------------------------------- */}
+    <section className="relative w-full overflow-hidden pb-2 mt-10 lg:mt-16">
       <div className="relative flex h-[432px] w-full items-center justify-center">
         <Card
           slide={slides[prev]}
           position="left"
           className="blur-[5px] opacity-60 z-10"
           idx={idx}
-          setIdx={setIdx}
+          setIdx={jumpTo}
+          progress={0}
         />
         <Card
           slide={slides[next]}
           position="right"
           className="blur-[5px] opacity-60 z-10"
           idx={idx}
-          setIdx={setIdx}
+          setIdx={jumpTo}
+          progress={0}
         />
         <Card
           slide={slides[idx]}
           position="center"
           className="z-20"
           idx={idx}
-          setIdx={setIdx}
+          setIdx={jumpTo}
+          progress={progress}
         />
       </div>
     </section>
@@ -100,21 +134,19 @@ function Card({
   position,
   idx,
   setIdx,
+  progress = 0,
   className = "",
 }: {
   slide: Slide;
   position: "left" | "right" | "center";
   idx: number;
   setIdx: (n: number) => void;
+  progress?: number;
   className?: string;
 }) {
-  /* real sizes instead of scale() -------------------------------------- */
   const wrapperSize =
-    position === "center"
-      ? "w-[1074px] h-[400px]" // active card
-      : "w-[945.12px] h-[352px]"; // inactive cards
+    position === "center" ? "w-[1074px] h-[400px]" : "w-[945.12px] h-[352px]";
 
-  /* place left / centre / right ---------------------------------------- */
   const placement =
     position === "center"
       ? "left-1/2 -translate-x-1/2"
@@ -122,19 +154,20 @@ function Card({
         ? "left-0"
         : "right-0";
 
+  const isCenter = position === "center";
+
   return (
     <div
       className={clsx("absolute -translate-y-1/2", placement, className)}
       style={{ top: "50%" }}
     >
-      {/* ── Card wrapper ──────────────────────────────────────────────── */}
       <div
         className={clsx(
           "relative max-w-full overflow-hidden rounded-2xl bg-[#D9D9D9] transition-all duration-500",
           wrapperSize
         )}
       >
-        {/* blurred background image ------------------------------------ */}
+        {/* blurred bg */}
         <div
           className="absolute inset-0 z-0 rounded-2xl blur-[24px]"
           style={{
@@ -143,12 +176,11 @@ function Card({
             backgroundPosition: "center",
           }}
         />
-        {/* dark veil --------------------------------------------------- */}
+        {/* veil */}
         <div className="absolute inset-0 z-0 rounded-2xl bg-[#08080F]/60" />
 
-        {/* ── Foreground content ─────────────────────────────────────── */}
+        {/* content */}
         <div className="relative z-10 flex flex-col gap-10 p-6 md:flex-row md:py-[38px] md:px-[104px]">
-          {/* poster ----------------------------------------------------- */}
           <div
             className="relative shrink-0 overflow-hidden rounded-xl
                         w-[152px] h-[191px]
@@ -168,7 +200,6 @@ function Card({
             />
           </div>
 
-          {/* text & meta ---------------------------------------------- */}
           <div className="flex flex-1 flex-col items-center justify-center text-center mt-3 md:mt-6 lg:mt-8 md:justify-normal md:items-start md:text-left">
             <h1 className="text-3xl sm:text-4xl lg:text-[52px] font-black leading-[90%] uppercase tracking-[-1.04px] italic text-white max-w-[436px]">
               {slide.title}
@@ -228,8 +259,22 @@ function Card({
           </div>
         </div>
 
-        {/* dots only on centre card ------------------------------------- */}
-        {position === "center" && (
+        {/* progress bar (only on active card) */}
+        {isCenter && (
+          <div
+            className="absolute left-0 right-0 bottom-0 h-[4px] overflow-hidden"
+            aria-hidden
+          >
+            {/* <div className="absolute inset-0 bg-white/10" />  // optional faint track */}
+            <div
+              className="absolute left-0 top-0 bottom-0 bg-primary-400"
+              style={{ width: `${progress}%` }} // RAF drives width; no CSS transition needed
+            />
+          </div>
+        )}
+
+        {/* dots (active only) */}
+        {isCenter && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-[6px] z-20">
             {slides.map((_, i) => {
               const isActive = i === idx;

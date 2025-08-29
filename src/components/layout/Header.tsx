@@ -24,7 +24,8 @@ export default function Header() {
     pathname.startsWith("/organizations/") ||
     pathname === "/about" ||
     pathname === "/demo" ||
-    pathname === "/help";
+    pathname === "/help" ||
+    pathname === "/events";
 
   /* ----- auth state ----------------------------------------------------- */
   const { data: session, status } = useSession();

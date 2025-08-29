@@ -122,7 +122,7 @@ export default function Header() {
                       fill="none"
                       focusable="false"
                       aria-hidden="true"
-                      className="shrink-0"
+                      className="h-4 w-4 shrink-0 text-white/70" // ← force visible color
                     >
                       <circle
                         cx="7.824"
@@ -466,7 +466,7 @@ export default function Header() {
                         fill="none"
                         focusable="false"
                         aria-hidden="true"
-                        className="shrink-0"
+                        className="h-4 w-4 shrink-0 text-white/70" // ← force visible color
                       >
                         <circle
                           cx="7.824"

@@ -22,7 +22,7 @@ import { TextArea } from "@/components/ui/TextArea";
 /* ----------------------------- schema ----------------------------- */
 /** Proper enum signature: use errorMap (not required_error) */
 const VolumeEnum = z.enum(["<1k", "1k-10k", "10k-50k", "50k+"] as const, {
-  errorMap: () => ({ message: "Pick your monthly ticket volume" }),
+  message: "Pick your monthly ticket volume",
 });
 
 const DemoSchema = z.object({

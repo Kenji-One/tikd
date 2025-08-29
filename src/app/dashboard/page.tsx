@@ -74,7 +74,7 @@ type DialogTicket = {
 
 type TabDef = {
   id: string;
-  label: React.ReactNode;
+  label: string;
   badge?: number;
   content: React.ReactNode;
 };

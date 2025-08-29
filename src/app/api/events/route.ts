@@ -8,6 +8,8 @@ import { auth } from "@/lib/auth";
 import Event from "@/models/Event";
 import Organization from "@/models/Organization";
 import Artist from "@/models/Artist";
+import type { FilterQuery } from "mongoose";
+import type { IEvent } from "@/models/Event";
 
 export const dynamic = "force-dynamic";
 
@@ -64,15 +66,15 @@ export async function GET(req: NextRequest) {
   // Public catalogue (no auth)
   const now = new Date();
   const q = searchParams.get("q")?.trim();
-  const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
-  const skip = Math.max(parseInt(searchParams.get("skip") || "0", 10), 0);
+  const limitRaw = Number.parseInt(searchParams.get("limit") ?? "50", 10);
+  const skipRaw = Number.parseInt(searchParams.get("skip") ?? "0", 10);
+  const limit = Math.min(Number.isNaN(limitRaw) ? 50 : limitRaw, 100);
+  const skip = Math.max(Number.isNaN(skipRaw) ? 0 : skipRaw, 0);
 
-  const filter: Record<string, any> = { date: { $gte: now } };
+  const filter: FilterQuery<IEvent> = { date: { $gte: now } };
   if (q) {
-    filter.$or = [
-      { title: { $regex: q, $options: "i" } },
-      { location: { $regex: q, $options: "i" } },
-    ];
+    const rx = new RegExp(q, "i");
+    filter.$or = [{ title: { $regex: rx } }, { location: { $regex: rx } }];
   }
 
   const events = await Event.find(filter)

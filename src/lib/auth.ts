@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import User, { IUser } from "@/models/User";
 import { JWT } from "next-auth/jwt";
+import type { Types } from "mongoose"; // ✅ add this
 
 type TokenWithRole = JWT & {
   role?: "user" | "admin";
@@ -43,8 +44,11 @@ export const authOptions: AuthOptions = {
         const valid = await bcrypt.compare(credentials.password, user.password);
         if (!valid) return null;
 
+        // ✅ Narrow _id to ObjectId|string to safely call toString()
+        const id = (user._id as Types.ObjectId | string).toString();
+
         return {
-          id: user._id.toString(),
+          id,
           email: user.email,
           name: user.username,
           role: user.role as "user" | "admin",

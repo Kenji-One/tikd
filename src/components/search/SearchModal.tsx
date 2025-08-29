@@ -15,7 +15,6 @@ import {
   Building2,
 } from "lucide-react";
 
-/* ------------------------------ types ------------------------------ */
 type Filter = "all" | "event" | "artist" | "org";
 
 type Item = {
@@ -41,7 +40,6 @@ const FILTER_LABEL: Record<Filter, string> = {
   org: "Organization",
 };
 
-/* ------------------------- utils: highlight ------------------------ */
 function highlight(text: string, query: string) {
   if (!query) return text;
   const pattern = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -67,7 +65,6 @@ function highlight(text: string, query: string) {
   return parts;
 }
 
-/* ----------------------- small local components -------------------- */
 function Badge({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-neutral-200">
@@ -76,7 +73,6 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ------------------------------- modal ----------------------------- */
 export default function SearchModal({
   open,
   onClose,
@@ -85,7 +81,6 @@ export default function SearchModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -95,7 +90,7 @@ export default function SearchModal({
     artists: [],
     orgs: [],
   });
-  const [active, setActive] = useState<string | null>(null); // id of active item
+  const [active, setActive] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const flatResults: Item[] = useMemo(() => {
@@ -106,7 +101,6 @@ export default function SearchModal({
     return items;
   }, [results, filter]);
 
-  /* --------------------- recent history in localStorage ------------- */
   const HISTORY_KEY = "tikd:recent-searches:v1";
   const [recent, setRecent] = useState<string[]>([]);
 
@@ -114,7 +108,9 @@ export default function SearchModal({
     try {
       const raw = localStorage.getItem(HISTORY_KEY);
       if (raw) setRecent(JSON.parse(raw));
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   function pushRecent(q: string) {
@@ -122,10 +118,12 @@ export default function SearchModal({
       const next = [q, ...recent.filter((x) => x !== q)].slice(0, 6);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
       setRecent(next);
-    } catch {}
+    } catch {
+      /* ignore */
+    }
   }
 
-  /* --------------------- open/close + focus trap -------------------- */
+  /* focus + key nav while open */
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -154,23 +152,9 @@ export default function SearchModal({
       clearTimeout(t);
       document.removeEventListener("keydown", onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, flatResults, active, query]);
+  }, [open, flatResults, active, query, onClose, router]);
 
-  // Global hotkeys to open: "/" or "Cmd/Ctrl+K"
-  useEffect(() => {
-    const onGlobal = (e: KeyboardEvent) => {
-      const isCmdK = e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey);
-      if (isCmdK || e.key === "/") {
-        e.preventDefault();
-        if (!open) (onClose as any)._open?.(); // no-op if not wired
-      }
-    };
-    document.addEventListener("keydown", onGlobal);
-    return () => document.removeEventListener("keydown", onGlobal);
-  }, [open, onClose]);
-
-  /* ---------------------------- fetch (debounced) ------------------- */
+  /* fetch (debounced) */
   useEffect(() => {
     if (!open) return;
     const q = query.trim();
@@ -184,10 +168,12 @@ export default function SearchModal({
     const t = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(filter)}&limit=6`,
+          `/api/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(
+            filter
+          )}&limit=6`,
           { signal: ac.signal, cache: "no-store" }
         );
-        const data = await res.json();
+        const data: { results?: Results } = await res.json();
         setResults(data.results || { events: [], artists: [], orgs: [] });
         const first =
           data.results?.events?.[0] ||
@@ -208,21 +194,20 @@ export default function SearchModal({
     };
   }, [query, filter, open]);
 
-  /* --------------------------- render portal ------------------------ */
   if (!open || typeof window === "undefined") return null;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[100] bg-neutral-950/80 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      ref={containerRef}
       aria-modal="true"
       role="dialog"
     >
       {/* top search bar */}
       <div className="mx-auto max-w-3xl px-4 pt-12">
-        <div className="relative flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/90 backdrop-blur px-4 py-2.5 shadow-2xl">
+        <div className="relative flex items-center gap-2 rounded-full border border-white/10 bg-neutral-900/90 backdrop-blur px-4 py-2.5 shadow-2xl focus-within:ring-2 focus-within:ring-primary-600/40 focus-within:border-primary-600/30">
           <Search
             className="h-5 w-5 shrink-0 text-neutral-300"
             aria-hidden="true"
@@ -232,14 +217,16 @@ export default function SearchModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search"
-            className="flex-1 bg-transparent text-neutral-0 placeholder:text-neutral-400 outline-none"
             aria-label="Search"
+            className="peer flex-1 bg-transparent text-neutral-0 placeholder:text-neutral-400 outline-none ring-0 focus:outline-none focus:ring-0"
           />
+
+          {/* filter dropdown */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setDropdownOpen((v) => !v)}
-              className="group inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-neutral-200 hover:bg-white/10"
+              className="group inline-flex h-9 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 text-xs text-neutral-200 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
               aria-haspopup="listbox"
               aria-expanded={dropdownOpen}
             >
@@ -262,7 +249,7 @@ export default function SearchModal({
                       setDropdownOpen(false);
                     }}
                     className={clsx(
-                      "flex w-full items-center gap-2 px-3.5 py-2.5 text-sm hover:bg-white/5",
+                      "flex w-full items-center gap-2 px-3.5 py-2.5 text-sm hover:bg-white/5 focus:outline-none",
                       filter === f && "bg-white/5"
                     )}
                   >
@@ -280,10 +267,12 @@ export default function SearchModal({
               </div>
             )}
           </div>
+
+          {/* close */}
           <button
             type="button"
             onClick={onClose}
-            className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-white/5"
+            className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
             aria-label="Close search"
           >
             <X className="h-4 w-4 text-neutral-300" />
@@ -294,7 +283,6 @@ export default function SearchModal({
       {/* results panel */}
       <div className="mx-auto max-w-3xl px-4">
         <div className="mt-3 overflow-hidden rounded-card border border-white/10 bg-neutral-900/90 backdrop-blur shadow-2xl">
-          {/* state: empty query → recent */}
           {!query.trim() && (
             <div className="p-4">
               <div className="flex items-center justify-between">
@@ -303,7 +291,7 @@ export default function SearchModal({
                 </h4>
                 {recent.length > 0 && (
                   <button
-                    className="text-xs text-neutral-400 hover:text-neutral-200"
+                    className="text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none"
                     onClick={() => {
                       localStorage.removeItem(HISTORY_KEY);
                       setRecent([]);
@@ -316,17 +304,14 @@ export default function SearchModal({
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {recent.length === 0 ? (
                   <p className="col-span-full text-sm text-neutral-400">
-                    Try searching for{" "}
-                    <span className="text-neutral-200">“Jazz”</span>,{" "}
-                    <span className="text-neutral-200">“Tbilisi”</span>, or{" "}
-                    <span className="text-neutral-200">“Coldplay”</span>.
+                    Try “Jazz”, “Tbilisi”, or “Coldplay”.
                   </p>
                 ) : (
                   recent.map((r) => (
                     <button
                       key={r}
                       onClick={() => setQuery(r)}
-                      className="group flex items-center gap-2 rounded-lg border border-white/5 bg-white/2 px-3 py-2 text-left hover:bg-white/5"
+                      className="group flex items-center gap-2 rounded-lg border border-white/5 bg-white/2 px-3 py-2 text-left hover:bg-white/5 focus:outline-none"
                     >
                       <History className="h-4 w-4 text-neutral-400 group-hover:text-neutral-300" />
                       <span className="truncate text-sm text-neutral-200">
@@ -336,27 +321,9 @@ export default function SearchModal({
                   ))
                 )}
               </div>
-              <div className="mt-3 flex items-center gap-2 text-xs text-neutral-400">
-                <Badge>
-                  <kbd className="font-mono">/</kbd> open
-                </Badge>
-                <Badge>
-                  <kbd className="font-mono">⌘K</kbd> open
-                </Badge>
-                <Badge>
-                  <kbd className="font-mono">↑↓</kbd> navigate
-                </Badge>
-                <Badge>
-                  <kbd className="font-mono">Enter</kbd> go
-                </Badge>
-                <Badge>
-                  <kbd className="font-mono">Esc</kbd> close
-                </Badge>
-              </div>
             </div>
           )}
 
-          {/* state: loading */}
           {query.trim() && loading && (
             <div className="flex items-center gap-3 p-4 text-neutral-300">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -364,7 +331,6 @@ export default function SearchModal({
             </div>
           )}
 
-          {/* state: results */}
           {query.trim() && !loading && flatResults.length > 0 && (
             <ul role="listbox" className="divide-y divide-white/5">
               {flatResults.map((item) => {
@@ -381,11 +347,10 @@ export default function SearchModal({
                         router.push(item.href);
                       }}
                       className={clsx(
-                        "flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5 focus:bg-white/5",
+                        "flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5 focus:outline-none",
                         activeNow && "bg-white/5"
                       )}
                     >
-                      {/* avatar / image */}
                       <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5">
                         {item.image ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -409,7 +374,6 @@ export default function SearchModal({
                           </div>
                         )}
                       </div>
-                      {/* text */}
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm text-neutral-0">
                           {highlight(item.title, query)}
@@ -443,7 +407,6 @@ export default function SearchModal({
             </ul>
           )}
 
-          {/* state: no results */}
           {query.trim() && !loading && flatResults.length === 0 && (
             <div className="p-6 text-center text-neutral-300">
               No results for <span className="text-neutral-0">“{query}”</span>.
@@ -455,7 +418,3 @@ export default function SearchModal({
     document.body
   );
 }
-
-/* -------------- helper to allow "/" / "Cmd+K" to open from header --------- */
-// Attach this to the onClose you pass in: (onClose as any)._open = () => setOpen(true);
-// (We wire it in Header below.)

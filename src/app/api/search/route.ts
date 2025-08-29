@@ -6,21 +6,83 @@
  *    limit=<1..20>             (default: 6 per type)
  *  Returns:
  *    { success: true, results: { events:[], artists:[], orgs:[] } }
- *
- *  Notes:
- *   - Uses case-insensitive regex (fallback) and tight projection.
- *   - Add proper text/Atlas indexes in production (see notes below).
  * ------------------------------------------------------------------ */
 
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
-
 import Event from "@/models/Event";
 import Artist from "@/models/Artist";
 import Organization from "@/models/Organization";
+import type { Types } from "mongoose";
+
+/* ---------- shared result item types (client shape) ---------------- */
+type SearchItemEvent = {
+  id: string;
+  type: "event";
+  title: string;
+  subtitle: string;
+  date: string | null;
+  image: string | null;
+  href: string;
+};
+type SearchItemArtist = {
+  id: string;
+  type: "artist";
+  title: string;
+  subtitle: string;
+  image: string | null;
+  href: string;
+};
+type SearchItemOrg = {
+  id: string;
+  type: "org";
+  title: string;
+  subtitle: string;
+  image: string | null;
+  href: string;
+};
+
+type SearchPayload = {
+  success: true;
+  results: {
+    events: SearchItemEvent[];
+    artists: SearchItemArtist[];
+    orgs: SearchItemOrg[];
+  };
+};
 
 type Kind = "event" | "artist" | "org" | "all";
 
+/* ---------- minimal lean projections (typed) ----------------------- */
+type ObjId = Types.ObjectId | string;
+
+interface EventLean {
+  _id: ObjId;
+  title: string;
+  slug?: string;
+  images?: { cover?: string | null } | null;
+  venue?: { name?: string | null } | null;
+  location?: { city?: string | null } | null;
+  startsAt?: Date | string | null;
+}
+
+interface ArtistLean {
+  _id: ObjId;
+  name: string;
+  slug?: string;
+  avatar?: string | null;
+  genres?: string[] | null;
+}
+
+interface OrgLean {
+  _id: ObjId;
+  name: string;
+  slug?: string;
+  logo?: string | null;
+  city?: string | null;
+}
+
+/* ------------------------------------------------------------------ */
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, n));
 
@@ -30,22 +92,23 @@ export async function GET(req: NextRequest) {
     const q = (url.searchParams.get("q") || "").trim();
     const type = (url.searchParams.get("type") || "all") as Kind;
     const limitParam = parseInt(url.searchParams.get("limit") || "6", 10);
-    const perType = clamp(isNaN(limitParam) ? 6 : limitParam, 1, 20);
+    const perType = clamp(Number.isNaN(limitParam) ? 6 : limitParam, 1, 20);
 
     if (!q) {
-      return NextResponse.json(
-        { success: true, results: { events: [], artists: [], orgs: [] } },
-        { status: 200 }
-      );
+      const empty: SearchPayload = {
+        success: true,
+        results: { events: [], artists: [], orgs: [] },
+      };
+      return NextResponse.json(empty, { status: 200 });
     }
 
-    // Very safe regex (escape special chars)
+    // Safe regex (escape special chars)
     const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const rx = new RegExp(pattern, "i");
 
-    const [events, artists, orgs] = await Promise.all([
+    const [eventsRaw, artistsRaw, orgsRaw] = await Promise.all([
       type === "event" || type === "all"
-        ? Event.find(
+        ? Event.find<EventLean>(
             {
               $or: [
                 { title: rx },
@@ -67,62 +130,64 @@ export async function GET(req: NextRequest) {
             .sort({ startsAt: 1 })
             .limit(perType)
             .lean()
-        : Promise.resolve([]),
+        : ([] as EventLean[]),
       type === "artist" || type === "all"
-        ? Artist.find(
+        ? Artist.find<ArtistLean>(
             { $or: [{ name: rx }, { genres: rx }] },
             { _id: 1, name: 1, slug: 1, avatar: 1, genres: 1 }
           )
             .limit(perType)
             .lean()
-        : Promise.resolve([]),
+        : ([] as ArtistLean[]),
       type === "org" || type === "all"
-        ? Organization.find(
+        ? Organization.find<OrgLean>(
             { $or: [{ name: rx }, { city: rx }] },
             { _id: 1, name: 1, slug: 1, logo: 1, city: 1 }
           )
             .limit(perType)
             .lean()
-        : Promise.resolve([]),
+        : ([] as OrgLean[]),
     ]);
 
     // Uniform client shape + hrefs
-    const toEvent = (e: any) => ({
+    const toEvent = (e: EventLean): SearchItemEvent => ({
       id: String(e._id),
-      type: "event" as const,
+      type: "event",
       title: e.title,
       subtitle: e.venue?.name || e.location?.city || "",
       date: e.startsAt ? new Date(e.startsAt).toISOString() : null,
-      image: e.images?.cover || null,
+      image: e.images?.cover ?? null,
       href: `/events/${e.slug || e._id}`,
     });
 
-    const toArtist = (a: any) => ({
+    const toArtist = (a: ArtistLean): SearchItemArtist => ({
       id: String(a._id),
-      type: "artist" as const,
+      type: "artist",
       title: a.name,
       subtitle: Array.isArray(a.genres) ? a.genres.slice(0, 2).join(" • ") : "",
-      image: a.avatar || null,
+      image: a.avatar ?? null,
       href: `/artists/${a.slug || a._id}`,
     });
 
-    const toOrg = (o: any) => ({
+    const toOrg = (o: OrgLean): SearchItemOrg => ({
       id: String(o._id),
-      type: "org" as const,
+      type: "org",
       title: o.name,
       subtitle: o.city || "",
-      image: o.logo || null,
+      image: o.logo ?? null,
       href: `/organizations/${o.slug || o._id}`,
     });
 
-    return NextResponse.json({
+    const payload: SearchPayload = {
       success: true,
       results: {
-        events: events.map(toEvent),
-        artists: artists.map(toArtist),
-        orgs: orgs.map(toOrg),
+        events: (eventsRaw as EventLean[]).map(toEvent),
+        artists: (artistsRaw as ArtistLean[]).map(toArtist),
+        orgs: (orgsRaw as OrgLean[]).map(toOrg),
       },
-    });
+    };
+
+    return NextResponse.json(payload);
   } catch (err) {
     console.error("[/api/search] error:", err);
     return NextResponse.json(
@@ -132,10 +197,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/* --------------------------------- Indexes (recommend) ---------------------
+/* Index hints (create in Mongo/Atlas for perf)
   db.events.createIndex({ title: "text", subtitle: "text", "venue.name": "text", "location.city": "text" })
   db.artists.createIndex({ name: "text", genres: "text" })
   db.organizations.createIndex({ name: "text", city: "text" })
-
-  // Or use Atlas Search (preferred) for scoring/fuzziness.
------------------------------------------------------------------------------ */
+*/

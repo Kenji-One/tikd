@@ -73,9 +73,18 @@ export default function Header() {
     };
   }, []);
 
-  // Expose open() to global hotkeys inside the modal file
-  // @ts-ignore
-  (setSearchOpen as any)._open = () => setSearchOpen(true);
+  /* Global hotkeys to open search: "/" or Cmd/Ctrl+K */
+  useEffect(() => {
+    const onGlobal = (e: KeyboardEvent) => {
+      const isCmdK = e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey);
+      if (isCmdK || e.key === "/") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onGlobal);
+    return () => document.removeEventListener("keydown", onGlobal);
+  }, []);
 
   /* ---------------------------------------------------------------------- */
   return (
@@ -99,13 +108,14 @@ export default function Header() {
               />
             </Link>
 
-            {/* search trigger (desktop only) – opens modal */}
+            {/* search trigger (desktop) */}
             <div className="hidden lg:block w-full">
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Open search"
-                className="group flex h-[44px] w-full max-w-[320px] items-center gap-3 rounded-full border border-white/10 bg-neutral-900/70 px-4 text-left text-neutral-400 backdrop-blur hover:bg-neutral-900/80"
+                className="group flex h-[44px] w-full max-w-[320px] items-center gap-3 rounded-full border border-white/10 bg-neutral-900/70 px-4 text-left text-neutral-400 backdrop-blur hover:bg-neutral-900/80
+                           outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40 focus-visible:ring-offset-0"
               >
                 <SearchIcon className="h-4 w-4 text-white/70 shrink-0" />
                 <span className="flex-1 truncate">Search events</span>
@@ -285,9 +295,8 @@ export default function Header() {
 
           {/* right utilities (mobile): cart + avatar + hamburger ---------- */}
           <div className="flex items-center gap-3 lg:hidden">
-            {/* quick search icon on mobile */}
             <button
-              className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center"
+              className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
               aria-label="Open search"
               onClick={() => setSearchOpen(true)}
             >

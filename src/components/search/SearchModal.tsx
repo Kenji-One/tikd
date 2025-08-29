@@ -1,5 +1,5 @@
 "use client";
-
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -40,13 +40,14 @@ const FILTER_LABEL: Record<Filter, string> = {
   org: "Organization",
 };
 
-function highlight(text: string, query: string) {
+function highlight(text: string, query: string): ReactNode {
   if (!query) return text;
   const pattern = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const rx = new RegExp(pattern, "ig");
-  const parts: (string | JSX.Element)[] = [];
+  const parts: ReactNode[] = [];
   let lastIdx = 0;
   let match: RegExpExecArray | null;
+
   while ((match = rx.exec(text))) {
     const start = match.index;
     const end = rx.lastIndex;

@@ -219,14 +219,22 @@ export default function EventDetailPage() {
   });
 
   /* ---------- Cart qty per ticket type ---------- */
-  const qtyByTicket = useMemo(() => {
-    if (!event) return {} as Record<string, number>;
+  const EMPTY_QTY_MAP: Readonly<Record<string, number>> = Object.freeze({});
+
+  // inside component
+  const eventId = event?._id?.toString() ?? ""; // handles Mongo ObjectId or string
+
+  const qtyByTicket = useMemo<Record<string, number>>(() => {
+    if (!eventId) return EMPTY_QTY_MAP;
+
     const map: Record<string, number> = {};
     for (const it of items) {
-      if (it.eventId === event._id) map[it.ticketTypeId] = it.qty;
+      if (it.eventId === eventId) {
+        map[it.ticketTypeId] = it.qty;
+      }
     }
     return map;
-  }, [items, event?._id]);
+  }, [items, eventId]);
 
   const selectedCount = useMemo(
     () => Object.values(qtyByTicket).reduce((a, b) => a + b, 0),

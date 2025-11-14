@@ -335,7 +335,7 @@ export default function RegisterLoginModal({
     <Dialog
       open={isOpen}
       onClose={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-100 flex items-center justify-center p-4"
     >
       {/* overlay */}
       <div className="fixed inset-0 bg-[#08080FB2]" aria-hidden />

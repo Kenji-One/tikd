@@ -19,10 +19,18 @@ export interface TabsProps {
   activeId: string;
   onChange: (newId: string) => void;
   className?: string;
+  /** Optional right side slot (e.g., Sort control). When provided, it overrides the default per-tab action button. */
+  rightSlot?: ReactNode;
 }
 
 /** Brand-aligned tabs: pill bar, scrollable on mobile, a11y roles. */
-export function Tabs({ tabs, activeId, onChange, className }: TabsProps) {
+export function Tabs({
+  tabs,
+  activeId,
+  onChange,
+  className,
+  rightSlot,
+}: TabsProps) {
   const uid = useId();
 
   function handleKey(e: KeyboardEvent<HTMLButtonElement>, idx: number) {
@@ -38,7 +46,7 @@ export function Tabs({ tabs, activeId, onChange, className }: TabsProps) {
 
   return (
     <div className={className}>
-      <div className="flex justify-between items-center gap-4 flex-wrap">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="no-scrollbar relative -mx-1 overflow-x-auto pb-1">
           <div
             role="tablist"
@@ -79,15 +87,22 @@ export function Tabs({ tabs, activeId, onChange, className }: TabsProps) {
             })}
           </div>
         </div>
-        {/* Right-side button visible only on 'events' tab (desktop) */}
-        {activeId === "events" && (
-          <Link href="/dashboard/events/new">
-            <Button variant="primary">
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              Create Event
-            </Button>
-          </Link>
-        )}
+
+        {/* Right-side area:
+            - If rightSlot is provided, render it (e.g., Sort by)
+            - Otherwise show Create Event button when on events/upcoming */}
+        <div className="shrink-0">
+          {rightSlot ? (
+            rightSlot
+          ) : activeId === "events" || activeId === "upcoming" ? (
+            <Link href="/dashboard/event/new">
+              <Button variant="electric">
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                Create Event
+              </Button>
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       <div

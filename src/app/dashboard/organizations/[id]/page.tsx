@@ -7,7 +7,6 @@ import { authOptions } from "@/lib/auth";
 import "@/lib/mongoose"; // ensure DB connection once
 import Organization from "@/models/Organization";
 import Event from "@/models/Event";
-import { serialize } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
@@ -88,19 +87,18 @@ async function getOrgDashboardData(
   }
 
   // Fetch all events for this org (any status)
-  // Use orgId string directly to avoid _id typing issues
   const eventDocs = await Event.find({ organizationId: orgId })
     .sort({ date: 1 })
     .lean()
     .exec();
 
-  // Cast through unknown → Record<string, unknown> to dodge Mongoose FlattenMaps types
-  const organization = serialize(
-    orgDoc as unknown as Record<string, unknown>
+  // Turn lean Mongoose docs into plain JSON objects with only serializable fields
+  const organization = JSON.parse(
+    JSON.stringify(orgDoc)
   ) as OrgApiResponse;
 
-  const events = eventDocs.map((e) =>
-    serialize(e as unknown as Record<string, unknown>)
+  const events = JSON.parse(
+    JSON.stringify(eventDocs)
   ) as OrgEvent[];
 
   organization.events = events;

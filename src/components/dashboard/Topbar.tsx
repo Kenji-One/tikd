@@ -31,12 +31,10 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
       ? session.user.image
       : `/api/avatar?seed=${encodeURIComponent(seed)}`;
 
-  /* ----- UI state ------------------------------------------------------ */
   const [searchOpen, setSearchOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement | null>(null);
 
-  /* close avatar on outside click / Esc */
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       const target = e.target as Node;
@@ -58,7 +56,6 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
     };
   }, []);
 
-  /* Keyboard shortcuts for search: "/" and Cmd/Ctrl+K */
   useEffect(() => {
     const onGlobal = (e: KeyboardEvent) => {
       const isCmdK = e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey);

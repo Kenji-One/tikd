@@ -19,7 +19,12 @@ import {
 } from "lucide-react";
 import SearchModal from "@/components/search/SearchModal";
 
-export default function Topbar() {
+type TopbarProps = {
+  /** For organization dashboard pages we hide the Tikd logo */
+  hideLogo?: boolean;
+};
+
+export default function Topbar({ hideLogo = false }: TopbarProps) {
   /* ----- auth ---------------------------------------------------------- */
   const { data: session, status } = useSession();
   const loggedIn = status === "authenticated";
@@ -71,12 +76,28 @@ export default function Topbar() {
 
   return (
     <>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-6">
-        <Link href="/" className="flex items-center">
-          <Image src="/Logo.svg" alt="Tikd." width={72} height={24} priority />
-        </Link>
+      <div className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
+        {/* Logo (hidden on organization pages) */}
+        {!hideLogo && (
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/Logo.svg"
+              alt="Tikd."
+              width={72}
+              height={24}
+              priority
+            />
+          </Link>
+        )}
+
         {/* Search trigger – looks like an input but opens SearchModal */}
-        <div className="relative w-full sm:max-w-md">
+        <div
+          className={
+            hideLogo
+              ? "relative w-full sm:max-w-md"
+              : "relative w-full sm:max-w-md"
+          }
+        >
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -87,7 +108,7 @@ export default function Topbar() {
             <span className="flex-1 truncate text-white/70">
               Search events, orgs, artists…
             </span>
-            <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/60">
+            <span className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/60 md:inline-flex">
               <kbd className="font-mono">/</kbd> <span>or</span>{" "}
               <kbd className="font-mono">⌘K</kbd>
             </span>
@@ -96,11 +117,7 @@ export default function Topbar() {
 
         {/* Right controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* <button className="inline-flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-xs text-white/80 hover:border-violet-500/40">
-            Sort by: Me
-            <ChevronDown size={14} className="opacity-60" />
-          </button> */}
-
+          {/* Notifications */}
           <button
             aria-label="Notifications"
             className="relative rounded-full bg-neutral-900 p-2 hover:border-violet-500/40"
@@ -142,7 +159,7 @@ export default function Topbar() {
               <div className="absolute right-0 z-50 mt-2 w-56">
                 <div className="relative">
                   {/* caret */}
-                  <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 bg-[#121420] border border-white/10 border-b-0 border-r-0" />
+                  <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
                   <div
                     role="menu"
                     aria-label="Account"

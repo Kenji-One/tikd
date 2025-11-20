@@ -1,17 +1,12 @@
-/* ------------------------------------------------------------------ */
-/*  src/app/dashboard/events/page.tsx – Tikd Dashboard / Events       */
-/*  - Tabs: Upcoming | Past | Pinned | Drafts | My Organizations      */
-/*  - <SortBy /> appears inside event tabs, above their grids          */
-/*  - Uses EventCard + refined OrgCard                                 */
-/* ------------------------------------------------------------------ */
+// src/app/dashboard/organizations/[id]/events/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { CalendarPlus, Calendar, Pin, FilePlus2, Plus } from "lucide-react";
+import { CalendarPlus, Calendar, FilePlus2 } from "lucide-react";
 
 import { Tabs, type Tab } from "@/components/ui/Tabs";
 import { EventCard } from "@/components/ui/EventCard";
@@ -26,11 +21,16 @@ type MyEvent = {
   date: string; // ISO date string
   location: string;
   category?: string;
-  pinned?: boolean;
   status?: "draft" | "published";
 };
 
-type Org = { _id: string; name: string; logo?: string; website?: string };
+type OrgWithEvents = {
+  _id: string;
+  name: string;
+  logo?: string;
+  website?: string;
+  events?: MyEvent[];
+};
 
 /* ---------------------------- Helpers ------------------------------ */
 async function fetchJSON<T>(url: string): Promise<T> {
@@ -45,17 +45,6 @@ function formatDateLabel(iso: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function domainFromUrl(url?: string) {
-  if (!url) return "";
-  try {
-    const clean = url.startsWith("http") ? url : `https://${url}`;
-    const u = new URL(clean);
-    return u.host.replace(/^www\./, "");
-  } catch {
-    return url.replace(/^https?:\/\/(www\.)?/, "");
-  }
 }
 
 /* --------------------------- Empty State --------------------------- */
@@ -79,91 +68,6 @@ function EmptyState({
       {sub ? <p className="mt-2 text-sm text-neutral-300">{sub}</p> : null}
       {cta ? <div className="mt-5">{cta}</div> : null}
     </div>
-  );
-}
-
-/* --------------------------- Org Card (refined) -------------------- */
-function OrgCard({
-  org,
-}: {
-  org: { _id: string; name: string; logo?: string; website?: string };
-}) {
-  const site = domainFromUrl(org.website);
-
-  return (
-    <Link
-      href={`/org/${org._id}`}
-      className={clsx(
-        "group relative flex items-center gap-5 rounded-2xl",
-        "border border-white/10 bg-neutral-948 p-5",
-        "ring-1 ring-white/5 shadow-[0_4px_24px_rgba(0,0,0,0.35)]",
-        "transition-all duration-200 hover:-translate-y-0.5",
-        "hover:border-primary-700/40 hover:ring-primary-700/25"
-      )}
-    >
-      {/* Logo tile */}
-      <div
-        className={clsx(
-          "relative h-16 w-16 shrink-0 overflow-hidden rounded-md",
-          "bg-neutral-900 ring-1 ring-inset ring-white/10",
-          "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]",
-          "transition-colors duration-200 group-hover:ring-primary-700/40"
-        )}
-        aria-hidden="true"
-      >
-        {org.logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={org.logo} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="grid h-full w-full place-items-center bg-[conic-gradient(from_220deg_at_50%_50%,#6d28d9,#3b82f6,#111827)] text-white">
-            <span className="text-lg font-semibold">
-              {org.name?.[0]?.toUpperCase() ?? "O"}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Text block */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold leading-tight">
-          {org.name}
-        </p>
-        <p className="mt-1 truncate text-sm text-neutral-300/90">
-          {site || "Public profile"}
-        </p>
-      </div>
-
-      {/* Right pill + chevron */}
-      <div className="ml-auto flex items-center gap-2">
-        <span
-          className={clsx(
-            "rounded-full px-3 py-1.5 text-xs",
-            "text-neutral-200 ring-1 ring-inset ring-white/10",
-            "bg-white/5 transition-colors duration-200",
-            "group-hover:bg-primary-700/20 group-hover:text-neutral-0"
-          )}
-        >
-          View
-        </span>
-        <svg
-          className="h-4 w-4 text-neutral-300 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-neutral-0"
-          viewBox="0 0 20 20"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M7.5 15l5-5-5-5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-
-      {/* Focus ring for a11y */}
-      <span className="pointer-events-none absolute inset-0 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-600/50" />
-    </Link>
   );
 }
 
@@ -313,30 +217,27 @@ function SortBy({
 }
 
 /* ------------------------------- Page ------------------------------ */
-export default function EventsDashboardPage() {
-  const { data: session } = useSession();
+export default function OrgEventsPage() {
+  const params = useParams() as { id?: string };
+  const orgId = params?.id ?? "";
 
-  /* --- data queries --- */
-  const { data: allEvents, isLoading: eventsLoading } = useQuery<MyEvent[]>({
-    queryKey: ["myEvents", "dashboard"],
-    queryFn: () => fetchJSON<MyEvent[]>("/api/events?owned=1"),
-    enabled: !!session,
+  /* --- data query: this org + its events --- */
+  const { data: org, isLoading: eventsLoading } = useQuery<OrgWithEvents>({
+    queryKey: ["orgEvents", orgId],
+    queryFn: () =>
+      fetchJSON<OrgWithEvents>(
+        `/api/organizations/${orgId}?include=events&status=all`
+      ),
+    enabled: !!orgId,
   });
 
-  const { data: orgs, isLoading: orgsLoading } = useQuery<Org[]>({
-    queryKey: ["orgs", "dashboard"],
-    queryFn: () => fetchJSON<Org[]>("/api/organizations"),
-    enabled: !!session,
-  });
+  const events = org?.events ?? [];
 
-  const events = allEvents ?? [];
-  const orgsList = orgs ?? [];
-
-  /* --- tabs state --- */
+  /* --- tabs + sort state --- */
   const [activeId, setActiveId] = useState<string>("upcoming");
   const [sort, setSort] = useState<SortKey>("newest");
 
-  /* --- computed lists --- */
+  /* --- computed lists for this org --- */
   const now = useMemo(() => Date.now(), []);
   const upcoming = events.filter(
     (e) => new Date(e.date).getTime() >= now && e.status !== "draft"
@@ -344,7 +245,6 @@ export default function EventsDashboardPage() {
   const past = events.filter(
     (e) => new Date(e.date).getTime() < now && e.status !== "draft"
   );
-  const pinned = events.filter((e) => (e as any).pinned === true);
   const drafts = events.filter((e) => e.status === "draft");
 
   function sortList(list: MyEvent[]) {
@@ -371,6 +271,10 @@ export default function EventsDashboardPage() {
     const data = sortList(list);
     const showSort = eventsLoading || data.length > 0;
 
+    const createHref = orgId
+      ? `/dashboard/organizations/${orgId}/event/new`
+      : "/dashboard/event/new";
+
     return (
       <>
         {showSort && (
@@ -391,7 +295,7 @@ export default function EventsDashboardPage() {
             title="No events here yet"
             sub="Create an event and it will appear in this list."
             cta={
-              <Link href="/dashboard/event/new">
+              <Link href={createHref}>
                 <Button variant="primary">
                   <CalendarPlus className="mr-2 h-4 w-4" />
                   Create Event
@@ -419,72 +323,17 @@ export default function EventsDashboardPage() {
     );
   }
 
-  /* ---------------- tabs config ---------------- */
+  /* ---------------- tabs config (org-scoped) ---------------- */
   const tabs: Tab[] = [
     {
       id: "upcoming",
-      label: "Upcoming events",
+      label: "Upcoming",
       content: renderEventGrid(upcoming),
     },
     {
-      id: "orgs",
-      label: "My organizations",
-      content: (
-        <>
-          {orgsLoading ? (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-28 rounded-2xl" />
-              ))}
-            </div>
-          ) : orgsList.length ? (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {orgsList.map((o) => (
-                <OrgCard key={o._id} org={o} />
-              ))}
-              <Link
-                href="/dashboard/organizations/new"
-                className="group flex items-center justify-center gap-3 rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-6 text-neutral-300 transition-colors hover:border-primary-600/50 hover:text-neutral-0"
-              >
-                <Plus className="h-5 w-5" />
-                <span>Create a new organization</span>
-              </Link>
-            </div>
-          ) : (
-            <EmptyState
-              icon={<Plus className="h-5 w-5 text-primary-300" />}
-              title="No organizations yet"
-              sub="Create an organization to host events and manage your brand."
-              cta={
-                <Link href="/dashboard/organizations/new">
-                  <Button variant="primary">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Organization
-                  </Button>
-                </Link>
-              }
-            />
-          )}
-        </>
-      ),
-    },
-    {
       id: "past",
-      label: "Past events",
+      label: "Past Events",
       content: renderEventGrid(past),
-    },
-    {
-      id: "pinned",
-      label: "Pinned events",
-      content: pinned.length ? (
-        renderEventGrid(pinned)
-      ) : (
-        <EmptyState
-          icon={<Pin className="h-5 w-5 text-primary-300" />}
-          title="No pinned events"
-          sub="Pin an event to keep it handy."
-        />
-      ),
     },
     {
       id: "drafts",
@@ -497,7 +346,13 @@ export default function EventsDashboardPage() {
           title="No drafts yet"
           sub="Start creating an event and save it as a draft."
           cta={
-            <Link href="/dashboard/event/new">
+            <Link
+              href={
+                orgId
+                  ? `/dashboard/organizations/${orgId}/event/new`
+                  : "/dashboard/event/new"
+              }
+            >
               <Button variant="primary">
                 <CalendarPlus className="mr-2 h-4 w-4" />
                 Create Event

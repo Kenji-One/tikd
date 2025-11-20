@@ -1,5 +1,6 @@
+// src/app/dashboard/organizations/[id]/team/page.tsx
 /* ------------------------------------------------------------------
-   Dashboard / Event Team Management
+   Dashboard / Organization Team Management
    ------------------------------------------------------------------ */
 "use client";
 
@@ -41,7 +42,7 @@ type Status = "invited" | "active" | "revoked" | "expired";
 
 type TeamMember = {
   _id: string;
-  eventId: string;
+  organizationId: string;
   email: string;
   name?: string;
   userId?: string | null;
@@ -63,6 +64,7 @@ async function json<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
 function prettyDate(d?: string) {
   if (!d) return "";
   return new Date(d).toLocaleString(undefined, {
@@ -74,7 +76,6 @@ function prettyDate(d?: string) {
 }
 
 /* ------------------------- Bits-style tab underline -------------- */
-/** accept any ref-like object; avoids RefObject variance issues */
 function useFluidTabIndicator(
   containerRef: { current: HTMLElement | null },
   indicatorRef: { current: HTMLElement | null },
@@ -199,7 +200,7 @@ function RoleSelect({
 }
 
 /* ------------------------------ Page ------------------------------ */
-export default function EventTeamPage() {
+export default function OrgTeamPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
 
@@ -218,38 +219,38 @@ export default function EventTeamPage() {
     isFetching,
     refetch,
   } = useQuery<TeamMember[]>({
-    queryKey: ["event-team", id],
-    queryFn: () => json<TeamMember[]>(`/api/events/${id}/team`),
+    queryKey: ["org-team", id],
+    queryFn: () => json<TeamMember[]>(`/api/organizations/${id}/team`),
     staleTime: 30_000,
   });
 
   const inviteMutation = useMutation({
     mutationFn: (payload: InvitePayload) =>
-      json<TeamMember>(`/api/events/${id}/team`, {
+      json<{ member: TeamMember }>(`/api/organizations/${id}/team`, {
         method: "POST",
         body: JSON.stringify(payload),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["event-team", id] });
+      qc.invalidateQueries({ queryKey: ["org-team", id] });
       setModalOpen(false);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: (args: { memberId: string; body: any }) =>
-      json<TeamMember>(`/api/events/${id}/team/${args.memberId}`, {
+      json<TeamMember>(`/api/organizations/${id}/team/${args.memberId}`, {
         method: "PATCH",
         body: JSON.stringify(args.body),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["event-team", id] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-team", id] }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (memberId: string) =>
-      json<{ ok: boolean }>(`/api/events/${id}/team/${memberId}`, {
+      json<{ ok: boolean }>(`/api/organizations/${id}/team/${memberId}`, {
         method: "DELETE",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["event-team", id] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-team", id] }),
   });
 
   const [active, temporary] = useMemo(() => {
@@ -274,7 +275,7 @@ export default function EventTeamPage() {
 
   /* ----------------------------- UI ---------------------------- */
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-0">
+    <div className="min-h-screen bg-neutral-950 text-neutral-0">
       <div className="mx-auto max-w-6xl px-4 py-8">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -282,7 +283,7 @@ export default function EventTeamPage() {
             <h1 className="text-2xl font-semibold">Team</h1>
             <p className="mt-1 text-sm text-neutral-300">
               Invite admins, promoters, scanners, or collaborators to this
-              event.
+              organization.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -304,8 +305,8 @@ export default function EventTeamPage() {
               )}
             </div>
 
-            <Link href={`/dashboard/events/${id}`}>
-              <Button variant="secondary">Back to event</Button>
+            <Link href={`/dashboard/organizations/${id}`}>
+              <Button variant="secondary">Back to organization</Button>
             </Link>
             <button
               onClick={() => setModalOpen(true)}
@@ -480,6 +481,6 @@ export default function EventTeamPage() {
         onInvite={(payload) => inviteMutation.mutate(payload)}
         isSubmitting={inviteMutation.isPending}
       />
-    </main>
+    </div>
   );
 }

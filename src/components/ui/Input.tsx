@@ -17,17 +17,15 @@ export interface InputProps extends NativeInput {
   variant?: "transparent" | "frosted" | "full";
   shape?: "default" | "pill";
   size?: "sm" | "md" | "lg";
-  icon?: ReactNode; // left icon (unchanged)
-  endAdornment?: ReactNode; // 🔹 right icon/adornment (e.g., eye)
+  icon?: ReactNode; // left icon
+  endAdornment?: ReactNode; // right icon/adornment (e.g., eye)
   maxWidth?: number | string;
   iconClassName?: string;
   className?: string;
-  // NOTE: `className` is not passed to the input element, but to the wrapper div
-  // around it. This is to allow for more flexible styling of the input.
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Static wrapper component (🔑 identity is now stable)                      */
+/*  Static wrapper component                                                  */
 /* -------------------------------------------------------------------------- */
 interface WrapperProps extends ComponentPropsWithoutRef<"div"> {
   children: ReactNode;
@@ -37,7 +35,7 @@ const InputWrapper = ({ children, ...rest }: WrapperProps) => (
 );
 
 /* -------------------------------------------------------------------------- */
-/*  Class maps (unchanged, with ARIA error styles)                            */
+/*  Class maps                                                                */
 /* -------------------------------------------------------------------------- */
 const base =
   "w-full font-[Gilroy] text-white font-normal text-[14px] leading-[100%] tracking-[-0.28px] " +
@@ -58,16 +56,30 @@ const shapeMap: Record<NonNullable<InputProps["shape"]>, string> = {
   pill: "rounded-full",
 };
 
+/**
+ * Padding presets.
+ * iconLeft = when there is a left icon (more left padding, but not huge).
+ */
 const paddingMap: Record<
   NonNullable<InputProps["size"]>,
   { base: string; iconLeft: string }
 > = {
-  sm: { base: "py-[8px] px-4", iconLeft: "py-[10px] pl-[58px] pr-3" },
-  md: { base: "py-3 px-4", iconLeft: "py-3 pl-[46px] pr-4" },
-  lg: { base: "py-4 px-6 text-lg", iconLeft: "py-4 pl-14 pr-5" },
+  sm: {
+    base: "py-[8px] px-4",
+    // tighter left padding when icon is present
+    iconLeft: "py-[8px] pl-9 pr-3",
+  },
+  md: {
+    base: "py-3 px-4",
+    // 🔧 reduced a lot: text now sits closer to the pin icon
+    iconLeft: "py-3 pl-10 pr-4",
+  },
+  lg: {
+    base: "py-4 px-6 text-lg",
+    iconLeft: "py-4 pl-12 pr-5",
+  },
 };
 
-/* extra right padding when endAdornment is present */
 const rightPadMap: Record<NonNullable<InputProps["size"]>, string> = {
   sm: "pr-12",
   md: "pr-12",
@@ -95,15 +107,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     const padding = icon ? paddingMap[size].iconLeft : paddingMap[size].base;
     const rightPad = endAdornment ? rightPadMap[size] : undefined;
 
-    /* width utilities preserved exactly */
     const widthStyle =
       maxWidth === undefined
         ? undefined
         : typeof maxWidth === "number"
           ? { maxWidth: `${maxWidth}px` }
-          : maxWidth.startsWith("max-w-")
-            ? undefined
-            : { maxWidth };
+          : typeof maxWidth === "string" && !maxWidth.startsWith("max-w-")
+            ? { maxWidth }
+            : undefined;
 
     const utilityWidthClass =
       typeof maxWidth === "string" && maxWidth.startsWith("max-w-")
@@ -118,7 +129,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           variantMap[variant],
           shapeMap[shape],
           padding,
-          rightPad, // 🔹 add space when endAdornment exists
+          rightPad,
           className
         )}
         {...props}
@@ -133,7 +144,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {icon ? (
           <span
             className={clsx(
-              "pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 flex items-center justify-center text-white",
+              // 🔧 bring icon closer to the left so the text doesn’t feel “pushed”
+              "pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center text-white",
               iconClassName
             )}
           >

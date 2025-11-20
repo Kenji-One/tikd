@@ -80,7 +80,7 @@ function OrgCard({
 
   return (
     <Link
-      href={`/org/${org._id}`}
+      href={`/dashboard/organizations/${org._id}`}
       className={clsx(
         "group relative flex items-center gap-5 rounded-2xl",
         "border border-white/10 bg-neutral-948 p-5",

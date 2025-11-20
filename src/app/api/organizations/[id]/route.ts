@@ -5,6 +5,8 @@ import "@/lib/mongoose";
 import Organization, { IOrganization } from "@/models/Organization";
 import Event from "@/models/Event";
 import { serialize } from "@/lib/serialize";
+import { z } from "zod";
+import { auth } from "@/lib/auth";
 
 type OrgLean = Omit<IOrganization, "_id" | "ownerId"> & {
   _id: mongoose.Types.ObjectId;
@@ -55,4 +57,77 @@ export async function GET(
   }
 
   return NextResponse.json(response);
+}
+
+/* -------------------------- PATCH (update) ------------------------- */
+
+const businessTypeSchema = z.enum([
+  "brand",
+  "venue",
+  "community",
+  "artist",
+  "fraternity",
+  "charity",
+]);
+
+const updateSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+  logo: z.string().url().optional().or(z.literal("")),
+  website: z.string().url().optional().or(z.literal("")),
+  businessType: businessTypeSchema,
+  location: z.string().optional().or(z.literal("")),
+  accentColor: z.string().optional().or(z.literal("")),
+});
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
+
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const json = await req.json();
+  const parsed = updateSchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json(parsed.error.flatten(), { status: 400 });
+  }
+
+  const org = await Organization.findById(id).exec();
+  if (!org) {
+    return NextResponse.json(
+      { error: "Organization not found" },
+      { status: 404 }
+    );
+  }
+
+  if (org.ownerId.toString() !== session.user.id) {
+    return NextResponse.json(
+      { error: "Forbidden – not your organization" },
+      { status: 403 }
+    );
+  }
+
+  const data = parsed.data;
+
+  org.name = data.name;
+  org.description = data.description ?? "";
+  org.logo = data.logo ?? "";
+  org.website = data.website ?? "";
+  org.businessType = data.businessType;
+  org.location = data.location ?? "";
+  org.accentColor = data.accentColor ?? "";
+
+  await org.save();
+
+  const plain = org.toObject() as OrgLean;
+  return NextResponse.json(serialize(plain));
 }

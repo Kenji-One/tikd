@@ -1,14 +1,7 @@
-/* ------------------------------------------------------------------ */
-/*  Create Event – Dashboard (moved from /profile)                    */
-/*  - Matches figma: date + start time + duration + categories        */
-/*  - Minimum age, location, co-hosts, promo team, promoters, msg     */
-/*  - Improved Artists UI                                             */
-/*  - Poster uploader                                                 */
-/*  - Send to Drafts (status='draft')                                 */
-/* ------------------------------------------------------------------ */
+// src/app/dashboard/organizations/[id]/event/new/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useForm,
   useFieldArray,
@@ -18,7 +11,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { v4 as uuid } from "uuid";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import clsx from "clsx";
 import {
   CalendarClock,
@@ -37,6 +30,14 @@ import { Button } from "@/components/ui/Button";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { TextArea } from "@/components/ui/TextArea";
 import { EventCard } from "@/components/ui/EventCard";
+
+/* ----------------------------- Types ------------------------------ */
+
+type OrgMember = {
+  _id: string;
+  name: string;
+  email: string;
+};
 
 /* ----------------------------- Schema ----------------------------- */
 /** Duration "HH:MM" 00:15 - 23:59 */
@@ -60,14 +61,14 @@ const FormSchema = z.object({
   minAge: z.coerce.number().int().min(0).max(99).optional(),
   location: z.string().min(2, "Location is required"),
   image: z.string().url().optional(),
-  organizationId: z.string().min(1, "Pick an organization"),
+
+  /** Org is now taken from URL, but still validated here */
+  organizationId: z.string().min(1, "Organization is required"),
 
   /** Categories (chips) */
   categories: z.array(z.string()).default([]),
 
-  /** People & comms */
-  coHosts: z.array(z.string().email("Invalid email")).default([]),
-  promotionalTeamEmails: z.array(z.string().email()).default([]),
+  /** People & comms – coHosts & promo team removed */
   promoters: z.array(z.string().email()).default([]),
   message: z.string().optional(),
 
@@ -159,6 +160,8 @@ function Section({
 /* ------------------------------ Page ------------------------------ */
 export default function NewEventPage() {
   const router = useRouter();
+  const params = useParams() as { id?: string };
+  const orgIdFromRoute = params?.id ?? "";
 
   const {
     register,
@@ -171,8 +174,6 @@ export default function NewEventPage() {
     resolver: zodResolver(FormSchema),
     defaultValues: {
       categories: [],
-      coHosts: [],
-      promotionalTeamEmails: [],
       promoters: [],
       artists: [],
       status: "published",
@@ -186,42 +187,37 @@ export default function NewEventPage() {
     fallback: NonNullable<FormInput[K]>
   ) => (watch(key) ?? fallback) as NonNullable<FormInput[K]>;
 
-  /* ---------- Organisations (owned by user) ----------------------- */
-  const [orgs, setOrgs] = useState<{ _id: string; name: string }[]>([]);
+  /* ---------- Lock organizationId from the URL -------------------- */
   useEffect(() => {
-    fetch("/api/organizations")
-      .then((r) => r.json())
-      .then(setOrgs)
-      .catch(() => setOrgs([]));
-  }, []);
+    if (orgIdFromRoute) {
+      setValue("organizationId", orgIdFromRoute, {
+        shouldDirty: true,
+      });
+    }
+  }, [orgIdFromRoute, setValue]);
 
-  /* ---------- Field arrays (typed) -------------------------------- */
+  /* ---------- Load organization members for promoters ------------- */
+  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+
+  useEffect(() => {
+    if (!orgIdFromRoute) return;
+    setMembersLoading(true);
+    fetch(`/api/organizations/${orgIdFromRoute}/members`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: OrgMember[]) => {
+        setMembers(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setMembers([]))
+      .finally(() => setMembersLoading(false));
+  }, [orgIdFromRoute]);
+
+  /* ---------- Field arrays (typed) – artists only ----------------- */
   const {
     fields: artistFields,
     append: addArtist,
     remove: removeArtist,
   } = useFieldArray<FormInput, "artists">({ control, name: "artists" });
-
-  const {
-    fields: coHostFields,
-    append: addCoHost,
-    remove: removeCoHost,
-  } = useFieldArray<FormInput, "coHosts">({ control, name: "coHosts" });
-
-  const {
-    fields: teamFields,
-    append: addTeamEmail,
-    remove: removeTeamEmail,
-  } = useFieldArray<FormInput, "promotionalTeamEmails">({
-    control,
-    name: "promotionalTeamEmails",
-  });
-
-  const {
-    fields: promoterFields,
-    append: addPromoter,
-    remove: removePromoter,
-  } = useFieldArray<FormInput, "promoters">({ control, name: "promoters" });
 
   /* ---------- Derived ISO for submit ------------------------------ */
   const dateOnly = watch("dateOnly") ?? "";
@@ -290,24 +286,16 @@ export default function NewEventPage() {
     setValue("categories", Array.from(set), { shouldDirty: true });
   };
 
-  /* ---------- Add-by-email helpers (separate refs) ---------------- */
-  const coHostRef = useRef<HTMLInputElement | null>(null);
-  const teamRef = useRef<HTMLInputElement | null>(null);
-  const promoterRef = useRef<HTMLInputElement | null>(null);
-
-  const addEmail = (kind: "co" | "team" | "promoter") => {
-    const map = {
-      co: coHostRef,
-      team: teamRef,
-      promoter: promoterRef,
-    } as const;
-    const ref = map[kind];
-    const val = ref.current?.value?.trim() || "";
-    if (!val) return;
-    if (kind === "co") addCoHost(val);
-    if (kind === "team") addTeamEmail(val);
-    if (kind === "promoter") addPromoter(val);
-    if (ref.current) ref.current.value = "";
+  /* ---------- Promoters chips ------------------------------------- */
+  const promoters = watchArr("promoters", [] as unknown as string[]);
+  const togglePromoter = (email: string) => {
+    const set = new Set(promoters as string[]);
+    if (set.has(email)) {
+      set.delete(email);
+    } else {
+      set.add(email);
+    }
+    setValue("promoters", Array.from(set), { shouldDirty: true });
   };
 
   /* ---------------------------------------------------------------- */
@@ -328,8 +316,7 @@ export default function NewEventPage() {
             Create New Event
           </h1>
           <p className="mt-2 max-w-prose text-sm text-neutral-300">
-            Add the essentials, upload a poster, choose organization and you’re
-            ready to publish. You can edit everything later.
+            Add the essentials, upload a poster, and you’re ready to publish.
           </p>
         </div>
       </div>
@@ -338,6 +325,9 @@ export default function NewEventPage() {
         className="grid grid-cols-1 gap-6 pt-6 pb-14 md:grid-cols-12"
         noValidate
       >
+        {/* hidden org id bound to URL */}
+        <input type="hidden" {...register("organizationId")} />
+
         {/* ------------------------- Main form ----------------------- */}
         <div className="md:col-span-7 lg:col-span-8 space-y-6">
           {submitCount > 0 && hasErrors && (
@@ -477,30 +467,19 @@ export default function NewEventPage() {
 
           <Section
             title="Organizer & Artists"
-            desc="Link your organization and optionally showcase who’s performing."
+            desc="Event is tied to the organization you’re currently managing. You can optionally showcase who’s performing."
             icon={<UsersIcon className="h-5 w-5 text-primary-300" />}
           >
             <div className="space-y-4">
-              {/* Organization */}
+              {/* Organization info (no chooser anymore) */}
               <div className="space-y-1">
                 <label className="block text-sm font-medium">
                   Organization
                 </label>
-                <select
-                  {...register("organizationId")}
-                  className={clsx(
-                    "w-full rounded-md border border-white/10 bg-neutral-950 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600",
-                    errors.organizationId &&
-                      "border-error-500 focus:ring-error-500/70"
-                  )}
-                >
-                  <option value="">Select…</option>
-                  {orgs.map((o) => (
-                    <option key={o._id} value={o._id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
+                <p className="text-sm text-neutral-300">
+                  This event will be created under the currently open
+                  organization.
+                </p>
               </div>
 
               {/* Artists */}
@@ -539,7 +518,7 @@ export default function NewEventPage() {
                             )}
                           />
                         </div>
-                        <div className=" ">
+                        <div>
                           <LabelledInput
                             noLabel
                             placeholder="Artist"
@@ -572,144 +551,56 @@ export default function NewEventPage() {
             </div>
           </Section>
 
-          {/* Communication & roles */}
+          {/* Promoters + Message */}
           <Section
-            title="Co-hosts & Promotion"
-            desc="Invite collaborators and your promotional team by email."
+            title="Promoters & Message"
+            desc="Optionally select organization members who will help promote this event and add a note."
             icon={<MailPlus className="h-5 w-5 text-primary-300" />}
           >
-            {/* Add Co-Host */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium">Add Co-Host</label>
-              <div className="flex gap-3">
-                <input
-                  ref={coHostRef}
-                  type="email"
-                  placeholder="Enter Email"
-                  className="w-full rounded-md border border-white/10 bg-neutral-950 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                />
-                <Button type="button" onClick={() => addEmail("co")}>
-                  + Add
-                </Button>
-              </div>
-
-              {/* chips */}
-              <div className="mt-2 flex flex-wrap gap-2">
-                {coHostFields.map((f, i) => (
-                  <span
-                    key={f.id}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm"
-                  >
-                    {watch(`coHosts.${i}`) ?? ""}
-                    <button
-                      type="button"
-                      onClick={() => removeCoHost(i)}
-                      className="opacity-70 hover:opacity-100"
-                      aria-label="Remove"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-              {coHostFields.length > 0 && (
-                <p className="text-sm text-neutral-400">
-                  {(watch("coHosts") ?? []).join(", ")} - will be your
-                  co-host(s)
+            {/* Promoters – only show if org has members */}
+            {members.length > 0 && (
+              <div className="space-y-2 mb-6">
+                <label className="block text-sm font-medium">Promoters</label>
+                <p className="text-xs text-neutral-400">
+                  Select members who will help promote this event.
                 </p>
-              )}
-            </div>
-
-            {/* Add Promotional Team */}
-            <div className="mt-6 space-y-2">
-              <label className="block text-sm font-medium">
-                Add Promotional Team
-              </label>
-              <div className="flex gap-3">
-                <input
-                  ref={teamRef}
-                  type="email"
-                  placeholder="Enter Email"
-                  className="w-full rounded-md border border-white/10 bg-neutral-950 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addEmail("team");
-                    }
-                  }}
-                />
-                <Button type="button" onClick={() => addEmail("team")}>
-                  + Add
-                </Button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {members.map((m) => {
+                    const selected = (promoters as string[]).includes(m.email);
+                    return (
+                      <button
+                        key={m._id}
+                        type="button"
+                        onClick={() => togglePromoter(m.email)}
+                        className={clsx(
+                          "rounded-full border px-3 py-1.5 text-xs md:text-sm transition-colors",
+                          selected
+                            ? "border-white/40 bg-white/10 text-neutral-0"
+                            : "border-white/10 text-neutral-300 hover:text-neutral-0"
+                        )}
+                      >
+                        {m.name || m.email}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(promoters as string[]).length > 0 && (
+                  <p className="text-xs text-neutral-400">
+                    {(promoters as string[]).length} promoter
+                    {(promoters as string[]).length > 1 ? "s" : ""} selected.
+                  </p>
+                )}
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {teamFields.map((f, i) => (
-                  <span
-                    key={f.id}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm"
-                  >
-                    {watch(`promotionalTeamEmails.${i}`) ?? ""}
-                    <button
-                      type="button"
-                      onClick={() => removeTeamEmail(i)}
-                      className="opacity-70 hover:opacity-100"
-                      aria-label="Remove"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Individual promoters */}
-            <div className="mt-6 space-y-2">
-              <label className="block text-sm font-medium">
-                Add Individual Promoters
-              </label>
-              <div className="flex gap-3">
-                <input
-                  ref={promoterRef}
-                  type="email"
-                  placeholder="Enter Email"
-                  className="w-full rounded-md border border-white/10 bg-neutral-950 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-600"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addEmail("promoter");
-                    }
-                  }}
-                />
-                <Button type="button" onClick={() => addEmail("promoter")}>
-                  + Add
-                </Button>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {promoterFields.map((f, i) => (
-                  <span
-                    key={f.id}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm"
-                  >
-                    {watch(`promoters.${i}`) ?? ""}
-                    <button
-                      type="button"
-                      onClick={() => removePromoter(i)}
-                      className="opacity-70 hover:opacity-100"
-                      aria-label="Remove"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
+            )}
+            {/* You said: if org has no members, promoters selector should not be visible.
+                So we simply don't render anything when members.length === 0. */}
 
             {/* Message */}
-            <div className="mt-6">
+            <div className="mt-2">
               <label className="block text-sm font-medium mb-2">Message</label>
               <TextArea
                 {...register("message")}
-                placeholder="Enter your message here.."
+                placeholder="Enter your message here..."
                 size="md"
                 variant="full"
               />

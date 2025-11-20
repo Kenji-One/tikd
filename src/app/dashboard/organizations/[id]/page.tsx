@@ -94,11 +94,15 @@ async function getOrgDashboardData(
     .lean()
     .exec();
 
-  // Cast to any before serialize to escape the Mongoose FlattenMaps types
-  const organization = serialize(orgDoc as any) as OrgApiResponse;
-  const events = eventDocs.map(
-    (e) => serialize(e as any) as OrgEvent
-  );
+  // Cast through unknown → Record<string, unknown> to dodge Mongoose FlattenMaps types
+  const organization = serialize(
+    orgDoc as unknown as Record<string, unknown>
+  ) as OrgApiResponse;
+
+  const events = eventDocs.map((e) =>
+    serialize(e as unknown as Record<string, unknown>)
+  ) as OrgEvent[];
+
   organization.events = events;
 
   const now = new Date();

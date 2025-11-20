@@ -259,7 +259,6 @@ function Card({
           </div>
         </div>
 
-        {/* progress bar (only on active card) */}
         {isCenter && (
           <div
             className="absolute left-0 right-0 bottom-0 h-[4px] overflow-hidden"

@@ -17,7 +17,7 @@ import {
   Building2,
 } from "lucide-react";
 
-/* ────────────────────────────────────────────────────────────────
+/* ──────────────────────────────────
    Types
    ──────────────────────────────────────────────────────────────── */
 type Filter = "all" | "event" | "artist" | "org";
@@ -583,7 +583,6 @@ export default function SearchModal({
               )}
             </div>
           </div>
-          {/* end card */}
         </div>
       </div>
     </div>,

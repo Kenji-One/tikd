@@ -58,7 +58,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
     };
   }, []);
 
-  /* global hotkeys for search: "/" and Cmd/Ctrl+K */
+  /* Keyboard shortcuts for search: "/" and Cmd/Ctrl+K */
   useEffect(() => {
     const onGlobal = (e: KeyboardEvent) => {
       const isCmdK = e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey);

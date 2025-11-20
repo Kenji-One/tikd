@@ -12,8 +12,6 @@ import { useEffect, useRef, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import {
   Search as SearchIcon,
-  ChevronDown,
-  Bell,
   Settings as SettingsIcon,
   LogOut,
 } from "lucide-react";
@@ -26,8 +24,7 @@ type TopbarProps = {
 
 export default function Topbar({ hideLogo = false }: TopbarProps) {
   /* ----- auth ---------------------------------------------------------- */
-  const { data: session, status } = useSession();
-  const loggedIn = status === "authenticated";
+  const { data: session } = useSession();
   const seed = session?.user?.id ?? "guest";
   const avatarSrc =
     session?.user?.image && session.user.image.length > 0

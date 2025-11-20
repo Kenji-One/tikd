@@ -55,6 +55,14 @@ type TeamMember = {
   updatedAt: string;
 };
 
+type UpdateBody = Partial<{
+  role: Role;
+  status: Status;
+  temporaryAccess: boolean;
+  expiresAt?: string;
+  action: "resend";
+}>;
+
 /* ---------------------------- Helpers ---------------------------- */
 async function json<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const res = await fetch(input, {
@@ -237,7 +245,7 @@ export default function OrgTeamPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (args: { memberId: string; body: any }) =>
+    mutationFn: (args: { memberId: string; body: UpdateBody }) =>
       json<TeamMember>(`/api/organizations/${id}/team/${args.memberId}`, {
         method: "PATCH",
         body: JSON.stringify(args.body),

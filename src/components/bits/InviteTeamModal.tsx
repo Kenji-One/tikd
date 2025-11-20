@@ -425,8 +425,17 @@ export default function InviteTeamModal({
                             const el = document.getElementById(
                               "expires"
                             ) as HTMLInputElement | null;
-                            // @ts-ignore experimental
-                            el?.showPicker ? el.showPicker() : el?.focus();
+
+                            if (el) {
+                              const withPicker = el as HTMLInputElement & {
+                                showPicker?: () => void;
+                              };
+                              if (typeof withPicker.showPicker === "function") {
+                                withPicker.showPicker();
+                              } else {
+                                el.focus();
+                              }
+                            }
                           }}
                           className="absolute right-1.5 top-1/2 -translate-y-1/2 grid size-8 place-items-center rounded-md bg-neutral-950 ring-1 ring-inset ring-white/10 hover:ring-primary-700/40"
                           aria-label="Open date & time picker"
@@ -451,11 +460,11 @@ export default function InviteTeamModal({
                   </h4>
                   <p className="text-sm text-neutral-400">
                     If you uncheck, the invited member will only be added to the
-                    organization and won't have access to its events.
+                    organization and won&apos;t have access to its events.
                   </p>
 
                   <p className="mt-3 text-sm text-neutral-300">
-                    Automatically apply to this organization's:
+                    Automatically apply to this organization&apos;s:
                   </p>
 
                   <div className="mt-2 space-y-3">

@@ -9,25 +9,34 @@ import crypto from "crypto";
 
 import { auth } from "@/lib/auth";
 import Event from "@/models/Event";
-import EventTeam, { EventTeamRole, EventTeamStatus } from "@/models/EventTeam";
+import EventTeam from "@/models/EventTeam";
 
 type Ctx = { params: Promise<{ id: string; memberId: string }> };
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
 
-async function assertCanManage(eventId: string, userId: string) {
+/* ------------------------------ Helpers ---------------------------- */
+
+async function assertCanManage(
+  eventId: string,
+  userId: string
+): Promise<boolean> {
   const owner = await Event.findOne({
     _id: eventId,
     createdByUserId: userId,
   }).lean();
   if (owner) return true;
+
   const admin = await EventTeam.findOne({
     eventId,
     userId,
     role: "admin",
     status: "active",
   }).lean();
+
   return !!admin;
 }
+
+/* ------------------------------- Schema ---------------------------- */
 
 const patchSchema = z.object({
   role: z.enum(["admin", "promoter", "scanner", "collaborator"]).optional(),
@@ -37,7 +46,15 @@ const patchSchema = z.object({
   action: z.enum(["resend"]).optional(), // resend invitation
 });
 
+type EventTeamUpdate = Partial<{
+  role: "admin" | "promoter" | "scanner" | "collaborator";
+  status: "invited" | "active" | "revoked";
+  temporaryAccess: boolean;
+  expiresAt: Date;
+}>;
+
 /* ------------------------------- PATCH ---------------------------- */
+
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const session = await auth();
   if (!session?.user?.id)
@@ -70,7 +87,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return NextResponse.json(updated);
   }
 
-  const update: any = {};
+  const update: EventTeamUpdate = {};
   if (role) update.role = role;
   if (status) update.status = status;
   if (typeof temporaryAccess === "boolean")
@@ -89,6 +106,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 }
 
 /* ------------------------------- DELETE --------------------------- */
+
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const session = await auth();
   if (!session?.user?.id)

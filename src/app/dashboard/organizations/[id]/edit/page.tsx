@@ -137,9 +137,11 @@ export default function EditOrganizationPage() {
             accentColor: org.accentColor ?? "",
           });
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setLoadError(err?.message || "Failed to load organization");
+          const message =
+            err instanceof Error ? err.message : "Failed to load organization";
+          setLoadError(message);
         }
       } finally {
         if (!cancelled) setLoading(false);

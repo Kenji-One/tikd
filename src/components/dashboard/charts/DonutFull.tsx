@@ -6,7 +6,13 @@
 "use client";
 
 import { memo, useMemo } from "react";
-import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  type PieLabelRenderProps,
+} from "recharts";
 import clsx from "clsx";
 
 export type DonutSegment = { value: number; label: string; color: string };
@@ -85,12 +91,20 @@ function DonutFull({
             labelLine={false}
             label={
               showSliceBadges
-                ? (props: any) => {
+                ? (props: PieLabelRenderProps) => {
                     const RAD = Math.PI / 180;
-                    const r = (props.innerRadius + props.outerRadius) / 2;
-                    const x = props.cx + r * Math.cos(-props.midAngle * RAD);
-                    const y = props.cy + r * Math.sin(-props.midAngle * RAD);
-                    const text = String(props.value);
+
+                    const innerR = Number(props.innerRadius ?? 0);
+                    const outerR = Number(props.outerRadius ?? 0);
+                    const cx = Number(props.cx ?? 0);
+                    const cy = Number(props.cy ?? 0);
+                    const midAngle = Number(props.midAngle ?? 0);
+
+                    const r = (innerR + outerR) / 2;
+                    const x = cx + r * Math.cos(-midAngle * RAD);
+                    const y = cy + r * Math.sin(-midAngle * RAD);
+
+                    const text = String(props.value ?? "");
                     const padX = 8;
                     const charW = 7; // rough width per char
                     const w = Math.max(24, padX * 2 + text.length * charW);

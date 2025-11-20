@@ -11,7 +11,7 @@ import { serialize } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
-type PageProps = {
+type OrgPageProps = {
   params: { id: string };
 };
 
@@ -88,13 +88,17 @@ async function getOrgDashboardData(
   }
 
   // Fetch all events for this org (any status)
-  const eventDocs = await Event.find({ organizationId: orgDoc._id })
+  // Use orgId string directly to avoid _id typing issues
+  const eventDocs = await Event.find({ organizationId: orgId })
     .sort({ date: 1 })
     .lean()
     .exec();
 
-  const organization = serialize(orgDoc) as OrgApiResponse;
-  const events = eventDocs.map((e) => serialize(e) as OrgEvent);
+  // Cast to any before serialize to escape the Mongoose FlattenMaps types
+  const organization = serialize(orgDoc as any) as OrgApiResponse;
+  const events = eventDocs.map(
+    (e) => serialize(e as any) as OrgEvent
+  );
   organization.events = events;
 
   const now = new Date();
@@ -125,7 +129,7 @@ async function getOrgDashboardData(
   };
 }
 
-export default async function OrgHomePage({ params }: PageProps) {
+export default async function OrgHomePage({ params }: OrgPageProps) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     redirect("/auth?callback=/dashboard");

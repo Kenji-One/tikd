@@ -11,7 +11,9 @@ import Event from "@/models/Event";
 export const dynamic = "force-dynamic";
 
 type OrgPageProps = {
-  params: { id: string };
+  // In this project setup, Next's PageProps expects params to be a Promise,
+  // so we mirror that here to satisfy the constraint.
+  params: Promise<{ id: string }>;
 };
 
 type OrgEvent = {
@@ -93,13 +95,9 @@ async function getOrgDashboardData(
     .exec();
 
   // Turn lean Mongoose docs into plain JSON objects with only serializable fields
-  const organization = JSON.parse(
-    JSON.stringify(orgDoc)
-  ) as OrgApiResponse;
+  const organization = JSON.parse(JSON.stringify(orgDoc)) as OrgApiResponse;
 
-  const events = JSON.parse(
-    JSON.stringify(eventDocs)
-  ) as OrgEvent[];
+  const events = JSON.parse(JSON.stringify(eventDocs)) as OrgEvent[];
 
   organization.events = events;
 
@@ -137,7 +135,8 @@ export default async function OrgHomePage({ params }: OrgPageProps) {
     redirect("/auth?callback=/dashboard");
   }
 
-  const { id } = params;
+  // In this setup, params is a Promise – we need to await it
+  const { id } = await params;
 
   const data = await getOrgDashboardData(id, session.user.id);
 

@@ -3,9 +3,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
-// If you want DB access later, import mongoose + Organization here.
-// import "@/lib/mongoose";
-// import Organization from "@/models/Organization";
 
 type SettingsResponse = {
   organizationId: string;
@@ -34,7 +31,7 @@ type SettingsResponse = {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
 
@@ -42,9 +39,8 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const organizationId = params.id;
-
-  // TODO: validate ownership / permissions and load real data from MongoDB.
+  const { id } = await params;
+  const organizationId = id;
 
   const payload: SettingsResponse = {
     organizationId,
@@ -79,7 +75,7 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
 
@@ -87,11 +83,11 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const organizationId = params.id;
+  const { id } = await params;
+  const organizationId = id;
   const body = await req.json();
 
   // TODO: validate + persist settings in MongoDB.
-  // For now we just echo them back for debugging.
 
   return NextResponse.json(
     {

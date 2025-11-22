@@ -36,7 +36,7 @@ type FinancesResponse = {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
 
@@ -44,7 +44,9 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const organizationId = params.id;
+  // 👇 Next 15/16: params is a Promise
+  const { id } = await params;
+  const organizationId = id;
 
   // TODO: pull real data from your own ledger / Stripe later.
   const payload: FinancesResponse = {

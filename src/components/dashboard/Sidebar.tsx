@@ -229,7 +229,7 @@ const orgItems: NavItem[] = [
     match: (pathname) => pathname.includes("/team"),
   },
   {
-    href: "finance",
+    href: "finances",
     label: "Finance",
     icon: OrgFinanceIcon,
     match: (pathname) => pathname.includes("/finance"),

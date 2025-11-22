@@ -71,6 +71,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
   return (
     <>
       <div className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
+        {/* Logo (hidden on organization pages) */}
         {!hideLogo && (
           <Link href="/" className="flex items-center">
             <Image

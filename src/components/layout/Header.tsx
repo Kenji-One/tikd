@@ -83,6 +83,7 @@ export default function Header() {
     };
   }, []);
 
+  /* Global hotkeys to open search: "/" or Cmd/Ctrl+K */
   useEffect(() => {
     const onGlobal = (e: KeyboardEvent) => {
       const isCmdK = e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey);

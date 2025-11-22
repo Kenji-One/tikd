@@ -1,7 +1,7 @@
 // src/app/dashboard/organizations/[id]/events/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -54,17 +54,17 @@ function EmptyState({
   sub,
   cta,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   title: string;
   sub?: string;
-  cta?: React.ReactNode;
+  cta?: ReactNode;
 }) {
   return (
-    <div className="mx-auto mt-8 max-w-md rounded-2xl border border-white/10 bg-neutral-950/70 p-10 text-center">
-      <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-primary-900/50 ring-1 ring-primary-700/40">
+    <div className="mx-auto mt-8 max-w-md rounded-2xl border border-white/12 bg-neutral-950/80 px-8 py-9 text-center shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
+      <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-primary-950 via-primary-900 to-primary-700 ring-1 ring-primary-700/60 shadow-[0_0_0_1px_rgba(255,255,255,0.1)]">
         {icon}
       </div>
-      <h3 className="text-lg font-semibold">{title}</h3>
+      <h3 className="text-lg font-semibold text-neutral-0">{title}</h3>
       {sub ? <p className="mt-2 text-sm text-neutral-300">{sub}</p> : null}
       {cta ? <div className="mt-5">{cta}</div> : null}
     </div>
@@ -233,6 +233,11 @@ export default function OrgEventsPage() {
 
   const events = org?.events ?? [];
 
+  /* where the event builder lives for this org */
+  const createHref = orgId
+    ? `/dashboard/organizations/${orgId}/events/create`
+    : "/dashboard/events/create";
+
   /* --- tabs + sort state --- */
   const [activeId, setActiveId] = useState<string>("upcoming");
   const [sort, setSort] = useState<SortKey>("newest");
@@ -271,10 +276,6 @@ export default function OrgEventsPage() {
     const data = sortList(list);
     const showSort = eventsLoading || data.length > 0;
 
-    const createHref = orgId
-      ? `/dashboard/organizations/${orgId}/event/new`
-      : "/dashboard/event/new";
-
     return (
       <>
         {showSort && (
@@ -291,7 +292,7 @@ export default function OrgEventsPage() {
           </div>
         ) : data.length === 0 ? (
           <EmptyState
-            icon={<Calendar className="h-5 w-5 text-primary-300" />}
+            icon={<Calendar className="h-5 w-5 text-primary-200" />}
             title="No events here yet"
             sub="Create an event and it will appear in this list."
             cta={
@@ -342,17 +343,11 @@ export default function OrgEventsPage() {
         renderEventGrid(drafts)
       ) : (
         <EmptyState
-          icon={<FilePlus2 className="h-5 w-5 text-primary-300" />}
+          icon={<FilePlus2 className="h-5 w-5 text-primary-200" />}
           title="No drafts yet"
           sub="Start creating an event and save it as a draft."
           cta={
-            <Link
-              href={
-                orgId
-                  ? `/dashboard/organizations/${orgId}/event/new`
-                  : "/dashboard/event/new"
-              }
-            >
+            <Link href={createHref}>
               <Button variant="primary">
                 <CalendarPlus className="mr-2 h-4 w-4" />
                 Create Event
@@ -367,6 +362,18 @@ export default function OrgEventsPage() {
   return (
     <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       <section className="pb-20 pt-6">
+        {/* Header row: org name + clean CTA (no electric button) */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-base font-semibold text-neutral-0">
+              {org?.name ?? "Organization events"}
+            </h1>
+            <p className="mt-1 text-xs text-neutral-400">
+              Manage upcoming, past and draft events for this organization.
+            </p>
+          </div>
+        </div>
+
         <Tabs tabs={tabs} activeId={activeId} onChange={setActiveId} />
       </section>
     </main>

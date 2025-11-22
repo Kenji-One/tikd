@@ -453,6 +453,7 @@ export default function EventsPage() {
     staleTime: 60_000,
   });
 
+  // 2️⃣ track which category is active
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
   // 3️⃣ memoize grouping for the “All” case (dummy dataset)
@@ -463,6 +464,7 @@ export default function EventsPage() {
     }, {});
   }, []);
 
+  // 4️⃣ grab all items when a single category is picked (dummy dataset)
   const filteredEvents =
     selectedCategory === "All"
       ? []

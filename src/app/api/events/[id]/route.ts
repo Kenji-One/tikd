@@ -4,7 +4,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
+import { z } from "zod";
 
+import { auth } from "@/lib/auth";
 import Event, { IEvent } from "@/models/Event";
 import Artist, { IArtist } from "@/models/Artist";
 import Organization, { IOrganization } from "@/models/Organization";
@@ -85,4 +87,79 @@ export async function GET(
     attendingCount,
     attendeesPreview,
   });
+}
+
+/* ------------------------------------------------------------------ */
+/*  PATCH /api/events/:id – update basic event fields                 */
+/* ------------------------------------------------------------------ */
+
+const patchSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  date: z.coerce.date().optional(),
+  minAge: z.coerce.number().int().min(0).max(99).optional(),
+  location: z.string().min(1).optional(),
+  image: z.string().url().optional(),
+  status: z.enum(["published", "draft"]).optional(),
+  internalNotes: z.string().optional(),
+});
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+
+  if (!isObjectId(id)) {
+    return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
+  }
+
+  const json = await req.json();
+  const parsed = patchSchema.safeParse(json);
+  if (!parsed.success) {
+    return NextResponse.json(parsed.error.flatten(), { status: 400 });
+  }
+
+  const event = await Event.findById(id);
+  if (!event) {
+    return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  }
+
+  // Permission: org owner or event creator can edit
+  const org = await Organization.findById(event.organizationId).select(
+    "_id ownerId"
+  ); // no .lean() so TS knows about ownerId
+
+  const isOwner = !!org && String(org.ownerId) === String(session.user.id);
+
+  const isCreator =
+    !!event.createdByUserId &&
+    String(event.createdByUserId) === String(session.user.id);
+
+  if (!isOwner && !isCreator) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const data = parsed.data;
+
+  if (data.title !== undefined) event.title = data.title;
+  if (data.description !== undefined) event.description = data.description;
+  if (data.date !== undefined) event.date = data.date;
+  if (data.minAge !== undefined) event.minAge = data.minAge;
+  if (data.location !== undefined) event.location = data.location;
+  if (data.image !== undefined) event.image = data.image;
+  if (data.status !== undefined) event.status = data.status;
+  if (data.internalNotes !== undefined) {
+    // assumes Event schema has this field
+    (event as any).internalNotes = data.internalNotes;
+  }
+
+  await event.save();
+
+  return NextResponse.json({ ok: true });
 }

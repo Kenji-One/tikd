@@ -306,18 +306,25 @@ export default function OrgEventsPage() {
           />
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3 xl:grid-cols-4">
-            {data.map((ev) => (
-              <div key={ev._id} className="flex flex-col">
+            {data.map((ev) => {
+              const detailHref = orgId
+                ? `/dashboard/organizations/${orgId}/events/${ev._id}/summary`
+                : `/dashboard/events/${ev._id}/summary`;
+
+              return (
                 <EventCard
+                  key={ev._id}
                   id={ev._id}
+                  href={detailHref}
                   title={ev.title}
                   img={ev.image ?? "/placeholder.jpg"}
                   dateLabel={formatDateLabel(ev.date)}
                   venue={ev.location}
                   category={ev.category ?? ""}
+                  className="flex flex-col transition-transform hover:-translate-y-0.5"
                 />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </>

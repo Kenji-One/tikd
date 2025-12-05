@@ -1,3 +1,4 @@
+// src/components/ui/EventCard.tsx
 "use client";
 
 import Image from "next/image";
@@ -17,7 +18,10 @@ export interface EventCardProps {
   category: string;
   /** extra classes from parent (e.g. w-full h-full) */
   className?: string;
+  /** makes the whole card a link when true */
   clickable?: boolean;
+  /** optional custom href (defaults to `/events/:id`) when clickable */
+  href?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -32,23 +36,20 @@ export function EventCard({
   category,
   className,
   clickable = true,
+  href,
 }: EventCardProps) {
   const dateColour = "text-primary-951";
   const ellipseBg = "bg-[rgba(154,81,255,0.6)]";
   const borderHover = "hover:border-primary-951";
 
-  return (
-    <Link
-      href={clickable ? `/events/${id}` : "#"}
-      /*  group/card lets this card know its own hover,
-          group-hover/row dims siblings when any card is hovered */
-      className={clsx(
-        "group/card relative flex w-full flex-col gap-2 transition-opacity",
-        "group-hover/row:opacity-60 hover:opacity-100",
-        className
-      )}
-    >
-      {/* <div className="bg-[#9a51ff99] w-full h-[63px] absolute left-1/2 top-0 -translate-x-1/2 blur-[25px] rounded-full"></div> */}
+  const baseClasses = clsx(
+    "group/card relative flex w-full flex-col gap-2 transition-opacity",
+    "group-hover/row:opacity-60 hover:opacity-100",
+    className
+  );
+
+  const inner = (
+    <>
       {/* glow ellipse – visible only while *this* card is hovered */}
       <div
         className={clsx(
@@ -84,9 +85,8 @@ export function EventCard({
           />
         </div>
       </div>
-      {/* </div> */}
 
-      {/* ── meta underneath ──────────────────────────────────────────── */}
+      {/* meta underneath */}
       <div className="space-y-1 px-1 text-left">
         <h3 className="text-sm font-bold uppercase text-neutral-0">{title}</h3>
         <div className={clsx("flex items-center gap-1 text-xs", dateColour)}>
@@ -94,6 +94,19 @@ export function EventCard({
           {dateLabel}
         </div>
       </div>
-    </Link>
+    </>
   );
+
+  // If clickable, wrap with <Link>. Otherwise plain <div>.
+  if (clickable) {
+    const targetHref = href ?? `/events/${id}`;
+
+    return (
+      <Link href={targetHref} className={baseClasses}>
+        {inner}
+      </Link>
+    );
+  }
+
+  return <div className={baseClasses}>{inner}</div>;
 }

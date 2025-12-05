@@ -100,6 +100,12 @@ type TicketTypeFormValues = {
   logoUrl: string;
   backgroundUrl: string;
   footerText: string;
+
+  watermarkEnabled: boolean;
+  eventInfoEnabled: boolean;
+  logoEnabled: boolean;
+  qrSize: number;
+  qrBorderRadius: number;
 };
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -178,6 +184,12 @@ function TicketTypeWizard({
       logoUrl: "",
       backgroundUrl: "",
       footerText: "",
+
+      watermarkEnabled: true,
+      eventInfoEnabled: true,
+      logoEnabled: false,
+      qrSize: 0,
+      qrBorderRadius: 0,
     },
   });
 
@@ -191,6 +203,9 @@ function TicketTypeWizard({
   const minPerOrder = watch("minPerOrder");
   const maxPerOrder = watch("maxPerOrder");
   const availabilityStatus = watch("availabilityStatus");
+  const qrSize = watch("qrSize");
+  const qrBorderRadius = watch("qrBorderRadius");
+  const footerText = watch("footerText");
 
   // checkout watches
   const requireFullName = watch("requireFullName");
@@ -207,6 +222,9 @@ function TicketTypeWizard({
     "addPurchasedTicketsToAttendeesCount"
   );
   const enableEmailAttachments = watch("enableEmailAttachments");
+  const watermarkEnabled = watch("watermarkEnabled");
+  const eventInfoEnabled = watch("eventInfoEnabled");
+  const logoEnabled = watch("logoEnabled");
 
   const [showBreakdown, setShowBreakdown] = useState(false);
 
@@ -392,6 +410,12 @@ function TicketTypeWizard({
         logoUrl: values.logoUrl,
         backgroundUrl: values.backgroundUrl,
         footerText: values.footerText,
+        // extra design fields (not yet used on backend, but ready):
+        watermarkEnabled: values.watermarkEnabled,
+        eventInfoEnabled: values.eventInfoEnabled,
+        logoEnabled: values.logoEnabled,
+        qrSize: values.qrSize,
+        qrBorderRadius: values.qrBorderRadius,
       },
     };
 
@@ -565,7 +589,7 @@ function TicketTypeWizard({
                 />
               </div>
 
-              {/* small square checkbox – toggles unlimited capacity */}
+              {/* small square checkbox */}
               <button
                 type="button"
                 onClick={() =>
@@ -1170,149 +1194,339 @@ function TicketTypeWizard({
     </div>
   );
 
+  /* ------------------------ DESIGN STEP (UI) ------------------------ */
+
   const designStep = (
-    <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 p-6 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-          <div className="space-y-4">
+    <div className="pb-20">
+      <div className="mx-auto w-full max-w-3xl rounded-[32px] border border-white/8 bg-neutral-950 px-6 py-6 md:px-10 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.85)]">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-semibold text-neutral-0">
+              Customize the way your ticket looks
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="hidden h-8 w-8 items-center justify-center rounded-full bg-[#151526] text-neutral-400 hover:text-neutral-100 md:flex"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Layout options */}
+        <div className="mt-8 grid gap-3 sm:grid-cols-4">
+          {(["horizontal", "vertical", "down", "up"] as const).map((value) => {
+            const isActive = layout === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setValue("layout", value)}
+                className={clsx(
+                  "flex flex-col items-center justify-between gap-2 rounded-2xl border px-3 py-3 text-sm capitalize transition-colors",
+                  "bg-[#111222] text-neutral-100",
+                  isActive
+                    ? "border-emerald-400 shadow-[0_0_0_1px_rgba(52,211,153,0.7)]"
+                    : "border-white/8 hover:border-primary-500"
+                )}
+              >
+                <span
+                  className={clsx(
+                    "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold",
+                    isActive
+                      ? "bg-emerald-500 text-neutral-950"
+                      : "bg-[#191a2a] text-neutral-300"
+                  )}
+                >
+                  {/* simple icon stub */}
+                  {value === "horizontal"
+                    ? "↔"
+                    : value === "vertical"
+                      ? "↕"
+                      : value === "down"
+                        ? "↓"
+                        : "↑"}
+                </span>
+                <span>{`${value[0].toUpperCase()}${value.slice(
+                  1
+                )} Focus`}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Toggles: Watermark / Event Info / Logo */}
+        <div className="mt-8 space-y-2">
+          <div className="flex items-center justify-between py-1.5">
+            <span className="text-sm text-neutral-100">Watermark</span>
+            <Toggle
+              size="md"
+              checked={watermarkEnabled}
+              onCheckedChange={(val) =>
+                setValue("watermarkEnabled", Boolean(val))
+              }
+            />
+          </div>
+          <div className="flex items-center justify-between py-1.5">
+            <span className="text-sm text-neutral-100">Event Info</span>
+            <Toggle
+              size="md"
+              checked={eventInfoEnabled}
+              onCheckedChange={(val) =>
+                setValue("eventInfoEnabled", Boolean(val))
+              }
+            />
+          </div>
+          <div className="flex items-center justify-between py-1.5">
+            <span className="text-sm text-neutral-100">Logo</span>
+            <Toggle
+              size="md"
+              checked={logoEnabled}
+              onCheckedChange={(val) => setValue("logoEnabled", Boolean(val))}
+            />
+          </div>
+        </div>
+
+        {/* Artwork upload */}
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            className="flex-1 rounded-2xl border-2 border-dashed border-primary-500/60 bg-[#0b0b17] px-4 py-3 text-left text-sm text-neutral-300"
+          >
+            Choose a file or drag &amp; drop it here
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl bg-primary-600 px-6 py-3 text-sm font-semibold text-white hover:bg-primary-500"
+          >
+            + Browse File
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div className="my-6 h-px w-full bg-white/10" />
+
+        {/* QR Code section */}
+        <div className="space-y-5">
+          <h3 className="text-lg font-semibold text-neutral-0">QR Code</h3>
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <p className="text-xs font-medium text-neutral-100">
-                Customize ticket layout
-              </p>
-              <p className="text-[11px] text-neutral-400">
-                Choose how your ticket appears in the app and on PDFs.
-              </p>
+              <label className="text-xs text-neutral-200">Size</label>
+              <input
+                {...register("qrSize", { valueAsNumber: true })}
+                type="number"
+                inputMode="numeric"
+                className="w-full rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+                placeholder="0"
+              />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs text-neutral-200">Border Radius</label>
+              <input
+                {...register("qrBorderRadius", { valueAsNumber: true })}
+                type="number"
+                inputMode="numeric"
+                className="w-full rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+                placeholder="0"
+              />
+            </div>
+          </div>
 
-            <div className="flex flex-wrap gap-3">
-              {(["horizontal", "vertical", "down", "up"] as const).map(
-                (value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setValue("layout", value)}
-                    className={clsx(
-                      "flex min-w-[120px] flex-1 items-center justify-center rounded-xl border px-3 py-2 text-[11px] capitalize",
-                      layout === value
-                        ? "border-primary-600 bg-primary-950/40 text-neutral-0"
-                        : "border-white/10 bg-neutral-950 text-neutral-300"
-                    )}
+          {/* Color */}
+          <div className="space-y-2">
+            <label className="text-xs text-neutral-200">Color</label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                {...register("brandColor")}
+                type="text"
+                placeholder="Enter Hex Color Code"
+                className="flex-1 rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+              />
+              <button
+                type="button"
+                className="relative flex items-center justify-center rounded-2xl bg-[#1c1d30] px-4 py-2.5 text-sm font-medium text-neutral-100 hover:bg-[#24263a]"
+              >
+                Color Picker
+                <input
+                  type="color"
+                  value={brandColor}
+                  onChange={(e) => setValue("brandColor", e.target.value)}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-neutral-500">or</p>
+
+          {/* QR artwork upload */}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              className="flex-1 rounded-2xl border-2 border-dashed border-primary-500/60 bg-[#0b0b17] px-4 py-3 text-left text-sm text-neutral-300"
+            >
+              Choose a file or drag &amp; drop it here
+            </button>
+            <button
+              type="button"
+              className="rounded-2xl bg-primary-600 px-6 py-3 text-sm font-semibold text-white hover:bg-primary-500"
+            >
+              + Browse File
+            </button>
+          </div>
+        </div>
+
+        {/* Bottom line */}
+        <div className="mt-6 space-y-2">
+          <label className="text-sm text-neutral-100">Bottom Line</label>
+          <input
+            {...register("footerText")}
+            type="text"
+            placeholder="Enter text"
+            className="w-full rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+          />
+        </div>
+
+        {/* Divider */}
+        <div className="my-6 h-px w-full bg-white/10" />
+
+        {/* Ticket Preview */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold text-neutral-0">
+            Ticket Preview
+          </h3>
+
+          <div className="mt-3 rounded-[32px] bg-[#111122] p-3 text-xs text-neutral-50">
+            {/* Ticket body */}
+            <div
+              className="mx-auto max-w-md rounded-[28px] bg-[#1a0f3a] pb-4 pt-3 shadow-[0_24px_70px_rgba(0,0,0,0.8)]"
+              style={{
+                backgroundImage:
+                  "linear-gradient(135deg, rgba(255,255,255,0.08), transparent)",
+              }}
+            >
+              {/* Image / artwork area */}
+              <div className="mx-3 overflow-hidden rounded-[22px]">
+                <div
+                  className="h-32 w-full"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(90deg,#ffb347,#ff5f6d,#845ef7,#3bc9db)",
+                  }}
+                />
+              </div>
+
+              {/* Content area */}
+              <div
+                className="mx-3 mt-3 rounded-[22px] bg-[rgba(0,0,0,0.18)] px-4 pb-4 pt-3"
+                style={{ backgroundColor: brandColor || "#9a46ff" }}
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-80">
+                  THE GRAVITY
+                </p>
+                <p className="mt-1 text-[13px] font-semibold leading-tight">
+                  {name || "NYC HIGHSCHOOL PARTY"}
+                </p>
+
+                <div className="mt-3 grid grid-cols-2 gap-y-1 text-[9px] opacity-90">
+                  <p>
+                    Date
+                    <br />
+                    <span className="font-semibold">24/09/2025</span>
+                  </p>
+                  <p className="text-right">
+                    Time
+                    <br />
+                    <span className="font-semibold">12 PM</span>
+                  </p>
+                  <p className="mt-2">
+                    Check in Type
+                    <br />
+                    <span className="font-semibold">VIP Experia - D</span>
+                  </p>
+                  <p className="mt-2 text-right">
+                    Order ID
+                    <br />
+                    <span className="font-semibold">GBD99763JS</span>
+                  </p>
+                </div>
+
+                <p className="mt-3 text-[9px] opacity-90">
+                  Place
+                  <br />
+                  <span className="font-semibold">
+                    St Stadium Jouers Preto, San Francisco, Florida, United
+                    States
+                  </span>
+                </p>
+
+                {/* Perforation line */}
+                <div className="mt-4 flex items-center">
+                  <div className="h-6 w-3 rounded-r-full bg-[#1a0f3a]" />
+                  <div className="h-px flex-1 border-t border-dashed border-white/70 opacity-70" />
+                  <div className="h-6 w-3 rounded-l-full bg-[#1a0f3a]" />
+                </div>
+
+                {/* Barcode / QR + pricing */}
+                <div className="mt-3 flex items-end justify-between gap-3">
+                  <div
+                    className="h-12 flex-1 rounded-md bg-[repeating-linear-gradient(90deg,rgba(0,0,0,0.9)_0,rgba(0,0,0,0.9)_2px,transparent_2px,transparent_4px)]"
+                    style={{
+                      borderRadius:
+                        typeof qrBorderRadius === "number"
+                          ? `${qrBorderRadius}px`
+                          : undefined,
+                    }}
+                  />
+                  <div
+                    className="flex h-12 w-12 items-center justify-center rounded-lg bg-black/25"
+                    style={
+                      typeof qrSize === "number" && qrSize > 0
+                        ? { width: qrSize, height: qrSize }
+                        : undefined
+                    }
                   >
-                    {value.replace("_", " ")} layout
-                  </button>
-                )
-              )}
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="space-y-1">
-                <label className="block text-[11px] text-neutral-300">
-                  Brand color
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    {...register("brandColor")}
-                    type="text"
-                    className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-                  />
-                  <input
-                    type="color"
-                    value={brandColor}
-                    onChange={(e) => setValue("brandColor", e.target.value)}
-                    className="h-9 w-9 cursor-pointer rounded-lg border border-white/20 bg-neutral-900"
-                  />
+                    <div className="h-7 w-7 rounded bg-white/90" />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-[11px] text-neutral-300">
-                  Footer text
-                </label>
-                <input
-                  {...register("footerText")}
-                  type="text"
-                  placeholder="Bottom line on the ticket"
-                  className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] text-neutral-300">
-                  Logo URL
-                </label>
-                <input
-                  {...register("logoUrl")}
-                  type="text"
-                  placeholder="https://…"
-                  className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-[11px] text-neutral-300">
-                  Background image URL
-                </label>
-                <input
-                  {...register("backgroundUrl")}
-                  type="text"
-                  placeholder="https://…"
-                  className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-                />
-              </div>
+              {/* Optional bottom line text */}
+              {footerText && (
+                <p className="mt-3 px-4 text-[9px] text-center text-neutral-200">
+                  {footerText}
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Ticket preview */}
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 p-6 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-          <p className="mb-3 text-xs font-medium text-neutral-100">
-            Ticket preview
+        {/* Go back / Complete buttons */}
+        <div className="mt-8 flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={goPrev}
+            className="rounded-full bg-white px-6 py-2 text-sm font-medium text-neutral-950 hover:bg-neutral-100"
+          >
+            Go back
+          </button>
+          <button
+            type="submit"
+            className="rounded-full bg-primary-600 px-8 py-2 text-sm font-semibold text-white hover:bg-primary-500"
+          >
+            Complete
+          </button>
+        </div>
+
+        {serverError && (
+          <p className="mt-4 text-center text-xs text-error-400">
+            {serverError}
           </p>
-          <div className="flex items-center justify-center">
-            <div
-              className="relative w-full max-w-xs rounded-[24px] border border-white/10 p-4 text-[10px] text-neutral-50"
-              style={{ background: brandColor }}
-            >
-              <div className="mb-3 flex items-center justify-between text-[9px]">
-                <span className="rounded-full bg-black/25 px-2 py-0.5 uppercase tracking-[0.08em]">
-                  Tikd • {layout}
-                </span>
-                <span className="text-[8px] opacity-80">
-                  {new Date().getFullYear()}
-                </span>
-              </div>
-
-              <p className="mb-1 text-[11px] font-semibold">
-                {name || "Ticket name"}
-              </p>
-              <p className="mb-3 text-[9px] opacity-85">
-                Admits one • {buyerTotal === 0 ? "Free" : `$${buyerTotal}`}
-              </p>
-
-              <div className="mb-4 space-y-1 text-[8px] opacity-85">
-                <p>Date: TBD</p>
-                <p>Time: TBD</p>
-                <p>Venue: Your event location</p>
-              </div>
-
-              <div className="mt-2 h-[26px] w-full rounded bg-black/25" />
-
-              <div className="mt-2 h-[18px] w-full rounded bg-black/35" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {serverError && <p className="text-xs text-error-400">{serverError}</p>}
-
-      <div className="flex items-center justify-start">
-        <button
-          type="button"
-          onClick={goPrev}
-          className="rounded-full px-3 py-1.5 text-[11px] font-medium text-neutral-200 hover:bg-neutral-900"
-        >
-          Back
-        </button>
+        )}
       </div>
     </div>
   );

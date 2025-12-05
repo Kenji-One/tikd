@@ -1,7 +1,7 @@
 // src/app/dashboard/organizations/[id]/events/[eventId]/ticket-types/page.tsx
 "use client";
 
-import { useMemo, useState, type SVGProps, type ReactNode } from "react";
+import { useMemo, useState, type SVGProps, type ComponentType } from "react";
 import { useParams } from "next/navigation";
 import {
   Search,
@@ -9,10 +9,18 @@ import {
   Ticket,
   EllipsisVertical,
   ArrowLeft,
+  Layers,
+  Clock4,
+  CreditCard,
+  Palette,
+  X,
 } from "lucide-react";
+
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import clsx from "clsx";
+
+import Toggle from "@/components/ui/Toggle";
 
 type RouteParams = {
   id: string;
@@ -72,14 +80,19 @@ type TicketTypeFormValues = {
   accessMode: "public" | "password";
   password: string;
 
-  // Checkout
+  // Checkout (mirrors design)
   requireFullName: boolean;
+  requireEmail: boolean;
   requirePhone: boolean;
+  requireFacebook: boolean;
+  requireInstagram: boolean;
   requireGender: boolean;
   requireDob: boolean;
+  requireAge: boolean;
   subjectToApproval: boolean;
-  addBuyerDetailsToOrder: boolean;
+  addBuyerDetailsToOrder: boolean; // "Merge buyer details"
   addPurchasedTicketsToAttendeesCount: boolean;
+  enableEmailAttachments: boolean;
 
   // Design
   layout: "horizontal" | "vertical" | "down" | "up";
@@ -119,6 +132,7 @@ function TicketTypeWizard({
 }: TicketTypeWizardProps) {
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [isStatusEditorOpen, setIsStatusEditorOpen] = useState(false);
 
   const {
     register,
@@ -145,13 +159,19 @@ function TicketTypeWizard({
       accessMode: "public",
       password: "",
 
+      // checkout defaults like in design
       requireFullName: true,
+      requireEmail: true,
       requirePhone: false,
+      requireFacebook: false,
+      requireInstagram: false,
       requireGender: false,
       requireDob: false,
+      requireAge: false,
       subjectToApproval: false,
-      addBuyerDetailsToOrder: true,
-      addPurchasedTicketsToAttendeesCount: true,
+      addBuyerDetailsToOrder: false,
+      addPurchasedTicketsToAttendeesCount: false,
+      enableEmailAttachments: true,
 
       layout: "horizontal",
       brandColor: "#9a46ff",
@@ -165,19 +185,68 @@ function TicketTypeWizard({
   const isFree = watch("isFree");
   const brandColor = watch("brandColor");
   const layout = watch("layout");
+  const feeMode = watch("feeMode");
   const name = watch("name");
+  const unlimitedQuantity = watch("unlimitedQuantity");
+  const minPerOrder = watch("minPerOrder");
+  const maxPerOrder = watch("maxPerOrder");
+  const availabilityStatus = watch("availabilityStatus");
 
-  const buyerTotal = useMemo(
-    () => (isFree ? 0 : Math.max(0, Number.isFinite(price) ? price : 0)),
-    [isFree, price]
+  // checkout watches
+  const requireFullName = watch("requireFullName");
+  const requireEmail = watch("requireEmail");
+  const requirePhone = watch("requirePhone");
+  const requireFacebook = watch("requireFacebook");
+  const requireInstagram = watch("requireInstagram");
+  const requireGender = watch("requireGender");
+  const requireDob = watch("requireDob");
+  const requireAge = watch("requireAge");
+  const subjectToApproval = watch("subjectToApproval");
+  const addBuyerDetailsToOrder = watch("addBuyerDetailsToOrder");
+  const addPurchasedTicketsToAttendeesCount = watch(
+    "addPurchasedTicketsToAttendeesCount"
   );
+  const enableEmailAttachments = watch("enableEmailAttachments");
+
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  const PRICE_STEP = 0.5;
+
+  const handlePriceStep = (delta: number) => {
+    const current = Number.isFinite(price as number) ? Number(price) : 0;
+    let next = current + delta;
+    if (next < 0) next = 0;
+
+    // round to cents
+    next = Math.round(next * 100) / 100;
+
+    setValue("price", next, { shouldDirty: true });
+    setValue("isFree", next === 0, { shouldDirty: true });
+  };
+
+  const { serviceFee, buyerTotal } = useMemo(() => {
+    if (isFree) {
+      return { serviceFee: 0, buyerTotal: 0 };
+    }
+
+    const basePrice = Number.isFinite(price as number) ? Number(price) : 0;
+
+    // Placeholder fee model – replace with real rules later
+    const fee = basePrice > 0 ? basePrice * 0.06 + 0.2 : 0;
+    const total = feeMode === "pass_on" ? basePrice + fee : basePrice;
+
+    return {
+      serviceFee: Math.max(0, Math.round(fee * 100) / 100),
+      buyerTotal: Math.max(0, Math.round(total * 100) / 100),
+    };
+  }, [isFree, price, feeMode]);
 
   type StepId = "general" | "availability" | "checkout" | "design";
 
   type StepDef = {
     id: StepId;
     label: string;
-    icon: (props: SVGProps<SVGSVGElement>) => ReactNode;
+    icon: ComponentType<SVGProps<SVGSVGElement>>;
   };
 
   const steps: StepDef[] = [
@@ -278,19 +347,22 @@ function TicketTypeWizard({
       ),
     },
   ];
+
   const goNext = () => setActiveStep((s) => (s < 3 ? ((s + 1) as any) : s));
   const goPrev = () => setActiveStep((s) => (s > 0 ? ((s - 1) as any) : s));
 
   async function onSubmit(values: TicketTypeFormValues) {
     setServerError(null);
 
+    const isFreeFlag = !values.price || values.price <= 0;
+
     const payload = {
       name: values.name,
       description: values.description || "",
-      price: values.isFree ? 0 : values.price,
+      price: isFreeFlag ? 0 : values.price,
       currency: values.currency,
       feeMode: values.feeMode,
-      isFree: values.isFree,
+      isFree: isFreeFlag,
       totalQuantity: values.unlimitedQuantity ? null : values.totalQuantity,
       minPerOrder: values.minPerOrder,
       maxPerOrder: values.maxPerOrder,
@@ -301,13 +373,18 @@ function TicketTypeWizard({
       password: values.accessMode === "password" ? values.password : "",
       checkout: {
         requireFullName: values.requireFullName,
+        requireEmail: values.requireEmail,
         requirePhone: values.requirePhone,
+        requireFacebook: values.requireFacebook,
+        requireInstagram: values.requireInstagram,
         requireGender: values.requireGender,
         requireDob: values.requireDob,
+        requireAge: values.requireAge,
         subjectToApproval: values.subjectToApproval,
         addBuyerDetailsToOrder: values.addBuyerDetailsToOrder,
         addPurchasedTicketsToAttendeesCount:
           values.addPurchasedTicketsToAttendeesCount,
+        enableEmailAttachments: values.enableEmailAttachments,
       },
       design: {
         layout: values.layout,
@@ -337,440 +414,758 @@ function TicketTypeWizard({
 
   const generalStep = (
     <div className="space-y-6">
-      <div className="rounded-card border border-white/8 bg-neutral-948/90 p-6 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-        <div className="space-y-4">
+      <div className="rounded-3xl border border-white/8 bg-neutral-950/95 px-6 py-6 md:px-8 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
+        {/* Name + Description */}
+        <div className="space-y-6">
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-neutral-100">
-              Name<span className="text-error-400">*</span>
+            <label className="block text-sm font-semibold text-neutral-0">
+              Name<span className="ml-1 text-error-400">*</span>
             </label>
             <input
               {...register("name", { required: true })}
               type="text"
-              placeholder="Early Bird, General Admission, VIP Table…"
-              className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3.5 py-2.5 text-xs text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-600"
+              placeholder="Enter name"
+              className="w-full rounded-2xl border border-white/10 bg-[#171726] px-4 py-3 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-neutral-100">
-              Description &amp; details
+            <label className="block text-sm font-semibold text-neutral-0">
+              Description
             </label>
             <textarea
               {...register("description")}
               rows={4}
-              placeholder="What does this ticket include? Any limitations or special instructions."
-              className="w-full resize-none rounded-xl border border-white/10 bg-neutral-950 px-3.5 py-2.5 text-xs text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-600"
+              placeholder="Write description"
+              className="w-full resize-none rounded-2xl border border-white/10 bg-[#171726] px-4 py-3 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
             />
           </div>
         </div>
 
-        <div className="mt-6 h-px w-full bg-white/5" />
+        {/* Divider */}
+        <div className="mt-8 h-px w-full bg-white/5" />
 
-        <div className="mt-6 flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-neutral-100">Price</p>
-              <p className="text-[11px] text-neutral-400">
-                Set this ticket as free or paid. Fees can be passed on to the
-                buyer or absorbed.
-              </p>
-            </div>
+        {/* Price section */}
+        <div className="mt-8 space-y-6">
+          <div className="space-y-1 text-center">
+            <p className="text-base font-semibold text-neutral-0">Price</p>
+            <p className="text-xs text-neutral-400">
+              Choose whether this ticket is free or paid. Adjust the price and
+              how fees are handled.
+            </p>
+          </div>
 
-            <div className="flex items-center gap-2 rounded-full bg-neutral-950 px-2 py-1">
+          {/* Price pill with – / + */}
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-4 rounded-full bg-[#171726] px-5 py-2.5 shadow-[0_18px_45px_rgba(0,0,0,0.65)]">
               <button
                 type="button"
-                onClick={() => setValue("isFree", true)}
-                className={clsx(
-                  "rounded-full px-3 py-1 text-[11px] font-medium",
-                  watch("isFree")
-                    ? "bg-primary-600 text-white"
-                    : "text-neutral-300 hover:text-neutral-0"
-                )}
+                onClick={() => handlePriceStep(-PRICE_STEP)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#11111A] text-xl leading-none text-neutral-100 hover:bg-[#181824]"
               >
-                Free
+                –
               </button>
+
+              <div className="min-w-[96px] text-center text-lg font-semibold text-neutral-0">
+                {isFree ? "Free" : `$${Number(price || 0).toFixed(2)}`}
+              </div>
+
               <button
                 type="button"
-                onClick={() => setValue("isFree", false)}
-                className={clsx(
-                  "rounded-full px-3 py-1 text-[11px] font-medium",
-                  !watch("isFree")
-                    ? "bg-primary-600 text-white"
-                    : "text-neutral-300 hover:text-neutral-0"
-                )}
+                onClick={() => handlePriceStep(PRICE_STEP)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-600 text-xl leading-none text-white shadow-[0_0_0_8px_rgba(133,92,255,0.4)] hover:bg-primary-500"
               >
-                Paid
+                +
               </button>
             </div>
           </div>
 
+          {/* Fee mode toggles (only when paid) */}
           {!isFree && (
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="inline-flex items-center gap-1 rounded-full bg-neutral-950 px-4 py-2">
-                <span className="text-sm text-neutral-0">$</span>
-                <input
-                  {...register("price", { valueAsNumber: true })}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className="w-24 border-none bg-transparent text-sm text-neutral-0 focus:outline-none focus:ring-0"
+            <div className="mt-6 space-y-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-neutral-0">
+                    Pass on the fees to the customer
+                  </p>
+                  <p className="max-w-md text-sm text-neutral-400">
+                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+                  </p>
+                </div>
+                <Toggle
+                  size="md"
+                  checked={feeMode === "pass_on"}
+                  onCheckedChange={() => setValue("feeMode", "pass_on")}
                 />
-                <span className="ml-2 text-[11px] text-neutral-400">
-                  {watch("currency")}
-                </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-300">
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    {...register("feeMode")}
-                    type="radio"
-                    value="pass_on"
-                    className="h-3 w-3 rounded border-white/20 bg-neutral-950 text-primary-600 focus:ring-primary-600"
-                  />
-                  <span>Pass on the fees to the customer</span>
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    {...register("feeMode")}
-                    type="radio"
-                    value="absorb"
-                    className="h-3 w-3 rounded border-white/20 bg-neutral-950 text-primary-600 focus:ring-primary-600"
-                  />
-                  <span>Absorb fees into ticket price</span>
-                </label>
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-neutral-0">
+                    Absorb the fees into the ticket price
+                  </p>
+                  <p className="max-w-md text-sm text-neutral-400">
+                    Lorem consectetur adipiscing elit, sed do ei.
+                  </p>
+                </div>
+                <Toggle
+                  size="md"
+                  checked={feeMode === "absorb"}
+                  onCheckedChange={() => setValue("feeMode", "absorb")}
+                />
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Buyer total bar */}
-      <div className="sticky bottom-4 flex items-center justify-between rounded-full bg-neutral-948/95 px-4 py-2 shadow-[0_18px_45px_rgba(0,0,0,0.8)] backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-3 py-1">
-            <span className="text-[11px] text-neutral-400">Buyer total</span>
-            <span className="text-xs font-semibold text-neutral-0">
-              ${buyerTotal.toFixed(2)}
-            </span>
-          </div>
-          <p className="hidden text-[11px] text-neutral-400 md:block">
-            Including ticket price and any applicable fees.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {activeStep > 0 && (
-            <button
-              type="button"
-              onClick={goPrev}
-              className="rounded-full px-3 py-1.5 text-[11px] font-medium text-neutral-200 hover:bg-neutral-900"
-            >
-              Back
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={goNext}
-            className="rounded-full bg-primary-600 px-4 py-1.5 text-[11px] font-medium text-white hover:bg-primary-500"
-          >
-            Next
-          </button>
-        </div>
+      {/* Step navigation for general step */}
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={goNext}
+          className="rounded-full bg-primary-600 px-6 py-2 text-sm font-medium text-white hover:bg-primary-500"
+        >
+          Next
+        </button>
       </div>
     </div>
   );
 
   const availabilityStep = (
     <div className="space-y-6">
-      <div className="rounded-card border border-white/8 bg-neutral-948/90 p-6 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-neutral-100">Quantities</p>
-            <p className="text-[11px] text-neutral-400">
-              Set limits on number of tickets available and how many a single
-              order can contain.
-            </p>
-          </div>
+      {/* Main availability card */}
+      <div className="rounded-3xl border border-white/8 bg-neutral-950/95 px-6 py-6 md:px-8 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
+        {/* Header */}
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold text-neutral-0">Quantities</h2>
+          <p className="text-sm text-neutral-400">
+            Set a total number of tickets for this ticket type.
+          </p>
+        </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-1">
-              <label className="block text-[11px] text-neutral-300">
-                Total number of tickets
-              </label>
+        {/* Three quantity cards in a row */}
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          {/* Total number of tickets */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-neutral-200">
+              Total Number of Tickets
+            </p>
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#181828] px-4 py-3">
               <div className="flex items-center gap-2">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-[#23233a] text-xs text-neutral-100">
+                  <Ticket className="h-3.5 w-3.5" />
+                </span>
                 <input
                   {...register("totalQuantity", { valueAsNumber: true })}
-                  disabled={watch("unlimitedQuantity")}
                   type="number"
                   min={0}
-                  className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={unlimitedQuantity}
+                  className="w-20 bg-transparent text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setValue("unlimitedQuantity", !watch("unlimitedQuantity"))
-                  }
-                  className={clsx(
-                    "whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium",
-                    watch("unlimitedQuantity")
-                      ? "bg-primary-600 text-white"
-                      : "bg-neutral-900 text-neutral-200"
-                  )}
-                >
-                  {watch("unlimitedQuantity") ? "Unlimited" : "Set limit"}
-                </button>
+              </div>
+
+              {/* small square checkbox – toggles unlimited capacity */}
+              <button
+                type="button"
+                onClick={() =>
+                  setValue("unlimitedQuantity", !unlimitedQuantity)
+                }
+                className={clsx(
+                  "flex h-5 w-5 items-center justify-center rounded-[6px] border text-[10px] font-semibold transition-colors",
+                  unlimitedQuantity
+                    ? "border-primary-500 bg-primary-500 text-neutral-950"
+                    : "border-white/20 bg-transparent text-transparent"
+                )}
+              >
+                ✓
+              </button>
+            </div>
+          </div>
+
+          {/* Minimum tickets per order */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-neutral-200">
+              Minimum Tickets Per Order
+            </p>
+            {(() => {
+              const isUnlimited = minPerOrder == null;
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#181828] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-[#23233a] text-xs text-neutral-100">
+                      <Ticket className="h-3.5 w-3.5" />
+                    </span>
+                    {isUnlimited ? (
+                      <span className="text-sm font-semibold text-success-500">
+                        Unlimited
+                      </span>
+                    ) : (
+                      <input
+                        {...register("minPerOrder", { valueAsNumber: true })}
+                        type="number"
+                        min={0}
+                        className="w-20 bg-transparent text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none"
+                      />
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setValue("minPerOrder", isUnlimited ? 1 : null)
+                    }
+                    className={clsx(
+                      "flex h-5 w-5 items-center justify-center rounded-[6px] border text-[10px] font-semibold transition-colors",
+                      isUnlimited
+                        ? "border-primary-500 bg-primary-500 text-neutral-950"
+                        : "border-white/20 bg-transparent text-transparent"
+                    )}
+                  >
+                    ✓
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Maximum tickets per order */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-neutral-200">
+              Maximum Tickets Per Order
+            </p>
+            {(() => {
+              const isUnlimited = maxPerOrder == null;
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#181828] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-[#23233a] text-xs text-neutral-100">
+                      <Ticket className="h-3.5 w-3.5" />
+                    </span>
+                    {isUnlimited ? (
+                      <span className="text-sm font-semibold text-success-500">
+                        Unlimited
+                      </span>
+                    ) : (
+                      <input
+                        {...register("maxPerOrder", { valueAsNumber: true })}
+                        type="number"
+                        min={0}
+                        className="w-20 bg-transparent text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none"
+                      />
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setValue("maxPerOrder", isUnlimited ? 10 : null)
+                    }
+                    className={clsx(
+                      "flex h-5 w-5 items-center justify-center rounded-[6px] border text-[10px] font-semibold transition-colors",
+                      isUnlimited
+                        ? "border-primary-500 bg-primary-500 text-neutral-950"
+                        : "border-white/20 bg-transparent text-transparent"
+                    )}
+                  >
+                    ✓
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        <p className="mt-3 text-[11px] text-neutral-500">
+          Ticking the box will make number Unlimited
+        </p>
+
+        {/* Password section */}
+        <div className="mt-8 space-y-3">
+          <h3 className="text-sm font-semibold text-neutral-0">Password</h3>
+          <p className="text-[11px] text-neutral-400">
+            If you would like to protect this ticket type with a password, check
+            the mark and create a password. There will be a place on your event
+            page for your customers to enter the password. Share the password
+            link directly to send your event page with the ticket type already
+            unlocked.
+          </p>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)]">
+            {/* Password input pill */}
+            <div className="space-y-1">
+              <p className="text-[11px] text-neutral-200">Password</p>
+              <div className="relative">
+                <input
+                  {...register("password")}
+                  type="text"
+                  placeholder="Enter Password"
+                  className="w-full rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 pr-20 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+                />
+                <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 text-[10px] text-neutral-300">
+                    ●
+                  </span>
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-success-500 text-[11px] font-semibold text-neutral-950">
+                    ✓
+                  </span>
+                </div>
               </div>
             </div>
 
+            {/* Who can access select */}
             <div className="space-y-1">
-              <label className="block text-[11px] text-neutral-300">
-                Minimum tickets per order
-              </label>
-              <input
-                {...register("minPerOrder", { valueAsNumber: true })}
-                type="number"
-                min={0}
-                className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-[11px] text-neutral-300">
-                Maximum tickets per order
-              </label>
-              <input
-                {...register("maxPerOrder", { valueAsNumber: true })}
-                type="number"
-                min={0}
-                className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 h-px w-full bg-white/5" />
-
-        <div className="mt-6 space-y-4">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-neutral-100">
-              Access control
-            </p>
-            <p className="text-[11px] text-neutral-400">
-              Protect this ticket with a password or keep it open to everyone.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="inline-flex items-center gap-2 text-[11px] text-neutral-300">
-              <input
-                {...register("accessMode")}
-                type="radio"
-                value="public"
-                className="h-3 w-3 rounded border-white/20 bg-neutral-950 text-primary-600 focus:ring-primary-600"
-              />
-              <span>Anyone can access</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-[11px] text-neutral-300">
-              <input
-                {...register("accessMode")}
-                type="radio"
-                value="password"
-                className="h-3 w-3 rounded border-white/20 bg-neutral-950 text-primary-600 focus:ring-primary-600"
-              />
-              <span>Require password</span>
-            </label>
-          </div>
-
-          {watch("accessMode") === "password" && (
-            <div className="space-y-1">
-              <label className="block text-[11px] text-neutral-300">
-                Password
-              </label>
-              <input
-                {...register("password")}
-                type="text"
-                className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-                placeholder="Enter password attendees must use"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="mt-6 h-px w-full bg-white/5" />
-
-        <div className="mt-6 space-y-4">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-neutral-100">
-              Availability timeline
-            </p>
-            <p className="text-[11px] text-neutral-400">
-              Control when this ticket is on sale and what its current status
-              should be.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-300">
-            {(["scheduled", "on_sale", "paused", "sale_ended"] as const).map(
-              (value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setValue("availabilityStatus", value)}
-                  className={clsx(
-                    "rounded-full px-3 py-1 capitalize",
-                    watch("availabilityStatus") === value
-                      ? "bg-primary-600 text-white"
-                      : "bg-neutral-900 text-neutral-200"
-                  )}
+              <p className="text-[11px] text-neutral-200">Who can access</p>
+              <div className="relative">
+                <select
+                  {...register("accessMode")}
+                  className="w-full appearance-none rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 pr-10 text-sm text-neutral-0 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
                 >
-                  {value.replace("_", " ")}
-                </button>
-              )
-            )}
+                  <option value="public">Anyone</option>
+                  <option value="password">
+                    Only people with the password
+                  </option>
+                </select>
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400">
+                  ▾
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Divider line */}
+        <div className="mt-8 h-px w-full bg-white/5" />
+
+        {/* Availability timeline */}
+        <div className="mt-6 space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-neutral-0">
+              Availability Timeline
+            </h3>
+            <p className="text-[11px] text-neutral-400">
+              Change the availability status of your ticket as it is displayed
+              on the event page. You can also add a time you would like to
+              change the ticket availability.
+            </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1">
-              <label className="block text-[11px] text-neutral-300">
-                Sales start
-              </label>
-              <input
-                {...register("salesStartAt")}
-                type="datetime-local"
-                className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
-              />
+          {/* plus — line — plus row */}
+          <div className="mt-4 flex items-center gap-6">
+            {/* initial status + node */}
+            <button
+              type="button"
+              className="flex flex-col items-center gap-2 text-neutral-0"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-neutral-0 shadow-[0_0_26px_rgba(133,0,255,0.8)]">
+                <Plus className="h-4 w-4" />
+              </span>
+            </button>
+
+            <div className="h-px flex-1 bg-neutral-600" />
+
+            {/* current status + node */}
+            <button
+              type="button"
+              onClick={() => setIsStatusEditorOpen(true)}
+              className="flex flex-col items-center gap-2 text-neutral-0"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-neutral-0 shadow-[0_0_26px_rgba(133,0,255,0.8)]">
+                <Plus className="h-4 w-4" />
+              </span>
+            </button>
+          </div>
+
+          {/* labels below timeline */}
+          <div className="mt-3 flex items-start justify-between gap-6 text-[11px] text-neutral-200">
+            <div className="flex-1">
+              <p className="font-medium text-neutral-0">Initial Status</p>
             </div>
+            <div className="flex flex-1 justify-end">
+              <div className="text-right">
+                <p className="font-medium text-neutral-0">Current Status</p>
+                <p className="mt-1 text-neutral-400 capitalize">
+                  {availabilityStatus === "on_sale"
+                    ? "On sale"
+                    : availabilityStatus === "sale_ended"
+                      ? "Sale ended"
+                      : availabilityStatus === "paused"
+                        ? "Paused"
+                        : "Scheduled"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Go back / Next inside the card */}
+        <div className="mt-8 flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={goPrev}
+            className="rounded-full bg-neutral-50 px-6 py-2 text-sm font-medium text-neutral-900 hover:bg-white"
+          >
+            Go back
+          </button>
+          <button
+            type="button"
+            onClick={goNext}
+            className="rounded-full bg-primary-600 px-7 py-2 text-sm font-semibold text-white hover:bg-primary-500"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      {/* Current Status bottom card (opened from timeline) */}
+      {isStatusEditorOpen && (
+        <div className="rounded-3xl border border-white/8 bg-neutral-950/95 px-6 py-6 md:px-8 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-lg font-semibold text-neutral-0">
+                Current Status
+              </p>
+              <p className="mt-1 text-[11px] text-neutral-400">
+                Update how this ticket is currently displayed on your event
+                page.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsStatusEditorOpen(false)}
+              className="text-xs text-neutral-400 hover:text-neutral-100"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div className="space-y-1">
               <label className="block text-[11px] text-neutral-300">
-                Sales end
+                Status
               </label>
+              <select
+                {...register("availabilityStatus")}
+                className="w-full rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 text-sm text-neutral-0 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+              >
+                <option value="on_sale">On sale</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="paused">Paused</option>
+                <option value="sale_ended">Sale ended</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-[11px] text-neutral-300">Date</label>
               <input
                 {...register("salesEndAt")}
                 type="datetime-local"
-                className="w-full rounded-xl border border-white/10 bg-neutral-950 px-3 py-2 text-xs text-neutral-0 placeholder:text-neutral-500"
+                className="w-full rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+              />
+              <p className="mt-1 text-[10px] text-neutral-500">
+                Optional: choose when this status should take effect.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setIsStatusEditorOpen(false)}
+              className="rounded-full bg-primary-600 px-6 py-2 text-sm font-semibold text-white hover:bg-primary-500"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  /* ----------------------- NEW CHECKOUT STEP ----------------------- */
+
+  const checkoutStep = (
+    <div className="pb-16">
+      <div className="mx-auto w-full max-w-xl rounded-[32px] border border-white/8 bg-neutral-950 px-6 py-6 md:px-10 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.8)]">
+        {/* Top heading */}
+        <div className="space-y-2">
+          <h2 className="text-2xl font-semibold text-neutral-0">
+            Checkout Requirments
+          </h2>
+          <p className="text-sm leading-relaxed text-neutral-300">
+            Customize the checkout process by collecting the client details that
+            best suit your needs. The more data collected – the more diverse
+            your dashboard analytics become
+          </p>
+        </div>
+
+        {/* First block – basic attendee details */}
+        <div className="mt-8 space-y-1">
+          {/* Name */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Name</span>
+            <Toggle
+              size="md"
+              checked={requireFullName}
+              onCheckedChange={(val) =>
+                setValue("requireFullName", Boolean(val))
+              }
+            />
+          </div>
+
+          {/* Email */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Email</span>
+            <Toggle
+              size="md"
+              checked={requireEmail}
+              onCheckedChange={(val) => setValue("requireEmail", Boolean(val))}
+            />
+          </div>
+
+          {/* Phone */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Phone number</span>
+            <Toggle
+              size="md"
+              checked={requirePhone}
+              onCheckedChange={(val) => setValue("requirePhone", Boolean(val))}
+            />
+          </div>
+
+          {/* Facebook */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Link to Facebook</span>
+            <Toggle
+              size="md"
+              checked={requireFacebook}
+              onCheckedChange={(val) =>
+                setValue("requireFacebook", Boolean(val))
+              }
+            />
+          </div>
+
+          {/* Instagram */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Instagram Profile</span>
+            <Toggle
+              size="md"
+              checked={requireInstagram}
+              onCheckedChange={(val) =>
+                setValue("requireInstagram", Boolean(val))
+              }
+            />
+          </div>
+
+          {/* Gender */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Gender</span>
+            <Toggle
+              size="md"
+              checked={requireGender}
+              onCheckedChange={(val) => setValue("requireGender", Boolean(val))}
+            />
+          </div>
+
+          {/* DOB */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Date of birth</span>
+            <Toggle
+              size="md"
+              checked={requireDob}
+              onCheckedChange={(val) => setValue("requireDob", Boolean(val))}
+            />
+          </div>
+
+          {/* Age */}
+          <div className="flex items-center justify-between py-2">
+            <span className="text-base text-neutral-0">Age</span>
+            <Toggle
+              size="md"
+              checked={requireAge}
+              onCheckedChange={(val) => setValue("requireAge", Boolean(val))}
+            />
+          </div>
+
+          {/* Add your field row */}
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#11111b] px-4 py-3">
+            <span className="text-sm text-neutral-0">Add your field</span>
+            <button
+              type="button"
+              className="rounded-full border border-white/30 px-6 py-1.5 text-sm font-medium text-neutral-0 hover:border-primary-500"
+            >
+              Setup
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="mt-8 h-px w-full bg-white/10" />
+
+        {/* Second header – Checkout Requirments (again, like design) */}
+        <div className="mt-6">
+          <h3 className="text-xl font-semibold text-neutral-0">
+            Checkout Requirments
+          </h3>
+
+          <div className="mt-5 space-y-1">
+            <div className="flex items-center justify-between py-2">
+              <span className="text-sm text-neutral-0">
+                Merge buyer details
+              </span>
+              <Toggle
+                size="md"
+                checked={addBuyerDetailsToOrder}
+                onCheckedChange={(val) =>
+                  setValue("addBuyerDetailsToOrder", Boolean(val))
+                }
+              />
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <span className="text-sm text-neutral-0">
+                Subject to approval
+              </span>
+              <Toggle
+                size="md"
+                checked={subjectToApproval}
+                onCheckedChange={(val) =>
+                  setValue("subjectToApproval", Boolean(val))
+                }
+              />
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <span className="text-sm text-neutral-0">
+                Add purchased tickets to attendees count
+              </span>
+              <Toggle
+                size="md"
+                checked={addPurchasedTicketsToAttendeesCount}
+                onCheckedChange={(val) =>
+                  setValue("addPurchasedTicketsToAttendeesCount", Boolean(val))
+                }
               />
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={goPrev}
-          className="rounded-full px-3 py-1.5 text-[11px] font-medium text-neutral-200 hover:bg-neutral-900"
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          onClick={goNext}
-          className="rounded-full bg-primary-600 px-4 py-1.5 text-[11px] font-medium text-white hover:bg-primary-500"
-        >
-          Next
-        </button>
-      </div>
-    </div>
-  );
+        {/* Divider */}
+        <div className="mt-8 h-px w-full bg-white/10" />
 
-  const checkoutStep = (
-    <div className="space-y-6">
-      <div className="rounded-card border border-white/8 bg-neutral-948/90 p-6 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-neutral-100">
-              Checkout requirements
-            </p>
-            <p className="text-[11px] text-neutral-400">
-              Choose which attendee details you collect at checkout.
-            </p>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="inline-flex items-center justify-between gap-3 rounded-xl bg-neutral-950 px-3 py-2 text-xs text-neutral-100">
-              <span>Buyer full name</span>
-              <input
-                {...register("requireFullName")}
-                type="checkbox"
-                className="h-4 w-7 rounded-full border-white/20 bg-neutral-900 text-primary-600 focus:ring-primary-600"
-              />
-            </label>
-
-            <label className="inline-flex items-center justify-between gap-3 rounded-xl bg-neutral-950 px-3 py-2 text-xs text-neutral-100">
-              <span>Phone number</span>
-              <input
-                {...register("requirePhone")}
-                type="checkbox"
-                className="h-4 w-7 rounded-full border-white/20 bg-neutral-900 text-primary-600 focus:ring-primary-600"
-              />
-            </label>
-
-            <label className="inline-flex items-center justify-between gap-3 rounded-xl bg-neutral-950 px-3 py-2 text-xs text-neutral-100">
-              <span>Gender</span>
-              <input
-                {...register("requireGender")}
-                type="checkbox"
-                className="h-4 w-7 rounded-full border-white/20 bg-neutral-900 text-primary-600 focus:ring-primary-600"
-              />
-            </label>
-
-            <label className="inline-flex items-center justify-between gap-3 rounded-xl bg-neutral-950 px-3 py-2 text-xs text-neutral-100">
-              <span>Date of birth</span>
-              <input
-                {...register("requireDob")}
-                type="checkbox"
-                className="h-4 w-7 rounded-full border-white/20 bg-neutral-900 text-primary-600 focus:ring-primary-600"
-              />
-            </label>
-          </div>
-
-          <div className="mt-4 space-y-2">
-            <label className="inline-flex items-center gap-2 text-[11px] text-neutral-200">
-              <input
-                {...register("subjectToApproval")}
-                type="checkbox"
-                className="h-3 w-3 rounded border-white/20 bg-neutral-950 text-primary-600 focus:ring-primary-600"
-              />
-              <span>
-                Subject orders to approval before tickets are released
-              </span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-[11px] text-neutral-200">
-              <input
-                {...register("addBuyerDetailsToOrder")}
-                type="checkbox"
-                className="h-3 w-3 rounded border-white/20 bg-neutral-950 text-primary-600 focus:ring-primary-600"
-              />
-              <span>Include buyer details on the ticket list</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-[11px] text-neutral-200">
-              <input
-                {...register("addPurchasedTicketsToAttendeesCount")}
-                type="checkbox"
-                className="h-3 w-3 rounded border-white/20 bg-neutral-950 text-primary-600 focus:ring-primary-600"
-              />
-              <span>Count purchased tickets towards attendee total</span>
-            </label>
+        {/* Additional fee */}
+        <div className="mt-6">
+          <h3 className="text-xl font-semibold text-neutral-0">
+            Additional fee
+          </h3>
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#11111b] px-4 py-3">
+            <span className="text-sm text-neutral-0">Add additional fee</span>
+            <button
+              type="button"
+              className="rounded-full border border-white/30 px-6 py-1.5 text-sm font-medium text-neutral-0 hover:border-primary-500"
+            >
+              Setup
+            </button>
           </div>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={goPrev}
-          className="rounded-full px-3 py-1.5 text-[11px] font-medium text-neutral-200 hover:bg-neutral-900"
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          onClick={goNext}
-          className="rounded-full bg-primary-600 px-4 py-1.5 text-[11px] font-medium text-white hover:bg-primary-500"
-        >
-          Next
-        </button>
+        {/* Divider */}
+        <div className="mt-8 h-px w-full bg-white/10" />
+
+        {/* Custom fields */}
+        <div className="mt-6">
+          <h3 className="text-xl font-semibold text-neutral-0">
+            Custom Fields
+          </h3>
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#11111b] px-4 py-3">
+            <span className="text-sm text-neutral-0">Add Fields</span>
+            <button
+              type="button"
+              className="rounded-full border border-white/30 px-6 py-1.5 text-sm font-medium text-neutral-0 hover:border-primary-500"
+            >
+              Setup
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="mt-8 h-px w-full bg-white/10" />
+
+        {/* Email attachments */}
+        <div className="mt-6 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-semibold text-neutral-0">
+                Email Attachments
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-neutral-300">
+                Include files in email confirmations sent with a ticket purchase
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setValue("enableEmailAttachments", !enableEmailAttachments)
+              }
+              className={clsx(
+                "mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full border text-neutral-300 transition-colors",
+                enableEmailAttachments
+                  ? "border-white/40 hover:border-primary-500 hover:text-primary-200"
+                  : "border-white/10 text-neutral-600 hover:border-white/30"
+              )}
+              title={
+                enableEmailAttachments ? "Disable attachments" : "Enable again"
+              }
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div
+            className={clsx(
+              "flex items-center justify-between rounded-2xl px-4 py-3",
+              enableEmailAttachments ? "bg-[#11111b]" : "bg-[#090912]"
+            )}
+          >
+            <span
+              className={clsx(
+                "text-sm",
+                enableEmailAttachments ? "text-neutral-0" : "text-neutral-500"
+              )}
+            >
+              Add Files
+            </span>
+            <button
+              type="button"
+              className={clsx(
+                "rounded-full border px-6 py-1.5 text-sm font-medium",
+                enableEmailAttachments
+                  ? "border-white/30 text-neutral-0 hover:border-primary-500"
+                  : "border-white/10 text-neutral-500"
+              )}
+            >
+              Setup
+            </button>
+          </div>
+        </div>
+
+        {/* Go back / Next buttons at bottom of card */}
+        <div className="mt-10 flex flex-wrap items-center justify-end gap-4">
+          <button
+            type="button"
+            onClick={goPrev}
+            className="rounded-full bg-neutral-50 px-7 py-2 text-sm font-medium text-neutral-950 hover:bg-white"
+          >
+            Go back
+          </button>
+          <button
+            type="button"
+            onClick={goNext}
+            className="rounded-full bg-primary-600 px-8 py-2 text-sm font-semibold text-white hover:bg-primary-500"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -797,7 +1192,7 @@ function TicketTypeWizard({
                     type="button"
                     onClick={() => setValue("layout", value)}
                     className={clsx(
-                      "flex flex-1 min-w-[120px] items-center justify-center rounded-xl border px-3 py-2 text-[11px] capitalize",
+                      "flex min-w-[120px] flex-1 items-center justify-center rounded-xl border px-3 py-2 text-[11px] capitalize",
                       layout === value
                         ? "border-primary-600 bg-primary-950/40 text-neutral-0"
                         : "border-white/10 bg-neutral-950 text-neutral-300"
@@ -910,20 +1305,13 @@ function TicketTypeWizard({
 
       {serverError && <p className="text-xs text-error-400">{serverError}</p>}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-start">
         <button
           type="button"
           onClick={goPrev}
           className="rounded-full px-3 py-1.5 text-[11px] font-medium text-neutral-200 hover:bg-neutral-900"
         >
           Back
-        </button>
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="rounded-full bg-primary-600 px-4 py-1.5 text-[11px] font-medium text-white hover:bg-primary-500 disabled:opacity-50"
-        >
-          {isSubmitting ? "Saving…" : "Save ticket type"}
         </button>
       </div>
     </div>
@@ -932,7 +1320,7 @@ function TicketTypeWizard({
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="space-y-8 pb-10 pt-2"
+      className="space-y-8 pb-10 pt-6 max-w-4xl mx-auto"
       noValidate
     >
       {/* Top row: back button + step counter */}
@@ -940,7 +1328,7 @@ function TicketTypeWizard({
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex items-center gap-1.5 text-sm text-neutral-300 hover:text-neutral-0 cursor-pointer"
+          className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-neutral-300 hover:text-neutral-0"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Back to ticket types</span>
@@ -951,7 +1339,7 @@ function TicketTypeWizard({
         </div>
       </div>
 
-      {/* Stepper header – full-width timeline with circles */}
+      {/* Stepper header */}
       <div className="flex w-full items-center justify-between gap-4">
         {steps.map((step, idx) => {
           const Icon = step.icon;
@@ -972,10 +1360,10 @@ function TicketTypeWizard({
               >
                 <div
                   className={clsx(
-                    "flex h-12 w-12 items-center justify-center rounded-full border-1 transition-all duration-200",
+                    "flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-200",
                     "shadow-[0_14px_35px_rgba(0,0,0,0.7)]",
                     isActive
-                      ? " bg-primary-600 shadow-[0_0_40px_rgba(133,0,255,0.65)]"
+                      ? "border-transparent bg-primary-600 shadow-[0_0_40px_rgba(133,0,255,0.65)]"
                       : isCompleted
                         ? "border-primary-600 bg-neutral-0"
                         : "border-neutral-700 bg-neutral-0"
@@ -1009,7 +1397,7 @@ function TicketTypeWizard({
 
               {/* Connector line to next step */}
               {!isLast && (
-                <div className="flex-1 mt-6">
+                <div className="mt-6 flex-1">
                   <div
                     className={clsx(
                       "h-px w-full",
@@ -1028,6 +1416,67 @@ function TicketTypeWizard({
       {activeStep === 1 && availabilityStep}
       {activeStep === 2 && checkoutStep}
       {activeStep === 3 && designStep}
+
+      {/* Fixed bottom Buyer total + Save bar */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center">
+        <div className="pointer-events-auto flex w-full max-w-4xl items-center gap-3 rounded-full bg-[#05050A]/95 px-2 py-2 shadow-[0_22px_60px_rgba(0,0,0,0.85)] backdrop-blur">
+          {/* Buyer total pill + breakdown */}
+          <div className="relative flex-1">
+            {showBreakdown && !isFree && (
+              <div className="absolute bottom-full left-0 mb-3 w-full rounded-3xl border border-primary-400/70 bg-[#05050A] px-5 py-4 text-sm text-neutral-100 shadow-[0_22px_60px_rgba(0,0,0,0.95)]">
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-neutral-200">Ticket price</span>
+                  <span className="font-semibold">
+                    ${Number(price || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-neutral-200">
+                    Service fee (non-refundable)
+                  </span>
+                  <span className="font-semibold">
+                    ${serviceFee.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => !isFree && setShowBreakdown((v) => !v)}
+              className={clsx(
+                "flex w-full items-center justify-between rounded-full px-5 py-2.5 text-sm",
+                "bg-[#171726] text-neutral-0",
+                isFree && "opacity-70"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#232332] text-xs text-neutral-100">
+                  {showBreakdown && !isFree ? "˄" : "˅"}
+                </span>
+                <span className="font-medium">Buyer total</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">
+                  ${buyerTotal.toFixed(2)}
+                </span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-semibold text-neutral-900">
+                  i
+                </span>
+              </div>
+            </button>
+          </div>
+
+          {/* Save button */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="flex min-w-[140px] items-center justify-center rounded-full bg-primary-600 px-8 py-2.5 text-sm font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06)] transition-colors hover:bg-primary-500 disabled:opacity-50"
+          >
+            {isSubmitting ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
     </form>
   );
 }

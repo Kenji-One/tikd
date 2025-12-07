@@ -3,109 +3,26 @@
 
 import { useMemo, useState, type SVGProps, type ComponentType } from "react";
 import { useParams } from "next/navigation";
-import {
-  Search,
-  Plus,
-  Ticket,
-  EllipsisVertical,
-  ArrowLeft,
-  Layers,
-  Clock4,
-  CreditCard,
-  Palette,
-  X,
-} from "lucide-react";
+import { Search, Plus, Ticket, EllipsisVertical, X } from "lucide-react";
 
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import clsx from "clsx";
 
-import Toggle from "@/components/ui/Toggle";
+import type {
+  TicketAvailabilityStatus,
+  TicketTypeApi,
+  TicketTypeRow,
+  TicketTypeFormValues,
+} from "./types";
+import TicketTypeGeneralStep from "./TicketTypeGeneralStep";
+import TicketTypeAvailabilityStep from "./TicketTypeAvailabilityStep";
+import TicketTypeCheckoutStep from "./TicketTypeCheckoutStep";
+import TicketTypeDesignStep from "./TicketTypeDesignStep";
 
 type RouteParams = {
   id: string;
   eventId: string;
-};
-
-/* ---------------------------- API shapes ---------------------------- */
-
-type TicketAvailabilityStatus =
-  | "scheduled"
-  | "on_sale"
-  | "paused"
-  | "sale_ended";
-
-type TicketTypeApi = {
-  _id: string;
-  name: string;
-  description?: string;
-  price: number;
-  currency: string;
-  isFree: boolean;
-  totalQuantity: number | null;
-  soldCount?: number;
-  availabilityStatus: TicketAvailabilityStatus;
-};
-
-type TicketTypeRow = {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  currency: string;
-  sold: number;
-  capacity: number | null;
-  status: TicketAvailabilityStatus;
-};
-
-/* --------------------------- Form types ---------------------------- */
-
-type TicketTypeFormValues = {
-  // General
-  name: string;
-  description: string;
-  isFree: boolean;
-  price: number;
-  currency: string;
-  feeMode: "pass_on" | "absorb";
-
-  // Availability
-  totalQuantity: number | null;
-  unlimitedQuantity: boolean;
-  minPerOrder: number | null;
-  maxPerOrder: number | null;
-  availabilityStatus: TicketAvailabilityStatus;
-  salesStartAt: string | null;
-  salesEndAt: string | null;
-  accessMode: "public" | "password";
-  password: string;
-
-  // Checkout (mirrors design)
-  requireFullName: boolean;
-  requireEmail: boolean;
-  requirePhone: boolean;
-  requireFacebook: boolean;
-  requireInstagram: boolean;
-  requireGender: boolean;
-  requireDob: boolean;
-  requireAge: boolean;
-  subjectToApproval: boolean;
-  addBuyerDetailsToOrder: boolean; // "Merge buyer details"
-  addPurchasedTicketsToAttendeesCount: boolean;
-  enableEmailAttachments: boolean;
-
-  // Design
-  layout: "horizontal" | "vertical" | "down" | "up";
-  brandColor: string;
-  logoUrl: string;
-  backgroundUrl: string;
-  footerText: string;
-
-  watermarkEnabled: boolean;
-  eventInfoEnabled: boolean;
-  logoEnabled: boolean;
-  qrSize: number;
-  qrBorderRadius: number;
 };
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -138,7 +55,6 @@ function TicketTypeWizard({
 }: TicketTypeWizardProps) {
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [isStatusEditorOpen, setIsStatusEditorOpen] = useState(false);
 
   const {
     register,
@@ -193,6 +109,7 @@ function TicketTypeWizard({
     },
   });
 
+  // Watches
   const price = watch("price");
   const isFree = watch("isFree");
   const brandColor = watch("brandColor");
@@ -207,7 +124,6 @@ function TicketTypeWizard({
   const qrBorderRadius = watch("qrBorderRadius");
   const footerText = watch("footerText");
 
-  // checkout watches
   const requireFullName = watch("requireFullName");
   const requireEmail = watch("requireEmail");
   const requirePhone = watch("requirePhone");
@@ -226,8 +142,6 @@ function TicketTypeWizard({
   const eventInfoEnabled = watch("eventInfoEnabled");
   const logoEnabled = watch("logoEnabled");
 
-  const [showBreakdown, setShowBreakdown] = useState(false);
-
   const PRICE_STEP = 0.5;
 
   const handlePriceStep = (delta: number) => {
@@ -241,23 +155,6 @@ function TicketTypeWizard({
     setValue("price", next, { shouldDirty: true });
     setValue("isFree", next === 0, { shouldDirty: true });
   };
-
-  const { serviceFee, buyerTotal } = useMemo(() => {
-    if (isFree) {
-      return { serviceFee: 0, buyerTotal: 0 };
-    }
-
-    const basePrice = Number.isFinite(price as number) ? Number(price) : 0;
-
-    // Placeholder fee model – replace with real rules later
-    const fee = basePrice > 0 ? basePrice * 0.06 + 0.2 : 0;
-    const total = feeMode === "pass_on" ? basePrice + fee : basePrice;
-
-    return {
-      serviceFee: Math.max(0, Math.round(fee * 100) / 100),
-      buyerTotal: Math.max(0, Math.round(total * 100) / 100),
-    };
-  }, [isFree, price, feeMode]);
 
   type StepId = "general" | "availability" | "checkout" | "design";
 
@@ -366,8 +263,17 @@ function TicketTypeWizard({
     },
   ];
 
-  const goNext = () => setActiveStep((s) => (s < 3 ? ((s + 1) as any) : s));
-  const goPrev = () => setActiveStep((s) => (s > 0 ? ((s - 1) as any) : s));
+  const stepTitles = [
+    "Create ticket type",
+    "Quantities",
+    "Checkout Requirments",
+    "Customize the way your ticket looks",
+  ] as const;
+
+  const goNext = () =>
+    setActiveStep((s) => (s < 3 ? ((s + 1) as 0 | 1 | 2 | 3) : s));
+  const goPrev = () =>
+    setActiveStep((s) => (s > 0 ? ((s - 1) as 0 | 1 | 2 | 3) : s));
 
   async function onSubmit(values: TicketTypeFormValues) {
     setServerError(null);
@@ -410,7 +316,6 @@ function TicketTypeWizard({
         logoUrl: values.logoUrl,
         backgroundUrl: values.backgroundUrl,
         footerText: values.footerText,
-        // extra design fields (not yet used on backend, but ready):
         watermarkEnabled: values.watermarkEnabled,
         eventInfoEnabled: values.eventInfoEnabled,
         logoEnabled: values.logoEnabled,
@@ -434,1127 +339,14 @@ function TicketTypeWizard({
     onCreated();
   }
 
-  /* ---------------------------- Step UIs ---------------------------- */
-
-  const generalStep = (
-    <div className="space-y-6">
-      <div className="rounded-3xl border border-white/8 bg-neutral-950/95 px-6 py-6 md:px-8 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-        {/* Name + Description */}
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-neutral-0">
-              Name<span className="ml-1 text-error-400">*</span>
-            </label>
-            <input
-              {...register("name", { required: true })}
-              type="text"
-              placeholder="Enter name"
-              className="w-full rounded-2xl border border-white/10 bg-[#171726] px-4 py-3 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-neutral-0">
-              Description
-            </label>
-            <textarea
-              {...register("description")}
-              rows={4}
-              placeholder="Write description"
-              className="w-full resize-none rounded-2xl border border-white/10 bg-[#171726] px-4 py-3 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-            />
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="mt-8 h-px w-full bg-white/5" />
-
-        {/* Price section */}
-        <div className="mt-8 space-y-6">
-          <div className="space-y-1 text-center">
-            <p className="text-base font-semibold text-neutral-0">Price</p>
-            <p className="text-xs text-neutral-400">
-              Choose whether this ticket is free or paid. Adjust the price and
-              how fees are handled.
-            </p>
-          </div>
-
-          {/* Price pill with – / + */}
-          <div className="flex justify-center">
-            <div className="inline-flex items-center gap-4 rounded-full bg-[#171726] px-5 py-2.5 shadow-[0_18px_45px_rgba(0,0,0,0.65)]">
-              <button
-                type="button"
-                onClick={() => handlePriceStep(-PRICE_STEP)}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#11111A] text-xl leading-none text-neutral-100 hover:bg-[#181824]"
-              >
-                –
-              </button>
-
-              <div className="min-w-[96px] text-center text-lg font-semibold text-neutral-0">
-                {isFree ? "Free" : `$${Number(price || 0).toFixed(2)}`}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => handlePriceStep(PRICE_STEP)}
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-600 text-xl leading-none text-white shadow-[0_0_0_8px_rgba(133,92,255,0.4)] hover:bg-primary-500"
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          {/* Fee mode toggles (only when paid) */}
-          {!isFree && (
-            <div className="mt-6 space-y-5">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="space-y-1">
-                  <p className="text-base font-semibold text-neutral-0">
-                    Pass on the fees to the customer
-                  </p>
-                  <p className="max-w-md text-sm text-neutral-400">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-                  </p>
-                </div>
-                <Toggle
-                  size="md"
-                  checked={feeMode === "pass_on"}
-                  onCheckedChange={() => setValue("feeMode", "pass_on")}
-                />
-              </div>
-
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="space-y-1">
-                  <p className="text-base font-semibold text-neutral-0">
-                    Absorb the fees into the ticket price
-                  </p>
-                  <p className="max-w-md text-sm text-neutral-400">
-                    Lorem consectetur adipiscing elit, sed do ei.
-                  </p>
-                </div>
-                <Toggle
-                  size="md"
-                  checked={feeMode === "absorb"}
-                  onCheckedChange={() => setValue("feeMode", "absorb")}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Step navigation for general step */}
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={goNext}
-          className="rounded-full bg-primary-600 px-6 py-2 text-sm font-medium text-white hover:bg-primary-500"
-        >
-          Next
-        </button>
-      </div>
-    </div>
-  );
-
-  const availabilityStep = (
-    <div className="space-y-6">
-      {/* Main availability card */}
-      <div className="rounded-3xl border border-white/8 bg-neutral-950/95 px-6 py-6 md:px-8 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-        {/* Header */}
-        <div className="space-y-1">
-          <h2 className="text-xl font-semibold text-neutral-0">Quantities</h2>
-          <p className="text-sm text-neutral-400">
-            Set a total number of tickets for this ticket type.
-          </p>
-        </div>
-
-        {/* Three quantity cards in a row */}
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {/* Total number of tickets */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-neutral-200">
-              Total Number of Tickets
-            </p>
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#181828] px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-[#23233a] text-xs text-neutral-100">
-                  <Ticket className="h-3.5 w-3.5" />
-                </span>
-                <input
-                  {...register("totalQuantity", { valueAsNumber: true })}
-                  type="number"
-                  min={0}
-                  disabled={unlimitedQuantity}
-                  className="w-20 bg-transparent text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none"
-                />
-              </div>
-
-              {/* small square checkbox */}
-              <button
-                type="button"
-                onClick={() =>
-                  setValue("unlimitedQuantity", !unlimitedQuantity)
-                }
-                className={clsx(
-                  "flex h-5 w-5 items-center justify-center rounded-[6px] border text-[10px] font-semibold transition-colors",
-                  unlimitedQuantity
-                    ? "border-primary-500 bg-primary-500 text-neutral-950"
-                    : "border-white/20 bg-transparent text-transparent"
-                )}
-              >
-                ✓
-              </button>
-            </div>
-          </div>
-
-          {/* Minimum tickets per order */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-neutral-200">
-              Minimum Tickets Per Order
-            </p>
-            {(() => {
-              const isUnlimited = minPerOrder == null;
-              return (
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#181828] px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-[#23233a] text-xs text-neutral-100">
-                      <Ticket className="h-3.5 w-3.5" />
-                    </span>
-                    {isUnlimited ? (
-                      <span className="text-sm font-semibold text-success-500">
-                        Unlimited
-                      </span>
-                    ) : (
-                      <input
-                        {...register("minPerOrder", { valueAsNumber: true })}
-                        type="number"
-                        min={0}
-                        className="w-20 bg-transparent text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setValue("minPerOrder", isUnlimited ? 1 : null)
-                    }
-                    className={clsx(
-                      "flex h-5 w-5 items-center justify-center rounded-[6px] border text-[10px] font-semibold transition-colors",
-                      isUnlimited
-                        ? "border-primary-500 bg-primary-500 text-neutral-950"
-                        : "border-white/20 bg-transparent text-transparent"
-                    )}
-                  >
-                    ✓
-                  </button>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* Maximum tickets per order */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-neutral-200">
-              Maximum Tickets Per Order
-            </p>
-            {(() => {
-              const isUnlimited = maxPerOrder == null;
-              return (
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#181828] px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-xl bg-[#23233a] text-xs text-neutral-100">
-                      <Ticket className="h-3.5 w-3.5" />
-                    </span>
-                    {isUnlimited ? (
-                      <span className="text-sm font-semibold text-success-500">
-                        Unlimited
-                      </span>
-                    ) : (
-                      <input
-                        {...register("maxPerOrder", { valueAsNumber: true })}
-                        type="number"
-                        min={0}
-                        className="w-20 bg-transparent text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none"
-                      />
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setValue("maxPerOrder", isUnlimited ? 10 : null)
-                    }
-                    className={clsx(
-                      "flex h-5 w-5 items-center justify-center rounded-[6px] border text-[10px] font-semibold transition-colors",
-                      isUnlimited
-                        ? "border-primary-500 bg-primary-500 text-neutral-950"
-                        : "border-white/20 bg-transparent text-transparent"
-                    )}
-                  >
-                    ✓
-                  </button>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-
-        <p className="mt-3 text-[11px] text-neutral-500">
-          Ticking the box will make number Unlimited
-        </p>
-
-        {/* Password section */}
-        <div className="mt-8 space-y-3">
-          <h3 className="text-sm font-semibold text-neutral-0">Password</h3>
-          <p className="text-[11px] text-neutral-400">
-            If you would like to protect this ticket type with a password, check
-            the mark and create a password. There will be a place on your event
-            page for your customers to enter the password. Share the password
-            link directly to send your event page with the ticket type already
-            unlocked.
-          </p>
-
-          <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)]">
-            {/* Password input pill */}
-            <div className="space-y-1">
-              <p className="text-[11px] text-neutral-200">Password</p>
-              <div className="relative">
-                <input
-                  {...register("password")}
-                  type="text"
-                  placeholder="Enter Password"
-                  className="w-full rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 pr-20 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-                />
-                <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center gap-2">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/25 text-[10px] text-neutral-300">
-                    ●
-                  </span>
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-success-500 text-[11px] font-semibold text-neutral-950">
-                    ✓
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Who can access select */}
-            <div className="space-y-1">
-              <p className="text-[11px] text-neutral-200">Who can access</p>
-              <div className="relative">
-                <select
-                  {...register("accessMode")}
-                  className="w-full appearance-none rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 pr-10 text-sm text-neutral-0 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-                >
-                  <option value="public">Anyone</option>
-                  <option value="password">
-                    Only people with the password
-                  </option>
-                </select>
-                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400">
-                  ▾
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Divider line */}
-        <div className="mt-8 h-px w-full bg-white/5" />
-
-        {/* Availability timeline */}
-        <div className="mt-6 space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-neutral-0">
-              Availability Timeline
-            </h3>
-            <p className="text-[11px] text-neutral-400">
-              Change the availability status of your ticket as it is displayed
-              on the event page. You can also add a time you would like to
-              change the ticket availability.
-            </p>
-          </div>
-
-          {/* plus — line — plus row */}
-          <div className="mt-4 flex items-center gap-6">
-            {/* initial status + node */}
-            <button
-              type="button"
-              className="flex flex-col items-center gap-2 text-neutral-0"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-neutral-0 shadow-[0_0_26px_rgba(133,0,255,0.8)]">
-                <Plus className="h-4 w-4" />
-              </span>
-            </button>
-
-            <div className="h-px flex-1 bg-neutral-600" />
-
-            {/* current status + node */}
-            <button
-              type="button"
-              onClick={() => setIsStatusEditorOpen(true)}
-              className="flex flex-col items-center gap-2 text-neutral-0"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-neutral-0 shadow-[0_0_26px_rgba(133,0,255,0.8)]">
-                <Plus className="h-4 w-4" />
-              </span>
-            </button>
-          </div>
-
-          {/* labels below timeline */}
-          <div className="mt-3 flex items-start justify-between gap-6 text-[11px] text-neutral-200">
-            <div className="flex-1">
-              <p className="font-medium text-neutral-0">Initial Status</p>
-            </div>
-            <div className="flex flex-1 justify-end">
-              <div className="text-right">
-                <p className="font-medium text-neutral-0">Current Status</p>
-                <p className="mt-1 text-neutral-400 capitalize">
-                  {availabilityStatus === "on_sale"
-                    ? "On sale"
-                    : availabilityStatus === "sale_ended"
-                      ? "Sale ended"
-                      : availabilityStatus === "paused"
-                        ? "Paused"
-                        : "Scheduled"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Go back / Next inside the card */}
-        <div className="mt-8 flex flex-wrap items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={goPrev}
-            className="rounded-full bg-neutral-50 px-6 py-2 text-sm font-medium text-neutral-900 hover:bg-white"
-          >
-            Go back
-          </button>
-          <button
-            type="button"
-            onClick={goNext}
-            className="rounded-full bg-primary-600 px-7 py-2 text-sm font-semibold text-white hover:bg-primary-500"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      {/* Current Status bottom card (opened from timeline) */}
-      {isStatusEditorOpen && (
-        <div className="rounded-3xl border border-white/8 bg-neutral-950/95 px-6 py-6 md:px-8 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-lg font-semibold text-neutral-0">
-                Current Status
-              </p>
-              <p className="mt-1 text-[11px] text-neutral-400">
-                Update how this ticket is currently displayed on your event
-                page.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsStatusEditorOpen(false)}
-              className="text-xs text-neutral-400 hover:text-neutral-100"
-            >
-              Close
-            </button>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="space-y-1">
-              <label className="block text-[11px] text-neutral-300">
-                Status
-              </label>
-              <select
-                {...register("availabilityStatus")}
-                className="w-full rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 text-sm text-neutral-0 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-              >
-                <option value="on_sale">On sale</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="paused">Paused</option>
-                <option value="sale_ended">Sale ended</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block text-[11px] text-neutral-300">Date</label>
-              <input
-                {...register("salesEndAt")}
-                type="datetime-local"
-                className="w-full rounded-2xl border border-white/10 bg-[#181828] px-4 py-3 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-              />
-              <p className="mt-1 text-[10px] text-neutral-500">
-                Optional: choose when this status should take effect.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center justify-end">
-            <button
-              type="button"
-              onClick={() => setIsStatusEditorOpen(false)}
-              className="rounded-full bg-primary-600 px-6 py-2 text-sm font-semibold text-white hover:bg-primary-500"
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  /* ----------------------- NEW CHECKOUT STEP ----------------------- */
-
-  const checkoutStep = (
-    <div className="pb-16">
-      <div className="mx-auto w-full max-w-xl rounded-[32px] border border-white/8 bg-neutral-950 px-6 py-6 md:px-10 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.8)]">
-        {/* Top heading */}
-        <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-neutral-0">
-            Checkout Requirments
-          </h2>
-          <p className="text-sm leading-relaxed text-neutral-300">
-            Customize the checkout process by collecting the client details that
-            best suit your needs. The more data collected – the more diverse
-            your dashboard analytics become
-          </p>
-        </div>
-
-        {/* First block – basic attendee details */}
-        <div className="mt-8 space-y-1">
-          {/* Name */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Name</span>
-            <Toggle
-              size="md"
-              checked={requireFullName}
-              onCheckedChange={(val) =>
-                setValue("requireFullName", Boolean(val))
-              }
-            />
-          </div>
-
-          {/* Email */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Email</span>
-            <Toggle
-              size="md"
-              checked={requireEmail}
-              onCheckedChange={(val) => setValue("requireEmail", Boolean(val))}
-            />
-          </div>
-
-          {/* Phone */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Phone number</span>
-            <Toggle
-              size="md"
-              checked={requirePhone}
-              onCheckedChange={(val) => setValue("requirePhone", Boolean(val))}
-            />
-          </div>
-
-          {/* Facebook */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Link to Facebook</span>
-            <Toggle
-              size="md"
-              checked={requireFacebook}
-              onCheckedChange={(val) =>
-                setValue("requireFacebook", Boolean(val))
-              }
-            />
-          </div>
-
-          {/* Instagram */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Instagram Profile</span>
-            <Toggle
-              size="md"
-              checked={requireInstagram}
-              onCheckedChange={(val) =>
-                setValue("requireInstagram", Boolean(val))
-              }
-            />
-          </div>
-
-          {/* Gender */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Gender</span>
-            <Toggle
-              size="md"
-              checked={requireGender}
-              onCheckedChange={(val) => setValue("requireGender", Boolean(val))}
-            />
-          </div>
-
-          {/* DOB */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Date of birth</span>
-            <Toggle
-              size="md"
-              checked={requireDob}
-              onCheckedChange={(val) => setValue("requireDob", Boolean(val))}
-            />
-          </div>
-
-          {/* Age */}
-          <div className="flex items-center justify-between py-2">
-            <span className="text-base text-neutral-0">Age</span>
-            <Toggle
-              size="md"
-              checked={requireAge}
-              onCheckedChange={(val) => setValue("requireAge", Boolean(val))}
-            />
-          </div>
-
-          {/* Add your field row */}
-          <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#11111b] px-4 py-3">
-            <span className="text-sm text-neutral-0">Add your field</span>
-            <button
-              type="button"
-              className="rounded-full border border-white/30 px-6 py-1.5 text-sm font-medium text-neutral-0 hover:border-primary-500"
-            >
-              Setup
-            </button>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="mt-8 h-px w-full bg-white/10" />
-
-        {/* Second header – Checkout Requirments (again, like design) */}
-        <div className="mt-6">
-          <h3 className="text-xl font-semibold text-neutral-0">
-            Checkout Requirments
-          </h3>
-
-          <div className="mt-5 space-y-1">
-            <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-neutral-0">
-                Merge buyer details
-              </span>
-              <Toggle
-                size="md"
-                checked={addBuyerDetailsToOrder}
-                onCheckedChange={(val) =>
-                  setValue("addBuyerDetailsToOrder", Boolean(val))
-                }
-              />
-            </div>
-
-            <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-neutral-0">
-                Subject to approval
-              </span>
-              <Toggle
-                size="md"
-                checked={subjectToApproval}
-                onCheckedChange={(val) =>
-                  setValue("subjectToApproval", Boolean(val))
-                }
-              />
-            </div>
-
-            <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-neutral-0">
-                Add purchased tickets to attendees count
-              </span>
-              <Toggle
-                size="md"
-                checked={addPurchasedTicketsToAttendeesCount}
-                onCheckedChange={(val) =>
-                  setValue("addPurchasedTicketsToAttendeesCount", Boolean(val))
-                }
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="mt-8 h-px w-full bg-white/10" />
-
-        {/* Additional fee */}
-        <div className="mt-6">
-          <h3 className="text-xl font-semibold text-neutral-0">
-            Additional fee
-          </h3>
-          <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#11111b] px-4 py-3">
-            <span className="text-sm text-neutral-0">Add additional fee</span>
-            <button
-              type="button"
-              className="rounded-full border border-white/30 px-6 py-1.5 text-sm font-medium text-neutral-0 hover:border-primary-500"
-            >
-              Setup
-            </button>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="mt-8 h-px w-full bg-white/10" />
-
-        {/* Custom fields */}
-        <div className="mt-6">
-          <h3 className="text-xl font-semibold text-neutral-0">
-            Custom Fields
-          </h3>
-          <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#11111b] px-4 py-3">
-            <span className="text-sm text-neutral-0">Add Fields</span>
-            <button
-              type="button"
-              className="rounded-full border border-white/30 px-6 py-1.5 text-sm font-medium text-neutral-0 hover:border-primary-500"
-            >
-              Setup
-            </button>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="mt-8 h-px w-full bg-white/10" />
-
-        {/* Email attachments */}
-        <div className="mt-6 space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-xl font-semibold text-neutral-0">
-                Email Attachments
-              </h3>
-              <p className="mt-1 text-sm leading-relaxed text-neutral-300">
-                Include files in email confirmations sent with a ticket purchase
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                setValue("enableEmailAttachments", !enableEmailAttachments)
-              }
-              className={clsx(
-                "mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full border text-neutral-300 transition-colors",
-                enableEmailAttachments
-                  ? "border-white/40 hover:border-primary-500 hover:text-primary-200"
-                  : "border-white/10 text-neutral-600 hover:border-white/30"
-              )}
-              title={
-                enableEmailAttachments ? "Disable attachments" : "Enable again"
-              }
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div
-            className={clsx(
-              "flex items-center justify-between rounded-2xl px-4 py-3",
-              enableEmailAttachments ? "bg-[#11111b]" : "bg-[#090912]"
-            )}
-          >
-            <span
-              className={clsx(
-                "text-sm",
-                enableEmailAttachments ? "text-neutral-0" : "text-neutral-500"
-              )}
-            >
-              Add Files
-            </span>
-            <button
-              type="button"
-              className={clsx(
-                "rounded-full border px-6 py-1.5 text-sm font-medium",
-                enableEmailAttachments
-                  ? "border-white/30 text-neutral-0 hover:border-primary-500"
-                  : "border-white/10 text-neutral-500"
-              )}
-            >
-              Setup
-            </button>
-          </div>
-        </div>
-
-        {/* Go back / Next buttons at bottom of card */}
-        <div className="mt-10 flex flex-wrap items-center justify-end gap-4">
-          <button
-            type="button"
-            onClick={goPrev}
-            className="rounded-full bg-neutral-50 px-7 py-2 text-sm font-medium text-neutral-950 hover:bg-white"
-          >
-            Go back
-          </button>
-          <button
-            type="button"
-            onClick={goNext}
-            className="rounded-full bg-primary-600 px-8 py-2 text-sm font-semibold text-white hover:bg-primary-500"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  /* ------------------------ DESIGN STEP (UI) ------------------------ */
-
-  const designStep = (
-    <div className="pb-20">
-      <div className="mx-auto w-full max-w-3xl rounded-[32px] border border-white/8 bg-neutral-950 px-6 py-6 md:px-10 md:py-8 shadow-[0_18px_45px_rgba(0,0,0,0.85)]">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-semibold text-neutral-0">
-              Customize the way your ticket looks
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="hidden h-8 w-8 items-center justify-center rounded-full bg-[#151526] text-neutral-400 hover:text-neutral-100 md:flex"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Layout options */}
-        <div className="mt-8 grid gap-3 sm:grid-cols-4">
-          {(["horizontal", "vertical", "down", "up"] as const).map((value) => {
-            const isActive = layout === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setValue("layout", value)}
-                className={clsx(
-                  "flex flex-col items-center justify-between gap-2 rounded-2xl border px-3 py-3 text-sm capitalize transition-colors",
-                  "bg-[#111222] text-neutral-100",
-                  isActive
-                    ? "border-emerald-400 shadow-[0_0_0_1px_rgba(52,211,153,0.7)]"
-                    : "border-white/8 hover:border-primary-500"
-                )}
-              >
-                <span
-                  className={clsx(
-                    "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold",
-                    isActive
-                      ? "bg-emerald-500 text-neutral-950"
-                      : "bg-[#191a2a] text-neutral-300"
-                  )}
-                >
-                  {/* simple icon stub */}
-                  {value === "horizontal"
-                    ? "↔"
-                    : value === "vertical"
-                      ? "↕"
-                      : value === "down"
-                        ? "↓"
-                        : "↑"}
-                </span>
-                <span>{`${value[0].toUpperCase()}${value.slice(
-                  1
-                )} Focus`}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Toggles: Watermark / Event Info / Logo */}
-        <div className="mt-8 space-y-2">
-          <div className="flex items-center justify-between py-1.5">
-            <span className="text-sm text-neutral-100">Watermark</span>
-            <Toggle
-              size="md"
-              checked={watermarkEnabled}
-              onCheckedChange={(val) =>
-                setValue("watermarkEnabled", Boolean(val))
-              }
-            />
-          </div>
-          <div className="flex items-center justify-between py-1.5">
-            <span className="text-sm text-neutral-100">Event Info</span>
-            <Toggle
-              size="md"
-              checked={eventInfoEnabled}
-              onCheckedChange={(val) =>
-                setValue("eventInfoEnabled", Boolean(val))
-              }
-            />
-          </div>
-          <div className="flex items-center justify-between py-1.5">
-            <span className="text-sm text-neutral-100">Logo</span>
-            <Toggle
-              size="md"
-              checked={logoEnabled}
-              onCheckedChange={(val) => setValue("logoEnabled", Boolean(val))}
-            />
-          </div>
-        </div>
-
-        {/* Artwork upload */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <button
-            type="button"
-            className="flex-1 rounded-2xl border-2 border-dashed border-primary-500/60 bg-[#0b0b17] px-4 py-3 text-left text-sm text-neutral-300"
-          >
-            Choose a file or drag &amp; drop it here
-          </button>
-          <button
-            type="button"
-            className="rounded-2xl bg-primary-600 px-6 py-3 text-sm font-semibold text-white hover:bg-primary-500"
-          >
-            + Browse File
-          </button>
-        </div>
-
-        {/* Divider */}
-        <div className="my-6 h-px w-full bg-white/10" />
-
-        {/* QR Code section */}
-        <div className="space-y-5">
-          <h3 className="text-lg font-semibold text-neutral-0">QR Code</h3>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-200">Size</label>
-              <input
-                {...register("qrSize", { valueAsNumber: true })}
-                type="number"
-                inputMode="numeric"
-                className="w-full rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-                placeholder="0"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-neutral-200">Border Radius</label>
-              <input
-                {...register("qrBorderRadius", { valueAsNumber: true })}
-                type="number"
-                inputMode="numeric"
-                className="w-full rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-                placeholder="0"
-              />
-            </div>
-          </div>
-
-          {/* Color */}
-          <div className="space-y-2">
-            <label className="text-xs text-neutral-200">Color</label>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                {...register("brandColor")}
-                type="text"
-                placeholder="Enter Hex Color Code"
-                className="flex-1 rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-              />
-              <button
-                type="button"
-                className="relative flex items-center justify-center rounded-2xl bg-[#1c1d30] px-4 py-2.5 text-sm font-medium text-neutral-100 hover:bg-[#24263a]"
-              >
-                Color Picker
-                <input
-                  type="color"
-                  value={brandColor}
-                  onChange={(e) => setValue("brandColor", e.target.value)}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                />
-              </button>
-            </div>
-          </div>
-
-          <p className="text-xs text-neutral-500">or</p>
-
-          {/* QR artwork upload */}
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              className="flex-1 rounded-2xl border-2 border-dashed border-primary-500/60 bg-[#0b0b17] px-4 py-3 text-left text-sm text-neutral-300"
-            >
-              Choose a file or drag &amp; drop it here
-            </button>
-            <button
-              type="button"
-              className="rounded-2xl bg-primary-600 px-6 py-3 text-sm font-semibold text-white hover:bg-primary-500"
-            >
-              + Browse File
-            </button>
-          </div>
-        </div>
-
-        {/* Bottom line */}
-        <div className="mt-6 space-y-2">
-          <label className="text-sm text-neutral-100">Bottom Line</label>
-          <input
-            {...register("footerText")}
-            type="text"
-            placeholder="Enter text"
-            className="w-full rounded-2xl border border-white/10 bg-[#151526] px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-          />
-        </div>
-
-        {/* Divider */}
-        <div className="my-6 h-px w-full bg-white/10" />
-
-        {/* Ticket Preview */}
-        <div className="space-y-3">
-          <h3 className="text-lg font-semibold text-neutral-0">
-            Ticket Preview
-          </h3>
-
-          <div className="mt-3 rounded-[32px] bg-[#111122] p-3 text-xs text-neutral-50">
-            {/* Ticket body */}
-            <div
-              className="mx-auto max-w-md rounded-[28px] bg-[#1a0f3a] pb-4 pt-3 shadow-[0_24px_70px_rgba(0,0,0,0.8)]"
-              style={{
-                backgroundImage:
-                  "linear-gradient(135deg, rgba(255,255,255,0.08), transparent)",
-              }}
-            >
-              {/* Image / artwork area */}
-              <div className="mx-3 overflow-hidden rounded-[22px]">
-                <div
-                  className="h-32 w-full"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(90deg,#ffb347,#ff5f6d,#845ef7,#3bc9db)",
-                  }}
-                />
-              </div>
-
-              {/* Content area */}
-              <div
-                className="mx-3 mt-3 rounded-[22px] bg-[rgba(0,0,0,0.18)] px-4 pb-4 pt-3"
-                style={{ backgroundColor: brandColor || "#9a46ff" }}
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-80">
-                  THE GRAVITY
-                </p>
-                <p className="mt-1 text-[13px] font-semibold leading-tight">
-                  {name || "NYC HIGHSCHOOL PARTY"}
-                </p>
-
-                <div className="mt-3 grid grid-cols-2 gap-y-1 text-[9px] opacity-90">
-                  <p>
-                    Date
-                    <br />
-                    <span className="font-semibold">24/09/2025</span>
-                  </p>
-                  <p className="text-right">
-                    Time
-                    <br />
-                    <span className="font-semibold">12 PM</span>
-                  </p>
-                  <p className="mt-2">
-                    Check in Type
-                    <br />
-                    <span className="font-semibold">VIP Experia - D</span>
-                  </p>
-                  <p className="mt-2 text-right">
-                    Order ID
-                    <br />
-                    <span className="font-semibold">GBD99763JS</span>
-                  </p>
-                </div>
-
-                <p className="mt-3 text-[9px] opacity-90">
-                  Place
-                  <br />
-                  <span className="font-semibold">
-                    St Stadium Jouers Preto, San Francisco, Florida, United
-                    States
-                  </span>
-                </p>
-
-                {/* Perforation line */}
-                <div className="mt-4 flex items-center">
-                  <div className="h-6 w-3 rounded-r-full bg-[#1a0f3a]" />
-                  <div className="h-px flex-1 border-t border-dashed border-white/70 opacity-70" />
-                  <div className="h-6 w-3 rounded-l-full bg-[#1a0f3a]" />
-                </div>
-
-                {/* Barcode / QR + pricing */}
-                <div className="mt-3 flex items-end justify-between gap-3">
-                  <div
-                    className="h-12 flex-1 rounded-md bg-[repeating-linear-gradient(90deg,rgba(0,0,0,0.9)_0,rgba(0,0,0,0.9)_2px,transparent_2px,transparent_4px)]"
-                    style={{
-                      borderRadius:
-                        typeof qrBorderRadius === "number"
-                          ? `${qrBorderRadius}px`
-                          : undefined,
-                    }}
-                  />
-                  <div
-                    className="flex h-12 w-12 items-center justify-center rounded-lg bg-black/25"
-                    style={
-                      typeof qrSize === "number" && qrSize > 0
-                        ? { width: qrSize, height: qrSize }
-                        : undefined
-                    }
-                  >
-                    <div className="h-7 w-7 rounded bg-white/90" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Optional bottom line text */}
-              {footerText && (
-                <p className="mt-3 px-4 text-[9px] text-center text-neutral-200">
-                  {footerText}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Go back / Complete buttons */}
-        <div className="mt-8 flex items-center justify-center gap-4">
-          <button
-            type="button"
-            onClick={goPrev}
-            className="rounded-full bg-white px-6 py-2 text-sm font-medium text-neutral-950 hover:bg-neutral-100"
-          >
-            Go back
-          </button>
-          <button
-            type="submit"
-            className="rounded-full bg-primary-600 px-8 py-2 text-sm font-semibold text-white hover:bg-primary-500"
-          >
-            Complete
-          </button>
-        </div>
-
-        {serverError && (
-          <p className="mt-4 text-center text-xs text-error-400">
-            {serverError}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="space-y-8 pb-10 pt-6 max-w-4xl mx-auto"
+      className="flex flex-col gap-5 px-6 py-5"
       noValidate
     >
-      {/* Top row: back button + step counter */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-neutral-300 hover:text-neutral-0"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to ticket types</span>
-        </button>
-
-        <div className="ml-auto text-sm font-medium text-neutral-400">
-          Step {activeStep + 1} of {steps.length}
-        </div>
-      </div>
-
       {/* Stepper header */}
-      <div className="flex w-full items-center justify-between gap-4">
+      <div className="flex w-full items-center justify-between gap-3">
         {steps.map((step, idx) => {
           const Icon = step.icon;
           const isActive = activeStep === idx;
@@ -1564,20 +356,18 @@ function TicketTypeWizard({
           return (
             <div
               key={step.id}
-              className="flex flex-1 items-start gap-4 last:flex-none"
+              className="flex flex-1 items-start gap-3 last:flex-none"
             >
-              {/* Circle + label */}
               <button
                 type="button"
-                onClick={() => setActiveStep(idx as any)}
-                className="flex flex-col items-center gap-3 outline-none"
+                onClick={() => setActiveStep(idx as 0 | 1 | 2 | 3)}
+                className="flex flex-col items-center gap-2 outline-none"
               >
                 <div
                   className={clsx(
-                    "flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-200",
-                    "shadow-[0_14px_35px_rgba(0,0,0,0.7)]",
+                    "flex h-9 w-9 items-center justify-center rounded-full border text-xs transition-all duration-200",
                     isActive
-                      ? "border-transparent bg-primary-600 shadow-[0_0_40px_rgba(133,0,255,0.65)]"
+                      ? "border-transparent bg-primary-600 shadow-[0_0_28px_rgba(133,0,255,0.65)]"
                       : isCompleted
                         ? "border-primary-600 bg-neutral-0"
                         : "border-neutral-700 bg-neutral-0"
@@ -1585,7 +375,7 @@ function TicketTypeWizard({
                 >
                   <Icon
                     className={clsx(
-                      "h-5 w-5 transition-colors duration-200",
+                      "h-4 w-4 transition-colors duration-200",
                       isActive
                         ? "text-neutral-0"
                         : isCompleted
@@ -1594,10 +384,9 @@ function TicketTypeWizard({
                     )}
                   />
                 </div>
-
                 <span
                   className={clsx(
-                    "text-sm font-medium tracking-[0.01em]",
+                    "text-[11px] font-medium tracking-[0.01em]",
                     isActive
                       ? "text-neutral-0"
                       : isCompleted
@@ -1609,15 +398,9 @@ function TicketTypeWizard({
                 </span>
               </button>
 
-              {/* Connector line to next step */}
               {!isLast && (
-                <div className="mt-6 flex-1">
-                  <div
-                    className={clsx(
-                      "h-px w-full",
-                      isCompleted ? "bg-primary-500" : "bg-neutral-500"
-                    )}
-                  />
+                <div className="mt-4 flex-1">
+                  <div className="h-px w-full bg-neutral-700" />
                 </div>
               )}
             </div>
@@ -1625,71 +408,92 @@ function TicketTypeWizard({
         })}
       </div>
 
-      {/* Step body */}
-      {activeStep === 0 && generalStep}
-      {activeStep === 1 && availabilityStep}
-      {activeStep === 2 && checkoutStep}
-      {activeStep === 3 && designStep}
-
-      {/* Fixed bottom Buyer total + Save bar */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center">
-        <div className="pointer-events-auto flex w-full max-w-4xl items-center gap-3 rounded-full bg-[#05050A]/95 px-2 py-2 shadow-[0_22px_60px_rgba(0,0,0,0.85)] backdrop-blur">
-          {/* Buyer total pill + breakdown */}
-          <div className="relative flex-1">
-            {showBreakdown && !isFree && (
-              <div className="absolute bottom-full left-0 mb-3 w-full rounded-3xl border border-primary-400/70 bg-[#05050A] px-5 py-4 text-sm text-neutral-100 shadow-[0_22px_60px_rgba(0,0,0,0.95)]">
-                <div className="flex items-center justify-between py-1">
-                  <span className="text-neutral-200">Ticket price</span>
-                  <span className="font-semibold">
-                    ${Number(price || 0).toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-1">
-                  <span className="text-neutral-200">
-                    Service fee (non-refundable)
-                  </span>
-                  <span className="font-semibold">
-                    ${serviceFee.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => !isFree && setShowBreakdown((v) => !v)}
-              className={clsx(
-                "flex w-full items-center justify-between rounded-full px-5 py-2.5 text-sm",
-                "bg-[#171726] text-neutral-0",
-                isFree && "opacity-70"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#232332] text-xs text-neutral-100">
-                  {showBreakdown && !isFree ? "˄" : "˅"}
-                </span>
-                <span className="font-medium">Buyer total</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold">
-                  ${buyerTotal.toFixed(2)}
-                </span>
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-200 text-[10px] font-semibold text-neutral-900">
-                  i
-                </span>
-              </div>
-            </button>
-          </div>
-
-          {/* Save button */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex min-w-[140px] items-center justify-center rounded-full bg-primary-600 px-8 py-2.5 text-sm font-semibold text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06)] transition-colors hover:bg-primary-500 disabled:opacity-50"
-          >
-            {isSubmitting ? "Saving…" : "Save"}
-          </button>
+      {/* Modal title + close */}
+      <div className="mt-1 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="mt-1 text-lg font-semibold text-neutral-0">
+            {stepTitles[activeStep]}
+          </h2>
         </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Step body */}
+      <div className="mt-1 space-y-6">
+        {activeStep === 0 && (
+          <TicketTypeGeneralStep
+            register={register}
+            price={Number(price || 0)}
+            isFree={!!isFree}
+            feeMode={feeMode}
+            onFeeModeChange={(mode) =>
+              setValue("feeMode", mode, { shouldDirty: true })
+            }
+            onPriceStep={handlePriceStep}
+            onNext={goNext}
+            isSubmitting={isSubmitting}
+          />
+        )}
+
+        {activeStep === 1 && (
+          <TicketTypeAvailabilityStep
+            register={register}
+            setValue={setValue}
+            unlimitedQuantity={!!unlimitedQuantity}
+            minPerOrder={minPerOrder}
+            maxPerOrder={maxPerOrder}
+            availabilityStatus={availabilityStatus as TicketAvailabilityStatus}
+            onPrev={goPrev}
+            onNext={goNext}
+          />
+        )}
+
+        {activeStep === 2 && (
+          <TicketTypeCheckoutStep
+            requireFullName={!!requireFullName}
+            requireEmail={!!requireEmail}
+            requirePhone={!!requirePhone}
+            requireFacebook={!!requireFacebook}
+            requireInstagram={!!requireInstagram}
+            requireGender={!!requireGender}
+            requireDob={!!requireDob}
+            requireAge={!!requireAge}
+            subjectToApproval={!!subjectToApproval}
+            addBuyerDetailsToOrder={!!addBuyerDetailsToOrder}
+            addPurchasedTicketsToAttendeesCount={
+              !!addPurchasedTicketsToAttendeesCount
+            }
+            enableEmailAttachments={!!enableEmailAttachments}
+            setValue={setValue}
+            onPrev={goPrev}
+            onNext={goNext}
+          />
+        )}
+
+        {activeStep === 3 && (
+          <TicketTypeDesignStep
+            register={register}
+            setValue={setValue}
+            layout={layout}
+            watermarkEnabled={!!watermarkEnabled}
+            eventInfoEnabled={!!eventInfoEnabled}
+            logoEnabled={!!logoEnabled}
+            brandColor={brandColor}
+            qrSize={qrSize}
+            qrBorderRadius={qrBorderRadius}
+            footerText={footerText || ""}
+            name={name}
+            serverError={serverError}
+            onPrev={goPrev}
+            isSubmitting={isSubmitting}
+          />
+        )}
       </div>
     </form>
   );
@@ -1729,31 +533,6 @@ export default function TicketTypesPage() {
     return (
       <div className="text-xs text-error-400">
         Missing event id in route params.
-      </div>
-    );
-  }
-
-  if (mode === "create") {
-    return (
-      <div className="space-y-4">
-        <header className="space-y-1">
-          <h2 className="text-sm font-semibold text-neutral-0">
-            New Ticket Type
-          </h2>
-          <p className="text-xs text-neutral-400">
-            Configure pricing, availability, checkout requirements and ticket
-            design for this event.
-          </p>
-        </header>
-
-        <TicketTypeWizard
-          eventId={eventId}
-          onCancel={() => setMode("list")}
-          onCreated={async () => {
-            await refetch();
-            setMode("list");
-          }}
-        />
       </div>
     );
   }
@@ -1874,6 +653,24 @@ export default function TicketTypesPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal overlay for creation */}
+      {mode === "create" && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
+          <div className="flex min-h-full items-start justify-center px-3 py-10">
+            <div className="w-full max-w-[550px] rounded-3xl border border-white/10 bg-neutral-950 ">
+              <TicketTypeWizard
+                eventId={eventId}
+                onCancel={() => setMode("list")}
+                onCreated={async () => {
+                  await refetch();
+                  setMode("list");
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

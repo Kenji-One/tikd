@@ -1,4 +1,3 @@
-// src/app/dashboard/organizations/[id]/events/[eventId]/ticket-types/page.tsx
 "use client";
 
 import { useMemo, useState, type SVGProps, type ComponentType } from "react";
@@ -141,6 +140,10 @@ function TicketTypeWizard({
   const watermarkEnabled = watch("watermarkEnabled");
   const eventInfoEnabled = watch("eventInfoEnabled");
   const logoEnabled = watch("logoEnabled");
+
+  // NEW: watch logo/background URLs so we can pass them into design step
+  const logoUrl = watch("logoUrl");
+  const backgroundUrl = watch("backgroundUrl");
 
   const PRICE_STEP = 0.5;
 
@@ -489,6 +492,8 @@ function TicketTypeWizard({
             qrBorderRadius={qrBorderRadius}
             footerText={footerText || ""}
             name={name}
+            logoUrl={logoUrl}
+            backgroundUrl={backgroundUrl}
             serverError={serverError}
             onPrev={goPrev}
             isSubmitting={isSubmitting}

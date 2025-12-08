@@ -1,6 +1,6 @@
-// src/app/dashboard/organizations/[id]/events/[eventId]/ticket-types/TicketTypeDesignStep.tsx
 "use client";
 
+import { useRef, useState } from "react";
 import type { TicketTypeFormValues } from "./types";
 import type { UseFormRegister, UseFormSetValue } from "react-hook-form";
 
@@ -19,6 +19,8 @@ type Props = {
   qrBorderRadius: number;
   footerText: string;
   name: string;
+  logoUrl: string;
+  backgroundUrl: string;
   serverError: string | null;
   onPrev: () => void;
   isSubmitting: boolean;
@@ -36,11 +38,21 @@ export default function TicketTypeDesignStep({
   qrBorderRadius,
   footerText,
   name,
+  logoUrl,
+  backgroundUrl,
   serverError,
   onPrev,
   isSubmitting,
 }: Props) {
   const ticketColor = brandColor || "#9a46ff";
+
+  // Hidden file inputs for LOGO + BACKGROUND
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const backgroundInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Displayed file names
+  const [logoFileName, setLogoFileName] = useState<string>("");
+  const [backgroundFileName, setBackgroundFileName] = useState<string>("");
 
   // Layout variants for the preview “Focus” options
   const artworkHeightClass =
@@ -59,157 +71,194 @@ export default function TicketTypeDesignStep({
 
   const barcodeHeight = qrSize && qrSize > 0 ? qrSize : 72;
 
-  const renderPreviewInner = () => (
-    <>
-      <h3 className="text-2xl font-semibold text-neutral-0">Ticket Preview</h3>
+  const renderPreviewInner = () => {
+    const hasBackgroundImage = Boolean(backgroundUrl);
+    const hasCustomLogo = Boolean(logoUrl);
 
-      <div className="mt-3 rounded-xl bg-neutral-950 p-4 text-[13px] text-neutral-50">
-        {/* Outer wrapper just to give a little breathing room */}
-        <div
-          className={clsx("mx-auto rounded-3xl bg-transparent", cardWidthClass)}
-        >
-          {/* Ticket */}
+    return (
+      <>
+        <h3 className="text-2xl font-semibold text-neutral-0">
+          Ticket Preview
+        </h3>
+
+        <div className="mt-3 rounded-xl bg-neutral-950 p-4 text-[13px] text-neutral-50">
+          {/* Outer wrapper just to give a little breathing room */}
           <div
-            className="relative overflow-hidden rounded-3xl p-4"
-            style={{ backgroundColor: ticketColor }}
-          >
-            {/* Watermark overlay */}
-            {watermarkEnabled && (
-              <div className="pointer-events-none absolute inset-0 z-0 opacity-20">
-                <div className="h-full w-full bg-[radial-gradient(circle_at_0_0,rgba(255,255,255,0.4),transparent_55%),radial-gradient(circle_at_100%_100%,rgba(255,255,255,0.4),transparent_55%)]" />
-              </div>
+            className={clsx(
+              "mx-auto rounded-3xl bg-transparent",
+              cardWidthClass
             )}
+          >
+            {/* Ticket */}
+            <div
+              className="relative overflow-hidden rounded-3xl p-4"
+              style={
+                hasBackgroundImage
+                  ? {
+                      backgroundImage: `url(${backgroundUrl})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }
+                  : {
+                      backgroundColor: ticketColor,
+                    }
+              }
+            >
+              {/* Watermark overlay */}
+              {watermarkEnabled && (
+                <div className="pointer-events-none absolute inset-0 z-0 opacity-20">
+                  <div className="h-full w-full bg-[radial-gradient(circle_at_0_0,rgba(255,255,255,0.4),transparent_55%),radial-gradient(circle_at_100%_100%,rgba(255,255,255,0.4),transparent_55%)]" />
+                </div>
+              )}
 
-            <div className="relative z-10">
-              {/* Artwork */}
-              <div
-                className={clsx(
-                  "relative overflow-hidden rounded-2xl",
-                  artworkHeightClass
-                )}
-              >
+              <div className="relative z-10">
+                {/* Artwork area / top section */}
                 <div
-                  className="absolute inset-0"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(135deg,#ffb347,#ff5f6d,#845ef7,#3bc9db)",
-                    backgroundSize: "cover",
-                    backgroundPosition:
-                      layout === "down"
-                        ? "center bottom"
-                        : layout === "up"
-                          ? "center top"
-                          : "center",
-                  }}
-                />
+                  className={clsx(
+                    "relative overflow-hidden rounded-2xl",
+                    artworkHeightClass
+                  )}
+                >
+                  {/* Only show the default gradient artwork
+                      when there is NO custom background image */}
+                  {!hasBackgroundImage && (
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(135deg,#ffb347,#ff5f6d,#845ef7,#3bc9db)",
+                        backgroundSize: "cover",
+                        backgroundPosition:
+                          layout === "down"
+                            ? "center bottom"
+                            : layout === "up"
+                              ? "center top"
+                              : "center",
+                      }}
+                    />
+                  )}
 
-                {/* Logo pill (toggle) */}
-                {logoEnabled && (
-                  <div className="absolute top-4 flex items-center left-1/2 -translate-x-1/2">
-                    <img
-                      src="/Logo.svg"
-                      alt="Logo"
-                      className="h-full w-full object-contain"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).style.display =
-                          "none";
+                  {/* Logo pill (toggle) */}
+                  {logoEnabled && (
+                    <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center justify-center">
+                      {hasCustomLogo ? (
+                        <img
+                          src={logoUrl}
+                          alt="Logo"
+                          className="h-10 w-10 rounded-full border border-white/40 bg-black/30 object-cover"
+                          onError={(e) => {
+                            (
+                              e.currentTarget as HTMLImageElement
+                            ).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src="/Logo.svg"
+                          alt="Logo"
+                          className="h-10 w-10 object-contain"
+                          onError={(e) => {
+                            (
+                              e.currentTarget as HTMLImageElement
+                            ).style.display = "none";
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className={contentPaddingTopClass}>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
+                    THE GRAVITY
+                  </p>
+                  <p className="mt-1 text-[18px] font-semibold leading-tight text-white">
+                    {name || "NYC HIGHSCHOOL PARTY"}
+                  </p>
+
+                  {/* Event info toggle */}
+                  {eventInfoEnabled && (
+                    <>
+                      {/* Date / Time / Check in / Order ID */}
+                      <div className="mt-5 grid grid-cols-2 gap-y-3 text-sm leading-snug text-white/80">
+                        <div>
+                          <p className="text-white/70">Date</p>
+                          <p className="mt-1 font-semibold text-white">
+                            24/09/2025
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-white/70">Time</p>
+                          <p className="mt-1 font-semibold text-white">12 PM</p>
+                        </div>
+
+                        <div>
+                          <p className="text-white/70">Check in Type</p>
+                          <p className="mt-1 font-semibold text-white">
+                            VIP Experia - D
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-white/70">Order ID</p>
+                          <p className="mt-1 font-semibold text-white">
+                            GBD99763JS
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Place */}
+                      <div className="mt-5 text-sm leading-snug text-white/80">
+                        <p className="text-white/70">Place</p>
+                        <p className="mt-1 font-semibold text-white">
+                          St Stadium Jouers Preto, San Francisco
+                          <br />
+                          Florida, United States
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Perforation with side cutouts */}
+                  <div className="relative mt-6">
+                    {/* dashed line */}
+                    <div className="mx-auto h-px w-[96%] border-t border-dashed border-white/80" />
+                    {/* left & right cutouts */}
+                    <div className="absolute -left-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
+                    <div className="absolute -right-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
+                  </div>
+
+                  {/* Barcode area – flush with ticket, like Figma */}
+                  <div className="mt-4 px-2 pb-1">
+                    <div
+                      className="w-full"
+                      style={{
+                        height: `${barcodeHeight}px`,
+                        backgroundImage:
+                          "repeating-linear-gradient(90deg, rgba(0,0,0,0.98) 0, rgba(0,0,0,0.98) 2px, transparent 2px, transparent 4px)",
+                        backgroundRepeat: "repeat",
+                        borderRadius:
+                          typeof qrBorderRadius === "number"
+                            ? `${qrBorderRadius}px`
+                            : undefined,
                       }}
                     />
                   </div>
-                )}
-              </div>
-
-              {/* Content */}
-              <div className={contentPaddingTopClass}>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
-                  THE GRAVITY
-                </p>
-                <p className="mt-1 text-[18px] font-semibold leading-tight text-white">
-                  {name || "NYC HIGHSCHOOL PARTY"}
-                </p>
-
-                {/* Event info toggle */}
-                {eventInfoEnabled && (
-                  <>
-                    {/* Date / Time / Check in / Order ID */}
-                    <div className="mt-5 grid grid-cols-2 gap-y-3 text-sm leading-snug text-white/80">
-                      <div>
-                        <p className="text-white/70">Date</p>
-                        <p className="mt-1 font-semibold text-white">
-                          24/09/2025
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-white/70">Time</p>
-                        <p className="mt-1 font-semibold text-white">12 PM</p>
-                      </div>
-
-                      <div>
-                        <p className="text-white/70">Check in Type</p>
-                        <p className="mt-1 font-semibold text-white">
-                          VIP Experia - D
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-white/70">Order ID</p>
-                        <p className="mt-1 font-semibold text-white">
-                          GBD99763JS
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Place */}
-                    <div className="mt-5 text-sm leading-snug text-white/80">
-                      <p className="text-white/70">Place</p>
-                      <p className="mt-1 font-semibold text-white">
-                        St Stadium Jouers Preto, San Francisco
-                        <br />
-                        Florida, United States
-                      </p>
-                    </div>
-                  </>
-                )}
-
-                {/* Perforation with side cutouts */}
-                <div className="relative mt-6">
-                  {/* dashed line */}
-                  <div className="mx-auto h-px w-[96%] border-t border-dashed border-white/80" />
-                  {/* left & right cutouts */}
-                  <div className="absolute -left-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
-                  <div className="absolute -right-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
-                </div>
-
-                {/* Barcode area – flush with ticket, like Figma */}
-                <div className="mt-4 px-2 pb-1">
-                  <div
-                    className="w-full"
-                    style={{
-                      height: `${barcodeHeight}px`,
-                      backgroundImage:
-                        // FIXED: correct gradient syntax so bars are visible
-                        "repeating-linear-gradient(90deg, rgba(0,0,0,0.98) 0, rgba(0,0,0,0.98) 2px, transparent 2px, transparent 4px)",
-                      backgroundRepeat: "repeat",
-                      borderRadius:
-                        typeof qrBorderRadius === "number"
-                          ? `${qrBorderRadius}px`
-                          : undefined,
-                    }}
-                  />
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Optional bottom line text under ticket */}
-          {footerText && (
-            <p className="mt-3 text-center text-[10px] text-neutral-200">
-              {footerText}
-            </p>
-          )}
+            {/* Optional bottom line text under ticket */}
+            {footerText && (
+              <p className="mt-3 text-center text-[10px] text-neutral-200">
+                {footerText}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-    </>
-  );
+      </>
+    );
+  };
 
   const commonInputClasses =
     "w-full rounded-lg border-none bg-neutral-900 px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500";
@@ -297,15 +346,44 @@ export default function TicketTypeDesignStep({
         </div>
       </div>
 
-      {/* Artwork upload */}
+      {/* LOGO upload (first browse) */}
       <div className="flex flex-col gap-2.5 sm:flex-row">
+        {/* Hidden input: logo file */}
+        <input
+          type="file"
+          accept="image/*"
+          ref={logoInputRef}
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0] ?? null;
+
+            // store the File in form state if you need it later
+            setValue("logoFile" as any, file, { shouldDirty: true });
+
+            if (file) {
+              setLogoFileName(file.name);
+              const url = URL.createObjectURL(file);
+              // use object URL for preview (and keep it in form so step changes keep it)
+              setValue("logoUrl", url, { shouldDirty: true });
+            } else {
+              setLogoFileName("");
+              setValue("logoUrl", "", { shouldDirty: true });
+            }
+          }}
+        />
+
         <button
           type="button"
           className="flex-1 rounded-lg border border-dashed border-primary-500 bg-neutral-900 px-4 py-3 text-left text-xs text-neutral-400"
+          onClick={() => logoInputRef.current?.click()}
         >
-          Choose a file or drag &amp; drop it here
+          {logoFileName || "Choose a logo file or drag & drop it here"}
         </button>
-        <button type="button" className={commonButtonClasses}>
+        <button
+          type="button"
+          className={commonButtonClasses}
+          onClick={() => logoInputRef.current?.click()}
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="16"
@@ -354,7 +432,7 @@ export default function TicketTypeDesignStep({
           </div>
         </div>
 
-        <div className="h-px w-full bg-white/10 my-6" />
+        <div className="my-6 h-px w-full bg-white/10" />
 
         {/* Color */}
         <div className="space-y-1.5">
@@ -401,15 +479,43 @@ export default function TicketTypeDesignStep({
 
         <p className="text-sm text-neutral-500">or</p>
 
-        {/* QR artwork upload */}
+        {/* BACKGROUND upload (second browse after color chooser) */}
         <div className="flex flex-col gap-2.5 sm:flex-row">
+          {/* Hidden input: background file */}
+          <input
+            type="file"
+            accept="image/*"
+            ref={backgroundInputRef}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+
+              setValue("backgroundFile" as any, file, { shouldDirty: true });
+
+              if (file) {
+                setBackgroundFileName(file.name);
+                const url = URL.createObjectURL(file);
+                setValue("backgroundUrl", url, { shouldDirty: true });
+              } else {
+                setBackgroundFileName("");
+                setValue("backgroundUrl", "", { shouldDirty: true });
+              }
+            }}
+          />
+
           <button
             type="button"
             className="flex-1 rounded-lg border border-dashed border-primary-500 bg-neutral-900 px-4 py-3 text-left text-xs text-neutral-400"
+            onClick={() => backgroundInputRef.current?.click()}
           >
-            Choose a file or drag &amp; drop it here
+            {backgroundFileName ||
+              "Choose a background image file or drag & drop it here"}
           </button>
-          <button type="button" className={commonButtonClasses}>
+          <button
+            type="button"
+            className={commonButtonClasses}
+            onClick={() => backgroundInputRef.current?.click()}
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="16"
@@ -426,6 +532,7 @@ export default function TicketTypeDesignStep({
           </button>
         </div>
       </div>
+
       <div className="h-px w-full bg-white/10" />
 
       {/* Bottom line */}

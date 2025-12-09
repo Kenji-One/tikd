@@ -18,6 +18,7 @@ import TicketTypeGeneralStep from "./TicketTypeGeneralStep";
 import TicketTypeAvailabilityStep from "./TicketTypeAvailabilityStep";
 import TicketTypeCheckoutStep from "./TicketTypeCheckoutStep";
 import TicketTypeDesignStep from "./TicketTypeDesignStep";
+import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 
 type RouteParams = {
   id: string;
@@ -43,12 +44,14 @@ function mapApiToRow(api: TicketTypeApi): TicketTypeRow {
 
 type TicketTypeWizardProps = {
   eventId: string;
+  event?: EventWithMeta;
   onCancel: () => void;
   onCreated: () => void;
 };
 
 function TicketTypeWizard({
   eventId,
+  event,
   onCancel,
   onCreated,
 }: TicketTypeWizardProps) {
@@ -141,7 +144,6 @@ function TicketTypeWizard({
   const eventInfoEnabled = watch("eventInfoEnabled");
   const logoEnabled = watch("logoEnabled");
 
-  // NEW: watch logo/background URLs so we can pass them into design step
   const logoUrl = watch("logoUrl");
   const backgroundUrl = watch("backgroundUrl");
 
@@ -494,6 +496,10 @@ function TicketTypeWizard({
             name={name}
             logoUrl={logoUrl}
             backgroundUrl={backgroundUrl}
+            eventTitle={event?.title}
+            eventDate={event?.date}
+            eventLocation={event?.location}
+            eventImageUrl={event?.image}
             serverError={serverError}
             onPrev={goPrev}
             isSubmitting={isSubmitting}
@@ -513,7 +519,13 @@ export default function TicketTypesPage() {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"list" | "create">("list");
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  // Fetch ticket types
+  const {
+    data: ticketTypes,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["ticket-types", eventId],
     enabled: Boolean(eventId),
     queryFn: async (): Promise<TicketTypeRow[]> => {
@@ -526,13 +538,20 @@ export default function TicketTypesPage() {
     },
   });
 
+  // Fetch event so design preview can use real event data
+  const { data: event } = useQuery<EventWithMeta>({
+    queryKey: ["event", eventId],
+    queryFn: () => fetchEventById(eventId!),
+    enabled: !!eventId,
+  });
+
   const filtered = useMemo(() => {
-    const list = data ?? [];
+    const list = ticketTypes ?? [];
     if (!query.trim()) return list;
     return list.filter((t) =>
       t.name.toLowerCase().includes(query.toLowerCase())
     );
-  }, [data, query]);
+  }, [ticketTypes, query]);
 
   if (!eventId) {
     return (
@@ -575,7 +594,8 @@ export default function TicketTypesPage() {
           />
         </div>
         <p className="text-[11px] text-neutral-400">
-          {filtered.length} ticket type{filtered.length === 1 ? "" : "s"}
+          {filtered?.length ?? 0} ticket type
+          {filtered && filtered.length === 1 ? "" : "s"}
         </p>
       </div>
 
@@ -591,13 +611,13 @@ export default function TicketTypesPage() {
         </div>
       )}
 
-      {!isLoading && !isError && filtered.length === 0 ? (
+      {!isLoading && !isError && (filtered?.length ?? 0) === 0 ? (
         <div className="rounded-card border border-dashed border-white/10 bg-neutral-950/80 px-6 py-10 text-center text-sm text-neutral-300">
           No ticket types yet. Start by creating a ticket above.
         </div>
       ) : null}
 
-      {!isLoading && !isError && filtered.length > 0 && (
+      {!isLoading && !isError && filtered && filtered.length > 0 && (
         <div className="space-y-3">
           {filtered.map((t) => (
             <div
@@ -668,6 +688,7 @@ export default function TicketTypesPage() {
             <div className="w-full max-w-[550px] rounded-3xl border border-white/10 bg-neutral-950 ">
               <TicketTypeWizard
                 eventId={eventId}
+                event={event}
                 onCancel={() => setMode("list")}
                 onCreated={async () => {
                   await refetch();

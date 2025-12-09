@@ -21,6 +21,11 @@ type Props = {
   name: string;
   logoUrl: string;
   backgroundUrl: string;
+  /** Real event data coming from the opened event */
+  eventTitle?: string;
+  eventDate?: string; // ISO string from API
+  eventLocation?: string;
+  eventImageUrl?: string;
   serverError: string | null;
   onPrev: () => void;
   isSubmitting: boolean;
@@ -40,6 +45,10 @@ export default function TicketTypeDesignStep({
   name,
   logoUrl,
   backgroundUrl,
+  eventTitle,
+  eventDate,
+  eventLocation,
+  eventImageUrl,
   serverError,
   onPrev,
   isSubmitting,
@@ -71,9 +80,40 @@ export default function TicketTypeDesignStep({
 
   const barcodeHeight = qrSize && qrSize > 0 ? qrSize : 72;
 
+  // --- Helpers for formatting event date/time from ISO string ----
+  const formatEventDate = (value?: string) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
+
+  const formatEventTime = (value?: string) => {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  const formattedDate = formatEventDate(eventDate);
+  const formattedTime = formatEventTime(eventDate);
+
   const renderPreviewInner = () => {
     const hasBackgroundImage = Boolean(backgroundUrl);
     const hasCustomLogo = Boolean(logoUrl);
+    const hasEventImage = Boolean(eventImageUrl);
+
+    const topLabel = (eventTitle || "Event").toUpperCase();
+    const mainTitle = name || eventTitle || "Untitled ticket";
+
+    const placeText = eventLocation || "Location TBA";
 
     return (
       <>
@@ -112,16 +152,36 @@ export default function TicketTypeDesignStep({
               )}
 
               <div className="relative z-10">
-                {/* Artwork area / top section */}
                 <div
                   className={clsx(
                     "relative overflow-hidden rounded-2xl",
                     artworkHeightClass
                   )}
                 >
-                  {/* Only show the default gradient artwork
-                      when there is NO custom background image */}
-                  {!hasBackgroundImage && (
+                  {/* If no custom ticket background is set, show event image as artwork.
+      Fallback to the old gradient if there is no event image. */}
+                  {!hasBackgroundImage && hasEventImage && (
+                    <img
+                      src={eventImageUrl}
+                      alt={eventTitle || "Event artwork"}
+                      className="absolute inset-0 h-full w-full object-cover"
+                      style={{
+                        objectPosition:
+                          layout === "down"
+                            ? "center bottom"
+                            : layout === "up"
+                              ? "center top"
+                              : "center",
+                      }}
+                      onError={(e) => {
+                        // Hide broken image so gradient fallback can be used if needed
+                        (e.currentTarget as HTMLImageElement).style.display =
+                          "none";
+                      }}
+                    />
+                  )}
+
+                  {!hasBackgroundImage && !hasEventImage && (
                     <div
                       className="absolute inset-0"
                       style={{
@@ -170,11 +230,14 @@ export default function TicketTypeDesignStep({
 
                 {/* Content */}
                 <div className={contentPaddingTopClass}>
+                  {/* Small top label – organization/event label */}
                   <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
-                    THE GRAVITY
+                    {topLabel}
                   </p>
+
+                  {/* Main line – ticket type name with event fallback */}
                   <p className="mt-1 text-[18px] font-semibold leading-tight text-white">
-                    {name || "NYC HIGHSCHOOL PARTY"}
+                    {mainTitle}
                   </p>
 
                   {/* Event info toggle */}
@@ -185,18 +248,20 @@ export default function TicketTypeDesignStep({
                         <div>
                           <p className="text-white/70">Date</p>
                           <p className="mt-1 font-semibold text-white">
-                            24/09/2025
+                            {formattedDate || "Date TBA"}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="text-white/70">Time</p>
-                          <p className="mt-1 font-semibold text-white">12 PM</p>
+                          <p className="mt-1 font-semibold text-white">
+                            {formattedTime || "Time TBA"}
+                          </p>
                         </div>
 
                         <div>
                           <p className="text-white/70">Check in Type</p>
                           <p className="mt-1 font-semibold text-white">
-                            VIP Experia - D
+                            {name || "General admission"}
                           </p>
                         </div>
                         <div className="text-right">
@@ -211,9 +276,7 @@ export default function TicketTypeDesignStep({
                       <div className="mt-5 text-sm leading-snug text-white/80">
                         <p className="text-white/70">Place</p>
                         <p className="mt-1 font-semibold text-white">
-                          St Stadium Jouers Preto, San Francisco
-                          <br />
-                          Florida, United States
+                          {placeText}
                         </p>
                       </div>
                     </>
@@ -266,7 +329,7 @@ export default function TicketTypeDesignStep({
     "inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-neutral-800 px-6 py-3 text-sm font-medium text-neutral-0 hover:bg-neutral-700 transition-colors";
 
   return (
-    <div className="space-y-6 pb-4">
+    <div className="space-y-6">
       {/* Intro text (title is in modal header) */}
       <p className="text-sm text-neutral-300">
         Customize the visual appearance of your ticket. Layout, artwork and QR
@@ -330,7 +393,9 @@ export default function TicketTypeDesignStep({
             size="sm"
             checked={eventInfoEnabled}
             onCheckedChange={(val) =>
-              setValue("eventInfoEnabled", Boolean(val), { shouldDirty: true })
+              setValue("eventInfoEnabled", Boolean(val), {
+                shouldDirty: true,
+              })
             }
           />
         </div>
@@ -550,18 +615,18 @@ export default function TicketTypeDesignStep({
       <div className="space-y-2.5 2xl:hidden">{renderPreviewInner()}</div>
 
       {/* Navigation + errors */}
-      <div className="mt-4 flex items-center justify-center gap-3">
+      <div className="mt-6 flex items-center justify-end gap-4">
         <button
           type="button"
           onClick={onPrev}
-          className="rounded-full bg-white px-5 py-1.5 text-xs font-medium text-neutral-950 hover:bg-neutral-100"
+          className="rounded-full bg-white px-6 py-3 font-medium text-neutral-950 hover:bg-neutral-100 cursor-pointer"
         >
           Go back
         </button>
         <button
           type="submit"
           disabled={isSubmitting}
-          className="rounded-full bg-primary-600 px-7 py-1.5 text-xs font-semibold text-white hover:bg-primary-500 disabled:opacity-60"
+          className="rounded-full bg-primary-500 border border-[#FFFFFF1A] px-6 py-3 text-white font-medium hover:bg-primary-400 disabled:opacity-60 cursor-pointer transition-colors"
         >
           {isSubmitting ? "Saving…" : "Complete"}
         </button>

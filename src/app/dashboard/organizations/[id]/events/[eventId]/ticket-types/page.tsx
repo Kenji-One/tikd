@@ -122,6 +122,7 @@ function TicketTypeWizard({
   const minPerOrder = watch("minPerOrder");
   const maxPerOrder = watch("maxPerOrder");
   const availabilityStatus = watch("availabilityStatus");
+  const accessMode = watch("accessMode");
   const qrSize = watch("qrSize");
   const qrBorderRadius = watch("qrBorderRadius");
   const footerText = watch("footerText");
@@ -454,6 +455,7 @@ function TicketTypeWizard({
             minPerOrder={minPerOrder}
             maxPerOrder={maxPerOrder}
             availabilityStatus={availabilityStatus as TicketAvailabilityStatus}
+            accessMode={accessMode as TicketTypeFormValues["accessMode"]}
             onPrev={goPrev}
             onNext={goNext}
           />

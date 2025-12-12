@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useRef, useState } from "react";
 import type { TicketTypeFormValues } from "./types";
 import type { UseFormRegister, UseFormSetValue } from "react-hook-form";
@@ -58,6 +60,10 @@ export default function TicketTypeDesignStep({
   // Hidden file inputs for LOGO + BACKGROUND
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const backgroundInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Keep track of created object URLs to revoke them (avoid memory leaks)
+  const logoObjectUrlRef = useRef<string | null>(null);
+  const backgroundObjectUrlRef = useRef<string | null>(null);
 
   // Displayed file names
   const [logoFileName, setLogoFileName] = useState<string>("");
@@ -159,7 +165,7 @@ export default function TicketTypeDesignStep({
                   )}
                 >
                   {/* If no custom ticket background is set, show event image as artwork.
-      Fallback to the old gradient if there is no event image. */}
+                      Fallback to the old gradient if there is no event image. */}
                   {!hasBackgroundImage && hasEventImage && (
                     <img
                       src={eventImageUrl}
@@ -174,9 +180,7 @@ export default function TicketTypeDesignStep({
                               : "center",
                       }}
                       onError={(e) => {
-                        // Hide broken image so gradient fallback can be used if needed
-                        (e.currentTarget as HTMLImageElement).style.display =
-                          "none";
+                        e.currentTarget.style.display = "none";
                       }}
                     />
                   )}
@@ -207,9 +211,7 @@ export default function TicketTypeDesignStep({
                           alt="Logo"
                           className="h-10 w-10 rounded-full border border-white/40 bg-black/30 object-cover"
                           onError={(e) => {
-                            (
-                              e.currentTarget as HTMLImageElement
-                            ).style.display = "none";
+                            e.currentTarget.style.display = "none";
                           }}
                         />
                       ) : (
@@ -218,9 +220,7 @@ export default function TicketTypeDesignStep({
                           alt="Logo"
                           className="h-10 w-10 object-contain"
                           onError={(e) => {
-                            (
-                              e.currentTarget as HTMLImageElement
-                            ).style.display = "none";
+                            e.currentTarget.style.display = "none";
                           }}
                         />
                       )}
@@ -422,18 +422,26 @@ export default function TicketTypeDesignStep({
           onChange={(e) => {
             const file = e.target.files?.[0] ?? null;
 
-            // store the File in form state if you need it later
-            setValue("logoFile" as any, file, { shouldDirty: true });
+            // cleanup previous object url
+            if (logoObjectUrlRef.current) {
+              URL.revokeObjectURL(logoObjectUrlRef.current);
+              logoObjectUrlRef.current = null;
+            }
 
             if (file) {
               setLogoFileName(file.name);
               const url = URL.createObjectURL(file);
+              logoObjectUrlRef.current = url;
+
               // use object URL for preview (and keep it in form so step changes keep it)
               setValue("logoUrl", url, { shouldDirty: true });
             } else {
               setLogoFileName("");
               setValue("logoUrl", "", { shouldDirty: true });
             }
+
+            // allow re-selecting the same file again
+            e.currentTarget.value = "";
           }}
         />
 
@@ -555,16 +563,25 @@ export default function TicketTypeDesignStep({
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null;
 
-              setValue("backgroundFile" as any, file, { shouldDirty: true });
+              // cleanup previous object url
+              if (backgroundObjectUrlRef.current) {
+                URL.revokeObjectURL(backgroundObjectUrlRef.current);
+                backgroundObjectUrlRef.current = null;
+              }
 
               if (file) {
                 setBackgroundFileName(file.name);
                 const url = URL.createObjectURL(file);
+                backgroundObjectUrlRef.current = url;
+
                 setValue("backgroundUrl", url, { shouldDirty: true });
               } else {
                 setBackgroundFileName("");
                 setValue("backgroundUrl", "", { shouldDirty: true });
               }
+
+              // allow re-selecting the same file again
+              e.currentTarget.value = "";
             }}
           />
 

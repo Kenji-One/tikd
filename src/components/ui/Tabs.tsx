@@ -68,7 +68,7 @@ export function Tabs({
                     "relative flex items-center gap-2 rounded-full px-4 py-2 text-sm outline-none transition-colors",
                     isActive
                       ? "bg-primary-700/30 text-neutral-0 ring-1 ring-primary-600/40"
-                      : "text-neutral-300 hover:text-neutral-0"
+                      : "text-neutral-300 hover:text-neutral-0 hover:bg-neutral-900/80"
                   )}
                 >
                   <span>{t.label}</span>

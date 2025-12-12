@@ -278,7 +278,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
         <div className="mb-8">
           <Link
             href={orgBase ? `${orgBase}/events/create` : "/dashboard/events"}
-            className="flex h-11 w-full items-center justify-center rounded-full bg-violet-600 text-sm font-semibold text-white shadow-lg transition hover:bg-violet-500"
+            className="flex h-9 w-full items-center justify-center rounded-full bg-neutral-0 font-semibold text-neutral-950 transition hover:bg-primary-500"
           >
             Create event <span className="ml-2 text-lg leading-none">+</span>
           </Link>

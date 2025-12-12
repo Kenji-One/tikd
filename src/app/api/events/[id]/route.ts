@@ -11,7 +11,7 @@ import Event, { IEvent } from "@/models/Event";
 import Artist, { IArtist } from "@/models/Artist";
 import Organization, { IOrganization } from "@/models/Organization";
 import Ticket from "@/models/Ticket";
-import type { Types } from "mongoose";
+import type { HydratedDocument, Types } from "mongoose";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -23,6 +23,10 @@ type EventLean = Omit<IEvent, "organizationId" | "artists"> & {
   organizationId: Pick<IOrganization, "_id" | "name" | "logo" | "website">;
   artists: Pick<IArtist, "_id" | "stageName" | "avatar" | "isVerified">[];
   _id: Types.ObjectId;
+};
+
+type EventDoc = HydratedDocument<IEvent> & {
+  internalNotes?: string;
 };
 
 /* ------------------------------------------------------------------ */
@@ -125,7 +129,7 @@ export async function PATCH(
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
 
-  const event = await Event.findById(id);
+  const event = (await Event.findById(id).exec()) as EventDoc | null;
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
@@ -155,8 +159,7 @@ export async function PATCH(
   if (data.image !== undefined) event.image = data.image;
   if (data.status !== undefined) event.status = data.status;
   if (data.internalNotes !== undefined) {
-    // assumes Event schema has this field
-    (event as any).internalNotes = data.internalNotes;
+    event.internalNotes = data.internalNotes;
   }
 
   await event.save();

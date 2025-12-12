@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   useForm,
   useFieldArray,
@@ -39,6 +39,28 @@ type OrgMember = {
   name: string;
   email: string;
 };
+
+type EventEditMeta = EventWithMeta & {
+  durationMinutes?: number | null;
+  categories?: string[];
+  promoters?: string[];
+  message?: string;
+  artists?: Array<{
+    _id?: string;
+    stageName?: string;
+    avatar?: string;
+  }>;
+};
+
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Unknown error";
+  }
+}
 
 /* ----------------------------- Schema ----------------------------- */
 /** Duration "HH:MM" 00:15 - 23:59 */
@@ -141,9 +163,9 @@ function Section({
   children,
 }: {
   title: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   desc?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5 md:p-6">
@@ -178,7 +200,7 @@ export default function EditEventPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   /* ---------- Fetch existing event -------------------------- */
-  const { data: event, isLoading } = useQuery<EventWithMeta>({
+  const { data: event, isLoading } = useQuery<EventEditMeta>({
     queryKey: ["event", eventId],
     queryFn: () => fetchEventById(eventId!),
     enabled: !!eventId,
@@ -205,11 +227,6 @@ export default function EditEventPage() {
     mode: "onBlur",
   });
 
-  const watchArr = <K extends keyof FormInput>(
-    key: K,
-    fallback: NonNullable<FormInput[K]>
-  ) => (watch(key) ?? fallback) as NonNullable<FormInput[K]>;
-
   /* ---------- Pre-fill from existing event ------------------- */
   useEffect(() => {
     if (!event) return;
@@ -217,7 +234,7 @@ export default function EditEventPage() {
     const d = event.date ? new Date(event.date) : null;
     const dateOnly = d ? d.toISOString().slice(0, 10) : "";
     const startTime = d ? d.toISOString().slice(11, 16) : "";
-    const duration = hhmmFromMinutes((event as any).durationMinutes ?? 60);
+    const duration = hhmmFromMinutes(event.durationMinutes ?? 60);
 
     reset({
       title: event.title ?? "",
@@ -230,11 +247,11 @@ export default function EditEventPage() {
       location: event.location ?? "",
       image: event.image ?? "",
       organizationId: orgIdFromRoute ?? "",
-      categories: ((event as any).categories ?? []) as string[],
-      promoters: ((event as any).promoters ?? []) as string[],
-      message: (event as any).message ?? "",
+      categories: event.categories ?? [],
+      promoters: event.promoters ?? [],
+      message: event.message ?? "",
       artists:
-        ((event as any).artists ?? []).map((a: any) => ({
+        event.artists?.map((a) => ({
           name: a.stageName ?? "",
           image: a.avatar ?? "",
         })) ?? [],
@@ -255,14 +272,34 @@ export default function EditEventPage() {
 
   useEffect(() => {
     if (!orgIdFromRoute) return;
+
+    let alive = true;
     setMembersLoading(true);
+
     fetch(`/api/organizations/${orgIdFromRoute}/members`)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data: OrgMember[]) => {
-        setMembers(Array.isArray(data) ? data : []);
+      .then((res) =>
+        res.ok ? res.json() : Promise.reject(new Error("Failed"))
+      )
+      .then((data: unknown) => {
+        if (!alive) return;
+        if (Array.isArray(data)) {
+          setMembers(data as OrgMember[]);
+        } else {
+          setMembers([]);
+        }
       })
-      .catch(() => setMembers([]))
-      .finally(() => setMembersLoading(false));
+      .catch(() => {
+        if (!alive) return;
+        setMembers([]);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setMembersLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, [orgIdFromRoute]);
 
   /* ---------- Field arrays – artists ------------------------- */
@@ -340,8 +377,8 @@ export default function EditEventPage() {
 
         await qc.invalidateQueries({ queryKey: ["event", eventId] });
         setSaved(true);
-      } catch (err: any) {
-        setSubmitError(err.message ?? "Failed to update event");
+      } catch (err: unknown) {
+        setSubmitError(getErrorMessage(err) || "Failed to update event");
       }
     };
 
@@ -349,11 +386,12 @@ export default function EditEventPage() {
   const title = watch("title") ?? "";
   const location = watch("location") ?? "";
   const image = watch("image") ?? "";
+
   const preview = useMemo(
     () => ({
       id: "preview",
       title: title || "Untitled Event",
-      dateLabel: formatDateLabel(startISO || (event?.date as string)),
+      dateLabel: formatDateLabel(startISO || event?.date),
       venue: location || event?.location || "Location TBA",
       img: image || event?.image || "/dummy/event-1.png",
       category: "Shows",
@@ -363,16 +401,17 @@ export default function EditEventPage() {
 
   /* ---------- Chips: categories & promoters ------------------ */
   const CATS = ["Shows", "Party", "Comedy", "Social", "Listing Party"] as const;
-  const categories = watchArr("categories", [] as unknown as string[]);
+
+  const categories = watch("categories") ?? [];
   const toggleCat = (c: string) => {
-    const set = new Set(categories as string[]);
+    const set = new Set(categories);
     set.has(c) ? set.delete(c) : set.add(c);
     setValue("categories", Array.from(set), { shouldDirty: true });
   };
 
-  const promoters = watchArr("promoters", [] as unknown as string[]);
+  const promoters = watch("promoters") ?? [];
   const togglePromoter = (email: string) => {
-    const set = new Set(promoters as string[]);
+    const set = new Set(promoters);
     if (set.has(email)) set.delete(email);
     else set.add(email);
     setValue("promoters", Array.from(set), { shouldDirty: true });
@@ -448,7 +487,7 @@ export default function EditEventPage() {
                 {...register("title")}
                 size="md"
                 variant="full"
-                className={errors.title && "border border-error-500"}
+                className={errors.title ? "border border-error-500" : undefined}
               />
 
               {/* Date + Start + Duration row */}
@@ -459,7 +498,9 @@ export default function EditEventPage() {
                   {...register("dateOnly")}
                   size="md"
                   variant="full"
-                  className={errors.dateOnly && "border border-error-500"}
+                  className={
+                    errors.dateOnly ? "border border-error-500" : undefined
+                  }
                 />
                 <LabelledInput
                   label="Start Time"
@@ -467,7 +508,9 @@ export default function EditEventPage() {
                   {...register("startTime")}
                   size="md"
                   variant="full"
-                  className={errors.startTime && "border border-error-500"}
+                  className={
+                    errors.startTime ? "border border-error-500" : undefined
+                  }
                   endAdornment={<Clock className="h-4 w-4 opacity-60" />}
                 />
                 <LabelledInput
@@ -476,7 +519,9 @@ export default function EditEventPage() {
                   {...register("duration")}
                   size="md"
                   variant="full"
-                  className={errors.duration && "border border-error-500"}
+                  className={
+                    errors.duration ? "border border-error-500" : undefined
+                  }
                 />
               </div>
 
@@ -527,7 +572,7 @@ export default function EditEventPage() {
                 </label>
                 <div className="flex flex-wrap gap-3">
                   {CATS.map((c) => {
-                    const active = (categories as string[]).includes(c);
+                    const active = categories.includes(c);
                     return (
                       <button
                         key={c}
@@ -566,7 +611,9 @@ export default function EditEventPage() {
                 {...register("location")}
                 size="md"
                 variant="full"
-                className={errors.location && "border border-error-500"}
+                className={
+                  errors.location ? "border border-error-500" : undefined
+                }
               />
             </div>
           </Section>
@@ -662,6 +709,12 @@ export default function EditEventPage() {
             desc="Optionally select organization members who will help promote this event and add a note."
             icon={<MailPlus className="h-5 w-5 text-primary-300" />}
           >
+            {membersLoading && (
+              <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-neutral-300">
+                Loading organization members…
+              </div>
+            )}
+
             {/* Promoters – only show if org has members */}
             {members.length > 0 && (
               <div className="space-y-2 mb-6">
@@ -671,7 +724,7 @@ export default function EditEventPage() {
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {members.map((m) => {
-                    const selected = (promoters as string[]).includes(m.email);
+                    const selected = promoters.includes(m.email);
                     return (
                       <button
                         key={m._id}
@@ -689,10 +742,10 @@ export default function EditEventPage() {
                     );
                   })}
                 </div>
-                {(promoters as string[]).length > 0 && (
+                {promoters.length > 0 && (
                   <p className="text-xs text-neutral-400">
-                    {(promoters as string[]).length} promoter
-                    {(promoters as string[]).length > 1 ? "s" : ""} selected.
+                    {promoters.length} promoter{promoters.length > 1 ? "s" : ""}{" "}
+                    selected.
                   </p>
                 )}
               </div>

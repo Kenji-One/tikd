@@ -3,12 +3,13 @@ import "@/lib/mongoose";
 
 import { auth } from "@/lib/auth";
 import Event, { type IEvent } from "@/models/Event";
-import TicketType from "@/models/TicketType";
-import { ticketTypeBodySchema } from "../schema";
+import PromoCode from "@/models/PromoCode";
+import { Types } from "mongoose";
+import { promoBodySchema } from "../schema";
 
-const partialSchema = ticketTypeBodySchema.partial();
+const partialSchema = promoBodySchema.partial();
 
-/* --------------------------- helpers --------------------------- */
+/* --------------------------- helper --------------------------- */
 
 async function ensureEventOwnership(
   userId: string,
@@ -37,44 +38,47 @@ async function ensureEventOwnership(
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; ticketTypeId: string }> }
+  { params }: { params: Promise<{ id: string; promoCodeId: string }> }
 ) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id: eventId, ticketTypeId } = await params;
+  const { id: eventId, promoCodeId } = await params;
 
   const ownership = await ensureEventOwnership(session.user.id, eventId);
   if (!ownership.ok) return ownership.res;
 
-  const doc = await TicketType.findOne({
-    _id: ticketTypeId,
+  const promo = await PromoCode.findOne({
+    _id: promoCodeId,
     eventId,
   })
     .lean()
     .exec();
 
-  if (!doc) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!promo) {
+    return NextResponse.json(
+      { error: "Promo code not found" },
+      { status: 404 }
+    );
   }
 
-  return NextResponse.json(doc);
+  return NextResponse.json(promo);
 }
 
 /* ------------------------------ PATCH ------------------------------ */
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; ticketTypeId: string }> }
+  { params }: { params: Promise<{ id: string; promoCodeId: string }> }
 ) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id: eventId, ticketTypeId } = await params;
+  const { id: eventId, promoCodeId } = await params;
 
   const ownership = await ensureEventOwnership(session.user.id, eventId);
   if (!ownership.ok) return ownership.res;
@@ -86,66 +90,63 @@ export async function PATCH(
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
 
-  const {
-    salesStartAt,
-    salesEndAt,
-    totalQuantity,
-    minPerOrder,
-    maxPerOrder,
-    ...rest
-  } = parsed.data;
+  const { validFrom, validUntil, applicableTicketTypeIds, ...rest } =
+    parsed.data;
 
   const update: Record<string, unknown> = { ...rest };
 
-  if (salesStartAt !== undefined) {
-    update.salesStartAt = salesStartAt ? new Date(salesStartAt) : null;
+  if (validFrom !== undefined) {
+    update.validFrom = validFrom ? new Date(validFrom) : null;
   }
-  if (salesEndAt !== undefined) {
-    update.salesEndAt = salesEndAt ? new Date(salesEndAt) : null;
+  if (validUntil !== undefined) {
+    update.validUntil = validUntil ? new Date(validUntil) : null;
   }
-  if (totalQuantity !== undefined) {
-    update.totalQuantity = totalQuantity ?? null;
-  }
-  if (minPerOrder !== undefined) {
-    update.minPerOrder = minPerOrder ?? null;
-  }
-  if (maxPerOrder !== undefined) {
-    update.maxPerOrder = maxPerOrder ?? null;
+  if (applicableTicketTypeIds !== undefined) {
+    update.applicableTicketTypeIds = (applicableTicketTypeIds || []).map(
+      (id) => new Types.ObjectId(id)
+    );
   }
 
-  const doc = await TicketType.findOneAndUpdate(
-    { _id: ticketTypeId, eventId },
+  if (typeof update.code === "string") {
+    update.code = update.code.trim().toUpperCase();
+  }
+
+  const promo = await PromoCode.findOneAndUpdate(
+    { _id: promoCodeId, eventId },
     update,
     { new: true }
   )
     .lean()
     .exec();
 
-  if (!doc) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!promo) {
+    return NextResponse.json(
+      { error: "Promo code not found" },
+      { status: 404 }
+    );
   }
 
-  return NextResponse.json(doc);
+  return NextResponse.json(promo);
 }
 
 /* ------------------------------ DELETE ------------------------------ */
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; ticketTypeId: string }> }
+  { params }: { params: Promise<{ id: string; promoCodeId: string }> }
 ) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id: eventId, ticketTypeId } = await params;
+  const { id: eventId, promoCodeId } = await params;
 
   const ownership = await ensureEventOwnership(session.user.id, eventId);
   if (!ownership.ok) return ownership.res;
 
-  await TicketType.deleteOne({
-    _id: ticketTypeId,
+  await PromoCode.deleteOne({
+    _id: promoCodeId,
     eventId,
   }).exec();
 

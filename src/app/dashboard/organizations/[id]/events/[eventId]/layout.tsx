@@ -1,6 +1,7 @@
+// src/app/dashboard/organizations/[id]/events/[eventId]/layout.tsx
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactNode, ComponentType, SVGProps } from "react";
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
@@ -12,6 +13,12 @@ import {
   ExternalLink,
   Users,
   Copy,
+  LayoutDashboard,
+  Ticket,
+  Percent,
+  UserPlus,
+  Edit3,
+  Settings,
 } from "lucide-react";
 
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
@@ -20,17 +27,32 @@ type EventLayoutProps = {
   children: ReactNode;
 };
 
-const EVENT_TABS = [
-  { id: "summary", label: "Summary" },
-  { id: "ticket-types", label: "Ticket Types" },
-  { id: "promo-codes", label: "Promo Codes" },
-  { id: "guests", label: "Guests" },
-  { id: "team", label: "Team" },
-  { id: "edit", label: "Edit" },
-  { id: "settings", label: "Settings" },
-] as const;
+type EventTabId =
+  | "summary"
+  | "ticket-types"
+  | "promo-codes"
+  | "guests"
+  | "team"
+  | "edit"
+  | "settings";
 
-type EventTabId = (typeof EVENT_TABS)[number]["id"];
+type EventTabIcon = ComponentType<SVGProps<SVGSVGElement>>;
+
+type EventTab = {
+  id: EventTabId;
+  label: string;
+  Icon: EventTabIcon;
+};
+
+const EVENT_TABS: EventTab[] = [
+  { id: "summary", label: "Summary", Icon: LayoutDashboard },
+  { id: "ticket-types", label: "Ticket Types", Icon: Ticket },
+  { id: "promo-codes", label: "Promo Codes", Icon: Percent },
+  { id: "guests", label: "Guests", Icon: Users },
+  { id: "team", label: "Team", Icon: UserPlus },
+  { id: "edit", label: "Edit", Icon: Edit3 },
+  { id: "settings", label: "Settings", Icon: Settings },
+];
 
 function formatDateTime(value?: string) {
   if (!value) return "Date not set";
@@ -98,29 +120,29 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
         {/* Top header */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-3">
-            <div className="flex items-center gap-3 text-xs text-neutral-400">
+            <div className="flex items-center gap-3  text-neutral-400">
               {orgId && (
                 <Link
                   href={`/dashboard/organizations/${orgId}/events`}
                   prefetch
-                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-neutral-950/80 px-3 py-1.5 text-[11px] text-neutral-300 hover:border-primary-500 hover:text-primary-200"
+                  className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-neutral-950/80 px-3 py-1.5  text-neutral-300 hover:border-primary-500 hover:text-primary-200"
                 >
                   <ArrowLeft className="h-3 w-3" />
                   <span>Back to events</span>
                 </Link>
               )}
               {event?.organization?.name && (
-                <span className="text-[11px] text-neutral-500">
+                <span className=" text-neutral-500">
                   {event.organization.name}
                 </span>
               )}
             </div>
 
-            <div className="space-y-2">
-              <h1 className="text-xl font-semibold tracking-tight text-neutral-0">
+            <div className="space-y-2 mt-8">
+              <h1 className="text-2xl font-semibold tracking-tight text-neutral-0">
                 {isLoading ? "Loading event…" : (event?.title ?? "Event")}
               </h1>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+              <div className="flex flex-wrap items-center gap-2  text-neutral-400">
                 <div className="inline-flex items-center gap-1">
                   <CalendarDays className="h-3.5 w-3.5 text-neutral-500" />
                   <span>
@@ -130,7 +152,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
                 <span
                   className={clsx(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+                    "inline-flex items-center rounded-full px-2 py-0.5  font-medium",
                     statusClasses
                   )}
                 >
@@ -138,7 +160,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                   {statusLabel}
                 </span>
 
-                <span className="inline-flex items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5 text-[11px] text-neutral-300">
+                <span className="inline-flex items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5  text-neutral-300">
                   <Users className="h-3 w-3" />
                   <span>
                     {(event?.attendingCount ?? 0).toLocaleString()}{" "}
@@ -155,7 +177,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
             <button
               type="button"
               onClick={handleCopyPublicLink}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950/80 px-4 py-2 text-xs font-medium text-neutral-200 hover:border-primary-500 hover:text-primary-200"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950/80 px-4 py-2  font-medium text-neutral-200 hover:border-primary-500 hover:text-primary-200"
             >
               <Copy className="h-3.5 w-3.5" />
               <span>{copied ? "Link copied" : "Copy public link"}</span>
@@ -166,7 +188,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                 href={`/events/${eventId}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-600 px-4 py-2 text-xs font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.10)] hover:bg-primary-500"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary-600 px-4 py-2  font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.10)] hover:bg-primary-500"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 <span>View public page</span>
@@ -176,12 +198,13 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
         </div>
 
         {/* Tab bar – bigger + nicer */}
-        <div className="mb-6 overflow-x-auto">
-          <div className="inline-flex min-w-max gap-2 rounded-2xl bg-neutral-950/90 px-2 py-2 ring-1 ring-white/10 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
+        <div className="mb-8 overflow-x-auto mt-12">
+          <div className="inline-flex min-w-max gap-2 rounded-full bg-neutral-950/70 p-1 border border-white/10 ">
             {EVENT_TABS.map((tab) => {
               const href =
                 basePath && orgId && eventId ? `${basePath}/${tab.id}` : "#";
               const isActive = activeTab === tab.id;
+              const Icon = tab.Icon;
 
               return (
                 <Link
@@ -190,12 +213,13 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                   prefetch
                   scroll={false}
                   className={clsx(
-                    "inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[13px] font-medium leading-none transition-colors",
+                    "relative flex items-center gap-3 rounded-full px-6 py-3 text-sm outline-none transition-colors",
                     isActive
-                      ? "bg-primary-600 text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+                      ? "bg-primary-951/16 text-neutral-0"
                       : "text-neutral-300 hover:text-neutral-0 hover:bg-neutral-900/80"
                   )}
                 >
+                  <Icon className="h-5 w-5" />
                   <span>{tab.label}</span>
                 </Link>
               );

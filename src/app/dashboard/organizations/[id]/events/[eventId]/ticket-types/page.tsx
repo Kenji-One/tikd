@@ -119,10 +119,12 @@ function TicketTypeWizard({
   const feeMode = watch("feeMode");
   const name = watch("name");
   const unlimitedQuantity = watch("unlimitedQuantity");
+  const totalQuantity = watch("totalQuantity");
   const minPerOrder = watch("minPerOrder");
   const maxPerOrder = watch("maxPerOrder");
   const availabilityStatus = watch("availabilityStatus");
   const accessMode = watch("accessMode");
+  const salesEndAt = watch("salesEndAt");
   const qrSize = watch("qrSize");
   const qrBorderRadius = watch("qrBorderRadius");
   const footerText = watch("footerText");
@@ -371,7 +373,7 @@ function TicketTypeWizard({
               >
                 <div
                   className={clsx(
-                    "flex h-9 w-9 items-center justify-center rounded-full border text-xs transition-all duration-200",
+                    "flex h-9 w-9 items-center justify-center rounded-full border  transition-all duration-200",
                     isActive
                       ? "border-transparent bg-primary-600 shadow-[0_0_28px_rgba(133,0,255,0.65)]"
                       : isCompleted
@@ -392,7 +394,7 @@ function TicketTypeWizard({
                 </div>
                 <span
                   className={clsx(
-                    "text-[11px] font-medium tracking-[0.01em]",
+                    " font-medium tracking-[0.01em]",
                     isActive
                       ? "text-neutral-0"
                       : isCompleted
@@ -452,10 +454,12 @@ function TicketTypeWizard({
             register={register}
             setValue={setValue}
             unlimitedQuantity={!!unlimitedQuantity}
+            totalQuantity={totalQuantity}
             minPerOrder={minPerOrder}
             maxPerOrder={maxPerOrder}
             availabilityStatus={availabilityStatus as TicketAvailabilityStatus}
             accessMode={accessMode as TicketTypeFormValues["accessMode"]}
+            salesEndAt={salesEndAt}
             onPrev={goPrev}
             onNext={goNext}
           />
@@ -557,9 +561,7 @@ export default function TicketTypesPage() {
 
   if (!eventId) {
     return (
-      <div className="text-xs text-error-400">
-        Missing event id in route params.
-      </div>
+      <div className=" text-error-400">Missing event id in route params.</div>
     );
   }
 
@@ -567,15 +569,17 @@ export default function TicketTypesPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-neutral-0">Ticket types</h2>
-          <p className="mt-1 text-xs text-neutral-400">
+          <h2 className="text-2xl font-semibold text-neutral-0">
+            Ticket types
+          </h2>
+          <p className="mt-1  text-neutral-500">
             Configure pricing, capacity and status for each ticket.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setMode("create")}
-          className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2 text-xs font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.10)] hover:bg-primary-500"
+          className="inline-flex items-center gap-2 rounded-full bg-neutral-0 px-4 py-2 font-medium text-neutral-950 hover:bg-primary-400"
         >
           <Plus className="h-4 w-4" />
           <span>New ticket type</span>
@@ -592,29 +596,29 @@ export default function TicketTypesPage() {
             placeholder="Search tickets…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-full border border-white/10 bg-neutral-950 px-9 py-2 text-xs text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="w-full rounded-full border border-white/10 bg-neutral-950 px-9 py-2  text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
-        <p className="text-[11px] text-neutral-400">
+        <p className=" text-neutral-400">
           {filtered?.length ?? 0} ticket type
           {filtered && filtered.length === 1 ? "" : "s"}
         </p>
       </div>
 
       {isLoading && (
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-6 py-8 text-center text-xs text-neutral-300">
+        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-6 py-8 text-center  text-neutral-300">
           Loading ticket types…
         </div>
       )}
 
       {isError && !isLoading && (
-        <div className="rounded-card border border-error-600/40 bg-error-950/60 px-6 py-8 text-center text-xs text-error-200">
+        <div className="rounded-card border border-error-600/40 bg-error-950/60 px-6 py-8 text-center  text-error-200">
           Failed to load ticket types. Please refresh the page.
         </div>
       )}
 
       {!isLoading && !isError && (filtered?.length ?? 0) === 0 ? (
-        <div className="rounded-card border border-dashed border-white/10 bg-neutral-950/80 px-6 py-10 text-center text-sm text-neutral-300">
+        <div className="rounded-card border border-dashed border-white/10 bg-neutral-950/80 px-6 py-10 text-center text-neutral-300">
           No ticket types yet. Start by creating a ticket above.
         </div>
       ) : null}
@@ -624,25 +628,25 @@ export default function TicketTypesPage() {
           {filtered.map((t) => (
             <div
               key={t.id}
-              className="flex items-center justify-between gap-4 rounded-card border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]"
+              className="flex items-center justify-between gap-4 rounded-lg border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-900/70 text-primary-200">
-                  <Ticket className="h-4 w-4" />
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#9A51FF29] text-primary-999">
+                  <Ticket className="h-5 w-5" />
                 </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-neutral-0">
+                <div className="min-w-0 space-y-1.5">
+                  <p className="truncate font-medium text-neutral-0">
                     {t.name}
                   </p>
-                  <p className="mt-0.5 truncate text-[11px] text-neutral-400">
+                  <p className="mt-0.5 truncate  text-neutral-400">
                     {t.description}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-6 text-xs text-neutral-200">
+              <div className="flex flex-wrap items-center gap-6  text-neutral-200">
                 <div className="text-right">
-                  <p className="text-[11px] text-neutral-500">Price</p>
+                  <p className=" text-neutral-500">Price</p>
                   <p className="font-medium">
                     {t.price === 0
                       ? "Free"
@@ -650,17 +654,17 @@ export default function TicketTypesPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] text-neutral-500">Sold</p>
+                  <p className=" text-neutral-500">Sold</p>
                   <p className="font-medium">
                     {t.sold}
                     {t.capacity != null ? `/${t.capacity}` : ""}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] text-neutral-500">Status</p>
+                  <p className=" text-neutral-500">Status</p>
                   <span
                     className={clsx(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
+                      "inline-flex items-center rounded-full px-2 py-0.5  font-medium capitalize",
                       t.status === "on_sale"
                         ? "border border-success-700/40 bg-success-900/40 text-success-300"
                         : t.status === "sale_ended"

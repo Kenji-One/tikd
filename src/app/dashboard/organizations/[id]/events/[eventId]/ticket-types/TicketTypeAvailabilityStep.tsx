@@ -3,7 +3,7 @@
 
 import type { TicketTypeFormValues, TicketAvailabilityStatus } from "./types";
 import type { UseFormRegister, UseFormSetValue } from "react-hook-form";
-import type { ReactNode } from "react";
+import { useState, useRef, type ReactNode } from "react";
 
 import clsx from "clsx";
 import { Lock } from "lucide-react";
@@ -18,6 +18,7 @@ type Props = {
   maxPerOrder: number | null;
   availabilityStatus: TicketAvailabilityStatus;
   accessMode: TicketTypeFormValues["accessMode"];
+  salesEndAt: string | null;
   onPrev: () => void;
   onNext: () => void;
 };
@@ -80,12 +81,12 @@ function QuantityPill({
 }: QuantityPillProps) {
   return (
     <div className="space-y-2">
-      <p className="font-medium capitalize text-neutral-0 text-center">
+      <p className="text-center font-medium capitalize text-neutral-0">
         {label}
       </p>
 
       <div className={quantityShellClasses}>
-        <div className="flex items-center gap-2 justify-between w-full">
+        <div className="flex w-full items-center justify-between gap-2">
           {/* MINUS */}
           <button
             type="button"
@@ -123,8 +124,103 @@ function QuantityPill({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Status dropdown (Current Status pill)                             */
+/* ------------------------------------------------------------------ */
+
+type StatusDropdownProps = {
+  value: TicketAvailabilityStatus;
+  onChange: (value: TicketAvailabilityStatus) => void;
+};
+
+function StatusDropdown({ value, onChange }: StatusDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const active =
+    STATUS_OPTIONS.find((opt) => opt.value === value) ?? STATUS_OPTIONS[0];
+
+  return (
+    <div className="relative inline-block text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex min-w-[122px] items-center justify-between rounded-lg border border-primary-400/70 bg-neutral-900 px-4 py-2 font-medium text-neutral-0 hover:border-primary-300"
+      >
+        <span>{active.label}</span>
+        <span className="text-[11px] text-neutral-400">▾</span>
+      </button>
+
+      {open && (
+        <div className="absolute left-1/2 z-30 mt-2 w-32 -translate-x-1/2 rounded-xl border border-neutral-800 bg-neutral-950/95 overflow-hidden backdrop-blur-sm">
+          <div className="max-h-64 overflow-y-auto overflow-x-hidden">
+            {STATUS_OPTIONS.map((option) => {
+              const isSelected = option.value === value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={clsx(
+                    "flex w-full items-center px-4 py-2 text-left transition-colors",
+                    isSelected
+                      ? "bg-neutral-800 text-neutral-0 font-semibold"
+                      : "text-neutral-200 hover:bg-neutral-800/80"
+                  )}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helper for schedule heading                                       */
+/* ------------------------------------------------------------------ */
+
+function formatScheduleHeading(raw: string | null | undefined): string {
+  if (!raw) return "Scheduled change";
+
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) return "Scheduled change";
+
+  const now = new Date();
+
+  const isSameDay = dt.toDateString() === now.toDateString();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const isTomorrow = dt.toDateString() === tomorrow.toDateString();
+
+  const time = dt.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  if (isSameDay) return `Later today at ${time}`;
+  if (isTomorrow) return `Tomorrow at ${time}`;
+
+  const date = dt.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return `${date} at ${time}`;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main component                                                    */
 /* ------------------------------------------------------------------ */
+
+type PickerCapableInput = HTMLInputElement & {
+  showPicker?: () => void;
+};
 
 export default function TicketTypeAvailabilityStep({
   register,
@@ -135,21 +231,28 @@ export default function TicketTypeAvailabilityStep({
   maxPerOrder,
   availabilityStatus,
   accessMode,
+  salesEndAt,
   onPrev,
   onNext,
 }: Props) {
-  const currentStatus = STATUS_OPTIONS.find(
-    (s) => s.value === availabilityStatus
-  );
-
   const isPasswordProtected = accessMode === "password";
 
   const hasNoMinimum = minPerOrder == null;
   const isMaxUnlimited = maxPerOrder == null;
 
+  const currentStatusMeta =
+    STATUS_OPTIONS.find((s) => s.value === availabilityStatus) ??
+    STATUS_OPTIONS[0];
+
+  const hasSchedule = !!salesEndAt;
+
+  // hidden datetime-local input (for RHF) + ref so "Edit date" can open it
+  const scheduleInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { ref: salesEndAtRef, ...salesEndAtField } = register("salesEndAt");
+
   /* ---------- keep numeric fields registered (hidden) ---------- */
 
-  // These stay in sync via setValue; we don't show real inputs in the pills.
   const hiddenNumericInputs = (
     <>
       <input
@@ -207,8 +310,9 @@ export default function TicketTypeAvailabilityStep({
       <p className="leading-snug text-neutral-300">
         Set a total number of tickets for this ticket type.
       </p>
+
+      {/* Quantities */}
       <div className="space-y-2">
-        {/* Quantities row – fits modal: 1 col → 2 cols (md) → 3 cols (xl) */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {/* Total tickets */}
           <QuantityPill
@@ -221,11 +325,10 @@ export default function TicketTypeAvailabilityStep({
 
               const current = totalQuantity ?? 1;
               if (current <= 1) {
-                // Go back to Unlimited
                 setValue("unlimitedQuantity", true, { shouldDirty: true });
-                setValue("totalQuantity", null as any, { shouldDirty: true });
+                setValue("totalQuantity", null, { shouldDirty: true });
               } else {
-                setValue("totalQuantity", (current - 1) as any, {
+                setValue("totalQuantity", current - 1, {
                   shouldDirty: true,
                 });
               }
@@ -233,12 +336,11 @@ export default function TicketTypeAvailabilityStep({
             plusAriaLabel="Increase total tickets"
             onPlus={() => {
               if (unlimitedQuantity) {
-                // From Unlimited -> start at 1
                 setValue("unlimitedQuantity", false, { shouldDirty: true });
-                setValue("totalQuantity", 1 as any, { shouldDirty: true });
+                setValue("totalQuantity", 1, { shouldDirty: true });
               } else {
                 const current = totalQuantity ?? 0;
-                setValue("totalQuantity", (current + 1) as any, {
+                setValue("totalQuantity", current + 1, {
                   shouldDirty: true,
                 });
               }
@@ -256,10 +358,9 @@ export default function TicketTypeAvailabilityStep({
 
               const current = minPerOrder ?? 1;
               if (current <= 1) {
-                // Back to Unlimited / no minimum
                 setValue("minPerOrder", null, { shouldDirty: true });
               } else {
-                setValue("minPerOrder", (current - 1) as any, {
+                setValue("minPerOrder", current - 1, {
                   shouldDirty: true,
                 });
               }
@@ -267,11 +368,10 @@ export default function TicketTypeAvailabilityStep({
             plusAriaLabel="Increase minimum tickets per order"
             onPlus={() => {
               if (hasNoMinimum) {
-                // From Unlimited -> start at 1
-                setValue("minPerOrder", 1 as any, { shouldDirty: true });
+                setValue("minPerOrder", 1, { shouldDirty: true });
               } else {
                 const current = minPerOrder ?? 0;
-                setValue("minPerOrder", (current + 1) as any, {
+                setValue("minPerOrder", current + 1, {
                   shouldDirty: true,
                 });
               }
@@ -289,10 +389,9 @@ export default function TicketTypeAvailabilityStep({
 
               const current = maxPerOrder ?? 1;
               if (current <= 1) {
-                // Back to Unlimited / no max
                 setValue("maxPerOrder", null, { shouldDirty: true });
               } else {
-                setValue("maxPerOrder", (current - 1) as any, {
+                setValue("maxPerOrder", current - 1, {
                   shouldDirty: true,
                 });
               }
@@ -300,11 +399,10 @@ export default function TicketTypeAvailabilityStep({
             plusAriaLabel="Increase maximum tickets per order"
             onPlus={() => {
               if (isMaxUnlimited) {
-                // From Unlimited -> start at 10 (default cap)
-                setValue("maxPerOrder", 10 as any, { shouldDirty: true });
+                setValue("maxPerOrder", 10, { shouldDirty: true });
               } else {
                 const current = maxPerOrder ?? 0;
-                setValue("maxPerOrder", (current + 1) as any, {
+                setValue("maxPerOrder", current + 1, {
                   shouldDirty: true,
                 });
               }
@@ -323,7 +421,7 @@ export default function TicketTypeAvailabilityStep({
       <div className="space-y-4">
         <h3 className="text-[15px] font-semibold text-neutral-0">Passwords</h3>
         <p className="max-w-2xl text-[13px] leading-relaxed text-neutral-300">
-          If you would like to protect this ticket type with a password, Check
+          If you would like to protect this ticket type with a password, check
           the mark and create a password. There will be a place on your event
           page for your customers to enter the password. Share the password link
           directly to send your event page with the ticket type already
@@ -346,7 +444,7 @@ export default function TicketTypeAvailabilityStep({
               }
             }}
             className={clsx(
-              "flex w-full items-center justify-between rounded-full border px-5 py-3 transition-colors sm:max-w-md cursor-pointer",
+              "flex w-full items-center justify-between rounded-full border px-5 py-3 text-[14px] transition-colors sm:max-w-md cursor-pointer",
               isPasswordProtected
                 ? "border-primary-500 bg-primary-950/60 text-neutral-0 shadow-[0_0_0_1px_rgba(154,70,255,0.6)]"
                 : "border-neutral-700 bg-neutral-900 text-neutral-100 hover:border-primary-500/70"
@@ -402,71 +500,131 @@ export default function TicketTypeAvailabilityStep({
         </div>
       </div>
 
-      {/* Status & schedule */}
-      <div className="space-y-3">
+      {/* Availability timeline (Status & schedule) */}
+      <div className="space-y-4">
         <div className="space-y-1">
-          <h3 className="font-medium text-neutral-0">Status &amp; schedule</h3>
-          <p className="leading-snug text-neutral-400">
-            Choose how this ticket is currently displayed on your event page.
+          <h3 className="text-lg font-semibold text-neutral-0">
+            Availability Timeline
+          </h3>
+          <p className="leading-snug text-neutral-500">
+            Change the availability status of your ticket as it is displayed on
+            the event page. You can also add a time when you’d like the ticket
+            availability to change.
           </p>
-          {currentStatus && (
-            <p className="text-[12px] text-neutral-500">
-              Current status:{" "}
-              <span className="font-medium text-neutral-0">
-                {currentStatus.label}
-              </span>
-            </p>
-          )}
+          <p className="mt-3 text-neutral-300">
+            Current status:{" "}
+            <span className="font-medium text-neutral-0">
+              {currentStatusMeta.label}
+            </span>
+          </p>
         </div>
 
-        {/* Keep the field registered for React Hook Form */}
-        <input type="hidden" {...register("availabilityStatus")} />
+        {/* Hidden datetime-local registered for salesEndAt */}
+        <input
+          type="datetime-local"
+          className="sr-only"
+          {...salesEndAtField}
+          ref={(el) => {
+            salesEndAtRef(el);
+            scheduleInputRef.current = el;
+          }}
+        />
 
-        <div className="grid gap-3 sm:grid-cols-4">
-          {STATUS_OPTIONS.map((option) => {
-            const isActive = option.value === availabilityStatus;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() =>
-                  setValue("availabilityStatus", option.value, {
-                    shouldDirty: true,
-                  })
-                }
-                className={clsx(
-                  "flex h-full flex-col items-start rounded-lg border p-3 text-left transition-colors",
-                  isActive
-                    ? "border-primary-500 bg-primary-950"
-                    : "border-neutral-800 bg-neutral-900 hover:border-primary-500/70"
-                )}
-              >
-                <span className="font-medium text-neutral-0">
-                  {option.label}
-                </span>
-                <span className="mt-1 text-xs] leading-snug text-neutral-500">
-                  {option.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="pt-2 sm:max-w-xs">
-          <div className="space-y-1">
-            <label className="block text-[11px] text-neutral-200">
-              Stop selling at (optional)
-            </label>
-            <input
-              {...register("salesEndAt")}
-              type="datetime-local"
-              className="w-full rounded-full border border-neutral-800 bg-neutral-900 px-4 py-3 text-[13px] text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
-            />
-            <p className="mt-1 text-[11px] text-neutral-500">
-              Leave empty if the ticket should stay on this status until you
-              change it manually.
-            </p>
+        <div className="relative mx-auto flex max-w-[227px] flex-col items-stretch gap-6 mt-8">
+          {/* vertical line */}
+          <div className="pointer-events-none absolute left-1/2 top-[92px] bottom-[92px] -z-10 -translate-x-1/2">
+            <div className="mx-auto h-full w-[2px] bg-gradient-to-b from-primary-500/60 via-primary-500/20 to-primary-500/0" />
           </div>
+
+          {/* Current status card */}
+          <div className="rounded-xl border border-primary-500/70 bg-neutral-950/70 px-6 py-5 shadow-[0_0_0_1px_rgba(88,28,135,0.4)]">
+            <p className="text-center text-[14px] font-semibold text-neutral-0">
+              Current Status
+            </p>
+            <div className="mt-4 flex justify-center">
+              <StatusDropdown
+                value={availabilityStatus}
+                onChange={(next) =>
+                  setValue("availabilityStatus", next, { shouldDirty: true })
+                }
+              />
+            </div>
+          </div>
+
+          {/* Plus button */}
+          <div className="flex justify-center">
+            <button
+              type="button"
+              disabled={hasSchedule}
+              onClick={() => {
+                if (hasSchedule) return;
+                const base = new Date();
+                base.setHours(base.getHours() + 1);
+                const local = new Date(
+                  base.getTime() - base.getTimezoneOffset() * 60000
+                )
+                  .toISOString()
+                  .slice(0, 16);
+
+                setValue("salesEndAt", local, { shouldDirty: true });
+              }}
+              className={clsx(
+                "flex h-9 w-9 items-center justify-center rounded-full bg-primary-500 text-[20px] font-semibold text-white shadow-[0_0_0_4px_rgba(88,28,135,0.5)] transition-transform",
+                hasSchedule && "cursor-not-allowed opacity-35 shadow-none"
+              )}
+            >
+              +
+            </button>
+          </div>
+
+          {/* Scheduled change card (single, mapped to salesEndAt) */}
+          {hasSchedule && (
+            <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-6 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]">
+              <p className="text-center text-[14px] font-semibold text-neutral-0">
+                {formatScheduleHeading(salesEndAt)}
+              </p>
+              <p className="mt-1 text-center text-[12px] text-neutral-400">
+                status will change to:
+              </p>
+
+              <div className="mt-4 flex justify-center">
+                <div className="flex min-w-[122px] items-center justify-between rounded-lg border border-primary-400/70 bg-neutral-900 px-4 py-2 font-medium text-neutral-0 hover:border-primary-300">
+                  Sale ended
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = scheduleInputRef.current;
+                    if (!input) return;
+
+                    const pickerInput: PickerCapableInput = input;
+                    if (typeof pickerInput.showPicker === "function") {
+                      pickerInput.showPicker();
+                    } else {
+                      input.focus();
+                      input.click();
+                    }
+                  }}
+                  className="flex items-center gap-2 rounded-full border border-primary-500/70 bg-neutral-900 px-4 py-2 text-[13px] font-medium text-neutral-0 hover:bg-neutral-800"
+                >
+                  Edit date
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setValue("salesEndAt", null, { shouldDirty: true })
+                  }
+                  className="flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900 px-4 py-2 text-[13px] text-neutral-200 hover:border-red-500 hover:text-red-300"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

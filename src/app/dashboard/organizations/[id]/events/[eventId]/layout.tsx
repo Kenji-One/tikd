@@ -1,4 +1,3 @@
-// src/app/dashboard/organizations/[id]/events/[eventId]/layout.tsx
 "use client";
 
 import type { ReactNode, ComponentType, SVGProps } from "react";

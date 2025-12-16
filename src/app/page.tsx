@@ -234,7 +234,7 @@ const heroEllipseBase: CSSProperties = {
 
 function FeatureTag() {
   return (
-    <span className="inline-flex h-8 items-center rounded-lg bg-primary-800/70 px-4 text-[13px] font-medium text-primary-200 ring-1 ring-white/5">
+    <span className="inline-flex h-7 items-center rounded-sm bg-primary-800/70 px-4 text-[14px] font-medium text-primary-200 ring-1 ring-white/5">
       Features
     </span>
   );
@@ -242,7 +242,7 @@ function FeatureTag() {
 
 type FeatureCardProps = {
   title: string; // use \n for line breaks
-  size: "lg" | "sm";
+  size: "lg" | "md" | "sm";
   className?: string;
   children?: React.ReactNode;
 };
@@ -251,11 +251,11 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
   return (
     <div
       className={clsx(
-        "relative overflow-hidden rounded-[26px] border border-white/5",
+        "relative overflow-hidden rounded-2xl border border-white/5",
         // Figma-ish “deep navy card”
         "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.00))] bg-neutral-948",
-        "shadow-[0_30px_80px_-60px_rgba(0,0,0,.9)]",
-        size === "lg" ? "min-h-[340px] sm:min-h-[380px]" : "min-h-[280px]",
+        "shadow-[0_30px_80px_-60px_rgba(0,0,0,.9)] min-h-[280px] sm:min-h-[321px]",
+
         className
       )}
     >
@@ -269,20 +269,15 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
         }}
       />
 
-      <div
-        className={clsx(
-          "relative z-10",
-          size === "lg" ? "p-8 sm:p-10" : "p-7 sm:p-8"
-        )}
-      >
+      <div className={"relative z-10 pt-8 pl-8 w-full"}>
         <FeatureTag />
 
         <h3
           className={clsx(
-            "mt-5 whitespace-pre-line font-black italic uppercase tracking-tight text-white",
-            size === "lg"
-              ? "text-[34px] leading-[0.95] sm:text-[42px]"
-              : "text-[26px] leading-[1.0] sm:text-[30px]"
+            "mt-4 whitespace-pre-line font-black italic uppercase text-white leading-[90%]",
+            size === "lg" || size === "md"
+              ? "text-[32px] tracking-[-0.64px] "
+              : "text-[24px] tracking-[-0.48px]"
           )}
         >
           {title}
@@ -300,36 +295,24 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
 
 function MediaLaptopPlaceholder() {
   return (
-    <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[58%] items-end justify-end pr-6 pb-6">
-      <div className="relative w-full max-w-[520px]">
-        <div className="relative aspect-[16/10] w-full">
-          <Image
-            src="/landing/features/feature-control.png"
-            alt=""
-            fill
-            sizes="(min-width:1024px) 520px, 70vw"
-            className="object-contain"
-          />
-        </div>
-      </div>
+    <div className="pointer-events-none flex items-end justify-end w-[397px] h-[98%] absolute bottom-0 right-0">
+      <img
+        src="/landing/features/feature-control.png"
+        alt=""
+        className="object-cover w-full h-full"
+      />
     </div>
   );
 }
 
 function MediaEventSetupPlaceholder() {
   return (
-    <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[56%] items-center justify-end pr-7">
-      <div className="relative w-full max-w-[520px]">
-        <div className="relative aspect-[16/10] w-full">
-          <Image
-            src="/landing/features/feature-event-setup.png"
-            alt=""
-            fill
-            sizes="(min-width:1024px) 520px, 70vw"
-            className="object-contain"
-          />
-        </div>
-      </div>
+    <div className="pointer-events-none flex items-end justify-end w-[290px] h-[90%] absolute bottom-0 right-0">
+      <img
+        src="/landing/features/feature-event-setup.png"
+        alt=""
+        className="w-full h-full"
+      />
     </div>
   );
 }
@@ -342,41 +325,34 @@ function MediaWideScreenshotPlaceholder({
   align?: "center" | "right";
 }) {
   return (
-    <div
-      className={clsx(
-        "pointer-events-none absolute inset-x-0 bottom-0 pb-6",
-        align === "center" ? "flex justify-center" : "flex justify-end pr-6"
-      )}
-    >
-      <div className="relative w-[86%] max-w-[560px]">
-        <div className="relative aspect-[16/9] w-full">
-          <Image
-            src={src}
-            alt=""
-            fill
-            sizes="(min-width:1024px) 560px, 90vw"
-            className="object-contain"
-          />
-        </div>
-      </div>
+    <div className="pointer-events-none flex items-end justify-end w-full h-[90%] absolute bottom-0 right-0 pl-8">
+      <img src={src} alt="" className="w-full h-auto" />
+    </div>
+  );
+}
+
+function HelpCenterPagePlaceholder({
+  src,
+  align = "center",
+}: {
+  src: string;
+  align?: "center" | "right";
+}) {
+  return (
+    <div className="pointer-events-none flex items-end justify-end w-full h-[72%] absolute bottom-0 right-0 pl-8">
+      <img src={src} alt="" className="w-auto h-full" />
     </div>
   );
 }
 
 function MediaMegaphonePlaceholder() {
   return (
-    <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[58%] items-end justify-end pr-6 pb-6">
-      <div className="relative w-full max-w-[520px]">
-        <div className="relative aspect-[16/10] w-full">
-          <Image
-            src="/landing/features/feature-promo-marketing.png"
-            alt=""
-            fill
-            sizes="(min-width:1024px) 520px, 70vw"
-            className="object-contain"
-          />
-        </div>
-      </div>
+    <div className="pointer-events-none flex items-end justify-end w-[87%] h-full absolute bottom-0 right-0 pl-8">
+      <img
+        src="/landing/features/feature-promo-marketing.png"
+        alt=""
+        className="w-full h-auto"
+      />
     </div>
   );
 }
@@ -604,9 +580,9 @@ export default function LandingPage() {
       {/* FEATURES (match Figma layout)                                      */}
       {/* ------------------------------------------------------------------ */}
       <section className="mx-auto max-w-[1232px] px-4 pb-16 sm:pb-20">
-        <div className="grid gap-6 lg:gap-7">
+        <div className="grid gap-4">
           {/* Row 1: two big cards */}
-          <div className="grid gap-6 lg:grid-cols-2 lg:gap-7">
+          <div className="grid gap-4 lg:grid-cols-[2.44fr_1.73fr]">
             <FeatureCard size="lg" title={"Control everything\nin one place"}>
               {/* Replace with your real image later:
                   <div className="absolute ... bg-cover" style={{backgroundImage:'url(...)'}} />
@@ -614,14 +590,14 @@ export default function LandingPage() {
               <MediaLaptopPlaceholder />
             </FeatureCard>
 
-            <FeatureCard size="lg" title={"Event page\nset-up"}>
+            <FeatureCard size="md" title={"Event page\nset-up"}>
               {/* Replace with your real collage image later */}
               <MediaEventSetupPlaceholder />
             </FeatureCard>
           </div>
 
           {/* Row 2: three smaller cards */}
-          <div className="grid gap-6 lg:grid-cols-3 lg:gap-7">
+          <div className="grid gap-4 lg:grid-cols-3">
             <FeatureCard size="sm" title={"Ticket creation"}>
               <MediaWideScreenshotPlaceholder
                 src="/landing/features/feature-ticket-creation.png"
@@ -635,7 +611,7 @@ export default function LandingPage() {
             </FeatureCard>
 
             <FeatureCard size="sm" title={"Attendee\nmanagement\n& check-in"}>
-              <MediaWideScreenshotPlaceholder
+              <HelpCenterPagePlaceholder
                 src="/landing/features/feature-attendee-checkin.png"
                 align="right"
               />
@@ -749,15 +725,14 @@ export default function LandingPage() {
       {/* Final CTA                                                          */}
       {/* ------------------------------------------------------------------ */}
       <section className="relative isolate px-8 pb-16 sm:py-[80px]">
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#6600B7] to-[rgba(102,0,183,0.4)] p-10 sm:p-[64px]">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-70"
-            style={{
-              background:
-                "radial-gradient(900px 340px at 70% 60%, rgba(130,46,255,.40), transparent 60%)",
-            }}
-          />
+        <div
+          className="
+    relative overflow-hidden rounded-2xl border border-white/10
+    bg-[url('/landing/gg-frame.png')]
+    bg-cover bg-center bg-no-repeat
+    p-10 sm:p-[64px]
+  "
+        >
           <div className="relative flex flex-col items-center text-center">
             <h3 className="text-5xl font-black italic leading-[0.9] tracking-[-1.04px] sm:text-[64px] max-w-[490px]">
               LET&apos;S GET TO PARTY!

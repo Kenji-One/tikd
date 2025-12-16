@@ -1,88 +1,72 @@
 /* ------------------------------------------------------------------ */
 /*  src/app/page.tsx – public landing page for Tikd.                  */
+/*  Figma: "Tickets Made Easy"                                        */
 /* ------------------------------------------------------------------ */
 "use client";
 
 import Link from "next/link";
-import {
-  Ticket,
-  Users,
-  Sparkles,
-  ShieldCheck,
-  CalendarDays,
-  ArrowRight,
-} from "lucide-react";
+import { useId, useMemo, useState, type CSSProperties } from "react";
+import clsx from "clsx";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import Image from "next/image";
+
 import { Button } from "@/components/ui/Button";
-import { CSSProperties } from "react";
+import EventCarouselSection, {
+  type Event,
+} from "@/components/sections/Landing/EventCarouselSection";
 
 /* ------------------------------------------------------------------ */
-/*  Types & tiny helpers                                               */
+/*  Background (mesh + old grid)                                       */
 /* ------------------------------------------------------------------ */
-interface FeatureItem {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
-}
-
-interface PromoEvent {
-  id: string;
-  title: string;
-  dateLabel: string;
-  venue: string;
-  img: string;
-}
-
-/*  Brand-y gradient mesh used behind hero text  */
-const meshBg: CSSProperties = {
+const pageMesh: CSSProperties = {
   background:
-    "radial-gradient(1200px 600px at 15% 20%, rgba(130, 46, 255, .28), transparent 60%)," +
-    "radial-gradient(900px 500px at 85% 15%, rgba(88, 101, 242, .25), transparent 60%)," +
-    "radial-gradient(700px 500px at 50% 80%, rgba(196, 181, 253, .18), transparent 60%)",
+    "radial-gradient(1100px 640px at 8% 12%, rgba(130, 46, 255, .35), transparent 62%)," +
+    "radial-gradient(1000px 560px at 92% 10%, rgba(130, 46, 255, .28), transparent 62%)," +
+    "radial-gradient(900px 560px at 50% 110%, rgba(196, 181, 253, .16), transparent 60%)",
 };
 
-const features: FeatureItem[] = [
-  {
-    icon: <Ticket className="h-6 w-6 text-primary-400" />,
-    title: "Instant Tickets",
-    text: "Mobile-wallet delivery in seconds with a smooth, secure checkout.",
-  },
-  {
-    icon: <Users className="h-6 w-6 text-primary-400" />,
-    title: "Curated Events",
-    text: "Only the good stuff. Hand-picked gigs, parties & festivals every week.",
-  },
-  {
-    icon: <ShieldCheck className="h-6 w-6 text-primary-400" />,
-    title: "Transparent Pricing",
-    text: "No hidden fees. Clear totals before you pay — always.",
-  },
-  {
-    icon: <Sparkles className="h-6 w-6 text-primary-400" />,
-    title: "Delightful Experience",
-    text: "Fast, accessible UI that feels premium on every device.",
-  },
-];
+const gridOverlayStyle: CSSProperties = {
+  backgroundImage:
+    "linear-gradient(to right, rgba(255,255,255,.65) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.65) 1px, transparent 1px)",
+  backgroundSize: "60px 60px",
+  maskImage: "radial-gradient(1100px 680px at 50% 18%, black, transparent 70%)",
+};
 
-const categories = [
-  "All",
-  "Shows",
-  "Clubs",
-  "Live Music",
-  "Festivals",
-  "Techno",
-  "Hip-Hop",
-  "House",
-  "Comedy",
-  "Theatre",
-];
-
-const promos: PromoEvent[] = [
+/* ------------------------------------------------------------------ */
+/*  Demo data (swap with real API)                                     */
+/* ------------------------------------------------------------------ */
+const trendingEvents: Event[] = [
   {
-    id: "1657675",
-    title: "NYC Highschool Party",
+    id: "24",
+    title: "Senior Rave",
     dateLabel: "May 23, 2025 · 6:00 PM",
     venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
+    img: "/dummy/event-2.png",
+    category: "Trending",
+  },
+  {
+    id: "32",
+    title: "Swim Good Open Air",
+    dateLabel: "May 23, 2025 · 6:00 PM",
+    venue: "Brooklyn, NY",
+    img: "/dummy/event-3.png",
+    category: "Trending",
+  },
+  {
+    id: "4",
+    title: "Summer Kickoff",
+    dateLabel: "May 23, 2025 · 6:00 PM",
+    venue: "Brooklyn, NY",
+    img: "/dummy/event-4.png",
+    category: "Trending",
+  },
+  {
+    id: "5",
+    title: "Evol Saturdays",
+    dateLabel: "May 23, 2025 · 6:00 PM",
+    venue: "Brooklyn, NY",
+    img: "/dummy/event-5.png",
+    category: "Trending",
   },
   {
     id: "1765756",
@@ -90,6 +74,7 @@ const promos: PromoEvent[] = [
     dateLabel: "Jun 02, 2025 · 7:30 PM",
     venue: "Downtown LA",
     img: "/dummy/event-2.png",
+    category: "Trending",
   },
   {
     id: "2453453",
@@ -97,91 +82,379 @@ const promos: PromoEvent[] = [
     dateLabel: "Jun 11, 2025 · 11:00 PM",
     venue: "Berlin, DE",
     img: "/dummy/event-3.png",
+    category: "Trending",
+  },
+  {
+    id: "1657675",
+    title: "NYC Highschool Party",
+    dateLabel: "May 23, 2025 · 6:00 PM",
+    venue: "Brooklyn, NY",
+    img: "/dummy/event-1.png",
+    category: "Trending",
+  },
+  {
+    id: "19867",
+    title: "After Prom RSVP",
+    dateLabel: "May 23, 2025 · 6:00 PM",
+    venue: "Mepham",
+    img: "/dummy/event-4.png",
+    category: "Trending",
+  },
+];
+
+type FaqItem = { q: string; a: string };
+
+const faqItems: FaqItem[] = [
+  {
+    q: "How do tickets work on Tikd?",
+    a: "Buy a ticket, get instant delivery, and scan it at the door. No mystery steps, no weird redirects.",
+  },
+  {
+    q: "Can I refund or transfer tickets?",
+    a: "Policies depend on the organizer. Tikd supports transfers and refunds when the event allows it.",
+  },
+  {
+    q: "Is checkout secure?",
+    a: "Yes — secure payments, clear totals, and a smooth flow designed to minimize drop-offs.",
+  },
+  {
+    q: "How do I host an event on Tikd?",
+    a: "Create an organizer account, set up your event page, publish, and start selling. Tools included for promotion and check-in.",
   },
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Small presentational pieces                                       */
+/*  Small UI blocks                                                    */
 /* ------------------------------------------------------------------ */
-function SectionTitle({
-  kicker,
-  title,
-  sub,
-}: {
-  kicker?: string;
-  title: string;
-  sub?: string;
-}) {
+function SectionKicker({ children }: { children: string }) {
   return (
-    <div className="mx-auto mb-10 max-w-2xl text-center">
-      {kicker ? (
-        <p className="mb-3 text-xs font-medium uppercase tracking-[0.18em] text-neutral-300">
-          {kicker}
-        </p>
-      ) : null}
-      <h2 className="text-balance text-2xl font-semibold md:text-3xl">
-        {title}
-      </h2>
-      {sub ? (
-        <p className="mt-3 text-pretty text-sm text-neutral-300 md:text-base">
-          {sub}
-        </p>
-      ) : null}
+    <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-300">
+      {children}
+    </p>
+  );
+}
+
+function HeroPhones() {
+  return (
+    <div className="relative mx-auto w-full max-w-[560px]">
+      {/* Keep the same aspect as before so layout stays stable */}
+      <div className="relative aspect-[5/4]">
+        <Image
+          src="/landing/hero-phones.png"
+          alt="Tikd app preview"
+          fill
+          priority
+          sizes="(min-width: 1024px) 560px, 92vw"
+          className="select-none object-contain"
+        />
+      </div>
     </div>
   );
 }
 
-function FeatureCard({ icon, title, text }: FeatureItem) {
+function Faq({ items }: { items: FaqItem[] }) {
+  const baseId = useId();
+  const [openIdx, setOpenIdx] = useState<number | null>(0);
+
   return (
-    <article className="rounded-2xl bg-gradient-to-b from-primary-600/20 to-transparent p-[1px]">
-      <div className="group rounded-2xl border border-white/10 bg-neutral-950 p-6 shadow-[0_10px_40px_-10px_rgba(0,0,0,.5)] transition-transform duration-300 hover:-translate-y-0.5">
-        <div className="mb-4 inline-flex rounded-xl bg-primary-900/50 p-2 ring-1 ring-primary-700/40">
-          {icon}
-        </div>
-        <h3 className="mb-2 text-base font-semibold">{title}</h3>
-        <p className="text-sm leading-relaxed text-neutral-300">{text}</p>
+    <div className="mx-auto w-full max-w-[920px]">
+      <h2 className="text-center text-4xl font-black italic leading-[0.9] tracking-[-1.04px] sm:text-[52px]">
+        F.A.Q.
+      </h2>
+
+      <div className="mt-8 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/50">
+        {items.map((it, idx) => {
+          const isOpen = openIdx === idx;
+          const panelId = `${baseId}-panel-${idx}`;
+          const buttonId = `${baseId}-btn-${idx}`;
+
+          return (
+            <div key={it.q} className="px-5 py-4 sm:px-6">
+              <button
+                id={buttonId}
+                type="button"
+                className="flex w-full items-center justify-between gap-4 text-left"
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                onClick={() => setOpenIdx((cur) => (cur === idx ? null : idx))}
+              >
+                <span className="text-base font-medium text-neutral-0 sm:text-lg">
+                  {it.q}
+                </span>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950/60">
+                  {isOpen ? (
+                    <ChevronUp className="h-5 w-5 text-neutral-200" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-neutral-200" />
+                  )}
+                </span>
+              </button>
+
+              <div
+                id={panelId}
+                role="region"
+                aria-labelledby={buttonId}
+                className={clsx(
+                  "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
+                  isOpen
+                    ? "grid-rows-[1fr] opacity-100"
+                    : "grid-rows-[0fr] opacity-0"
+                )}
+              >
+                <div className="overflow-hidden">
+                  <p className="mt-3 text-sm leading-relaxed text-neutral-200 sm:text-base">
+                    {it.a}
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
-    </article>
+    </div>
   );
 }
 
-function CategoryPill({ label }: { label: string }) {
+/* ------------------------------------------------------------------ */
+/*  HERO Ellipses (Figma)                                              */
+/* ------------------------------------------------------------------ */
+const heroEllipseBase: CSSProperties = {
+  width: 251,
+  height: 413,
+  borderRadius: 413,
+  background: "var(--color-primary-500)",
+  filter: "blur(232px)",
+  transform: "rotate(-26.157deg)",
+  opacity: 0.9,
+};
+
+/* ------------------------------------------------------------------ */
+/*  Features (pixel-layout like Figma)                                 */
+/* ------------------------------------------------------------------ */
+
+function FeatureTag() {
   return (
-    <button
-      type="button"
-      className="whitespace-nowrap rounded-full border border-white/10 bg-neutral-950/70 px-4 py-2 text-sm text-neutral-200 transition-colors hover:border-primary-500/40 hover:text-neutral-0"
-      aria-label={`Browse ${label}`}
-    >
-      {label}
-    </button>
+    <span className="inline-flex h-8 items-center rounded-lg bg-primary-800/70 px-4 text-[13px] font-medium text-primary-200 ring-1 ring-white/5">
+      Features
+    </span>
   );
 }
 
-function EventPromoCard({ e }: { e: PromoEvent }) {
+type FeatureCardProps = {
+  title: string; // use \n for line breaks
+  size: "lg" | "sm";
+  className?: string;
+  children?: React.ReactNode;
+};
+
+function FeatureCard({ title, size, className, children }: FeatureCardProps) {
   return (
-    <Link
-      href={`/events/${e.id}`}
-      className="group relative isolate flex min-h-64 items-end overflow-hidden rounded-2xl border border-white/10 bg-neutral-900"
+    <div
+      className={clsx(
+        "relative overflow-hidden rounded-[26px] border border-white/5",
+        // Figma-ish “deep navy card”
+        "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.00))] bg-neutral-948",
+        "shadow-[0_30px_80px_-60px_rgba(0,0,0,.9)]",
+        size === "lg" ? "min-h-[340px] sm:min-h-[380px]" : "min-h-[280px]",
+        className
+      )}
     >
+      {/* soft top glow */}
       <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url(${e.img})` }}
         aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{
+          background:
+            "radial-gradient(900px 380px at 50% -30%, rgba(154,70,255,.22), transparent 60%)",
+        }}
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-neutral-950/90 via-neutral-950/40 to-transparent" />
-      <div className="relative z-10 w-full p-4">
-        <span className="inline-flex items-center gap-2 rounded-full bg-neutral-950/70 px-3 py-1 text-xs text-neutral-300 ring-1 ring-white/10 backdrop-blur">
-          <CalendarDays className="h-4 w-4" />
-          {e.dateLabel}
-        </span>
-        <h3 className="mt-3 line-clamp-2 text-lg font-semibold">{e.title}</h3>
-        <p className="mt-1 text-sm text-neutral-300">{e.venue}</p>
-        <div className="mt-3 inline-flex items-center text-sm text-primary-300">
-          View details{" "}
-          <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+
+      <div
+        className={clsx(
+          "relative z-10",
+          size === "lg" ? "p-8 sm:p-10" : "p-7 sm:p-8"
+        )}
+      >
+        <FeatureTag />
+
+        <h3
+          className={clsx(
+            "mt-5 whitespace-pre-line font-black italic uppercase tracking-tight text-white",
+            size === "lg"
+              ? "text-[34px] leading-[0.95] sm:text-[42px]"
+              : "text-[26px] leading-[1.0] sm:text-[30px]"
+          )}
+        >
+          {title}
+        </h3>
+      </div>
+
+      {/* media/placeholder */}
+      {children}
+    </div>
+  );
+}
+
+/* ------------------- Feature media placeholders (no assets) ------------------- */
+/* Replace any of these blocks later with a single <div style={{backgroundImage:`url(...)`}} /> */
+
+function MediaLaptopPlaceholder() {
+  return (
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[58%] items-end justify-end pr-6 pb-6">
+      <div className="relative w-full max-w-[520px]">
+        <div className="relative aspect-[16/10] w-full">
+          <Image
+            src="/landing/features/feature-control.png"
+            alt=""
+            fill
+            sizes="(min-width:1024px) 520px, 70vw"
+            className="object-contain"
+          />
         </div>
       </div>
-    </Link>
+    </div>
+  );
+}
+
+function MediaEventSetupPlaceholder() {
+  return (
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[56%] items-center justify-end pr-7">
+      <div className="relative w-full max-w-[520px]">
+        <div className="relative aspect-[16/10] w-full">
+          <Image
+            src="/landing/features/feature-event-setup.png"
+            alt=""
+            fill
+            sizes="(min-width:1024px) 520px, 70vw"
+            className="object-contain"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MediaWideScreenshotPlaceholder({
+  src,
+  align = "center",
+}: {
+  src: string;
+  align?: "center" | "right";
+}) {
+  return (
+    <div
+      className={clsx(
+        "pointer-events-none absolute inset-x-0 bottom-0 pb-6",
+        align === "center" ? "flex justify-center" : "flex justify-end pr-6"
+      )}
+    >
+      <div className="relative w-[86%] max-w-[560px]">
+        <div className="relative aspect-[16/9] w-full">
+          <Image
+            src={src}
+            alt=""
+            fill
+            sizes="(min-width:1024px) 560px, 90vw"
+            className="object-contain"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MediaMegaphonePlaceholder() {
+  return (
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[58%] items-end justify-end pr-6 pb-6">
+      <div className="relative w-full max-w-[520px]">
+        <div className="relative aspect-[16/10] w-full">
+          <Image
+            src="/landing/features/feature-promo-marketing.png"
+            alt=""
+            fill
+            sizes="(min-width:1024px) 520px, 70vw"
+            className="object-contain"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const allInOneImages = {
+  top: "/landing/all-in-one/top.jpg",
+  main: "/landing/all-in-one/main.png",
+  bottom: "/landing/all-in-one/bottom.jpg",
+};
+
+function AllInOneCollage() {
+  return (
+    <div className="relative mx-auto w-full max-w-[490px]">
+      {/* Fixed height so overlap stays consistent like Figma */}
+      <div className="relative h-[330px] sm:h-[390px] lg:h-[430px]">
+        {/* TOP (back image) */}
+        <div className="absolute right-0 top-0 h-[42%] w-[52%] overflow-hidden rounded-lg ring-1 ring-white/10 shadow-[0_30px_80px_-55px_rgba(0,0,0,.9)]">
+          <Image
+            src={allInOneImages.top}
+            alt="Venue exterior"
+            fill
+            sizes="(min-width:1024px) 360px, 60vw"
+            className="object-cover"
+            priority={false}
+          />
+          <div className="absolute inset-0 bg-black/45" />
+        </div>
+
+        {/* MAIN (front image with purple border) */}
+        <div className="absolute left-0 top-[18%] h-[55%] w-[68%] overflow-hidden rounded-lg border-2 border-primary-500 shadow-[0_40px_110px_-70px_rgba(154,70,255,.65)] z-10">
+          <Image
+            src={allInOneImages.main}
+            alt="Ticket scanning on mobile"
+            fill
+            sizes="(min-width:1024px) 420px, 75vw"
+            className="object-cover"
+            priority={false}
+          />
+        </div>
+
+        {/* BOTTOM (dimmed image) */}
+        <div className="absolute bottom-0 -right-8 h-[44%] w-[52%] overflow-hidden rounded-lg ring-1 ring-white/10 shadow-[0_30px_80px_-55px_rgba(0,0,0,.9)]">
+          <Image
+            src={allInOneImages.bottom}
+            alt="Ticket handoff"
+            fill
+            sizes="(min-width:1024px) 360px, 60vw"
+            className="object-cover"
+            priority={false}
+          />
+          <div className="absolute inset-0 bg-black/60" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const unlockPhoneSrc = "/landing/phone.png";
+
+function UnlockLabel({
+  children,
+  emphasize = false,
+  className,
+}: {
+  children: string;
+  emphasize?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={clsx(
+        "font-black italic uppercase leading-[0.9] tracking-[-0.48px] text-[20px] sm:text-[24px]",
+        emphasize ? "text-white" : "text-neutral-300",
+        className
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -189,156 +462,315 @@ function EventPromoCard({ e }: { e: PromoEvent }) {
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 export default function LandingPage() {
+  const stats = useMemo(
+    () => [
+      { k: "+20", label: "Venues" },
+      { k: "+150", label: "Events Hosted" },
+      { k: "+10", label: "Tickets Sold" },
+    ],
+    []
+  );
+
   return (
     <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
-      {/* ───────── Hero ───────── */}
-      <section className="relative isolate flex min-h-[78vh] items-center justify-center px-4 py-24 text-center">
-        {/* Mesh + subtle grid + vignette */}
-        <div
-          className="pointer-events-none absolute inset-0 -z-20 opacity-90"
-          style={meshBg}
-        />
-        <div
-          className="pointer-events-none absolute inset-0 -z-30 opacity-[.08]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, rgba(255,255,255,.65) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.65) 1px, transparent 1px)",
-            backgroundSize: "60px 60px",
-            maskImage:
-              "radial-gradient(1000px 600px at 50% 40%, black, transparent 70%)",
-          }}
-          aria-hidden
-        />
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(1200px_400px_at_50%_120%,rgba(17,17,17,.9),transparent)]" />
+      {/* Global backdrop */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-30 opacity-95"
+        style={pageMesh}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0 -z-20 opacity-[.08]"
+        style={gridOverlayStyle}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            "radial-gradient(1400px 520px at 50% -10%, rgba(0,0,0,.0), rgba(0,0,0,.65) 55%, rgba(0,0,0,.9) 100%)",
+        }}
+        aria-hidden
+      />
 
-        <div className="mx-auto max-w-3xl">
-          <h1 className="text-balance text-4xl font-extrabold leading-tight md:text-6xl">
-            Discover{" "}
-            <span className="relative inline-block">
-              <span className="bg-gradient-to-r from-primary-300 via-primary-400 to-primary-200 bg-clip-text text-transparent">
-                unmissable
-              </span>
-              <span className="absolute -bottom-1 left-0 h-[3px] w-full bg-gradient-to-r from-primary-500/80 via-primary-400/70 to-primary-300/80 blur-[1px]" />
-            </span>{" "}
-            events
-          </h1>
+      {/* ------------------------------------------------------------------ */}
+      {/* HERO (Tickets Made Easy)                                           */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="relative">
+        {/* Figma ellipses (left + right) */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+          {/* left ellipse */}
+          <div
+            className="absolute"
+            style={{
+              ...heroEllipseBase,
+              left: -120,
+              bottom: -240,
+            }}
+          />
+          {/* right ellipse */}
+          <div
+            className="absolute"
+            style={{
+              ...heroEllipseBase,
+              right: -160,
+              top: -140,
+            }}
+          />
+        </div>
 
-          <p className="mx-auto mt-5 max-w-xl text-pretty text-neutral-200">
-            From underground raves to rooftop concerts — Tikd. gets you through
-            the door. Browse, book, and party like it’s 2025.
-          </p>
+        <div className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 lg:pt-24">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_.95fr] lg:gap-14">
+            {/* left */}
+            <div className="text-left space-y-4 sm:space-y-6 ">
+              {/* Figma: 2-line title: "TICKETS" / "MADE EASY." */}
+              <h1 className="font-black italic uppercase leading-[90%] tracking-[-1.6px] text-[52px] sm:text-[72px] lg:text-[80px]">
+                <span className="block">Tickets</span>
+                <span className="block">Made Easy.</span>
+              </h1>
 
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild size="lg" variant="primary" className="px-7">
-              <Link href="/events">Browse events</Link>
-            </Button>
-            <Button asChild size="lg" variant="ghost" className="px-7">
-              <Link href="/help">How Tikd works</Link>
-            </Button>
+              <p className="max-w-[390px] text-pretty text-[13px] leading-[1.45] text-white sm:text-[14px]">
+                Buy, sell, and discover tickets effortlessly. Fast, secure, and
+                hassle-free, so you can focus on the event — not the process.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button asChild size="md" variant="primary">
+                  <Link href="/events">Browse Events</Link>
+                </Button>
+
+                <Button asChild size="md" variant="secondary">
+                  <Link href="/book-demo">Book a Demo</Link>
+                </Button>
+              </div>
+            </div>
+
+            {/* right */}
+            <div className="pb-2 lg:pb-0">
+              <HeroPhones />
+            </div>
+          </div>
+        </div>
+
+        {/* Trending Events slider */}
+        <div className="mt-20">
+          <EventCarouselSection
+            title="Trending Events"
+            events={trendingEvents}
+          />
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* ALL-IN-ONE PLATFORM                                                */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="mx-auto max-w-[1232px] px-4 py-16 sm:py-20">
+        <div className="grid items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-24">
+          {/* left: collage */}
+          <AllInOneCollage />
+
+          {/* right: copy */}
+          <div className="max-w-[560px] space-y-6">
+            <h2 className="font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
+              ALL-IN-ONE
+              <br />
+              PLATFORM
+            </h2>
+
+            <p className="max-w-[390px] text-[13px] leading-[1.3] tracking-[-0.28px] text-white/70 sm:text-[14px]">
+              From ticket creation to seamless check-ins, promotion, and
+              payouts, Tikd gives you everything you need to run a successful
+              event—whether you’re hosting a nightclub party, concert, or
+              private gathering—all in one place.
+            </p>
+
+            <div className="flex flex-wrap gap-x-8 gap-y-8">
+              {stats.map((s) => (
+                <div key={s.label}>
+                  <div className="text-[28px] font-semibold leading-none tracking-[-0.64px] text-white sm:text-[32px]">
+                    {s.k}
+                  </div>
+                  <div className="mt-1 text-[14px] text-white/55 leading-[1.3] tracking-[-0.28px]">
+                    {s.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* FEATURES (match Figma layout)                                      */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="mx-auto max-w-[1232px] px-4 pb-16 sm:pb-20">
+        <div className="grid gap-6 lg:gap-7">
+          {/* Row 1: two big cards */}
+          <div className="grid gap-6 lg:grid-cols-2 lg:gap-7">
+            <FeatureCard size="lg" title={"Control everything\nin one place"}>
+              {/* Replace with your real image later:
+                  <div className="absolute ... bg-cover" style={{backgroundImage:'url(...)'}} />
+               */}
+              <MediaLaptopPlaceholder />
+            </FeatureCard>
+
+            <FeatureCard size="lg" title={"Event page\nset-up"}>
+              {/* Replace with your real collage image later */}
+              <MediaEventSetupPlaceholder />
+            </FeatureCard>
           </div>
 
-          {/* trust row */}
-          <div className="mx-auto mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-neutral-300 md:text-sm">
-            <span>🎟️ 120k+ tickets issued</span>
-            <span className="opacity-40">•</span>
-            <span>⚡ Fast, secure checkout</span>
-            <span className="opacity-40">•</span>
-            <span>⭐ 4.9/5 community rating</span>
+          {/* Row 2: three smaller cards */}
+          <div className="grid gap-6 lg:grid-cols-3 lg:gap-7">
+            <FeatureCard size="sm" title={"Ticket creation"}>
+              <MediaWideScreenshotPlaceholder
+                src="/landing/features/feature-ticket-creation.png"
+                align="center"
+              />
+            </FeatureCard>
+
+            <FeatureCard size="sm" title={"Promotion &\nmarketing"}>
+              {/* Replace with real illustration image later */}
+              <MediaMegaphonePlaceholder />
+            </FeatureCard>
+
+            <FeatureCard size="sm" title={"Attendee\nmanagement\n& check-in"}>
+              <MediaWideScreenshotPlaceholder
+                src="/landing/features/feature-attendee-checkin.png"
+                align="right"
+              />
+            </FeatureCard>
           </div>
         </div>
       </section>
 
-      {/* ───────── Categories (quick browse) ───────── */}
-      <section className="mx-auto max-w-[1232px] px-4 pb-6">
-        <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto py-2">
-          {categories.map((c) => (
-            <CategoryPill key={c} label={c} />
-          ))}
+      {/* ------------------------------------------------------------------ */}
+      {/* UNLOCK YOUR FULL POTENTIAL                                         */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20">
+        <h2 className="text-center font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
+          UNLOCK YOUR FULL
+          <br className="hidden sm:block" />
+          POTENTIAL
+        </h2>
+
+        <div className="relative mt-10 grid items-center gap-10 lg:mt-14 lg:grid-cols-[1fr_auto_1fr]">
+          {/* LEFT labels (desktop) */}
+          <div className="relative hidden h-[560px] lg:block">
+            <UnlockLabel emphasize className="absolute left-0 top-[90px]">
+              FRIENDLY DASHBOARD
+            </UnlockLabel>
+
+            <UnlockLabel className="absolute left-[110px] top-[275px]">
+              SCORE STREAKS
+            </UnlockLabel>
+
+            <UnlockLabel className="absolute left-[-40px] bottom-[40px]">
+              PERSONALIZED ACHIEVEMENTS
+            </UnlockLabel>
+          </div>
+
+          {/* CENTER phone */}
+          <div className="relative mx-auto">
+            {/* Figma ellipse glow */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 -bottom-[52%] h-[429px] w-[765px] -translate-x-1/2 rounded-full"
+              style={{
+                background: "rgba(255,255,255,0.20)",
+                filter: "blur(267px)",
+              }}
+            />
+
+            <div className="relative mx-auto aspect-[9/16] w-[280px] sm:w-[340px] lg:w-[380px]">
+              <Image
+                src={unlockPhoneSrc}
+                alt="Tikd app preview"
+                fill
+                sizes="(min-width: 1024px) 380px, (min-width: 640px) 340px, 280px"
+                className=" drop-shadow-[0_60px_140px_rgba(0,0,0,.75)]"
+              />
+            </div>
+          </div>
+
+          {/* RIGHT labels (desktop) */}
+          <div className="relative hidden h-[560px] text-right lg:block">
+            <UnlockLabel className="absolute right-0 top-[90px]">
+              OPTIMIZE RECOVERY
+            </UnlockLabel>
+
+            <UnlockLabel className="absolute right-0 top-[245px]">
+              DAILY VIDEOS TAILORED FOR YOU
+            </UnlockLabel>
+
+            <UnlockLabel className="absolute right-0 bottom-[70px]">
+              MONITOR YOUR PROGRESS
+            </UnlockLabel>
+          </div>
+
+          {/* Mobile labels */}
+          <div className="grid gap-5 sm:grid-cols-2 lg:hidden">
+            <UnlockLabel emphasize className="text-center sm:text-left">
+              FRIENDLY DASHBOARD
+            </UnlockLabel>
+            <UnlockLabel className="text-center sm:text-right">
+              OPTIMIZE RECOVERY
+            </UnlockLabel>
+
+            <UnlockLabel className="text-center sm:text-left">
+              SCORE STREAKS
+            </UnlockLabel>
+            <UnlockLabel className="text-center sm:text-right">
+              DAILY VIDEOS TAILORED FOR YOU
+            </UnlockLabel>
+
+            <UnlockLabel className="text-center sm:text-left">
+              PERSONALIZED ACHIEVEMENTS
+            </UnlockLabel>
+            <UnlockLabel className="text-center sm:text-right">
+              MONITOR YOUR PROGRESS
+            </UnlockLabel>
+          </div>
         </div>
       </section>
 
-      {/* ───────── Features ───────── */}
-      <section className="mx-auto max-w-[1232px] px-4 py-14 md:py-20">
-        <SectionTitle
-          kicker="Why Tikd?"
-          title="A premium ticketing experience that just works"
-          sub="Designed with clarity, speed and transparency — so you spend less time checking out and more time vibing."
-        />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {features.map((f) => (
-            <FeatureCard key={f.title} {...f} />
-          ))}
-        </div>
-      </section>
-
-      {/* ───────── Showcase / Popular right now ───────── */}
-      <section className="mx-auto max-w-[1232px] px-4 pb-14 md:pb-20">
-        <SectionTitle
-          kicker="Popular right now"
-          title="This week’s highlights"
-          sub="Hand-picked by our editors. Limited tickets — don’t sleep."
-        />
-        <div className="grid gap-4 md:grid-cols-3">
-          {promos.map((e) => (
-            <EventPromoCard key={e.id} e={e} />
-          ))}
-        </div>
-
-        <div className="mt-8 flex justify-center">
-          <Button asChild variant="secondary" className="px-8">
-            <Link href="/events">See all events</Link>
-          </Button>
-        </div>
-      </section>
-
-      {/* ───────── Organizer CTA ───────── */}
-      <section className="relative isolate px-4 py-16">
+      {/* ------------------------------------------------------------------ */}
+      {/* FAQ                                                                */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="relative isolate px-4 py-16 sm:py-20">
         <div
           className="absolute inset-0 -z-10 bg-gradient-to-br from-primary-700/35 via-primary-900/25 to-neutral-950"
           aria-hidden
         />
-        <div className="mx-auto max-w-[1100px] overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/80 p-8 backdrop-blur">
-          <div className="flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-neutral-300">
-                For organizers
-              </p>
-              <h3 className="text-balance text-xl font-semibold md:text-2xl">
-                Sell out your next event with Tikd.
-              </h3>
-              <p className="mt-2 max-w-prose text-sm text-neutral-300">
-                Powerful tools, fair pricing, and payouts on time.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button asChild variant="primary" className="px-6">
-                <Link href="/help/organizers">Get started</Link>
+        <Faq items={faqItems} />
+      </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Final CTA                                                          */}
+      {/* ------------------------------------------------------------------ */}
+      <section className="relative isolate px-8 pb-16 sm:py-[80px]">
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-[#6600B7] to-[rgba(102,0,183,0.4)] p-10 sm:p-[64px]">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-70"
+            style={{
+              background:
+                "radial-gradient(900px 340px at 70% 60%, rgba(130,46,255,.40), transparent 60%)",
+            }}
+          />
+          <div className="relative flex flex-col items-center text-center">
+            <h3 className="text-5xl font-black italic leading-[0.9] tracking-[-1.04px] sm:text-[64px] max-w-[490px]">
+              LET&apos;S GET TO PARTY!
+            </h3>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Button asChild size="md">
+                <Link href="/events">Browse Events</Link>
               </Button>
-              <Button asChild variant="ghost" className="px-6">
-                <Link href="/help">Learn more</Link>
+              <Button asChild size="md" variant="secondary">
+                <Link href="/book-demo">Book a Demo</Link>
               </Button>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ───────── Final CTA ───────── */}
-      <section className="relative isolate overflow-hidden px-4 py-20 text-center">
-        <div
-          className="absolute inset-0 -z-10 bg-gradient-to-tr from-primary-700/30 via-primary-900/20 to-neutral-950"
-          aria-hidden
-        />
-        <h2 className="text-balance text-2xl font-semibold md:text-3xl">
-          Ready for your next night out?
-        </h2>
-        <p className="mx-auto mt-2 max-w-xl text-pretty text-neutral-300">
-          Browse trending events, lock your spot, and we’ll meet you on the
-          dancefloor.
-        </p>
-        <div className="mt-7">
-          <Button asChild size="lg" variant="secondary" className="px-10">
-            <Link href="/events">Get tickets</Link>
-          </Button>
         </div>
       </section>
     </main>

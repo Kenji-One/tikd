@@ -140,10 +140,6 @@ export default function Header() {
               >
                 <SearchIcon className="h-4 w-4 text-white/80 shrink-0" />
                 <span className="flex-1 truncate">Search events</span>
-                <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-neutral-300">
-                  <kbd className="font-mono">/</kbd> <span>or</span>{" "}
-                  <kbd className="font-mono">⌘K</kbd>
-                </span>
               </button>
             </div>
           </div>

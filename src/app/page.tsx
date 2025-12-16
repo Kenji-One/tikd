@@ -140,7 +140,7 @@ function HeroPhones() {
       {/* Keep the same aspect as before so layout stays stable */}
       <div className="relative aspect-[5/4]">
         <Image
-          src="/landing/hero-phones.png"
+          src="/landing/hero-phones.svg"
           alt="Tikd app preview"
           fill
           priority

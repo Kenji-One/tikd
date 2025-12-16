@@ -410,7 +410,7 @@ function AllInOneCollage() {
   );
 }
 
-const unlockPhoneSrc = "/landing/phone.png";
+const unlockPhoneSrc = "/landing/phone.svg";
 
 function UnlockLabel({
   children,
@@ -623,7 +623,7 @@ export default function LandingPage() {
       {/* ------------------------------------------------------------------ */}
       {/* UNLOCK YOUR FULL POTENTIAL                                         */}
       {/* ------------------------------------------------------------------ */}
-      <section className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20">
+      <section className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 -mb-4.5">
         <h2 className="text-center font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
           UNLOCK YOUR FULL
           <br className="hidden sm:block" />

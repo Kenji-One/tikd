@@ -47,6 +47,13 @@ export interface EventCarouselSectionProps {
   events: Event[];
   onViewAll?: () => void;
   onSelect?: (e: Event) => void;
+
+  /**
+   * When true (default): behaves like the current carousel (arrows + sliding).
+   * When false: shows a "static" single-view strip (no arrows, no sliding),
+   * pinned to the first possible slide.
+   */
+  isCarousel?: boolean;
 }
 
 export default function EventCarouselSection({
@@ -55,6 +62,7 @@ export default function EventCarouselSection({
   events,
   onViewAll,
   onSelect,
+  isCarousel = false,
 }: EventCarouselSectionProps) {
   /* responsive sizing */
   const [{ cardW, visible }, setLayout] = useState(() =>
@@ -77,21 +85,37 @@ export default function EventCarouselSection({
 
   /* boundaries */
   useEffect(() => {
+    // If carousel is disabled, always pin to the first slide.
+    if (!isCarousel) {
+      setIdx(0);
+      setAnim(false);
+      return;
+    }
+
+    // Keep idx valid when visible count / event count changes.
     setIdx((i) => Math.min(i, Math.max(events.length - visible, 0)));
-  }, [visible, events.length]);
+  }, [visible, events.length, isCarousel]);
 
   const maxIdx = Math.max(events.length - visible, 0);
-  const canLeft = idx < maxIdx;
-  const canRight = idx > 0;
 
-  const shiftLeft = useCallback(
-    () => canLeft && !anim && (setAnim(true), setIdx((i) => i + 1)),
-    [canLeft, anim]
-  );
-  const shiftRight = useCallback(
-    () => canRight && !anim && (setAnim(true), setIdx((i) => i - 1)),
-    [canRight, anim]
-  );
+  // Only allow movement when carousel is enabled.
+  const canLeft = isCarousel && idx < maxIdx;
+  const canRight = isCarousel && idx > 0;
+
+  const shiftLeft = useCallback(() => {
+    if (!isCarousel) return;
+    if (!canLeft || anim) return;
+    setAnim(true);
+    setIdx((i) => i + 1);
+  }, [isCarousel, canLeft, anim]);
+
+  const shiftRight = useCallback(() => {
+    if (!isCarousel) return;
+    if (!canRight || anim) return;
+    setAnim(true);
+    setIdx((i) => i - 1);
+  }, [isCarousel, canRight, anim]);
+
   const onEnd = () => setAnim(false);
 
   /* render */
@@ -116,77 +140,92 @@ export default function EventCarouselSection({
               View all
             </Button>
           )}
-          <button
-            onClick={shiftRight}
-            disabled={!canRight}
-            className={clsx(
-              "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
-              !canRight && "cursor-default opacity-30 hover:bg-transparent"
-            )}
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <button
-            onClick={shiftLeft}
-            disabled={!canLeft}
-            className={clsx(
-              "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
-              !canLeft && "cursor-default opacity-30 hover:bg-transparent"
-            )}
-          >
-            <ChevronRight size={20} />
-          </button>
+
+          {/* Only show arrows when carousel is enabled */}
+          {isCarousel && (
+            <>
+              <button
+                onClick={shiftRight}
+                disabled={!canRight}
+                className={clsx(
+                  "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
+                  !canRight && "cursor-default opacity-30 hover:bg-transparent"
+                )}
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={shiftLeft}
+                disabled={!canLeft}
+                className={clsx(
+                  "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
+                  !canLeft && "cursor-default opacity-30 hover:bg-transparent"
+                )}
+              >
+                <ChevronRight size={20} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* row (no overflow clipping) */}
       <div className="relative px-4 lg:px-8 xl:px-[120px]">
-        {/* gradient fades – anchored to the INNER padding edge */}
-        {/* left fade */}
-        <div
-          aria-hidden
-          className={clsx(
-            "pointer-events-none absolute top-0 bottom-0 z-10",
-            canRight ? "opacity-100" : "opacity-0"
-          )}
-          style={{
-            left: 0, // ✅ at the very start of content (padding edge)
-            width: SHADOW_W,
-            backgroundColor: "var(--background)",
-            WebkitMaskImage:
-              "linear-gradient(to right, black 0%, transparent 100%)",
-            maskImage: "linear-gradient(to right, black 0%, transparent 100%)",
-            transition: "opacity 200ms ease",
-          }}
-        />
-        {/* right fade */}
-        <div
-          aria-hidden
-          className={clsx(
-            "pointer-events-none absolute top-0 bottom-0 z-10",
-            canLeft ? "opacity-100" : "opacity-0"
-          )}
-          style={{
-            right: 0, // ✅ flush with the end of content (padding edge)
-            width: SHADOW_W,
-            backgroundColor: "var(--background)",
-            WebkitMaskImage:
-              "linear-gradient(to left, black 0%, transparent 100%)",
-            maskImage: "linear-gradient(to left, black 0%, transparent 100%)",
-            transition: "opacity 200ms ease",
-          }}
-        />
+        {/* gradient fades – only when carousel is enabled */}
+        {isCarousel && (
+          <>
+            {/* left fade */}
+            <div
+              aria-hidden
+              className={clsx(
+                "pointer-events-none absolute top-0 bottom-0 z-10",
+                canRight ? "opacity-100" : "opacity-0"
+              )}
+              style={{
+                left: 0, // ✅ at the very start of content (padding edge)
+                width: SHADOW_W,
+                backgroundColor: "var(--background)",
+                WebkitMaskImage:
+                  "linear-gradient(to right, black 0%, transparent 100%)",
+                maskImage:
+                  "linear-gradient(to right, black 0%, transparent 100%)",
+                transition: "opacity 200ms ease",
+              }}
+            />
+            {/* right fade */}
+            <div
+              aria-hidden
+              className={clsx(
+                "pointer-events-none absolute top-0 bottom-0 z-10",
+                canLeft ? "opacity-100" : "opacity-0"
+              )}
+              style={{
+                right: 0, // ✅ flush with the end of content (padding edge)
+                width: SHADOW_W,
+                backgroundColor: "var(--background)",
+                WebkitMaskImage:
+                  "linear-gradient(to left, black 0%, transparent 100%)",
+                maskImage:
+                  "linear-gradient(to left, black 0%, transparent 100%)",
+                transition: "opacity 200ms ease",
+              }}
+            />
+          </>
+        )}
 
         {/* track */}
         <div className="flex items-start">
           <div className="relative" style={{ width: viewportW }}>
             <div
-              onTransitionEnd={onEnd}
+              onTransitionEnd={isCarousel ? onEnd : undefined}
               className="group/row flex"
               style={{
                 columnGap: GAP_PX,
-                transform: `translateX(-${idx * STEP}px)`,
-                transition: anim ? `transform ${TRANSITION_MS}ms ease` : "none",
+                transform: `translateX(-${(isCarousel ? idx : 0) * STEP}px)`,
+                transition:
+                  isCarousel && anim
+                    ? `transform ${TRANSITION_MS}ms ease`
+                    : "none",
               }}
             >
               {events.map((ev) => (

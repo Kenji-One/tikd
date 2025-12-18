@@ -7,7 +7,14 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 import { Button } from "@/components/ui/Button";
-import { X, LogOut, LayoutDashboard, Search as SearchIcon } from "lucide-react";
+import {
+  X,
+  LogOut,
+  LayoutDashboard,
+  TicketCheck,
+  SlidersHorizontal,
+  Search as SearchIcon,
+} from "lucide-react";
 import clsx from "classnames";
 import RegisterLoginModal from "@/components/ui/RegisterLoginModal";
 import SearchModal from "@/components/search/SearchModal";
@@ -154,7 +161,7 @@ export default function Header() {
             <Link href="/events" className="hover:text-primary-500 transition">
               Events
             </Link>
-            <Link href="/about" className="hover:text-primary-500 transition">
+            <Link href="#" className="hover:text-primary-500 transition">
               About us
             </Link>
 
@@ -278,7 +285,27 @@ export default function Header() {
                                 className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                               >
                                 <LayoutDashboard className="h-4 w-4 opacity-80" />
-                                <span className="text-sm">Dashboard</span>
+                                <span className="text-sm">
+                                  Seller Dashboard
+                                </span>
+                              </Link>
+                              <Link
+                                href="/account/my-tickets"
+                                role="menuitem"
+                                onClick={() => setAvatarOpen(false)}
+                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                              >
+                                <TicketCheck className="h-4 w-4 opacity-80" />
+                                <span className="text-sm">My Tickets</span>
+                              </Link>
+                              <Link
+                                href="/account/settings"
+                                role="menuitem"
+                                onClick={() => setAvatarOpen(false)}
+                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                              >
+                                <SlidersHorizontal className="h-4 w-4 opacity-80" />
+                                <span className="text-sm">Settings</span>
                               </Link>
 
                               <button
@@ -386,7 +413,26 @@ export default function Header() {
                             className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                           >
                             <LayoutDashboard className="h-4 w-4 opacity-80" />
-                            <span className="text-sm">Dashboard</span>
+                            <span className="text-sm">Seller Dashboard</span>
+                          </Link>
+
+                          <Link
+                            href="/account/my-tickets"
+                            role="menuitem"
+                            onClick={() => setAvatarOpen(false)}
+                            className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                          >
+                            <TicketCheck className="h-4 w-4 opacity-80" />
+                            <span className="text-sm">My Tickets</span>
+                          </Link>
+                          <Link
+                            href="/account/settings"
+                            role="menuitem"
+                            onClick={() => setAvatarOpen(false)}
+                            className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                          >
+                            <SlidersHorizontal className="h-4 w-4 opacity-80" />
+                            <span className="text-sm">Settings</span>
                           </Link>
 
                           <button
@@ -447,7 +493,7 @@ export default function Header() {
               <Link href="/events" onClick={() => setMobileOpen(false)}>
                 Events
               </Link>
-              <Link href="/about" onClick={() => setMobileOpen(false)}>
+              <Link href="#" onClick={() => setMobileOpen(false)}>
                 About us
               </Link>
 

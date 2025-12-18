@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -81,38 +81,7 @@ const events: Event[] = [
     img: "/dummy/event-2.png",
     category: "Shows",
   },
-  {
-    id: "18",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Shows",
-  },
-  {
-    id: "19",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Shows",
-  },
-  {
-    id: "12",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Shows",
-  },
-  {
-    id: "13",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Shows",
-  },
+
   {
     id: "24",
     title: "Senior Rave",
@@ -456,6 +425,23 @@ export default function EventsPage() {
   // 2️⃣ track which category is active
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
+  const setCategoryAndScrollTop = useCallback((cat: string) => {
+    setSelectedCategory(cat);
+
+    const behavior: ScrollBehavior = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches
+      ? "auto"
+      : "smooth";
+
+    // Let React paint the new UI first, then scroll.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior });
+      });
+    });
+  }, []);
+
   // 3️⃣ memoize grouping for the “All” case (dummy dataset)
   const eventsByCategory = useMemo(() => {
     return events.reduce<Record<string, Event[]>>((acc, ev) => {
@@ -491,7 +477,7 @@ export default function EventsPage() {
             title="Live Events"
             icon={<Zap className="text-white" size={22} />}
             events={liveEvents}
-            onViewAll={() => setSelectedCategory("All")}
+            onViewAll={() => setCategoryAndScrollTop("All")}
           />
         )}
 
@@ -503,14 +489,18 @@ export default function EventsPage() {
               title={cat}
               icon={categoryIcon[cat] ?? <Search size={22} />}
               events={list}
-              onViewAll={() => setSelectedCategory(cat)}
+              onViewAll={() => setCategoryAndScrollTop(cat)}
             />
           ))
         ) : (
           // ─── Single category: show a simple grid (dummy) ───────────────
-          <section className="mb-16">
-            <div className="mb-6 flex items-center gap-2">
-              {categoryIcon[selectedCategory] ?? <Search size={22} />}
+          <section className="mb-16 px-4 lg:px-8 xl:px-[120px]">
+            <div className="mb-6 flex items-center gap-3">
+              <span className="inline-flex items-center justify-center text-white [&_svg]:h-7 [&_svg]:w-7">
+                {categoryIcon[selectedCategory] ?? (
+                  <Search className="h-7 w-7" />
+                )}
+              </span>
               <h2 className="text-2xl font-semibold text-neutral-0">
                 {selectedCategory}
               </h2>

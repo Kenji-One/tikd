@@ -54,7 +54,7 @@ const slides: Slide[] = [
 /*  Main component                                                            */
 /* -------------------------------------------------------------------------- */
 
-const SLIDE_DURATION_MS = 14000; // progress bar + auto-advance duration
+const SLIDE_DURATION_MS = 7000; // progress bar + auto-advance duration
 
 export default function HeroSection() {
   const [idx, setIdx] = useState(0);

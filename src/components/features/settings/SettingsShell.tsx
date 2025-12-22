@@ -112,8 +112,14 @@ export default function SettingsShell() {
         </div>
       </div>
 
-      {/* ---------- Settings tabs ---------- */}
-      <Tabs tabs={tabs} activeId={active} onChange={setActive} />
+      {/* ---------- Settings tabs – now beautifully centered ---------- */}
+      <div className="mt-10 flex flex-col items-center">
+        <div className="w-full max-w-3xl">
+          {" "}
+          {/* Adjust max-w as needed: 3xl ≈ 768px, or use 2xl/4xl */}
+          <Tabs tabs={tabs} activeId={active} onChange={setActive} />
+        </div>
+      </div>
 
       {/* ---------- Avatar dialog ---------- */}
       <AvatarDialog open={avatarOpen} onClose={() => setAvatarOpen(false)} />

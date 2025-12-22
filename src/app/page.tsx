@@ -219,13 +219,14 @@ function Faq({ items }: { items: FaqItem[] }) {
 /*  HERO Ellipses (Figma)                                              */
 /* ------------------------------------------------------------------ */
 const heroEllipseBase: CSSProperties = {
-  width: 251,
-  height: 413,
-  borderRadius: 413,
-  background: "var(--color-primary-500)",
+  width: "251px",
+  height: "413px",
+  borderRadius: "413px",
+  background: "#9a46ff", // Exact --color-primary-500 from your theme
   filter: "blur(232px)",
   transform: "rotate(-26.157deg)",
-  opacity: 0.9,
+  opacity: 0.85, // Matches the soft glow in Figma
+  pointerEvents: "none" as const,
 };
 
 /* ------------------------------------------------------------------ */
@@ -449,60 +450,53 @@ export default function LandingPage() {
 
   return (
     <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
-      {/* Global backdrop */}
-      <div
-        className="pointer-events-none absolute inset-0 -z-30 opacity-95"
-        style={pageMesh}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 -z-20 opacity-[.08]"
-        style={gridOverlayStyle}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(1400px 520px at 50% -10%, rgba(0,0,0,.0), rgba(0,0,0,.65) 55%, rgba(0,0,0,.9) 100%)",
-        }}
-        aria-hidden
-      />
-
       {/* ------------------------------------------------------------------ */}
       {/* HERO (Tickets Made Easy)                                           */}
       {/* ------------------------------------------------------------------ */}
       <section className="relative">
         {/* Figma ellipses (left + right) */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-          {/* left ellipse */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden z-0"
+        >
+          {/* Left ellipse */}
           <div
             className="absolute"
             style={{
               ...heroEllipseBase,
-              left: -120,
-              bottom: -240,
+              left: "80px",
+              bottom: "240px",
             }}
           />
-          {/* right ellipse */}
+
+          {/* Right ellipse – mirrored rotation for symmetry */}
           <div
             className="absolute"
             style={{
               ...heroEllipseBase,
-              right: -160,
-              top: -140,
+              right: "-31px",
+              top: "171px",
+              transform: "rotate(26.157deg)", // flipped for right side
             }}
           />
         </div>
 
-        <div className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 lg:pt-24">
+        <div className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 lg:pt-24 z-10 relative">
           <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_.95fr] lg:gap-14">
             {/* left */}
             <div className="text-left space-y-4 sm:space-y-6 ">
               {/* Figma: 2-line title: "TICKETS" / "MADE EASY." */}
               <h1 className="font-black italic uppercase leading-[90%] tracking-[-1.6px] text-[52px] sm:text-[72px] lg:text-[80px]">
                 <span className="block">Tickets</span>
-                <span className="block">Made Easy.</span>
+                <span className="block">
+                  Made{" "}
+                  <span
+                    className="bg-gradient-to-r from-primary-300 via-primary-500 to-primary-600 bg-clip-text text-transparent underline decoration-primary-500/30 underline-offset-4"
+                    style={{ textShadow: "0 0 60px rgba(154, 70, 255, 0.6)" }} // optional extra glow
+                  >
+                    Easy.
+                  </span>
+                </span>
               </h1>
 
               <p className="max-w-[390px] text-pretty text-[13px] leading-[1.45] text-white sm:text-[14px]">
@@ -529,10 +523,27 @@ export default function LandingPage() {
         </div>
 
         {/* Trending Events slider */}
-        <div className="mt-20">
+        <div className="mt-20 z-10">
           <EventCarouselSection
             title="Trending Events"
+            icon={
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                viewBox="0 0 22 22"
+                fill="none"
+              >
+                <path
+                  fill-rule="evenodd"
+                  clip-rule="evenodd"
+                  d="M7.46368 2.74881C6.58141 2.74871 5.71681 2.99618 4.96821 3.46308C4.21961 3.92998 3.61703 4.59757 3.22902 5.38994C2.841 6.18231 2.68311 7.06766 2.77329 7.94531C2.86348 8.82297 3.19813 9.6577 3.73918 10.3546L10.3549 3.73887C9.52855 3.09562 8.51087 2.74713 7.46368 2.74881ZM11.6266 3.29216C10.8913 2.5587 9.97527 2.03258 8.97121 1.76709C7.96715 1.5016 6.91076 1.50617 5.90903 1.78034C4.9073 2.0545 3.99582 2.58853 3.26689 3.32832C2.53797 4.06812 2.01749 4.9874 1.75818 5.99308C1.49887 6.99876 1.50993 8.05511 1.79025 9.05514C2.07057 10.0552 2.61018 10.9633 3.35444 11.6877C4.0987 12.4121 5.02117 12.9269 6.02842 13.18C7.03567 13.4331 8.09192 13.4156 9.0902 13.1291L17.0896 20.2788C17.202 20.3791 17.3486 20.4326 17.4992 20.4282C17.6498 20.4238 17.793 20.3619 17.8994 20.2552L20.2566 17.8979C20.3628 17.7915 20.4243 17.6484 20.4284 17.4981C20.4326 17.3478 20.3792 17.2016 20.279 17.0894L13.1294 9.08992C13.2779 8.57367 13.3569 8.02796 13.3569 7.46339C13.3581 6.68927 13.2062 5.92256 12.9101 5.20732C12.614 4.49208 12.1794 3.84243 11.6314 3.2957C11.629 3.2957 11.6278 3.29334 11.6266 3.29216ZM11.1882 4.57217L4.57248 11.1879C5.47954 11.893 6.61288 12.2427 7.75955 12.1712C8.90623 12.0996 9.98733 11.6118 10.7997 10.7994C11.6121 9.98704 12.0999 8.90594 12.1714 7.75926C12.243 6.61258 11.8933 5.47924 11.1882 4.57217ZM12.6308 10.3004C12.0902 11.2819 11.2822 12.09 10.3007 12.6306L17.4597 19.0282L19.0285 17.4595L12.6308 10.3004Z"
+                  fill="white"
+                />
+              </svg>
+            }
             events={trendingEvents}
+            isCarousel={true}
           />
         </div>
       </section>

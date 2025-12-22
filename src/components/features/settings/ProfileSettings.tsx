@@ -108,7 +108,7 @@ export default function ProfileSettings() {
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="grid gap-6 w-full">
       <div className="space-y-3 rounded-xl border border-white/10 bg-surface p-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold">Profile Settings</h3>

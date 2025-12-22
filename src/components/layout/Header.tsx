@@ -128,13 +128,17 @@ export default function Header() {
           {/* left: logo + desktop search ---------------------------------- */}
           <div className="flex items-center gap-6 w-full max-w-[420px]">
             <Link href="/" className="flex items-center">
-              <Image
-                src="/Logo.svg"
-                alt="Tikd."
-                width={72}
-                height={24}
-                priority
-              />
+              <div className="relative w-[94px] h-[39px]">
+                {" "}
+                {/* ← adjust these values to whatever size you want */}
+                <Image
+                  src="/Logo.svg"
+                  alt="Tikd."
+                  fill
+                  priority
+                  className="object-contain"
+                />
+              </div>
             </Link>
 
             {/* search trigger (desktop) */}
@@ -161,9 +165,9 @@ export default function Header() {
             <Link href="/events" className="hover:text-primary-500 transition">
               Events
             </Link>
-            <Link href="#" className="hover:text-primary-500 transition">
+            {/* <Link href="#" className="hover:text-primary-500 transition">
               About us
-            </Link>
+            </Link> */}
 
             {/* right-hand buttons / avatar / logout (desktop) */}
             <div className="flex items-center gap-2">
@@ -493,9 +497,9 @@ export default function Header() {
               <Link href="/events" onClick={() => setMobileOpen(false)}>
                 Events
               </Link>
-              <Link href="#" onClick={() => setMobileOpen(false)}>
+              {/* <Link href="#" onClick={() => setMobileOpen(false)}>
                 About us
-              </Link>
+              </Link> */}
 
               {!loggedIn ? (
                 <>

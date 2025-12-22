@@ -51,7 +51,7 @@ export function Tabs({
           <div
             role="tablist"
             aria-label="Dashboard tabs"
-            className="mx-1 inline-flex gap-2 rounded-full border border-white/10 bg-neutral-950/70 p-1"
+            className="mx-1 grid grid-cols-5 gap-2 rounded-full border border-white/10 bg-neutral-950/70 p-1" // ← Change to grid grid-cols-5
           >
             {tabs.map((t, i) => {
               const isActive = activeId === t.id;
@@ -65,7 +65,7 @@ export function Tabs({
                   onClick={() => onChange(t.id)}
                   onKeyDown={(e) => handleKey(e, i)}
                   className={clsx(
-                    "relative flex items-center gap-2 rounded-full px-4 py-2 text-sm outline-none transition-colors",
+                    "relative flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm outline-none transition-colors flex-1 min-w-0", // ← Add these
                     isActive
                       ? "bg-primary-700/30 text-neutral-0 ring-1 ring-primary-600/40"
                       : "text-neutral-300 hover:text-neutral-0 hover:bg-neutral-900/80"

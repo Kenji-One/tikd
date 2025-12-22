@@ -3,9 +3,10 @@
 /* -------------------------------------------------------------------------- */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import clsx from "classnames";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Pill } from "@/components/ui/Pill";
@@ -50,6 +51,11 @@ const slides: Slide[] = [
   },
 ];
 
+const HERO_CENTER_W = 1074; // must match "center" card width
+const HERO_CENTER_HALF = HERO_CENTER_W / 2; // 537
+const HERO_ARROW_GAP = 18; // distance from center card edge
+const HERO_ARROW_EDGE_PAD = 12; // minimum padding from screen edge
+
 /* -------------------------------------------------------------------------- */
 /*  Main component                                                            */
 /* -------------------------------------------------------------------------- */
@@ -59,6 +65,19 @@ const SLIDE_DURATION_MS = 7000; // progress bar + auto-advance duration
 export default function HeroSection() {
   const [idx, setIdx] = useState(0);
   const [progress, setProgress] = useState(0); // 0..100
+
+  const jumpTo = useCallback((i: number) => {
+    setIdx(i);
+    setProgress(0);
+  }, []);
+
+  const goPrev = useCallback(() => {
+    jumpTo((idx - 1 + slides.length) % slides.length);
+  }, [idx, jumpTo]);
+
+  const goNext = useCallback(() => {
+    jumpTo((idx + 1) % slides.length);
+  }, [idx, jumpTo]);
 
   const prev = (idx - 1 + slides.length) % slides.length;
   const next = (idx + 1) % slides.length;
@@ -88,14 +107,32 @@ export default function HeroSection() {
     };
   }, [idx]);
 
-  const jumpTo = (i: number) => {
-    setIdx(i);
-    setProgress(0);
-  };
-
   return (
     <section className="relative w-full overflow-hidden pb-2 mt-10 lg:mt-16">
       <div className="relative flex h-[432px] w-full items-center justify-center">
+        {/* left / right nav arrows */}
+        <div className="pointer-events-none absolute inset-0 z-30">
+          {/* Left arrow: hugs the left edge of the CENTER card */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 pointer-events-auto"
+            style={{
+              left: `max(${HERO_ARROW_EDGE_PAD}px, calc(50% - ${HERO_CENTER_HALF}px - ${HERO_ARROW_GAP}px))`,
+            }}
+          >
+            <ArrowButton direction="left" onClick={goPrev} />
+          </div>
+
+          {/* Right arrow: hugs the right edge of the CENTER card */}
+          <div
+            className="absolute top-1/2 -translate-y-1/2 pointer-events-auto"
+            style={{
+              right: `max(${HERO_ARROW_EDGE_PAD}px, calc(50% - ${HERO_CENTER_HALF}px - ${HERO_ARROW_GAP}px))`,
+            }}
+          >
+            <ArrowButton direction="right" onClick={goNext} />
+          </div>
+        </div>
+
         <Card
           slide={slides[prev]}
           position="left"
@@ -122,6 +159,41 @@ export default function HeroSection() {
         />
       </div>
     </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Arrow button                                                              */
+/* -------------------------------------------------------------------------- */
+
+function ArrowButton({
+  direction,
+  onClick,
+}: {
+  direction: "left" | "right";
+  onClick: () => void;
+}) {
+  const Icon = direction === "left" ? ChevronLeft : ChevronRight;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={direction === "left" ? "Previous slide" : "Next slide"}
+      className={clsx(
+        "group inline-flex items-center justify-center rounded-full",
+        "h-9 w-9 sm:h-10 sm:w-10",
+        "border border-white/15 bg-neutral-950/55 backdrop-blur-md",
+        "shadow-[0_12px_34px_rgba(0,0,0,0.40)]",
+        "transform-gpu will-change-transform origin-center scale-100",
+        "transition-[transform,background-color,border-color,box-shadow] duration-200 ease-out",
+        "hover:bg-neutral-950/70 hover:border-white/25",
+        "active:scale-[0.98]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/70"
+      )}
+    >
+      <Icon className="h-5 w-5 sm:h-5.5 sm:w-5.5 text-white/90 transition-transform duration-200 group-hover:scale-110" />
+    </button>
   );
 }
 
@@ -265,10 +337,9 @@ function Card({
             className="absolute left-0 right-0 bottom-0 h-[4px] overflow-hidden"
             aria-hidden
           >
-            {/* <div className="absolute inset-0 bg-white/10" />  // optional faint track */}
             <div
               className="absolute left-0 top-0 bottom-0 bg-primary-400"
-              style={{ width: `${progress}%` }} // RAF drives width; no CSS transition needed
+              style={{ width: `${progress}%` }}
             />
           </div>
         )}

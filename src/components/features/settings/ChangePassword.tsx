@@ -69,7 +69,7 @@ export default function ChangePassword() {
         e.preventDefault();
         if (canSubmit) onSave();
       }}
-      className="grid gap-6 md:grid-cols-2"
+      className="grid gap-6 "
     >
       <div className="space-y-4 rounded-xl border border-white/10 bg-surface p-4">
         <h3 className="text-lg font-semibold">Change Password</h3>

@@ -1,7 +1,8 @@
 // src/components/sections/Landing/EventCarouselSection.tsx
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EventCard } from "@/components/ui/EventCard";
@@ -20,21 +21,32 @@ export type Event = {
 };
 
 /* -------------------------------------------------- */
-/*  Slider layout + behaviour configuration           */
+/*  Layout + behaviour configuration                  */
 /* -------------------------------------------------- */
 const GAP_PX = 7;
 const CARD_WIDTHS = [229, 171] as const;
 
-const SIDE_PADDING = 120; // px per side
+const RESPONSIVE_CAROUSEL_BREAKPOINT = 1024; // < lg => carousel when isCarousel={false}
 const SHADOW_W = 64; // px
 const TRANSITION_MS = 300;
 
+const getSidePadding = (winW: number) => {
+  // Must match container paddings used in this component:
+  // px-4 (16) | sm:px-6 (24) | lg:px-[120px]
+  if (winW >= 1024) return 120;
+  if (winW >= 640) return 24;
+  return 16;
+};
+
 const calcLayout = (winW: number) => {
-  const safe = Math.max(0, winW - SIDE_PADDING * 2);
+  const side = getSidePadding(winW);
+  const safe = Math.max(0, winW - side * 2);
+
   for (const cw of CARD_WIDTHS) {
     const vis = Math.floor((safe + GAP_PX) / (cw + GAP_PX));
     if (vis >= 1) return { cardW: cw, visible: vis };
   }
+
   return { cardW: CARD_WIDTHS.at(-1)!, visible: 1 };
 };
 
@@ -43,15 +55,15 @@ const calcLayout = (winW: number) => {
 /* -------------------------------------------------- */
 export interface EventCarouselSectionProps {
   title: string;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   events: Event[];
   onViewAll?: () => void;
   onSelect?: (e: Event) => void;
 
   /**
-   * When true (default): behaves like the current carousel (arrows + sliding).
-   * When false: shows a "static" single-view strip (no arrows, no sliding),
-   * pinned to the first possible slide.
+   * - true  => always carousel (arrows + sliding)
+   * - false => ≥1024: desktop grid list (6 items)
+   *           <1024: carousel (6 items) instead of wrapping
    */
   isCarousel?: boolean;
 }
@@ -64,20 +76,47 @@ export default function EventCarouselSection({
   onSelect,
   isCarousel = false,
 }: EventCarouselSectionProps) {
-  /* responsive sizing */
+  // When NOT forced carousel, we only ever show 6 items (both desktop list + mobile carousel)
+  const shownEvents = useMemo(
+    () => (isCarousel ? events : events.slice(0, 6)),
+    [events, isCarousel]
+  );
+
+  // Track window width to switch modes responsively
+  const [winW, setWinW] = useState(() =>
+    typeof window === "undefined" ? 1200 : window.innerWidth
+  );
+
+  // If user didn't ask for carousel, make it carousel on mobile/tablet (<1024)
+  const responsiveCarousel =
+    !isCarousel && winW < RESPONSIVE_CAROUSEL_BREAKPOINT;
+  const effectiveCarousel = isCarousel || responsiveCarousel;
+
+  /* responsive sizing (carousel modes only) */
   const [{ cardW, visible }, setLayout] = useState(() =>
     typeof window === "undefined"
-      ? { cardW: 260, visible: 3 }
+      ? { cardW: CARD_WIDTHS[0], visible: 3 }
       : calcLayout(window.innerWidth)
   );
-  const STEP = cardW + GAP_PX;
-  const viewportW = visible * cardW + (visible - 1) * GAP_PX;
 
   useEffect(() => {
-    const onResize = () => setLayout(calcLayout(window.innerWidth));
+    const onResize = () => {
+      const w = window.innerWidth;
+      setWinW(w);
+
+      // Only keep layout in sync when carousel is active (forced OR responsive)
+      if (isCarousel || w < RESPONSIVE_CAROUSEL_BREAKPOINT) {
+        setLayout(calcLayout(w));
+      }
+    };
+
+    onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
+  }, [isCarousel]);
+
+  const STEP = cardW + GAP_PX;
+  const viewportW = visible * cardW + (visible - 1) * GAP_PX;
 
   /* carousel state */
   const [idx, setIdx] = useState(0);
@@ -85,44 +124,41 @@ export default function EventCarouselSection({
 
   /* boundaries */
   useEffect(() => {
-    // If carousel is disabled, always pin to the first slide.
-    if (!isCarousel) {
+    if (!effectiveCarousel) {
       setIdx(0);
       setAnim(false);
       return;
     }
 
-    // Keep idx valid when visible count / event count changes.
-    setIdx((i) => Math.min(i, Math.max(events.length - visible, 0)));
-  }, [visible, events.length, isCarousel]);
+    // keep idx valid when visible count / event count changes
+    setIdx((i) => Math.min(i, Math.max(shownEvents.length - visible, 0)));
+  }, [effectiveCarousel, visible, shownEvents.length]);
 
-  const maxIdx = Math.max(events.length - visible, 0);
+  const maxIdx = Math.max(shownEvents.length - visible, 0);
 
-  // Only allow movement when carousel is enabled.
-  const canLeft = isCarousel && idx < maxIdx;
-  const canRight = isCarousel && idx > 0;
+  const canLeft = effectiveCarousel && idx < maxIdx;
+  const canRight = effectiveCarousel && idx > 0;
 
   const shiftLeft = useCallback(() => {
-    if (!isCarousel) return;
+    if (!effectiveCarousel) return;
     if (!canLeft || anim) return;
     setAnim(true);
     setIdx((i) => i + 1);
-  }, [isCarousel, canLeft, anim]);
+  }, [effectiveCarousel, canLeft, anim]);
 
   const shiftRight = useCallback(() => {
-    if (!isCarousel) return;
+    if (!effectiveCarousel) return;
     if (!canRight || anim) return;
     setAnim(true);
     setIdx((i) => i - 1);
-  }, [isCarousel, canRight, anim]);
+  }, [effectiveCarousel, canRight, anim]);
 
   const onEnd = () => setAnim(false);
 
-  /* render */
   return (
     <div className="mb-16">
       {/* header */}
-      <div className="mb-6 flex items-center justify-between px-4 lg:px-8 xl:px-[120px]">
+      <div className="mb-6 flex items-center justify-between px-4 sm:px-6 lg:px-[120px]">
         <div className="flex items-center gap-2">
           <span>{icon}</span>
           <h2 className="text-2xl font-semibold text-neutral-0">{title}</h2>
@@ -141,14 +177,14 @@ export default function EventCarouselSection({
             </Button>
           )}
 
-          {/* Only show arrows when carousel is enabled */}
-          {isCarousel && (
+          {/* arrows only when we're actually in carousel mode AND there's something to slide */}
+          {effectiveCarousel && maxIdx > 0 && (
             <>
               <button
                 onClick={shiftRight}
                 disabled={!canRight}
                 className={clsx(
-                  "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
+                  "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer",
                   !canRight && "cursor-default opacity-30 hover:bg-transparent"
                 )}
               >
@@ -158,7 +194,7 @@ export default function EventCarouselSection({
                 onClick={shiftLeft}
                 disabled={!canLeft}
                 className={clsx(
-                  "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer ",
+                  "rounded-full border border-neutral-700/70 p-3 hover:border-primary-500 cursor-pointer",
                   !canLeft && "cursor-default opacity-30 hover:bg-transparent"
                 )}
               >
@@ -169,12 +205,31 @@ export default function EventCarouselSection({
         </div>
       </div>
 
-      {/* row (no overflow clipping) */}
-      <div className="relative px-4 lg:px-8 xl:px-[120px]">
-        {/* gradient fades – only when carousel is enabled */}
-        {isCarousel && (
+      {/* content */}
+      <div className="relative px-4 sm:px-6 lg:px-[120px]">
+        {/* ≥1024 and isCarousel={false}: DESKTOP grid list (auto-fits; will show 6 on big screens) */}
+        {!effectiveCarousel ? (
+          <div
+            className="grid w-full gap-4"
+            style={{
+              // auto-fit = makes as many columns as can fit,
+              // but collapses empty columns so 6 items => max 6 visible columns
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            }}
+          >
+            {shownEvents.map((ev) => (
+              <div
+                key={ev.id}
+                className="cursor-pointer"
+                onClick={() => onSelect?.(ev)}
+              >
+                <EventCard {...ev} className="h-full w-full" />
+              </div>
+            ))}
+          </div>
+        ) : (
           <>
-            {/* left fade */}
+            {/* gradient fades – carousel only */}
             <div
               aria-hidden
               className={clsx(
@@ -182,7 +237,7 @@ export default function EventCarouselSection({
                 canRight ? "opacity-100" : "opacity-0"
               )}
               style={{
-                left: 0, // ✅ at the very start of content (padding edge)
+                left: 0,
                 width: SHADOW_W,
                 backgroundColor: "var(--background)",
                 WebkitMaskImage:
@@ -192,7 +247,6 @@ export default function EventCarouselSection({
                 transition: "opacity 200ms ease",
               }}
             />
-            {/* right fade */}
             <div
               aria-hidden
               className={clsx(
@@ -200,7 +254,7 @@ export default function EventCarouselSection({
                 canLeft ? "opacity-100" : "opacity-0"
               )}
               style={{
-                right: 0, // ✅ flush with the end of content (padding edge)
+                right: 0,
                 width: SHADOW_W,
                 backgroundColor: "var(--background)",
                 WebkitMaskImage:
@@ -210,37 +264,36 @@ export default function EventCarouselSection({
                 transition: "opacity 200ms ease",
               }}
             />
+
+            {/* track (NO overflow-hidden — it can spill off-screen) */}
+            <div className="flex items-start">
+              <div className="relative" style={{ width: viewportW }}>
+                <div
+                  onTransitionEnd={onEnd}
+                  className="group/row flex"
+                  style={{
+                    columnGap: GAP_PX,
+                    transform: `translateX(-${idx * STEP}px)`,
+                    transition: anim
+                      ? `transform ${TRANSITION_MS}ms ease`
+                      : "none",
+                  }}
+                >
+                  {shownEvents.map((ev) => (
+                    <div
+                      key={ev.id}
+                      style={{ width: cardW }}
+                      className="flex-shrink-0 cursor-pointer"
+                      onClick={() => onSelect?.(ev)}
+                    >
+                      <EventCard {...ev} className="h-full" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </>
         )}
-
-        {/* track */}
-        <div className="flex items-start">
-          <div className="relative" style={{ width: viewportW }}>
-            <div
-              onTransitionEnd={isCarousel ? onEnd : undefined}
-              className="group/row flex"
-              style={{
-                columnGap: GAP_PX,
-                transform: `translateX(-${(isCarousel ? idx : 0) * STEP}px)`,
-                transition:
-                  isCarousel && anim
-                    ? `transform ${TRANSITION_MS}ms ease`
-                    : "none",
-              }}
-            >
-              {events.map((ev) => (
-                <div
-                  key={ev.id}
-                  style={{ width: cardW }}
-                  className="flex-shrink-0 cursor-pointer"
-                  onClick={() => onSelect?.(ev)}
-                >
-                  <EventCard {...ev} className="h-full" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

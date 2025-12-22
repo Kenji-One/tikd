@@ -53,8 +53,8 @@ const slides: Slide[] = [
 
 const HERO_CENTER_W = 1074; // must match "center" card width
 const HERO_CENTER_HALF = HERO_CENTER_W / 2; // 537
-const HERO_ARROW_GAP = 18; // distance from center card edge
-const HERO_ARROW_EDGE_PAD = 12; // minimum padding from screen edge
+const HERO_ARROW_GAP = 58; // distance from center card edge
+const HERO_ARROW_EDGE_PAD = 22; // minimum padding from screen edge
 
 /* -------------------------------------------------------------------------- */
 /*  Main component                                                            */
@@ -189,7 +189,7 @@ function ArrowButton({
         "transition-[transform,background-color,border-color,box-shadow] duration-200 ease-out",
         "hover:bg-neutral-950/70 hover:border-white/25",
         "active:scale-[0.98]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/70"
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/70 cursor-pointer"
       )}
     >
       <Icon className="h-5 w-5 sm:h-5.5 sm:w-5.5 text-white/90 transition-transform duration-200 group-hover:scale-110" />

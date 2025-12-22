@@ -1,3 +1,4 @@
+// src/app/events/page.tsx
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
@@ -8,7 +9,7 @@ import HeroSection from "@/components/sections/Landing/HeroSection";
 import FilterBar from "@/components/ui/FilterBar";
 import CategoryFilter from "@/components/ui/CategoryFilter";
 import EventCarouselSection, {
-  Event,
+  type Event,
 } from "@/components/sections/Landing/EventCarouselSection";
 import { EventCard } from "@/components/ui/EventCard";
 import { Search, Zap } from "lucide-react";
@@ -415,7 +416,7 @@ export default function EventsPage() {
       }
       const json = (await res.json()) as BackendEvent[];
       return json
-        .slice() // clone
+        .slice()
         .sort((a, b) => +new Date(a.date) - +new Date(b.date))
         .map(toCarouselEvent);
     },
@@ -434,7 +435,6 @@ export default function EventsPage() {
       ? "auto"
       : "smooth";
 
-    // Let React paint the new UI first, then scroll.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.scrollTo({ top: 0, behavior });
@@ -462,7 +462,7 @@ export default function EventsPage() {
       <FilterBar />
 
       {/* category filter */}
-      <div className="px-4 sm:px-6 w-full flex justify-center">
+      <div className="w-full px-4 sm:px-6 lg:px-[120px] flex justify-center">
         <CategoryFilter
           selected={selectedCategory}
           onSelect={setSelectedCategory}
@@ -470,7 +470,7 @@ export default function EventsPage() {
       </div>
 
       {/* carousels */}
-      <main className="w-full py-12 overflow-hidden">
+      <main className="w-full py-12">
         {/* ─── New: Live Events (real data) – shown when available ───────── */}
         {liveEvents.length > 0 && (
           <EventCarouselSection
@@ -478,11 +478,12 @@ export default function EventsPage() {
             icon={<Zap className="text-white" size={22} />}
             events={liveEvents}
             onViewAll={() => setCategoryAndScrollTop("All")}
+            isCarousel={false}
           />
         )}
 
         {selectedCategory === "All" ? (
-          // ─── All: render one slider per category (dummy) ───────────────
+          // ─── All: render one section per category (dummy) ───────────────
           Object.entries(eventsByCategory).map(([cat, list]) => (
             <EventCarouselSection
               key={cat}
@@ -490,10 +491,10 @@ export default function EventsPage() {
               icon={categoryIcon[cat] ?? <Search size={22} />}
               events={list}
               onViewAll={() => setCategoryAndScrollTop(cat)}
+              isCarousel={false}
             />
           ))
         ) : (
-          // ─── Single category: show a simple grid (dummy) ───────────────
           <section className="mb-16 px-4 lg:px-8 xl:px-[120px]">
             <div className="mb-6 flex items-center gap-3">
               <span className="inline-flex items-center justify-center text-white [&_svg]:h-7 [&_svg]:w-7">
@@ -505,7 +506,6 @@ export default function EventsPage() {
                 {selectedCategory}
               </h2>
             </div>
-
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               {filteredEvents.map((ev) => (
                 <EventCard key={ev.id} {...ev} />

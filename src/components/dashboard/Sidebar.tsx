@@ -6,7 +6,7 @@
 import type { ReactElement } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 
 /* ------------------------------- Icons ----------------------------- */
@@ -18,42 +18,118 @@ import clsx from "clsx";
 
 type IconProps = { className?: string };
 
-function DashboardGridIcon({ className }: IconProps): ReactElement {
+/* ----- Dashboard-home icons (replaces old internal tabs) ----------- */
+
+function DashHomeIcon({ className }: IconProps): ReactElement {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      {/* TODO: Replace with dashboard grid SVG */}
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+    >
+      <path
+        d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
 
-function DashboardEventsIcon({ className }: IconProps): ReactElement {
+function DashUpcomingIcon({ className }: IconProps): ReactElement {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      {/* TODO: Replace with events SVG */}
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+    >
+      <path
+        d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1Zm14 8H3v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-9Z"
+        fill="currentColor"
+      />
+      <path
+        d="M8 13.5a1 1 0 0 1 1-1h6a1 1 0 1 1 0 2H9a1 1 0 0 1-1-1Z"
+        fill="currentColor"
+        opacity="0.9"
+      />
     </svg>
   );
 }
 
-function ConnectionsIcon({ className }: IconProps): ReactElement {
+function DashOrgsIcon({ className }: IconProps): ReactElement {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      {/* TODO: Replace with connections SVG */}
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+    >
+      <path
+        d="M4 21V7a2 2 0 0 1 2-2h5V3a1 1 0 0 1 1-1h6a2 2 0 0 1 2 2v17H4Z"
+        fill="currentColor"
+      />
+      <path
+        d="M7 10h2v2H7v-2Zm0 4h2v2H7v-2Zm4-4h2v2h-2v-2Zm0 4h2v2h-2v-2Zm4-4h2v2h-2v-2Zm0 4h2v2h-2v-2Z"
+        fill="#08080F"
+        opacity="0.85"
+      />
     </svg>
   );
 }
 
-function FinancesIcon({ className }: IconProps): ReactElement {
+function DashPastIcon({ className }: IconProps): ReactElement {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      {/* TODO: Replace with finances SVG */}
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+    >
+      <path
+        d="M12 2a10 10 0 1 1-7.07 2.93 1 1 0 1 1 1.41 1.41A8 8 0 1 0 12 4a1 1 0 1 1 0-2Z"
+        fill="currentColor"
+        opacity="0.95"
+      />
+      <path
+        d="M12 6a1 1 0 0 1 1 1v4.25l2.6 1.5a1 1 0 1 1-1 1.73l-3.1-1.8A1 1 0 0 1 11 11.8V7a1 1 0 0 1 1-1Z"
+        fill="currentColor"
+      />
+      <path
+        d="M3.25 5.75h2.5a1 1 0 1 1 0 2h-2.5a1 1 0 1 1 0-2Z"
+        fill="currentColor"
+        opacity="0.9"
+      />
     </svg>
   );
 }
 
-function DataIcon({ className }: IconProps): ReactElement {
+function DashDraftsIcon({ className }: IconProps): ReactElement {
   return (
-    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
-      {/* TODO: Replace with data SVG */}
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+    >
+      <path
+        d="M7 2h7l5 5v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"
+        fill="currentColor"
+      />
+      <path
+        d="M14 2v4a1 1 0 0 0 1 1h4"
+        stroke="#08080F"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.7"
+      />
+      <path
+        d="M8 13h8M8 17h6"
+        stroke="#08080F"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
     </svg>
   );
 }
@@ -176,22 +252,44 @@ type NavItem = {
   href: string;
   label: string;
   icon: IconLike;
+  /** Dashboard-home only: identifies which internal section this link maps to */
+  view?: "home" | "upcoming" | "orgs" | "past" | "drafts";
   /** Optional custom match logic for active state */
   match?: (pathname: string) => boolean;
 };
 
 type SidebarVariant = "dashboard" | "organization";
 
+/**
+ * Dashboard default page ("/dashboard") uses this nav now.
+ * It mirrors the old internal tabs, but as sidebar links.
+ */
 const dashboardItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: DashboardGridIcon },
-  { href: "/dashboard/events", label: "Events", icon: DashboardEventsIcon },
+  { href: "/dashboard", label: "Home", icon: DashHomeIcon, view: "home" },
   {
-    href: "/dashboard/connections",
-    label: "Connections",
-    icon: ConnectionsIcon,
+    href: "/dashboard?view=upcoming",
+    label: "Upcoming Events",
+    icon: DashUpcomingIcon,
+    view: "upcoming",
   },
-  { href: "/dashboard/finances", label: "Finances", icon: FinancesIcon },
-  { href: "/dashboard/data", label: "Data", icon: DataIcon },
+  {
+    href: "/dashboard?view=orgs",
+    label: "My Organizations",
+    icon: DashOrgsIcon,
+    view: "orgs",
+  },
+  {
+    href: "/dashboard?view=past",
+    label: "Past Events",
+    icon: DashPastIcon,
+    view: "past",
+  },
+  {
+    href: "/dashboard?view=drafts",
+    label: "Drafts",
+    icon: DashDraftsIcon,
+    view: "drafts",
+  },
 ];
 
 /**
@@ -244,7 +342,10 @@ type SidebarProps = {
 
 export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const isOrg = variant === "organization";
+  const isDashboard = variant === "dashboard";
   const items = isOrg ? orgItems : dashboardItems;
 
   // Figure out /dashboard/organizations/:id base from the current URL
@@ -256,10 +357,22 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     }
   }
 
+  // Dashboard-home active section is driven by ?view=
+  const rawView = searchParams.get("view");
+  const dashboardView: NavItem["view"] =
+    rawView === "upcoming" ||
+    rawView === "orgs" ||
+    rawView === "past" ||
+    rawView === "drafts"
+      ? rawView
+      : "home";
+
+  const showTopLogo = isOrg || isDashboard;
+
   return (
     <nav className="flex h-full w-[248px] flex-col border-r border-white/5 bg-[#0F1117] px-6 py-8">
-      {/* Logo for org dashboard sidebar */}
-      {isOrg && (
+      {/* Logo */}
+      {showTopLogo && (
         <div className="mb-8">
           <Link href="/dashboard" className="flex items-center">
             <Image
@@ -286,7 +399,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
       )}
 
       <ul className="space-y-2">
-        {items.map(({ href, label, icon: Icon, match }) => {
+        {items.map(({ href, label, icon: Icon, match, view }) => {
           // Build absolute href for org links using orgBase
           const computedHref =
             isOrg && orgBase
@@ -297,7 +410,11 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
                   : `${orgBase}/${href}`
               : href;
 
-          const active = match ? match(pathname) : pathname === computedHref;
+          const active = isDashboard
+            ? view === dashboardView
+            : match
+              ? match(pathname)
+              : pathname === computedHref;
 
           return (
             <li key={`${variant}-${label}`}>

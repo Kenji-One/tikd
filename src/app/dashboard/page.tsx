@@ -1,15 +1,12 @@
 /* ------------------------------------------------------------------ */
 /*  src/app/dashboard/page.tsx – Tikd Dashboard Home                  */
-/*  - No sidebar (handled in layout)                                  */
-/*  - Internal tabs: Home | Upcoming | My Orgs | Past | Drafts        */
-/*  - Hero CTAs + tabbed content (events & orgs)                      */
 /* ------------------------------------------------------------------ */
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -46,7 +43,7 @@ type MyEvent = {
   pinned?: boolean;
 };
 
-type HomeTabId = "home" | "upcoming" | "orgs" | "past" | "drafts";
+type HomeViewId = "home" | "upcoming" | "orgs" | "past" | "drafts";
 
 /* ---------------------------- Helpers ------------------------------ */
 async function fetchJSON<T>(url: string): Promise<T> {
@@ -73,6 +70,21 @@ function formatDateLabel(iso: string) {
     year: "numeric",
   });
 }
+
+function normalizeView(v: string | null): HomeViewId {
+  if (v === "upcoming" || v === "orgs" || v === "past" || v === "drafts") {
+    return v;
+  }
+  return "home";
+}
+
+const VIEW_LABEL: Record<HomeViewId, string> = {
+  home: "Home",
+  upcoming: "Upcoming Events",
+  orgs: "My Organizations",
+  past: "Past Events",
+  drafts: "Drafts",
+};
 
 /* -------------------------- Org Card (shared) ---------------------- */
 function OrgCard({
@@ -304,50 +316,6 @@ function SortBy({
   );
 }
 
-/* -------------------------- Tabs (top pills) ----------------------- */
-
-const DASHBOARD_TABS: { id: HomeTabId; label: string }[] = [
-  { id: "home", label: "Home" },
-  { id: "upcoming", label: "Upcoming Events" },
-  { id: "orgs", label: "My Organizations" },
-  { id: "past", label: "Past Events" },
-  { id: "drafts", label: "Drafts" },
-];
-
-function DashboardTabs({
-  activeId,
-  onChange,
-}: {
-  activeId: HomeTabId;
-  onChange: (id: HomeTabId) => void;
-}) {
-  return (
-    <nav className="mt-6 mb-8">
-      <div className="inline-flex flex-wrap gap-1 rounded-full border border-white/10 bg-neutral-950/80 p-1 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-        {DASHBOARD_TABS.map((item) => {
-          const isActive = item.id === activeId;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onChange(item.id)}
-              className={clsx(
-                "rounded-full px-5 py-2.5 text-sm font-medium transition-all.duration-150",
-                "whitespace-nowrap",
-                isActive
-                  ? "bg-neutral-0 text-neutral-950 shadow-[0_0_0_1px_rgba(255,255,255,0.25)]"
-                  : "text-neutral-300 hover:bg-white/5 hover:text-neutral-0"
-              )}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
 /* ---------------------- Org Picker Modal -------------------------- */
 
 type OrgPickerModalProps = {
@@ -553,8 +521,11 @@ function OrgPickerModal({
 
 export default function DashboardHomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<HomeTabId>("home");
+
+  const view = normalizeView(searchParams.get("view"));
+
   const [sort, setSort] = useState<SortKey>("newest");
 
   const [showOrgPicker, setShowOrgPicker] = useState(false);
@@ -606,6 +577,13 @@ export default function DashboardHomePage() {
     }
   }
 
+  /* ---------------------- Navigation helpers ---------------------- */
+
+  function goToView(next: HomeViewId) {
+    const href = next === "home" ? "/dashboard" : `/dashboard?view=${next}`;
+    router.push(href);
+  }
+
   /* ---------------------- Actions ---------------------- */
 
   function openOrgPicker() {
@@ -624,7 +602,7 @@ export default function DashboardHomePage() {
     router.push(target);
   }
 
-  /* ---------------------- Tab content helpers ---------------------- */
+  /* ---------------------- Content helpers ---------------------- */
 
   function renderHomeTab() {
     return (
@@ -692,7 +670,7 @@ export default function DashboardHomePage() {
             </div>
             <button
               type="button"
-              onClick={() => setActiveTab("orgs")}
+              onClick={() => goToView("orgs")}
               className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-neutral-0 transition-colors hover:border-primary-600/60 hover:bg-primary-700/30 md:inline-flex"
             >
               <Plus className="h-3 w-3" />
@@ -864,7 +842,7 @@ export default function DashboardHomePage() {
   }
 
   let content: ReactNode;
-  switch (activeTab) {
+  switch (view) {
     case "home":
       content = renderHomeTab();
       break;
@@ -904,12 +882,57 @@ export default function DashboardHomePage() {
   }
 
   return (
-    <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
+    <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       <section className="pb-20">
-        {/* Top pill tabs */}
-        <DashboardTabs activeId={activeTab} onChange={setActiveTab} />
+        {/* Mobile section picker (since sidebar is hidden on mobile) */}
+        <div className="mt-6 md:hidden">
+          <label
+            htmlFor="dashboard-view"
+            className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400"
+          >
+            Section
+          </label>
+          <div className="relative">
+            <select
+              id="dashboard-view"
+              value={view}
+              onChange={(e) => goToView(e.target.value as HomeViewId)}
+              className={clsx(
+                "h-[44px] w-full appearance-none rounded-full border border-white/10",
+                "bg-[#121420] px-4 pr-10 text-sm text-neutral-0",
+                "focus:outline-none focus-visible:border-violet-500/50"
+              )}
+            >
+              <option value="home">Home</option>
+              <option value="upcoming">Upcoming Events</option>
+              <option value="orgs">My Organizations</option>
+              <option value="past">Past Events</option>
+              <option value="drafts">Drafts</option>
+            </select>
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-neutral-300">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path
+                  d="M11.333 6.113a.67.67 0 0 0-.47-.194c-.176 0-.345.07-.47.194L8 8.473 5.64 6.113a.665.665 0 0 0-.94 0 .66.66 0 0 0 0 .947l2.827 2.827a.666.666 0 0 0 .946 0l2.86-2.827a.66.66 0 0 0 0-.947Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </span>
+          </div>
+        </div>
 
-        {/* Active tab content */}
+        {/* Desktop page label (sidebar handles actual navigation) */}
+        <div className="mt-6 hidden md:block">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
+            {VIEW_LABEL[view]}
+          </p>
+        </div>
+
+        {/* Active section content */}
         {content}
       </section>
 
@@ -923,6 +946,6 @@ export default function DashboardHomePage() {
         onClose={() => setShowOrgPicker(false)}
         onConfirm={handleOrgPickerConfirm}
       />
-    </main>
+    </div>
   );
 }

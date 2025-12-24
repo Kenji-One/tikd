@@ -71,27 +71,8 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
   return (
     <>
       <div className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
-        {/* Logo (hidden on organization pages) */}
-        {!hideLogo && (
-          <Link href="/" className="flex items-center">
-            <Image
-              src="/Logo.svg"
-              alt="Tikd."
-              width={72}
-              height={24}
-              priority
-            />
-          </Link>
-        )}
-
         {/* Search trigger – looks like an input but opens SearchModal */}
-        <div
-          className={
-            hideLogo
-              ? "relative w-full sm:max-w-md"
-              : "relative w-full sm:max-w-md"
-          }
-        >
+        <div className={"relative w-full sm:max-w-md"}>
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -101,10 +82,6 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
             <SearchIcon className="h-4 w-4 opacity-70" />
             <span className="flex-1 truncate text-white/70">
               Search events, orgs, artists…
-            </span>
-            <span className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/60 md:inline-flex">
-              <kbd className="font-mono">/</kbd> <span>or</span>{" "}
-              <kbd className="font-mono">⌘K</kbd>
             </span>
           </button>
         </div>

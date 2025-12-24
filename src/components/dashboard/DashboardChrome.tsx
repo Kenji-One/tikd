@@ -21,19 +21,31 @@ export default function DashboardChrome({ children }: Props) {
     pathname.startsWith("/dashboard/organizations/") &&
     pathname.split("/").length >= 4; // /dashboard/organizations/[id](/*)
 
-  const hasOrgSidebar = isOrgSubpage;
+  // Dashboard default page: replace internal tabs with a sidebar
+  const isDashboardHome = pathname === "/dashboard";
+
+  const hasSidebar = isOrgSubpage || isDashboardHome;
+
+  const sidebarVariant = isOrgSubpage
+    ? ("organization" as const)
+    : ("dashboard" as const);
 
   return (
     <div className="min-h-dvh w-full bg-neutral-950 text-white">
-      <div className={clsx("mx-auto max-w-[1600px]", hasOrgSidebar && "flex")}>
-        {hasOrgSidebar && (
+      <div
+        className={clsx(
+          // When a sidebar is present, the layout must be flush-left (no mx-auto centering)
+          hasSidebar ? "flex w-full" : "mx-auto max-w-[1600px]"
+        )}
+      >
+        {hasSidebar && (
           <aside className="sticky top-0 hidden h-dvh shrink-0 md:block">
-            <Sidebar variant="organization" />
+            <Sidebar variant={sidebarVariant} />
           </aside>
         )}
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 !pt-0">
-          <Topbar hideLogo={hasOrgSidebar} />
+        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 !pt-0">
+          <Topbar hideLogo={isOrgSubpage} />
           {children}
         </main>
       </div>

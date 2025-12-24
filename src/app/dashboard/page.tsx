@@ -18,10 +18,11 @@ import {
   FilePlus2,
   X,
   CheckCircle2,
+  ChevronDown,
+  DollarSign,
 } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/Skeleton";
-import { EventCard } from "@/components/ui/EventCard";
 import { Button } from "@/components/ui/Button";
 
 /* ------------------------------ Types ------------------------------ */
@@ -62,15 +63,6 @@ function domainFromUrl(url?: string) {
   }
 }
 
-function formatDateLabel(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function normalizeView(v: string | null): HomeViewId {
   if (v === "upcoming" || v === "orgs" || v === "past" || v === "drafts") {
     return v;
@@ -85,6 +77,37 @@ const VIEW_LABEL: Record<HomeViewId, string> = {
   past: "Past Events",
   drafts: "Drafts",
 };
+
+function money(n: number) {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    return `$${Math.round(n).toLocaleString()}`;
+  }
+}
+
+function formatEventDate(iso: string) {
+  const d = new Date(iso);
+  const day = d.getDate();
+  const mon = d.toLocaleString(undefined, { month: "short" }).toUpperCase();
+  const year = d.getFullYear();
+  return `${day} ${mon}, ${year}`;
+}
+
+function formatDateLine(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 /* -------------------------- Org Card (shared) ---------------------- */
 function OrgCard({
@@ -171,143 +194,80 @@ function OrgCard({
   );
 }
 
-/* --------------------------- Sort control -------------------------- */
-type SortKey = "newest" | "oldest" | "az" | "za";
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: "newest", label: "Newest" },
-  { key: "oldest", label: "Oldest" },
-  { key: "az", label: "A–Z" },
-  { key: "za", label: "Z–A" },
-];
-
-function SortBy({
+/* ---------------------- Compact dropdown (Tikd style) -------------- */
+function MiniSelect<T extends string>({
   value,
   onChange,
+  options,
 }: {
-  value: SortKey;
-  onChange: (v: SortKey) => void;
+  value: T;
+  onChange: (v: T) => void;
+  options: { key: T; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  const currentIndex = useMemo(
-    () =>
-      Math.max(
-        0,
-        SORT_OPTIONS.findIndex((o) => o.key === value)
-      ),
-    [value]
-  );
-  const [highlight, setHighlight] = useState(currentIndex);
 
   useEffect(() => {
-    function onDocClick(e: MouseEvent) {
+    function onDoc(e: MouseEvent) {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     }
-    if (open) document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    if (open) document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (!open) return;
-      if (e.key === "Escape") {
-        setOpen(false);
-        return;
-      }
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        const dir = e.key === "ArrowDown" ? 1 : -1;
-        const next =
-          (highlight + dir + SORT_OPTIONS.length) % SORT_OPTIONS.length;
-        setHighlight(next);
-        listRef.current
-          ?.querySelector<HTMLElement>(`[data-index="${next}"]`)
-          ?.scrollIntoView({ block: "nearest" });
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        const opt = SORT_OPTIONS[highlight];
-        if (opt) {
-          onChange(opt.key);
-          setOpen(false);
-        }
-      }
-    }
-    if (open) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, highlight, onChange]);
-
-  const label = SORT_OPTIONS.find((o) => o.key === value)?.label ?? "Newest";
+  const label =
+    options.find((o) => o.key === value)?.label ?? options[0]?.label;
 
   return (
     <div ref={wrapRef} className="relative">
       <button
-        onClick={() => {
-          setHighlight(currentIndex);
-          setOpen((v) => !v);
-        }}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
         className={clsx(
           "inline-flex items-center gap-2 rounded-full border border-white/10",
-          "bg-neutral-950/70 px-4 py-2 text-sm text-neutral-300",
-          "hover:text-neutral-0 focus:outline-none focus:ring-1 focus:ring-primary-600/40"
+          "bg-white/5 px-3 py-2 text-xs font-medium text-neutral-200",
+          "transition hover:bg-white/8 hover:text-neutral-0",
+          "focus:outline-none focus:ring-1 focus:ring-primary-600/35"
         )}
-        aria-haspopup="listbox"
-        aria-expanded={open}
       >
-        <span>Sort by: {label}</span>
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
+        {label}
+        <ChevronDown
           className={clsx(
-            "transition-transform",
-            open ? "rotate-180 text-neutral-200" : "text-neutral-400"
+            "h-4 w-4 transition-transform",
+            open ? "rotate-180 text-neutral-100" : "text-neutral-400"
           )}
-          aria-hidden="true"
-        >
-          <path
-            d="M11.333 6.113a.67.67 0 0 0-.47-.194c-.176 0-.345.07-.47.194L8 8.473 5.64 6.113a.665.665 0 0 0-.94 0 .66.66 0 0 0 0 .947l2.827 2.827a.666.666 0 0 0 .946 0l2.86-2.827a.66.66 0 0 0 0-.947Z"
-            fill="currentColor"
-          />
-        </svg>
+        />
       </button>
 
       {open && (
         <div
-          ref={listRef}
-          role="listbox"
-          aria-activedescendant={`sort-opt-${highlight}`}
           className={clsx(
-            "absolute right-0 z-50 mt-2 w-48 overflow-auto rounded-2xl",
-            "border border-white/10 bg-neutral-950/95 shadow-xl backdrop-blur",
-            "focus:outline-none"
+            "absolute right-0 z-30 mt-2 w-44 overflow-hidden rounded-2xl",
+            "border border-white/10 bg-neutral-950/95 shadow-xl backdrop-blur"
           )}
         >
-          {SORT_OPTIONS.map((opt, i) => {
-            const selected = opt.key === value;
-            const isActive = i === highlight;
+          {options.map((opt) => {
+            const active = opt.key === value;
             return (
-              <div
+              <button
                 key={opt.key}
-                id={`sort-opt-${i}`}
-                data-index={i}
-                role="option"
-                aria-selected={selected}
-                onMouseEnter={() => setHighlight(i)}
+                type="button"
                 onClick={() => {
                   onChange(opt.key);
                   setOpen(false);
                 }}
                 className={clsx(
-                  "cursor-pointer px-3 py-2 text-sm",
-                  selected ? "text-neutral-0" : "text-neutral-200",
-                  isActive ? "bg-primary-700/25" : "hover:bg-white/5"
+                  "flex w-full items-center justify-between px-3 py-2 text-left text-xs",
+                  active
+                    ? "bg-primary-700/20 text-neutral-0"
+                    : "text-neutral-200 hover:bg-white/5"
                 )}
               >
-                {`Sort by: ${opt.label}`}
-              </div>
+                <span>{opt.label}</span>
+                {active ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary-300" />
+                ) : null}
+              </button>
             );
           })}
         </div>
@@ -317,7 +277,6 @@ function SortBy({
 }
 
 /* ---------------------- Org Picker Modal -------------------------- */
-
 type OrgPickerModalProps = {
   open: boolean;
   orgs: Org[];
@@ -342,9 +301,7 @@ function OrgPickerModal({
   const hasOrgs = orgs.length > 0;
   const canConfirm = hasOrgs && !!selectedOrgId && !loading;
 
-  const handleOverlayClick = () => {
-    onClose();
-  };
+  const handleOverlayClick = () => onClose();
 
   const handleCardClick = (e: ReactMouseEvent<HTMLDivElement>, id: string) => {
     e.stopPropagation();
@@ -518,7 +475,6 @@ function OrgPickerModal({
 }
 
 /* ----------------------------- Page -------------------------------- */
-
 export default function DashboardHomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -526,7 +482,12 @@ export default function DashboardHomePage() {
 
   const view = normalizeView(searchParams.get("view"));
 
-  const [sort, setSort] = useState<SortKey>("newest");
+  /* Drafts sort (Tikd dropdown style) */
+  type SortKey = "newest" | "oldest" | "az" | "za";
+  const [draftSort, setDraftSort] = useState<SortKey>("newest");
+
+  /* Upcoming/Past stats sort (Revenue dropdown style) */
+  type MetricKey = "revenue" | "tickets" | "date";
 
   const [showOrgPicker, setShowOrgPicker] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
@@ -557,35 +518,27 @@ export default function DashboardHomePage() {
   );
   const drafts = events.filter((e) => e.status === "draft");
 
-  function sortList(list: MyEvent[]) {
-    const arr = [...list];
-    switch (sort) {
-      case "newest":
-        return arr.sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-        );
-      case "oldest":
-        return arr.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-        );
-      case "az":
-        return arr.sort((a, b) => a.title.localeCompare(b.title));
-      case "za":
-        return arr.sort((a, b) => b.title.localeCompare(a.title));
-      default:
-        return arr;
-    }
-  }
+  /* --- orgs: one simple stat (safe for future backend fields) --- */
+  const totalOrgRevenue = useMemo(() => {
+    const published = events.filter((e) => e.status !== "draft");
+    const sum = published.reduce((acc, e) => {
+      const raw =
+        (e as any).revenue ??
+        (e as any).revenueTotal ??
+        (e as any).grossRevenue ??
+        0;
+      return acc + (typeof raw === "number" ? raw : 0);
+    }, 0);
+    return sum;
+  }, [events]);
 
   /* ---------------------- Navigation helpers ---------------------- */
-
   function goToView(next: HomeViewId) {
     const href = next === "home" ? "/dashboard" : `/dashboard?view=${next}`;
     router.push(href);
   }
 
   /* ---------------------- Actions ---------------------- */
-
   function openOrgPicker() {
     if (orgsList.length > 0) {
       setSelectedOrgId(orgsList[0]._id);
@@ -602,8 +555,7 @@ export default function DashboardHomePage() {
     router.push(target);
   }
 
-  /* ---------------------- Content helpers ---------------------- */
-
+  /* ---------------------- Home tab ---------------------- */
   function renderHomeTab() {
     return (
       <div className="mt-4 space-y-8">
@@ -657,25 +609,460 @@ export default function DashboardHomePage() {
           </button>
         </div>
 
-        {/* My Organizations section (preview) */}
-        <section className="rounded-2xl border border-white/10 bg-neutral-950/80 px-4 py-4 md:px-6 md:py-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
+        {/* My Organizations (preview) — match stats panel styling */}
+        <section
+          className={clsx(
+            "overflow-hidden rounded-2xl border border-white/10",
+            "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+          )}
+        >
+          <div
+            className={clsx(
+              "relative p-4 md:p-5",
+              "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+            )}
+          >
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
+                  My Organizations
+                </p>
+                <p className="mt-1 text-xs text-neutral-400">
+                  All the brands and teams you manage in Tikd.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-200">
+                  <DollarSign className="h-4 w-4 text-neutral-400" />
+                  <span className="font-semibold text-neutral-0">
+                    {money(totalOrgRevenue)}
+                  </span>
+                  <span className="text-neutral-400">Total revenue</span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => goToView("orgs")}
+                  className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-neutral-0 transition-colors hover:border-primary-600/60 hover:bg-primary-700/30 md:inline-flex"
+                >
+                  <Plus className="h-3 w-3" />
+                  View all
+                </button>
+              </div>
+            </div>
+
+            {orgsLoading ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-24 rounded-2xl" />
+                ))}
+              </div>
+            ) : orgsList.length ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {orgsList.slice(0, 6).map((o) => (
+                  <OrgCard key={o._id} org={o} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-10 text-center">
+                <p className="text-sm font-medium text-neutral-0">
+                  You don&apos;t have any organizations yet.
+                </p>
+                <p className="mt-1 text-xs text-neutral-300">
+                  Create an organization to host events under your own brand.
+                </p>
+                <Link
+                  href="/dashboard/organizations/new"
+                  className="mt-4 inline-flex items-center justify-center rounded-full border border-white/14 bg-white/5 px-4 py-2 text-xs font-medium text-neutral-0 transition hover:bg-white/10"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add your first organization
+                </Link>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  /* -------------------- Shared: Stats list panel (Figma design) -------------------- */
+  function EventsStatsListPanel({
+    title,
+    list,
+    defaultMetric = "revenue",
+    dateSortMode,
+    emptyTitle,
+    emptySub,
+  }: {
+    title: string;
+    list: MyEvent[];
+    defaultMetric?: MetricKey;
+    dateSortMode: "soonest" | "latest";
+    emptyTitle: string;
+    emptySub: string;
+  }) {
+    const [metric, setMetric] = useState<MetricKey>(defaultMetric);
+
+    const metricOptions: { key: MetricKey; label: string }[] = [
+      { key: "revenue", label: "Revenue" },
+      { key: "tickets", label: "Tickets Sold" },
+      { key: "date", label: "Event Date" },
+    ];
+
+    const sorted = useMemo(() => {
+      const arr = [...list];
+
+      const revenueOf = (e: MyEvent) => {
+        const raw =
+          (e as any).revenue ??
+          (e as any).revenueTotal ??
+          (e as any).grossRevenue ??
+          0;
+        return typeof raw === "number" ? raw : 0;
+      };
+
+      const ticketsOf = (e: MyEvent) => {
+        const raw = (e as any).ticketsSold ?? (e as any).sold ?? 0;
+        return typeof raw === "number" ? raw : 0;
+      };
+
+      if (metric === "revenue")
+        return arr.sort((a, b) => revenueOf(b) - revenueOf(a));
+      if (metric === "tickets")
+        return arr.sort((a, b) => ticketsOf(b) - ticketsOf(a));
+
+      // date
+      if (dateSortMode === "soonest") {
+        return arr.sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+      }
+      return arr.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+    }, [list, metric, dateSortMode]);
+
+    return (
+      <section
+        className={clsx(
+          "mt-4 overflow-hidden rounded-2xl border border-white/10",
+          "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+        )}
+      >
+        <div
+          className={clsx(
+            "relative p-4 md:p-5",
+            "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
+              {title}
+            </p>
+
+            <MiniSelect
+              value={metric}
+              onChange={setMetric}
+              options={metricOptions}
+            />
+          </div>
+
+          {/* List */}
+          <div className="mt-3 space-y-2">
+            {eventsLoading ? (
+              <>
+                <Skeleton className="h-[92px] rounded-2xl" />
+                <Skeleton className="h-[92px] rounded-2xl" />
+                <Skeleton className="h-[92px] rounded-2xl" />
+              </>
+            ) : sorted.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-10 text-center">
+                <p className="text-sm font-medium text-neutral-0">
+                  {emptyTitle}
+                </p>
+                <p className="mt-1 text-xs text-neutral-300">{emptySub}</p>
+              </div>
+            ) : (
+              sorted.map((ev, idx) => {
+                // keep placeholders until backend stats exist (won’t break when added)
+                const revenue =
+                  typeof (ev as any).revenue === "number"
+                    ? (ev as any).revenue
+                    : typeof (ev as any).revenueTotal === "number"
+                      ? (ev as any).revenueTotal
+                      : 123382;
+
+                const ticketsSold =
+                  typeof (ev as any).ticketsSold === "number"
+                    ? (ev as any).ticketsSold
+                    : typeof (ev as any).sold === "number"
+                      ? (ev as any).sold
+                      : 328;
+
+                const activeRow = idx === 0;
+
+                return (
+                  <Link
+                    key={ev._id}
+                    href={`/dashboard/events/${ev._id}`}
+                    className={clsx(
+                      "group relative block overflow-hidden rounded-2xl border",
+                      activeRow
+                        ? "border-white/10 bg-[#2a2a45]/90"
+                        : "border-transparent bg-transparent hover:bg-white/4"
+                    )}
+                  >
+                    <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
+                      {/* left: poster + title */}
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={ev.image ?? "/placeholder.jpg"}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-[15px] font-semibold text-neutral-0">
+                            {ev.title}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-primary-500">
+                            {formatDateLine(ev.date)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* right: metrics */}
+                      <div className="grid flex-1 grid-cols-1 gap-3 text-left sm:grid-cols-3 sm:text-center">
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-0">
+                            {money(revenue)}
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-400">
+                            Revenue
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-0">
+                            {ticketsSold.toLocaleString()}
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-400">
+                            Tickets Sold
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-0">
+                            {formatEventDate(ev.date)}
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-400">
+                            Event Date
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="pointer-events-none absolute inset-0 rounded-2xl ring-0 transition group-hover:ring-1 group-hover:ring-primary-700/25" />
+                  </Link>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /* -------------------- Drafts list panel (same design, no stats) -------------------- */
+  function DraftsListPanel({ list }: { list: MyEvent[] }) {
+    const sortOptions: { key: SortKey; label: string }[] = [
+      { key: "newest", label: "Newest" },
+      { key: "oldest", label: "Oldest" },
+      { key: "az", label: "A–Z" },
+      { key: "za", label: "Z–A" },
+    ];
+
+    const sorted = useMemo(() => {
+      const arr = [...list];
+      switch (draftSort) {
+        case "newest":
+          return arr.sort(
+            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          );
+        case "oldest":
+          return arr.sort(
+            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          );
+        case "az":
+          return arr.sort((a, b) => a.title.localeCompare(b.title));
+        case "za":
+          return arr.sort((a, b) => b.title.localeCompare(a.title));
+        default:
+          return arr;
+      }
+    }, [list, draftSort]);
+
+    return (
+      <section
+        className={clsx(
+          "mt-4 overflow-hidden rounded-2xl border border-white/10",
+          "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+        )}
+      >
+        <div
+          className={clsx(
+            "relative p-4 md:p-5",
+            "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
+              Drafts
+            </p>
+
+            <MiniSelect
+              value={draftSort}
+              onChange={setDraftSort}
+              options={sortOptions}
+            />
+          </div>
+
+          {/* List */}
+          <div className="mt-3 space-y-2">
+            {eventsLoading ? (
+              <>
+                <Skeleton className="h-[92px] rounded-2xl" />
+                <Skeleton className="h-[92px] rounded-2xl" />
+                <Skeleton className="h-[92px] rounded-2xl" />
+              </>
+            ) : sorted.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-10 text-center">
+                <p className="text-sm font-medium text-neutral-0">
+                  No drafts yet
+                </p>
+                <p className="mt-1 text-xs text-neutral-300">
+                  Start creating an event and save it as a draft to keep
+                  building it later.
+                </p>
+                <button type="button" onClick={openOrgPicker} className="mt-4">
+                  <Button variant="primary" size="sm">
+                    <CalendarPlus className="mr-2 h-4 w-4" />
+                    Create Event
+                  </Button>
+                </button>
+              </div>
+            ) : (
+              sorted.map((ev, idx) => {
+                const activeRow = idx === 0;
+
+                return (
+                  <Link
+                    key={ev._id}
+                    href={`/dashboard/events/${ev._id}`}
+                    className={clsx(
+                      "group relative block overflow-hidden rounded-2xl border",
+                      activeRow
+                        ? "border-white/10 bg-[#2a2a45]/90"
+                        : "border-transparent bg-transparent hover:bg-white/4"
+                    )}
+                  >
+                    <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
+                      {/* left: poster + title */}
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={ev.image ?? "/placeholder.jpg"}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-[15px] font-semibold text-neutral-0">
+                            {ev.title}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-primary-500">
+                            {formatDateLine(ev.date)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* right: status only (no statistics) */}
+                      <div className="flex flex-1 items-center justify-start sm:justify-end">
+                        <div className="text-left sm:text-center">
+                          <p className="text-sm font-semibold text-neutral-0">
+                            Draft
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-400">
+                            Status
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="pointer-events-none absolute inset-0 rounded-2xl ring-0 transition group-hover:ring-1 group-hover:ring-primary-700/25" />
+                  </Link>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  /* ---------------------- Orgs Tab (same panel styling + total revenue) ---------------------- */
+  function renderOrgsTab(full = false) {
+    return (
+      <section
+        className={clsx(
+          "mt-4 overflow-hidden rounded-2xl border border-white/10",
+          "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+        )}
+      >
+        <div
+          className={clsx(
+            "relative p-4 md:p-5",
+            "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+          )}
+        >
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-300">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
                 My Organizations
-              </h2>
+              </p>
               <p className="mt-1 text-xs text-neutral-400">
-                All the brands and teams you manage in Tikd.
+                {full
+                  ? "Create and manage organizations that own your events."
+                  : "All the brands and teams you manage in Tikd."}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => goToView("orgs")}
-              className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-neutral-0 transition-colors hover:border-primary-600/60 hover:bg-primary-700/30 md:inline-flex"
-            >
-              <Plus className="h-3 w-3" />
-              View all
-            </button>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-200">
+                <DollarSign className="h-4 w-4 text-neutral-400" />
+                <span className="font-semibold text-neutral-0">
+                  {money(totalOrgRevenue)}
+                </span>
+                <span className="text-neutral-400">Total revenue</span>
+              </span>
+
+              <Link
+                href="/dashboard/organizations/new"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-neutral-0 transition-colors hover:border-primary-600/60 hover:bg-primary-700/30"
+              >
+                <Plus className="h-3 w-3" />
+                New organization
+              </Link>
+            </div>
           </div>
 
           {orgsLoading ? (
@@ -686,158 +1073,57 @@ export default function DashboardHomePage() {
             </div>
           ) : orgsList.length ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {orgsList.slice(0, 6).map((o) => (
+              {orgsList.map((o) => (
                 <OrgCard key={o._id} org={o} />
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/70 p-6 text-sm text-neutral-300">
-              <p className="font-medium text-neutral-0">
+            <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-10 text-center">
+              <p className="text-sm font-medium text-neutral-0">
                 You don&apos;t have any organizations yet.
               </p>
-              <p className="mt-1 text-neutral-400">
+              <p className="mt-1 text-xs text-neutral-300">
                 Create an organization to host events under your own brand.
               </p>
               <Link
                 href="/dashboard/organizations/new"
-                className="mt-4 inline-flex items-center text-sm font-medium text-primary-300 hover:text-primary-200"
+                className="mt-4 inline-flex items-center justify-center rounded-full border border-white/14 bg-white/5 px-4 py-2 text-xs font-medium text-neutral-0 transition hover:bg-white/10"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Add your first organization
               </Link>
             </div>
           )}
-        </section>
-      </div>
-    );
-  }
-
-  function renderEventSection(
-    list: MyEvent[],
-    opts: {
-      title: string;
-      description: string;
-      emptyTitle: string;
-      emptySub: string;
-      showCreateCta?: boolean;
-    }
-  ) {
-    const data = sortList(list);
-    const showSort = eventsLoading || data.length > 0;
-
-    return (
-      <section className="mt-4 rounded-2xl border border-white/10 bg-neutral-950/80 px-4 py-4 md:px-6 md:py-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-0">
-              {opts.title}
-            </h2>
-            <p className="mt-1 text-xs text-neutral-400">{opts.description}</p>
-          </div>
-          {showSort && <SortBy value={sort} onChange={setSort} />}
         </div>
-
-        {eventsLoading ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 xl:grid-cols-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-60 rounded-2xl" />
-            ))}
-          </div>
-        ) : data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-neutral-950/70 p-10 text-center">
-            <div className="mb-3 grid h-10 w-10 place-items-center rounded-full bg-primary-900/50">
-              {opts.showCreateCta ? (
-                <Calendar className="h-5 w-5 text-primary-300" />
-              ) : (
-                <FilePlus2 className="h-5 w-5 text-primary-300" />
-              )}
-            </div>
-            <p className="text-sm font-medium text-neutral-0">
-              {opts.emptyTitle}
-            </p>
-            <p className="mt-1 text-xs text-neutral-300">{opts.emptySub}</p>
-            {opts.showCreateCta && (
-              <button type="button" onClick={openOrgPicker} className="mt-4">
-                <Button variant="primary" size="sm">
-                  <CalendarPlus className="mr-2 h-4 w-4" />
-                  Create Event
-                </Button>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3 xl:grid-cols-4">
-            {data.map((ev) => (
-              <div key={ev._id} className="flex flex-col">
-                <EventCard
-                  id={ev._id}
-                  title={ev.title}
-                  img={ev.image ?? "/placeholder.jpg"}
-                  dateLabel={formatDateLabel(ev.date)}
-                  venue={ev.location}
-                  category={ev.category ?? ""}
-                />
-              </div>
-            ))}
-          </div>
-        )}
       </section>
     );
   }
 
-  function renderOrgsTab(full = false) {
+  /* ---------------------- Upcoming (same original list design) ---------------------- */
+  function UpcomingEventsSection({ list }: { list: MyEvent[] }) {
     return (
-      <section className="mt-4 rounded-2xl border border-white/10 bg-neutral-950/80 px-4 py-4 md:px-6 md:py-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-0">
-              My Organizations
-            </h2>
-            <p className="mt-1 text-xs text-neutral-400">
-              {full
-                ? "Create and manage organizations that own your events."
-                : "All the brands and teams you manage in Tikd."}
-            </p>
-          </div>
-          <Link
-            href="/dashboard/organizations/new"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-neutral-0 transition-colors hover:border-primary-600/60 hover:bg-primary-700/30"
-          >
-            <Plus className="h-3 w-3" />
-            New organization
-          </Link>
-        </div>
+      <EventsStatsListPanel
+        title="Upcoming Events"
+        list={list}
+        defaultMetric="revenue"
+        dateSortMode="soonest"
+        emptyTitle="No upcoming events yet"
+        emptySub="Create an event and it will appear here once scheduled."
+      />
+    );
+  }
 
-        {orgsLoading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton key={i} className="h-24 rounded-2xl" />
-            ))}
-          </div>
-        ) : orgsList.length ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {orgsList.map((o) => (
-              <OrgCard key={o._id} org={o} />
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/70 p-6 text-sm text-neutral-300">
-            <p className="font-medium text-neutral-0">
-              You don&apos;t have any organizations yet.
-            </p>
-            <p className="mt-1 text-neutral-400">
-              Create an organization to host events under your own brand.
-            </p>
-            <Link
-              href="/dashboard/organizations/new"
-              className="mt-4 inline-flex items-center text-sm font-medium text-primary-300 hover:text-primary-200"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add your first organization
-            </Link>
-          </div>
-        )}
-      </section>
+  /* ---------------------- Past (same exact design as Upcoming) ---------------------- */
+  function PastEventsSection({ list }: { list: MyEvent[] }) {
+    return (
+      <EventsStatsListPanel
+        title="Past Events"
+        list={list}
+        defaultMetric="revenue"
+        dateSortMode="latest"
+        emptyTitle="No past events yet"
+        emptySub="Once you’ve hosted events, they’ll show up here."
+      />
     );
   }
 
@@ -847,35 +1133,16 @@ export default function DashboardHomePage() {
       content = renderHomeTab();
       break;
     case "upcoming":
-      content = renderEventSection(upcoming, {
-        title: "Upcoming events",
-        description: "All future events you’re hosting across organizations.",
-        emptyTitle: "No upcoming events yet",
-        emptySub: "Create an event and it will appear here once scheduled.",
-        showCreateCta: true,
-      });
+      content = <UpcomingEventsSection list={upcoming} />;
       break;
     case "orgs":
       content = renderOrgsTab(true);
       break;
     case "past":
-      content = renderEventSection(past, {
-        title: "Past events",
-        description:
-          "Everything you’ve already hosted – a record of your work.",
-        emptyTitle: "No past events",
-        emptySub: "Once you’ve hosted events, you’ll see their history here.",
-      });
+      content = <PastEventsSection list={past} />;
       break;
     case "drafts":
-      content = renderEventSection(drafts, {
-        title: "Drafts",
-        description: "Work-in-progress events that aren’t published yet.",
-        emptyTitle: "No drafts yet",
-        emptySub:
-          "Start creating an event and save it as a draft to keep building it later.",
-        showCreateCta: true,
-      });
+      content = <DraftsListPanel list={drafts} />;
       break;
     default:
       content = renderHomeTab();

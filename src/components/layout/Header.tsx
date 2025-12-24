@@ -124,7 +124,7 @@ export default function Header() {
   return (
     <>
       <header className={headerShell}>
-        <div className="flex items-center justify-between px-4 lg:px-8 xl:px-[120px] py-3 sm:py-4">
+        <div className="flex items-center justify-between px-4 lg:px-8 xl:px-12 py-3 sm:py-4">
           {/* left: logo + desktop search ---------------------------------- */}
           <div className="flex items-center gap-6 w-full max-w-[420px]">
             <Link href="/" className="flex items-center">
@@ -283,17 +283,6 @@ export default function Header() {
                             {/* items */}
                             <div className="p-1.5">
                               <Link
-                                href="/dashboard"
-                                role="menuitem"
-                                onClick={() => setAvatarOpen(false)}
-                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
-                              >
-                                <LayoutDashboard className="h-4 w-4 opacity-80" />
-                                <span className="text-sm">
-                                  Seller Dashboard
-                                </span>
-                              </Link>
-                              <Link
                                 href="/account/my-tickets"
                                 role="menuitem"
                                 onClick={() => setAvatarOpen(false)}
@@ -311,7 +300,17 @@ export default function Header() {
                                 <SlidersHorizontal className="h-4 w-4 opacity-80" />
                                 <span className="text-sm">Settings</span>
                               </Link>
-
+                              <Link
+                                href="/dashboard"
+                                role="menuitem"
+                                onClick={() => setAvatarOpen(false)}
+                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                              >
+                                <LayoutDashboard className="h-4 w-4 opacity-80" />
+                                <span className="text-sm">
+                                  Seller Dashboard
+                                </span>
+                              </Link>
                               <button
                                 type="button"
                                 role="menuitem"

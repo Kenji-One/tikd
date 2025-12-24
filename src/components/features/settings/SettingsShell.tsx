@@ -43,11 +43,11 @@ export default function SettingsShell() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ---------- Header with gradient banner + avatar ---------- */}
       <div className="relative overflow-hidden rounded-2xl">
         {/* Gradient banner (tailored to our brand-ish purple on dark) */}
-        <div className="relative h-40 w-full md:h-56">
+        <div className="relative h-36 w-full md:h-46">
           <div
             className="
               absolute inset-0
@@ -69,10 +69,10 @@ export default function SettingsShell() {
         </div>
 
         {/* Avatar card */}
-        <div className="relative -mt-12 px-4 pb-4 md:-mt-16 md:px-6">
+        <div className="relative -mt-21 px-4 pb-4 md:-mt-33 md:px-6">
           <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-md md:flex md:items-start md:gap-6">
             <div className="flex items-center gap-3 flex-col">
-              <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full ring-4 ring-black/60 md:h-28 md:w-28">
+              <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full ring-4 ring-black/60 md:h-24 md:w-24">
                 {avatarUrl ? (
                   <Image
                     src={avatarUrl}
@@ -113,7 +113,7 @@ export default function SettingsShell() {
       </div>
 
       {/* ---------- Settings tabs – now beautifully centered ---------- */}
-      <div className="mt-10 flex flex-col items-center">
+      <div className="mt-4 flex flex-col items-center">
         <div className="w-full max-w-3xl">
           {" "}
           {/* Adjust max-w as needed: 3xl ≈ 768px, or use 2xl/4xl */}

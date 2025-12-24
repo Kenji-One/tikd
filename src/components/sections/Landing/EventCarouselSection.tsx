@@ -159,8 +159,10 @@ export default function EventCarouselSection({
     <div className="mb-16">
       {/* header */}
       <div className="mb-6 flex items-center justify-between px-4 sm:px-6 lg:px-[120px]">
-        <div className="flex items-center gap-2">
-          <span>{icon}</span>
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center justify-center text-white [&_svg]:h-7 [&_svg]:w-7">
+            {icon}
+          </span>
           <h2 className="text-2xl font-semibold text-neutral-0">{title}</h2>
         </div>
 
@@ -168,7 +170,7 @@ export default function EventCarouselSection({
           {onViewAll && (
             <Button
               variant="ghost"
-              size="xs"
+              size="sm"
               type="button"
               onClick={onViewAll}
               className="!hidden md:!inline-flex border border-transparent hover:border-primary-500 transition duration-200"

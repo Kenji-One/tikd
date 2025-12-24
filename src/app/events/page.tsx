@@ -1,7 +1,6 @@
-// src/app/events/page.tsx
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -404,7 +403,43 @@ const toCarouselEvent = (e: BackendEvent): Event => ({
   category: "Live",
 });
 
+const GRID_MIN_CARD_W = 220; // must match minmax(220px, ...)
+const GRID_GAP_PX = 16; // gap-4 = 16px
+const GRID_MAX_COLS = 6;
+
+const getSidePadding = (winW: number) => {
+  // Must match your page paddings: px-4 | sm:px-6 | lg:px-[120px]
+  if (winW >= 1024) return 120;
+  if (winW >= 640) return 24;
+  return 16;
+};
+
 export default function EventsPage() {
+  const [winW, setWinW] = useState(() =>
+    typeof window === "undefined" ? 1200 : window.innerWidth
+  );
+
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const gridTemplateColumns = useMemo(() => {
+    const side = getSidePadding(winW);
+    const safe = Math.max(0, winW - side * 2);
+
+    const canFit7 =
+      safe >=
+      (GRID_MAX_COLS + 1) * GRID_MIN_CARD_W + GRID_MAX_COLS * GRID_GAP_PX;
+
+    // If 7 would fit, cap at 6. Otherwise keep auto-fit responsiveness.
+    return canFit7
+      ? `repeat(${GRID_MAX_COLS}, minmax(${GRID_MIN_CARD_W}px, 1fr))`
+      : `repeat(auto-fit, minmax(${GRID_MIN_CARD_W}px, 1fr))`;
+  }, [winW]);
+
   // 1️⃣ live events from API (auth required; hide if 401/no data)
   const { data: liveEvents = [] } = useQuery({
     queryKey: ["live-events"],
@@ -465,7 +500,7 @@ export default function EventsPage() {
       <div className="w-full px-4 sm:px-6 lg:px-[120px] flex justify-center">
         <CategoryFilter
           selected={selectedCategory}
-          onSelect={setSelectedCategory}
+          onSelect={setCategoryAndScrollTop}
         />
       </div>
 
@@ -495,7 +530,8 @@ export default function EventsPage() {
             />
           ))
         ) : (
-          <section className="mb-16 px-4 lg:px-8 xl:px-[120px]">
+          // ─── Single category: match EventCarouselSection grid container ──
+          <section className="mb-16 px-4 sm:px-6 lg:px-[120px]">
             <div className="mb-6 flex items-center gap-3">
               <span className="inline-flex items-center justify-center text-white [&_svg]:h-7 [&_svg]:w-7">
                 {categoryIcon[selectedCategory] ?? (
@@ -506,9 +542,12 @@ export default function EventsPage() {
                 {selectedCategory}
               </h2>
             </div>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+
+            <div className="grid w-full gap-4" style={{ gridTemplateColumns }}>
               {filteredEvents.map((ev) => (
-                <EventCard key={ev.id} {...ev} />
+                <div key={ev.id} className="cursor-pointer">
+                  <EventCard {...ev} className="h-full w-full" />
+                </div>
               ))}
             </div>
           </section>

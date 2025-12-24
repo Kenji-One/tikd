@@ -48,8 +48,8 @@ export default function AccountSettingsPage() {
         }}
       />
 
-      <section className="mx-auto max-w-[1232px] px-4 pb-20 pt-10 md:pt-14">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <section className="mx-auto max-w-[1232px] px-4 pb-20 pt-6 md:pt-8">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-extrabold md:text-3xl">
               Profile & Settings

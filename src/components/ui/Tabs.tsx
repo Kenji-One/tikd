@@ -47,7 +47,7 @@ export function Tabs({
   return (
     <div className={className}>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="no-scrollbar relative -mx-1 overflow-x-auto pb-1">
+        <div className="no-scrollbar relative -mx-1 overflow-x-auto ">
           <div
             role="tablist"
             aria-label="Dashboard tabs"
@@ -109,7 +109,7 @@ export function Tabs({
         id={`${uid}-${activeTab?.id}-panel`}
         role="tabpanel"
         aria-labelledby={`${uid}-${activeTab?.id}-tab`}
-        className="pt-4"
+        className="pt-3"
       >
         {activeTab?.content}
       </div>

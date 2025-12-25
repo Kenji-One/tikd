@@ -1,9 +1,5 @@
 /* ------------------------------------------------------------------ */
 /*  src/components/dashboard/charts/RevenueChart.tsx                  */
-/*  Reusable area chart (line + gradient), exact-day tooltip          */
-/*                                                                    */
-/*  IMPORTANT: each instance now uses a UNIQUE SVG gradient id to     */
-/*  avoid cross-chart clashes (was the cause of the purple fill).     */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -20,41 +16,32 @@ import { memo, useMemo, useId } from "react";
 
 /* ------------------------------ Types ------------------------------ */
 export type RevenueTooltip = {
-  /** index to pin the white marker; tooltip follows hover */
+  /** index to pin the marker + callout */
   index: number;
   valueLabel: string; // e.g. "$240,8K"
-  subLabel?: string;
-  deltaText?: string;
+  subLabel?: string; // e.g. "June 21, 2025"
+  deltaText?: string; // e.g. "+24.6%"
   deltaPositive?: boolean;
 };
 
 type Props = {
-  /** numeric series (e.g., revenue) */
   data: number[];
-  /** optional date for each point (used for tooltip exact day) */
   dates?: Date[];
-  /** axis domain/ticks and labels */
   domain?: [number, number];
-  xLabels?: string[]; // labels on X
+  xLabels?: string[];
   yTicks?: number[];
-  tooltip?: RevenueTooltip; // used for the pinned marker only
+  tooltip?: RevenueTooltip;
   stroke?: string;
   fillTop?: string;
 
-  /** gradient opacity (top->bottom) */
-  fillStartOpacity?: number; // default 0.25
-  fillEndOpacity?: number; // default 0
+  fillStartOpacity?: number;
+  fillEndOpacity?: number;
 
-  /** tooltip value decorations */
   valuePrefix?: string; // default "$"
   valueSuffix?: string; // default "K"
-  /** show calendar date under value in tooltip */
-  showDateInTooltip?: boolean; // default true
+  showDateInTooltip?: boolean;
 
-  /** tooltip body theme */
   tooltipVariant?: "primary" | "light" | "dark";
-
-  /** (optional) force a specific gradient id; otherwise auto-unique */
   gradientId?: string;
 };
 
@@ -67,8 +54,15 @@ const toRows = (vals: number[], labels?: string[], dates?: Date[]) =>
     value: v,
   }));
 
-const fmtK = (v: number) =>
+const fmtAxisK = (v: number) =>
   Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}K` : `${v}`;
+
+const fmtTooltipK = (v: number) => {
+  if (Math.abs(v) < 1000) return `${v}`;
+  const n = v / 1000;
+  const s = n.toFixed(1);
+  return s.endsWith(".0") ? s.slice(0, -2) : s;
+};
 
 const AXIS_TICK_STYLE = {
   fill: "var(--Color-Neutral-500, #727293)",
@@ -104,13 +98,16 @@ const tooltipClasses = (variant: NonNullable<Props["tooltipVariant"]>) => {
       sub: "mt-1 text-xs text-neutral-400",
     };
   }
-  // primary (purple) like the Total Revenue mock
   return {
     wrapper: "pointer-events-none rounded-lg bg-primary-800 p-2.5",
     value: "text-white font-extrabold text-[18px]",
-    sub: "mt-1 text-xs text-neutral-400",
+    sub: "mt-1 text-xs text-neutral-300",
   };
 };
+
+function stripSign(s?: string) {
+  return (s ?? "").trim().replace(/^[-+]\s*/, "");
+}
 
 /* ------------------------------ Component ------------------------------ */
 function RevenueChart({
@@ -154,7 +151,6 @@ function RevenueChart({
 
   const tipCls = tooltipClasses(tooltipVariant);
 
-  // UNIQUE gradient id per instance to avoid clashes across charts
   const autoId = useId();
   const gradId = gradientId ?? `rev-fill-${autoId}`;
 
@@ -180,19 +176,17 @@ function RevenueChart({
             </linearGradient>
           </defs>
 
-          {/* Y axis */}
           <YAxis
             dataKey="value"
             domain={domain}
             ticks={yTicks}
             tick={{ ...AXIS_TICK_STYLE, textAnchor: "end" }}
-            tickFormatter={fmtK}
+            tickFormatter={fmtAxisK}
             width={44}
             axisLine={{ stroke: "#2C2C44", strokeWidth: 1 }}
             tickLine={false}
             tickMargin={8}
           />
-          {/* X axis */}
           <XAxis
             dataKey="name"
             tick={{ ...AXIS_TICK_STYLE, textAnchor: "middle" }}
@@ -202,7 +196,6 @@ function RevenueChart({
             tickMargin={12}
           />
 
-          {/* Fill first for gradient (uses unique id) */}
           <Area
             type="monotone"
             dataKey="value"
@@ -211,8 +204,6 @@ function RevenueChart({
             activeDot={false}
             isAnimationActive={false}
           />
-
-          {/* Crisp line */}
           <Area
             type="monotone"
             dataKey="value"
@@ -225,17 +216,113 @@ function RevenueChart({
             dot={false}
           />
 
-          {/* Pinned white marker (visual only) */}
-          {pinnedRow ? (
+          {/* Pinned dot + pinned callout (Figma-like) */}
+          {pinnedRow && tooltip ? (
             <ReferenceDot
               x={pinnedRow.name}
               y={pinnedRow.value}
               r={4.5}
-              fill="#BD99FF"
+              fill="#FFFFFF"
+              stroke="#BD99FF"
+              strokeWidth={2}
+              label={(p: any) => {
+                const x = p?.x;
+                const y = p?.y;
+                if (typeof x !== "number" || typeof y !== "number")
+                  return <g />;
+
+                const w = 170;
+                const h = 54;
+                const ox = x - w / 2;
+                const oy = y - h - 14;
+
+                const deltaTxt = stripSign(tooltip.deltaText);
+                const isPos = tooltip.deltaPositive !== false;
+
+                const bg = tooltipVariant === "dark" ? "#141625" : "#6D28D9"; // primary-ish
+                const badgeBg = isPos
+                  ? "rgba(69,255,121,0.18)"
+                  : "rgba(255,69,74,0.18)";
+                const badgeStroke = isPos
+                  ? "rgba(69,255,121,0.30)"
+                  : "rgba(255,69,74,0.30)";
+                const badgeText = isPos ? "#45FF79" : "#FF454A";
+
+                return (
+                  <g transform={`translate(${ox}, ${oy})`}>
+                    <rect x="0" y="0" width={w} height={h} rx="10" fill={bg} />
+                    {/* pointer */}
+                    <path
+                      d={`M${w / 2 - 7} ${h} L${w / 2} ${h + 8} L${w / 2 + 7} ${h} Z`}
+                      fill={bg}
+                    />
+
+                    {/* value */}
+                    <text
+                      x="12"
+                      y="20"
+                      fill="#FFFFFF"
+                      fontSize="16"
+                      fontWeight="800"
+                      fontFamily="Gilroy, ui-sans-serif, system-ui"
+                    >
+                      {tooltip.valueLabel}
+                    </text>
+
+                    {/* delta badge */}
+                    {deltaTxt ? (
+                      <g transform={`translate(${w - 12 - 62}, 8)`}>
+                        <rect
+                          x="0"
+                          y="0"
+                          width="62"
+                          height="22"
+                          rx="7"
+                          fill={badgeBg}
+                          stroke={badgeStroke}
+                        />
+                        {/* tiny arrow */}
+                        <path
+                          d={
+                            isPos
+                              ? "M10 15 L15 10 L15 13.5 L19 13.5 L19 7 L12.5 7 L12.5 11 L16 11 L11 16 Z"
+                              : "M10 7 L15 12 L15 8.5 L19 8.5 L19 15 L12.5 15 L12.5 11 L16 11 L11 6 Z"
+                          }
+                          fill={badgeText}
+                        />
+                        <text
+                          x="28"
+                          y="15.5"
+                          fill={badgeText}
+                          fontSize="11"
+                          fontWeight="700"
+                          fontFamily="Gilroy, ui-sans-serif, system-ui"
+                        >
+                          {deltaTxt}
+                        </text>
+                      </g>
+                    ) : null}
+
+                    {/* sub label */}
+                    {tooltip.subLabel ? (
+                      <text
+                        x="12"
+                        y="42"
+                        fill="rgba(255,255,255,0.70)"
+                        fontSize="11"
+                        fontWeight="600"
+                        fontFamily="Gilroy, ui-sans-serif, system-ui"
+                      >
+                        {tooltip.subLabel}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              }}
             />
           ) : null}
 
-          {/* Tooltip */}
+          {/* Hover tooltip */}
           <Tooltip
             cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1 }}
             isAnimationActive={false}
@@ -245,14 +332,13 @@ function RevenueChart({
                 | { value: number; date?: Date }
                 | undefined;
               if (!row) return null;
+
               return (
                 <div className={tipCls.wrapper}>
-                  <div className="flex items-center gap-2">
-                    <div className={tipCls.value}>
-                      {valuePrefix}
-                      {fmtK(row.value)}
-                      {valueSuffix}
-                    </div>
+                  <div className={tipCls.value}>
+                    {valuePrefix}
+                    {fmtTooltipK(row.value)}
+                    {valueSuffix}
                   </div>
                   {showDateInTooltip ? (
                     <div className={tipCls.sub}>{fmtFullDate(row.date)}</div>

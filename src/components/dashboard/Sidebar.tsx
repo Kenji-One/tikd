@@ -370,7 +370,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
   const showTopLogo = isOrg || isDashboard;
 
   return (
-    <nav className="flex h-full w-[248px] flex-col border-r border-white/5 bg-[#0F1117] px-6 py-8">
+    <nav className="flex h-full w-[248px] flex-col bg-neutral-900 px-6 py-8">
       {/* Logo */}
       {showTopLogo && (
         <div className="mb-8">
@@ -421,12 +421,17 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
               <Link
                 href={computedHref}
                 className={clsx(
-                  "flex items-center gap-4 rounded-lg px-4 py-3 font-semibold transition-colors",
+                  "flex items-center gap-3 rounded-lg px-4 py-3 font-semibold transition-colors",
                   "hover:bg-neutral-800 hover:text-white",
                   active ? "bg-neutral-800 text-white" : "text-neutral-200"
                 )}
               >
-                <Icon className="h-5 w-5 shrink-0 text-neutral-500" />
+                <Icon
+                  className={clsx(
+                    "h-6 w-6 shrink-0",
+                    active ? "text-white" : "text-neutral-500"
+                  )}
+                />
                 <span>{label}</span>
               </Link>
             </li>

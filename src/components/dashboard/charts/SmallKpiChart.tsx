@@ -1,6 +1,5 @@
 /* ------------------------------------------------------------------ */
 /*  src/components/dashboard/charts/SmallKpiChart.tsx                 */
-/*  Figma-accurate small line charts (Page Views / Tickets Sold)      */
 /* ------------------------------------------------------------------ */
 "use client";
 

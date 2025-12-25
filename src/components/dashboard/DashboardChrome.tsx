@@ -22,7 +22,9 @@ export default function DashboardChrome({ children }: Props) {
     pathname.split("/").length >= 4; // /dashboard/organizations/[id](/*)
 
   // Dashboard default page: replace internal tabs with a sidebar
-  const isDashboardHome = pathname === "/dashboard";
+  // ✅ include ALL finances subroutes
+  const isDashboardHome =
+    pathname === "/dashboard" || pathname.startsWith("/dashboard/finances");
 
   const hasSidebar = isOrgSubpage || isDashboardHome;
 

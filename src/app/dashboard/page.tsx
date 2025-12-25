@@ -21,6 +21,7 @@ import {
   ChevronDown,
   DollarSign,
 } from "lucide-react";
+import DashboardClient from "./DashboardClient";
 
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
@@ -608,81 +609,7 @@ export default function DashboardHomePage() {
             </div>
           </button>
         </div>
-
-        {/* My Organizations (preview) — match stats panel styling */}
-        <section
-          className={clsx(
-            "overflow-hidden rounded-2xl border border-white/10",
-            "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
-          )}
-        >
-          <div
-            className={clsx(
-              "relative p-4 md:p-5",
-              "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
-            )}
-          >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
-                  My Organizations
-                </p>
-                <p className="mt-1 text-xs text-neutral-400">
-                  All the brands and teams you manage in Tikd.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-200">
-                  <DollarSign className="h-4 w-4 text-neutral-400" />
-                  <span className="font-semibold text-neutral-0">
-                    {money(totalOrgRevenue)}
-                  </span>
-                  <span className="text-neutral-400">Total revenue</span>
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => goToView("orgs")}
-                  className="hidden items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-neutral-0 transition-colors hover:border-primary-600/60 hover:bg-primary-700/30 md:inline-flex"
-                >
-                  <Plus className="h-3 w-3" />
-                  View all
-                </button>
-              </div>
-            </div>
-
-            {orgsLoading ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-24 rounded-2xl" />
-                ))}
-              </div>
-            ) : orgsList.length ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {orgsList.slice(0, 6).map((o) => (
-                  <OrgCard key={o._id} org={o} />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-10 text-center">
-                <p className="text-sm font-medium text-neutral-0">
-                  You don&apos;t have any organizations yet.
-                </p>
-                <p className="mt-1 text-xs text-neutral-300">
-                  Create an organization to host events under your own brand.
-                </p>
-                <Link
-                  href="/dashboard/organizations/new"
-                  className="mt-4 inline-flex items-center justify-center rounded-full border border-white/14 bg-white/5 px-4 py-2 text-xs font-medium text-neutral-0 transition hover:bg-white/10"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add your first organization
-                </Link>
-              </div>
-            )}
-          </div>
-        </section>
+        <DashboardClient />
       </div>
     );
   }

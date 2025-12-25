@@ -1,11 +1,10 @@
 /* ------------------------------------------------------------------ */
 /*  src/components/dashboard/cards/KpiCard.tsx                        */
-/*  Figma header: big value, delta pill, optional toolbar             */
-/*  NEW: stretchChart (opt-in) so only chosen cards fill height       */
 /* ------------------------------------------------------------------ */
 "use client";
 
 import type { PropsWithChildren, ReactNode } from "react";
+import Link from "next/link";
 import clsx from "clsx";
 
 type Props = PropsWithChildren<{
@@ -20,6 +19,12 @@ type Props = PropsWithChildren<{
   toolbar?: ReactNode;
   /** If true, the chart slot will flex to fill the card's remaining height */
   stretchChart?: boolean;
+
+  /** ✅ Detailed view behavior */
+  detailsHref?: string;
+  onDetailedView?: () => void;
+  hideDetails?: boolean;
+  detailsLabel?: string;
 }>;
 
 export default function KpiCard({
@@ -31,6 +36,10 @@ export default function KpiCard({
   toolbar,
   children,
   stretchChart = false,
+  detailsHref,
+  onDetailedView,
+  hideDetails = false,
+  detailsLabel = "Detailed View",
 }: Props) {
   const rawDelta = (delta ?? "").trim();
   const isNegative = rawDelta.startsWith("-");
@@ -73,6 +82,35 @@ export default function KpiCard({
     </svg>
   );
 
+  const FooterAction = () => {
+    if (hideDetails) return null;
+
+    const cls =
+      "text-xs text-neutral-200 hover:text-white cursor-pointer inline-flex items-center";
+
+    if (detailsHref) {
+      return (
+        <Link href={detailsHref} className={cls}>
+          {detailsLabel}
+        </Link>
+      );
+    }
+
+    if (onDetailedView) {
+      return (
+        <button type="button" onClick={onDetailedView} className={cls}>
+          {detailsLabel}
+        </button>
+      );
+    }
+
+    return (
+      <button type="button" className={clsx(cls, "opacity-60")} disabled>
+        {detailsLabel}
+      </button>
+    );
+  };
+
   return (
     <div
       className={clsx(stretchChart ? "h-full flex flex-col" : "", className)}
@@ -89,19 +127,21 @@ export default function KpiCard({
                 {value}
               </div>
               <div className="flex items-center gap-0.5">
-                {delta && (
+                {delta ? (
                   <span
                     className={clsx(
                       "flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[12px] font-semibold leading-none",
                       "border",
                       deltaColor
                     )}
-                    aria-label={`Change ${deltaText}${isNegative ? " decrease" : " increase"}`}
+                    aria-label={`Change ${deltaText}${
+                      isNegative ? " decrease" : " increase"
+                    }`}
                   >
                     {deltaIcon}
                     <span className="tabular-nums">{deltaText}</span>
                   </span>
-                )}
+                ) : null}
               </div>
             </div>
             {toolbar}
@@ -109,7 +149,7 @@ export default function KpiCard({
         </div>
       </div>
 
-      {/* Chart area (stretches only when stretchChart=true) */}
+      {/* Chart area */}
       <div className={clsx("relative", stretchChart && "flex-1 min-h-0")}>
         <div className={clsx("relative", stretchChart && "h-full")}>
           {children}
@@ -118,9 +158,7 @@ export default function KpiCard({
 
       {/* Footer */}
       <div className="mt-2 flex items-center justify-end">
-        <button className="text-xs text-neutral-200 hover:text-white cursor-pointer">
-          Detailed View
-        </button>
+        <FooterAction />
       </div>
     </div>
   );

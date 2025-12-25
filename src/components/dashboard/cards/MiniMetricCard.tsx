@@ -5,6 +5,7 @@
 
 import type { ReactNode } from "react";
 import clsx from "clsx";
+import { DeltaBadge } from "../finances/DetailedViewShell";
 
 type Props = {
   title: string;
@@ -33,24 +34,14 @@ export default function MiniMetricCard({
     >
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-xs text-white/60">{title}</div>
+          <div className="uppercase text-neutral-400 font-semibold">
+            {title}
+          </div>
           <div className="mt-1 text-xl font-extrabold tracking-tight">
             {value}
           </div>
         </div>
-
-        {delta ? (
-          <span
-            className={clsx(
-              "inline-flex min-w-[58px] items-center justify-center rounded-full px-2 py-1 text-xs font-semibold",
-              negative
-                ? "bg-error-950 text-error-400 border border-error-700/40"
-                : "bg-success-950 text-success-400 border border-success-700/40"
-            )}
-          >
-            {delta}
-          </span>
-        ) : null}
+        <DeltaBadge delta={delta} />
       </div>
 
       <div className="mt-3">{chart}</div>

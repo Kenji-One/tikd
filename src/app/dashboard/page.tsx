@@ -14,8 +14,6 @@ import {
   CalendarPlus,
   ArrowRight,
   Plus,
-  Calendar,
-  FilePlus2,
   X,
   CheckCircle2,
   ChevronDown,
@@ -43,6 +41,13 @@ type MyEvent = {
   category?: string;
   status?: "draft" | "published";
   pinned?: boolean;
+
+  // Optional dashboard stats (safe: backend can add later)
+  revenue?: number;
+  revenueTotal?: number;
+  grossRevenue?: number;
+  ticketsSold?: number;
+  sold?: number;
 };
 
 type HomeViewId = "home" | "upcoming" | "orgs" | "past" | "drafts";
@@ -50,6 +55,10 @@ type HomeViewId = "home" | "upcoming" | "orgs" | "past" | "drafts";
 /* ---------------------------- Helpers ------------------------------ */
 async function fetchJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
+  if (!res.ok) {
+    // keeps debugging sane on Vercel too
+    throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+  }
   return (await res.json()) as T;
 }
 
@@ -108,6 +117,16 @@ function formatDateLine(iso: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function revenueOf(e: MyEvent) {
+  const raw = e.revenue ?? e.revenueTotal ?? e.grossRevenue ?? 0;
+  return typeof raw === "number" ? raw : 0;
+}
+
+function ticketsOf(e: MyEvent) {
+  const raw = e.ticketsSold ?? e.sold ?? 0;
+  return typeof raw === "number" ? raw : 0;
 }
 
 /* -------------------------- Org Card (shared) ---------------------- */
@@ -283,7 +302,7 @@ type OrgPickerModalProps = {
   orgs: Org[];
   loading: boolean;
   selectedOrgId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string | null) => void;
   onClose: () => void;
   onConfirm: () => void;
 };
@@ -506,31 +525,35 @@ export default function DashboardHomePage() {
     enabled: !!session,
   });
 
-  const orgsList = orgs ?? [];
-  const events = allEvents ?? [];
+  // IMPORTANT: stabilize fallbacks so memo deps don't change every render
+  const orgsList = useMemo<Org[]>(() => orgs ?? [], [orgs]);
+  const events = useMemo<MyEvent[]>(() => allEvents ?? [], [allEvents]);
 
   /* --- computed event lists --- */
   const now = useMemo(() => Date.now(), []);
-  const upcoming = events.filter(
-    (e) => new Date(e.date).getTime() >= now && e.status !== "draft"
+  const upcoming = useMemo(
+    () =>
+      events.filter(
+        (e) => new Date(e.date).getTime() >= now && e.status !== "draft"
+      ),
+    [events, now]
   );
-  const past = events.filter(
-    (e) => new Date(e.date).getTime() < now && e.status !== "draft"
+  const past = useMemo(
+    () =>
+      events.filter(
+        (e) => new Date(e.date).getTime() < now && e.status !== "draft"
+      ),
+    [events, now]
   );
-  const drafts = events.filter((e) => e.status === "draft");
+  const drafts = useMemo(
+    () => events.filter((e) => e.status === "draft"),
+    [events]
+  );
 
   /* --- orgs: one simple stat (safe for future backend fields) --- */
   const totalOrgRevenue = useMemo(() => {
     const published = events.filter((e) => e.status !== "draft");
-    const sum = published.reduce((acc, e) => {
-      const raw =
-        (e as any).revenue ??
-        (e as any).revenueTotal ??
-        (e as any).grossRevenue ??
-        0;
-      return acc + (typeof raw === "number" ? raw : 0);
-    }, 0);
-    return sum;
+    return published.reduce((acc, e) => acc + revenueOf(e), 0);
   }, [events]);
 
   /* ---------------------- Navigation helpers ---------------------- */
@@ -609,6 +632,7 @@ export default function DashboardHomePage() {
             </div>
           </button>
         </div>
+
         <DashboardClient />
       </div>
     );
@@ -640,20 +664,6 @@ export default function DashboardHomePage() {
 
     const sorted = useMemo(() => {
       const arr = [...list];
-
-      const revenueOf = (e: MyEvent) => {
-        const raw =
-          (e as any).revenue ??
-          (e as any).revenueTotal ??
-          (e as any).grossRevenue ??
-          0;
-        return typeof raw === "number" ? raw : 0;
-      };
-
-      const ticketsOf = (e: MyEvent) => {
-        const raw = (e as any).ticketsSold ?? (e as any).sold ?? 0;
-        return typeof raw === "number" ? raw : 0;
-      };
 
       if (metric === "revenue")
         return arr.sort((a, b) => revenueOf(b) - revenueOf(a));
@@ -714,20 +724,9 @@ export default function DashboardHomePage() {
               </div>
             ) : (
               sorted.map((ev, idx) => {
-                // keep placeholders until backend stats exist (won’t break when added)
-                const revenue =
-                  typeof (ev as any).revenue === "number"
-                    ? (ev as any).revenue
-                    : typeof (ev as any).revenueTotal === "number"
-                      ? (ev as any).revenueTotal
-                      : 123382;
-
-                const ticketsSold =
-                  typeof (ev as any).ticketsSold === "number"
-                    ? (ev as any).ticketsSold
-                    : typeof (ev as any).sold === "number"
-                      ? (ev as any).sold
-                      : 328;
+                // placeholders until backend stats exist (won’t break when added)
+                const revenue = revenueOf(ev) || 123_382;
+                const ticketsSold = ticketsOf(ev) || 328;
 
                 const activeRow = idx === 0;
 

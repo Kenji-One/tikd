@@ -45,8 +45,48 @@ type Props = {
   gradientId?: string;
 };
 
+type ChartRow = {
+  i: number;
+  name: string;
+  date?: Date;
+  value: number;
+};
+
+/**
+ * Recharts passes a big props object to label render functions.
+ * We only need x/y; keep the rest as unknown (not any).
+ */
+type ReferenceDotLabelProps = { x?: number; y?: number } & Record<
+  string,
+  unknown
+>;
+
+/**
+ * Recharts Tooltip typing differs across versions.
+ * Runtime gives us `active` + `payload`, so we model only what we use.
+ */
+type HoverTooltipProps = {
+  active?: boolean;
+  payload?: Array<{ payload?: unknown }>;
+};
+
+function isChartRow(x: unknown): x is ChartRow {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.value === "number" &&
+    typeof o.name === "string" &&
+    typeof o.i === "number" &&
+    (o.date === undefined || o.date instanceof Date)
+  );
+}
+
 /* ------------------------------ Utils ------------------------------ */
-const toRows = (vals: number[], labels?: string[], dates?: Date[]) =>
+const toRows = (
+  vals: number[],
+  labels?: string[],
+  dates?: Date[]
+): ChartRow[] =>
   vals.map((v, i) => ({
     i,
     name: labels?.[i] ?? `${i + 1}`,
@@ -225,9 +265,9 @@ function RevenueChart({
               fill="#FFFFFF"
               stroke="#BD99FF"
               strokeWidth={2}
-              label={(p: any) => {
-                const x = p?.x;
-                const y = p?.y;
+              label={(p: ReferenceDotLabelProps) => {
+                const x = p.x;
+                const y = p.y;
                 if (typeof x !== "number" || typeof y !== "number")
                   return <g />;
 
@@ -253,7 +293,9 @@ function RevenueChart({
                     <rect x="0" y="0" width={w} height={h} rx="10" fill={bg} />
                     {/* pointer */}
                     <path
-                      d={`M${w / 2 - 7} ${h} L${w / 2} ${h + 8} L${w / 2 + 7} ${h} Z`}
+                      d={`M${w / 2 - 7} ${h} L${w / 2} ${h + 8} L${
+                        w / 2 + 7
+                      } ${h} Z`}
                       fill={bg}
                     />
 
@@ -326,12 +368,16 @@ function RevenueChart({
           <Tooltip
             cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1 }}
             isAnimationActive={false}
-            content={({ active, payload }) => {
+            content={(props: HoverTooltipProps) => {
+              const active = props.active;
+              const payload = props.payload;
+
               if (!active || !payload || payload.length === 0) return null;
-              const row = payload[0]?.payload as
-                | { value: number; date?: Date }
-                | undefined;
-              if (!row) return null;
+
+              const candidate = payload[0]?.payload;
+              if (!isChartRow(candidate)) return null;
+
+              const row = candidate;
 
               return (
                 <div className={tipCls.wrapper}>

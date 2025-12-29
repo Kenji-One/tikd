@@ -582,57 +582,7 @@ export default function DashboardHomePage() {
   /* ---------------------- Home tab ---------------------- */
   function renderHomeTab() {
     return (
-      <div className="mt-4 space-y-8">
-        {/* Top CTA row */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Build organization */}
-          <Link href="/dashboard/organizations/new" className="group block">
-            <div className="flex h-full items-center justify-between rounded-xl border border-white/10 bg-neutral-948/90 px-6 py-5 shadow-[0_18px_45px_rgba(0,0,0,0.65)] transition-colors duration-200 hover:border-primary-700/50 hover:bg-neutral-900">
-              <div>
-                <h2 className="text-base font-semibold text-neutral-0">
-                  Build your organization
-                </h2>
-                <p className="mt-2 text-sm text-neutral-300">
-                  Start by crafting your branded empire, then add your events.
-                </p>
-              </div>
-              <div className="ml-4 flex h-11 w-11 items-center justify-center rounded-full bg-neutral-950 text-primary-300 ring-1 ring-primary-700/40 transition-all duration-200 group-hover:bg-primary-600 group-hover:text-white">
-                <ArrowRight className="h-4 w-4" />
-              </div>
-            </div>
-          </Link>
-
-          {/* Launch event */}
-          <button
-            type="button"
-            onClick={openOrgPicker}
-            className="group block cursor-pointer"
-          >
-            <div
-              className={clsx(
-                "flex h-full items-center justify-between rounded-xl border px-6 py-5",
-                "border-primary-700/45 bg-neutral-948/95",
-                "shadow-[0_18px_45px_rgba(0,0,0,0.75)]",
-                "bg-[radial-gradient(circle_at_0%_0%,rgba(154,70,255,0.35),transparent_55%),radial-gradient(circle_at_100%_100%,rgba(66,139,255,0.32),transparent_55%)]",
-                "transition-colors duration-200 hover:border-primary-500 hover:bg-primary-950/60"
-              )}
-            >
-              <div>
-                <h2 className="text-base font-semibold text-neutral-0 text-start">
-                  Launch an event
-                </h2>
-                <p className="mt-2 text-sm text-neutral-200">
-                  Go live in seconds. Pick the organization for this event and
-                  start selling tickets.
-                </p>
-              </div>
-              <div className="ml-4 flex h-11 w-11 items-center justify-center rounded-full bg-primary-500 text-neutral-950 shadow-[0_0_0_1px_rgba(255,255,255,0.25)] transition-all duration-200 group-hover:bg-primary-400 group-hover:shadow-[0_0_0_1px_rgba(255,255,255,0.45)]">
-                <CalendarPlus className="h-4 w-4" />
-              </div>
-            </div>
-          </button>
-        </div>
-
+      <div className="space-y-5">
         <DashboardClient />
       </div>
     );
@@ -1116,13 +1066,6 @@ export default function DashboardHomePage() {
               </svg>
             </span>
           </div>
-        </div>
-
-        {/* Desktop page label (sidebar handles actual navigation) */}
-        <div className="mt-6 hidden md:block">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
-            {VIEW_LABEL[view]}
-          </p>
         </div>
 
         {/* Active section content */}

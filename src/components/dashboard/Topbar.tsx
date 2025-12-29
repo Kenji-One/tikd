@@ -1,8 +1,5 @@
 /* ------------------------------------------------------------------ */
 /*  src/components/dashboard/Topbar.tsx                               */
-/*  - Reuses auth + search behavior from site Header                  */
-/*  - Opens SearchModal on "/" or ⌘/Ctrl+K                            */
-/*  - Avatar dropdown with Settings + Logout                          */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -10,21 +7,33 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import {
   Search as SearchIcon,
   Settings as SettingsIcon,
   LogOut,
 } from "lucide-react";
 import SearchModal from "@/components/search/SearchModal";
+import NotificationsDialog from "@/components/dashboard/NotificationsDialog";
 
 type TopbarProps = {
   /** For organization dashboard pages we hide the Tikd logo */
   hideLogo?: boolean;
 };
 
+type SortByKey = "me" | "newest" | "oldest";
+
+const SORT_OPTIONS: { key: SortByKey; label: string }[] = [
+  { key: "me", label: "Me" },
+  { key: "newest", label: "Newest" },
+  { key: "oldest", label: "Oldest" },
+];
+
 export default function Topbar({ hideLogo = false }: TopbarProps) {
   /* ----- auth ---------------------------------------------------------- */
   const { data: session } = useSession();
+  console.log("Topbar session:", session);
   const seed = session?.user?.id ?? "guest";
   const avatarSrc =
     session?.user?.image && session.user.image.length > 0
@@ -35,17 +44,75 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement | null>(null);
 
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(11);
+
+  // initialize unread badge from localStorage (dialog uses same storage key)
+  // useEffect(() => {
+  //   try {
+  //     const raw = localStorage.getItem("tikd:notifications:v1");
+  //     const arr = raw ? (JSON.parse(raw) as { read?: boolean }[]) : [];
+  //     const count = Array.isArray(arr) ? arr.filter((n) => !n?.read).length : 0;
+  //     setUnreadCount(count);
+  //   } catch {
+  //     setUnreadCount(0);
+  //   }
+  // }, []);
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const sortParamRaw = searchParams.get("sortBy");
+  const sortParam: SortByKey | null =
+    sortParamRaw === "me" ||
+    sortParamRaw === "newest" ||
+    sortParamRaw === "oldest"
+      ? sortParamRaw
+      : null;
+
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<SortByKey>(sortParam ?? "me");
+  const sortRef = useRef<HTMLDivElement | null>(null);
+
+  const sortLabel = SORT_OPTIONS.find((o) => o.key === sortBy)?.label ?? "Me";
+
+  function applySort(next: SortByKey) {
+    setSortBy(next);
+    setSortOpen(false);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sortBy", next);
+
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
+
+  // keep local state in sync when user navigates back/forward or page changes query
+  useEffect(() => {
+    if (sortParam && sortParam !== sortBy) setSortBy(sortParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortParamRaw]);
+
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       const target = e.target as Node;
+
       if (avatarRef.current && !avatarRef.current.contains(target)) {
         setAvatarOpen(false);
       }
+
+      if (sortRef.current && !sortRef.current.contains(target)) {
+        setSortOpen(false);
+      }
     }
+
     function onEsc(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setAvatarOpen(false);
         setSearchOpen(false);
+        setSortOpen(false);
+        setNotifOpen(false);
       }
     }
     document.addEventListener("mousedown", onDocClick);
@@ -61,6 +128,10 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
       const isCmdK = e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey);
       if (isCmdK || e.key === "/") {
         e.preventDefault();
+        setNotifOpen(false);
+        setAvatarOpen(false);
+        setSortOpen(false);
+
         setSearchOpen(true);
       }
     };
@@ -86,12 +157,81 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
           </button>
         </div>
 
+        {/* Sort selector */}
+        <div ref={sortRef} className="relative w-full max-w-[126px]">
+          <button
+            type="button"
+            onClick={() => setSortOpen((v) => !v)}
+            aria-haspopup="listbox"
+            aria-expanded={sortOpen}
+            className="flex w-full items-center justify-between rounded-full border border-white/10 bg-neutral-900 px-3 py-[9px] text-left text-white outline-none focus-visible:border-violet-500/50"
+          >
+            <span className="truncate">Sort by: {sortLabel}</span>
+            <ChevronDown
+              className={`h-4 w-4 opacity-70 transition-transform ${
+                sortOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {sortOpen && (
+            <div className="absolute left-0 z-50 mt-2 w-full">
+              <div className="relative">
+                {/* caret */}
+                <span className="pointer-events-none absolute -top-2 left-6 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
+
+                <div
+                  role="listbox"
+                  aria-label="Sort by"
+                  className="overflow-hidden rounded-xl border border-white/10 bg-[#121420] shadow-2xl backdrop-blur"
+                >
+                  <div className="p-1.5">
+                    {SORT_OPTIONS.map((opt) => {
+                      const active = opt.key === sortBy;
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          onClick={() => applySort(opt.key)}
+                          className={`flex w-full items-center justify-between rounded-lg px-3.5 py-2 text-left text-sm outline-none hover:bg-white/5 focus:bg-white/5 ${
+                            active ? "bg-white/5 text-white" : "text-white/90"
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                          {active ? (
+                            <span className="text-xs font-semibold text-white/80">
+                              ✓
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Right controls */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Notifications */}
+          {/* Notifications */}
           <button
+            type="button"
             aria-label="Notifications"
-            className="relative rounded-full bg-neutral-900 p-2 hover:border-violet-500/40"
+            aria-haspopup="dialog"
+            aria-expanded={notifOpen}
+            onClick={() => {
+              // close other popovers for clean UX
+              setAvatarOpen(false);
+              setSortOpen(false);
+              setSearchOpen(false);
+              setNotifOpen(true);
+            }}
+            className="relative rounded-full bg-neutral-900 p-[9px] hover:border-violet-500/40 cursor-pointer focus:outline-none focus:ring-2 focus:ring-violet-500/40"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -105,7 +245,10 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                 fill="#727293"
               />
             </svg>
-            <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-error-500" />
+
+            {unreadCount > 0 && (
+              <span className="absolute right-[9px] top-[9px] h-1.5 w-1.5 rounded-full bg-error-500" />
+            )}
           </button>
 
           {/* Avatar w/ dropdown (account, settings, logout) */}
@@ -115,15 +258,34 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
               onClick={() => setAvatarOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={avatarOpen}
-              className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full ring-2 ring-white/10 focus:outline-none focus:ring-violet-500/40"
+              className="flex gap-1.5 w-[120px] p-1 pr-2 items-center rounded-full ring-2 ring-white/10 focus:outline-none focus:ring-violet-500/40 bg-neutral-900 cursor-pointer"
             >
-              <Image
-                src={avatarSrc}
-                width={36}
-                height={36}
-                alt={session?.user?.name ?? "Profile"}
-                className="h-full w-full object-cover"
-              />
+              <div className=" relative h-[34px] w-[34px] rounded-full bg-white/5 flex-shrink-0 overflow-hidden">
+                <Image
+                  src={avatarSrc}
+                  width={34}
+                  height={34}
+                  alt={session?.user?.name ?? "Profile"}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <p className="w-full text-left capitalize font-medium">
+                {session?.user?.name || "User"}
+              </p>
+
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                className=" flex-shrink-0"
+              >
+                <path
+                  d="M10.36 7.52661L6.58666 3.75994C6.52469 3.69746 6.45096 3.64786 6.36972 3.61402C6.28848 3.58017 6.20134 3.56274 6.11333 3.56274C6.02532 3.56274 5.93819 3.58017 5.85695 3.61402C5.77571 3.64786 5.70197 3.69746 5.64 3.75994C5.51583 3.88485 5.44614 4.05382 5.44614 4.22994C5.44614 4.40607 5.51583 4.57503 5.64 4.69994L8.94 8.03328L5.64 11.3333C5.51583 11.4582 5.44614 11.6272 5.44614 11.8033C5.44614 11.9794 5.51583 12.1484 5.64 12.2733C5.70174 12.3363 5.77537 12.3864 5.85662 12.4207C5.93787 12.455 6.02513 12.4729 6.11333 12.4733C6.20154 12.4729 6.28879 12.455 6.37004 12.4207C6.45129 12.3864 6.52492 12.3363 6.58666 12.2733L10.36 8.50661C10.4277 8.44418 10.4817 8.36841 10.5186 8.28408C10.5556 8.19975 10.5746 8.10868 10.5746 8.01661C10.5746 7.92454 10.5556 7.83347 10.5186 7.74914C10.4817 7.66481 10.4277 7.58904 10.36 7.52661Z"
+                  fill="#727293"
+                />
+              </svg>
             </button>
 
             {avatarOpen && (
@@ -173,6 +335,12 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
           </div>
         </div>
       </div>
+
+      <NotificationsDialog
+        open={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        onUnreadChange={setUnreadCount}
+      />
 
       {/* Global search modal (reuses your existing component) */}
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />

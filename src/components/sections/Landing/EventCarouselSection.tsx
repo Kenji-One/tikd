@@ -212,7 +212,7 @@ export default function EventCarouselSection({
         {/* ≥1024 and isCarousel={false}: DESKTOP grid list (auto-fits; will show 6 on big screens) */}
         {!effectiveCarousel ? (
           <div
-            className="grid w-full gap-4"
+            className="grid w-full gap-4 group/row transition-all duration-300"
             style={{
               // auto-fit = makes as many columns as can fit,
               // but collapses empty columns so 6 items => max 6 visible columns

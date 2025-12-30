@@ -24,7 +24,10 @@ export default function DashboardChrome({ children }: Props) {
   // Dashboard default page: replace internal tabs with a sidebar
   // ✅ include ALL finances subroutes
   const isDashboardHome =
-    pathname === "/dashboard" || pathname.startsWith("/dashboard/finances");
+    pathname === "/dashboard" ||
+    pathname.startsWith("/dashboard/finances") ||
+    pathname.startsWith("/dashboard/connections") ||
+    pathname.startsWith("/dashboard/events");
 
   const hasSidebar = isOrgSubpage || isDashboardHome;
 

@@ -258,7 +258,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
               onClick={() => setAvatarOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={avatarOpen}
-              className="flex gap-1.5 w-[120px] p-1 pr-2 items-center rounded-full ring-2 ring-white/10 focus:outline-none focus:ring-violet-500/40 bg-neutral-900 cursor-pointer"
+              className="flex gap-1.5 min-w-[120px] p-1 pr-2 items-center rounded-full ring-2 ring-white/10 focus:outline-none focus:ring-violet-500/40 bg-neutral-900 cursor-pointer"
             >
               <div className=" relative h-[34px] w-[34px] rounded-full bg-white/5 flex-shrink-0 overflow-hidden">
                 <Image

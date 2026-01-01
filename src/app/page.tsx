@@ -455,10 +455,7 @@ export default function LandingPage() {
       {/* ------------------------------------------------------------------ */}
       <section className="relative">
         {/* Figma ellipses (left + right) */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 overflow-hidden z-0"
-        >
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           {/* Left ellipse */}
           <div
             className="absolute"

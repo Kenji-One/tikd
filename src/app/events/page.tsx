@@ -544,8 +544,7 @@ export default function EventsPage() {
             </div>
 
             <div
-              // className="grid w-full gap-4 group/row transition-all duration-300" //uncomment to enable shadow dom
-              className="grid w-full gap-4"
+              className="grid w-full gap-4 group/row transition-all duration-300"
               style={{ gridTemplateColumns }}
             >
               {filteredEvents.map((ev) => (

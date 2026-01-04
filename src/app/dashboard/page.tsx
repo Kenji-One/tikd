@@ -1043,7 +1043,7 @@ export default function DashboardHomePage() {
               className={clsx(
                 "h-[44px] w-full appearance-none rounded-full border border-white/10",
                 "bg-[#121420] px-4 pr-10 text-sm text-neutral-0",
-                "focus:outline-none focus-visible:border-violet-500/50"
+                "focus:outline-none focus-visible:border-primary-500"
               )}
             >
               <option value="home">Home</option>

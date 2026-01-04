@@ -49,31 +49,38 @@ export default function BreakdownCard({
         padAngle={donutProps?.padAngle}
       />
 
-      {/* Legend generated from the same segments so colors/values can’t drift */}
-      <ul className="mt-4 space-y-2 text-sm">
+      <ul className="mt-8">
         {segments.map((s) => (
           <li
             key={s.label}
-            className="flex items-center justify-between text-white/70 border-b last:border-b-0 border-neutral-700 pb-1"
+            className="
+        relative flex items-center justify-between py-3
+        after:content-[''] after:absolute after:inset-x-0 after:bottom-0 after:h-px
+        after:bg-gradient-to-r after:from-transparent after:via-[#414162] after:to-transparent
+        last:after:hidden
+      "
           >
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-2 text-neutral-50">
               <span
-                className="inline-block h-2.5 w-2.5 rounded-full"
+                className="inline-block h-1.5 w-1.5 rounded-full"
                 style={{ backgroundColor: s.color }}
                 aria-hidden="true"
               />
               {s.label}
             </span>
-            <span>{s.value.toLocaleString()}</span>
+
+            <span className="text-neutral-0 text-base">
+              {s.value.toLocaleString()}
+            </span>
           </li>
         ))}
       </ul>
 
-      <div className="pointer-events-none w-full flex justify-end mt-4">
+      <div className="pointer-events-none w-full flex justify-end mt-1">
         <button
           type="button"
           onClick={onDetailedView}
-          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-4 py-1.5 text-xs font-medium text-white/80 backdrop-blur-sm transition hover:bg-white/15 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
           Detailed View
         </button>

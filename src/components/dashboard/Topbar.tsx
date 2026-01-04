@@ -141,83 +141,84 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
 
   return (
     <>
-      <div className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
-        {/* Search trigger – looks like an input but opens SearchModal */}
-        <div className={"relative w-full sm:max-w-md"}>
-          <button
-            type="button"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Open search"
-            className="group flex h-[44px] w-full items-center gap-3 rounded-full border border-white/10 bg-[#121420] px-3 text-left text-sm text-white outline-none focus-visible:border-violet-500/50"
-          >
-            <SearchIcon className="h-4 w-4 opacity-70" />
-            <span className="flex-1 truncate text-white/70">
-              Search events, orgs, artists…
-            </span>
-          </button>
-        </div>
+      <div className="grid grid-cols-[3.10fr_1.51fr] gap-5 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4 justify-between w-full sm:w-auto">
+          {/* Search trigger – looks like an input but opens SearchModal */}
+          <div className={"relative w-full sm:max-w-md"}>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Open search"
+              className="group flex h-[44px] w-full items-center gap-3 rounded-full border border-white/10 bg-[#121420] px-3 text-left text-sm text-white outline-none focus-visible:border-primary-500"
+            >
+              <SearchIcon className="h-4 w-4 opacity-70" />
+              <span className="flex-1 truncate text-white/70">
+                Search events, orgs, artists…
+              </span>
+            </button>
+          </div>
 
-        {/* Sort selector */}
-        <div ref={sortRef} className="relative w-full max-w-[126px]">
-          <button
-            type="button"
-            onClick={() => setSortOpen((v) => !v)}
-            aria-haspopup="listbox"
-            aria-expanded={sortOpen}
-            className="flex w-full items-center justify-between rounded-full border border-white/10 bg-neutral-900 px-3 py-[9px] text-left text-white outline-none focus-visible:border-violet-500/50"
-          >
-            <span className="truncate">Sort by: {sortLabel}</span>
-            <ChevronDown
-              className={`h-4 w-4 opacity-70 transition-transform ${
-                sortOpen ? "rotate-180" : ""
-              }`}
-            />
-          </button>
+          {/* Sort selector */}
+          <div ref={sortRef} className="relative w-full max-w-[126px]">
+            <button
+              type="button"
+              onClick={() => setSortOpen((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={sortOpen}
+              className="flex w-full items-center justify-between rounded-full border border-white/10 bg-neutral-900 px-3 py-[9px] text-left text-white/80 hover:text-white outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer"
+            >
+              <span className="truncate">Sort by: {sortLabel}</span>
+              <ChevronDown
+                className={`h-4 w-4 opacity-70 transition-transform ${
+                  sortOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
 
-          {sortOpen && (
-            <div className="absolute left-0 z-50 mt-2 w-full">
-              <div className="relative">
-                {/* caret */}
-                <span className="pointer-events-none absolute -top-2 left-6 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
+            {sortOpen && (
+              <div className="absolute left-0 z-50 mt-2 w-full">
+                <div className="relative">
+                  {/* caret */}
+                  <span className="pointer-events-none absolute -top-2 left-6 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
 
-                <div
-                  role="listbox"
-                  aria-label="Sort by"
-                  className="overflow-hidden rounded-xl border border-white/10 bg-[#121420] shadow-2xl backdrop-blur"
-                >
-                  <div className="p-1.5">
-                    {SORT_OPTIONS.map((opt) => {
-                      const active = opt.key === sortBy;
-                      return (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          role="option"
-                          aria-selected={active}
-                          onClick={() => applySort(opt.key)}
-                          className={`flex w-full items-center justify-between rounded-lg px-3.5 py-2 text-left text-sm outline-none hover:bg-white/5 focus:bg-white/5 ${
-                            active ? "bg-white/5 text-white" : "text-white/90"
-                          }`}
-                        >
-                          <span>{opt.label}</span>
-                          {active ? (
-                            <span className="text-xs font-semibold text-white/80">
-                              ✓
-                            </span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
+                  <div
+                    role="listbox"
+                    aria-label="Sort by"
+                    className="overflow-hidden rounded-xl border border-white/10 bg-[#121420] backdrop-blur"
+                  >
+                    <div className="p-1.5">
+                      {SORT_OPTIONS.map((opt) => {
+                        const active = opt.key === sortBy;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            onClick={() => applySort(opt.key)}
+                            className={`flex w-full items-center justify-between rounded-lg px-3.5 py-2 text-left text-sm outline-none hover:bg-white/5 focus:bg-white/5 ${
+                              active ? "bg-white/5 text-white" : "text-white/90"
+                            }`}
+                          >
+                            <span>{opt.label}</span>
+                            {active ? (
+                              <span className="text-xs font-semibold text-white/80">
+                                ✓
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Right controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Notifications */}
+        <div className="flex items-center justify-end gap-2 sm:gap-3">
           {/* Notifications */}
           <button
             type="button"
@@ -231,7 +232,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
               setSearchOpen(false);
               setNotifOpen(true);
             }}
-            className="relative rounded-full bg-neutral-900 p-[9px] hover:border-violet-500/40 cursor-pointer focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+            className="relative rounded-full bg-neutral-900 p-[9px] hover:border-primary-500 cursor-pointer focus:outline-none ring-1 ring-white/10 hover:ring-primary-500 focus:ring-primary-500 cursor-pointer transition"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -258,7 +259,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
               onClick={() => setAvatarOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={avatarOpen}
-              className="flex gap-1.5 min-w-[120px] p-1 pr-2 items-center rounded-full ring-2 ring-white/10 focus:outline-none focus:ring-violet-500/40 bg-neutral-900 cursor-pointer"
+              className="flex gap-1.5 min-w-[120px] p-1 pr-2 items-center rounded-full ring-1 ring-white/10 focus:outline-none hover:ring-primary-500 focus:ring-primary-500 bg-neutral-900 cursor-pointer transition"
             >
               <div className=" relative h-[34px] w-[34px] rounded-full bg-white/5 flex-shrink-0 overflow-hidden">
                 <Image

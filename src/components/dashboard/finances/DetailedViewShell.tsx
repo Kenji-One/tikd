@@ -231,7 +231,7 @@ export default function DetailedViewShell({
             <div className="relative">
               <button
                 onClick={() => setMenuOpen((v) => !v)}
-                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#1A1C29] px-3 py-2 text-xs text-white/80 hover:border-violet-500/40"
+                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#1A1C29] px-3 py-2 text-xs text-white/80 hover:border-primary-500"
               >
                 <CalendarIcon size={14} className="opacity-80" />
                 {range.label}

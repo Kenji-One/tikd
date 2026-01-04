@@ -1,11 +1,11 @@
 /* ------------------------------------------------------------------ */
-/*  src/components/dashboard/tables/RecentSalesTable.tsx                     */
-/*  Tikd Dashboard – Recent Sales (368px column width in grid)        */
+/*  src/components/dashboard/tables/RecentSalesTable.tsx              */
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
+import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
 
 /* ------------------------------ Types ------------------------------ */
 type Sale = {
@@ -17,6 +17,9 @@ type Sale = {
   avatarBg?: string;
   avatarText?: string;
 };
+
+type SortKey = "id" | "name" | "event" | "date" | "total";
+type SortDir = "asc" | "desc";
 
 /* ---------------------------- Mock Data ---------------------------- */
 const SALES: Sale[] = [
@@ -89,7 +92,7 @@ const SALES: Sale[] = [
     event: "Valentines Gala",
     date: "Sep 15, 2025",
     total: 2930.93,
-    avatarBg: "bg-gradient-to-br from-violet-500 to-purple-500",
+    avatarBg: "bg-gradient-to-br from-primary-500 to-purple-500",
     avatarText: "DW",
   },
   {
@@ -116,20 +119,6 @@ const firstWordEllip = (s: string) => {
   return `${first}…`;
 };
 
-/* ------------------------------ UI -------------------------------- */
-function SortGlyph() {
-  return (
-    <span className="ml-1 inline-flex flex-col leading-none opacity-40">
-      <svg width="8" height="8" viewBox="0 0 10 10" className="-mb-0.5">
-        <path d="M5 2l3 3H2l3-3z" fill="currentColor" />
-      </svg>
-      <svg width="8" height="8" viewBox="0 0 10 10" className="-mt-0.5">
-        <path d="M5 8L2 5h6L5 8z" fill="currentColor" />
-      </svg>
-    </span>
-  );
-}
-
 function Avatar({ text, bg }: { text: string; bg?: string }) {
   return (
     <div
@@ -144,11 +133,59 @@ function Avatar({ text, bg }: { text: string; bg?: string }) {
   );
 }
 
+/** Parse "Sep 19, 2025" / "Dec 21" into a timestamp for sorting */
+function dateToMs(label: string) {
+  const withYear = /\d{4}/.test(label) ? label : `${label}, 2025`;
+  const ms = Date.parse(withYear);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 /* ---------------------------- Component ---------------------------- */
 export default function RecentSalesTable() {
   const clipRef = useRef<HTMLDivElement | null>(null);
   const [isClamped, setIsClamped] = useState(false);
   const MAX = 458;
+
+  // ✅ sort state (same behavior as MyTeamTable)
+  const [sortBy, setSortBy] = useState<SortKey>("date");
+  const [dir, setDir] = useState<SortDir>("desc");
+
+  const toggleSort = (key: SortKey) => {
+    if (key === sortBy) setDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortBy(key);
+      setDir("desc");
+    }
+  };
+
+  const sorted = useMemo(() => {
+    const arr = [...SALES];
+    arr.sort((a, b) => {
+      const A = a[sortBy];
+      const B = b[sortBy];
+
+      // numeric column
+      if (sortBy === "total") {
+        return dir === "asc" ? a.total - b.total : b.total - a.total;
+      }
+
+      // date column
+      if (sortBy === "date") {
+        const ams = dateToMs(a.date);
+        const bms = dateToMs(b.date);
+        return dir === "asc" ? ams - bms : bms - ams;
+      }
+
+      // strings
+      const aStr = String(A);
+      const bStr = String(B);
+      return dir === "asc"
+        ? aStr.localeCompare(bStr)
+        : bStr.localeCompare(aStr);
+    });
+
+    return arr;
+  }, [sortBy, dir]);
 
   useEffect(() => {
     if (!clipRef.current) return;
@@ -165,20 +202,17 @@ export default function RecentSalesTable() {
     };
   }, []);
 
+  const thRow = "[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-2";
+  const thBase =
+    "text-left font-semibold cursor-pointer select-none hover:text-white/80";
+  const thBaseRight =
+    "text-right font-semibold cursor-pointer select-none hover:text-white/80";
+
   return (
-    /* FIX: prevent grid stretch + cap height on the ROOT */
-    <div className="relative self-start max-h-[458px] rounded-lg border border-neutral-700 bg-neutral-900 pt-4">
+    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-4">
       {/* Header */}
       <div className="mb-3 flex items-center justify-between px-4">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-white/80">
-          Recent Sales
-        </h3>
-        <button
-          type="button"
-          className="text-xs text-white/60 transition-colors hover:text-white/80"
-        >
-          See All
-        </button>
+        <h3 className="font-bold uppercase text-neutral-400">Recent Sales</h3>
       </div>
 
       {/* Clipping wrapper */}
@@ -189,28 +223,122 @@ export default function RecentSalesTable() {
       >
         <table className="w-full border-collapse text-xs font-medium leading-tight">
           <thead className="text-neutral-400">
-            <tr className="[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-2">
-              <th className="text-left font-medium">Order</th>
-              <th className="text-left font-medium">Name</th>
-              <th className="truncate text-left font-medium">Event</th>
-              <th className="text-left font-medium">Date</th>
-              <th className="text-right font-medium">Total</th>
+            <tr className={thRow}>
+              <th
+                className={thBase}
+                onClick={() => toggleSort("id")}
+                aria-sort={
+                  sortBy === "id"
+                    ? dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <div className="inline-flex items-center">
+                  Order
+                  <SortArrowsIcon
+                    direction={sortBy === "id" ? dir : null}
+                    className="ml-2 -translate-y-[1px]"
+                  />
+                </div>
+              </th>
+
+              <th
+                className={thBase + " !pl-0"}
+                onClick={() => toggleSort("name")}
+                aria-sort={
+                  sortBy === "name"
+                    ? dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <div className="inline-flex items-center">
+                  Name
+                  <SortArrowsIcon
+                    direction={sortBy === "name" ? dir : null}
+                    className="ml-2 -translate-y-[1px]"
+                  />
+                </div>
+              </th>
+
+              <th
+                className={clsx(thBase, "truncate !pl-0")}
+                onClick={() => toggleSort("event")}
+                aria-sort={
+                  sortBy === "event"
+                    ? dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <div className="inline-flex items-center">
+                  Event
+                  <SortArrowsIcon
+                    direction={sortBy === "event" ? dir : null}
+                    className="ml-2 -translate-y-[1px]"
+                  />
+                </div>
+              </th>
+
+              <th
+                className={thBase}
+                onClick={() => toggleSort("date")}
+                aria-sort={
+                  sortBy === "date"
+                    ? dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <div className="inline-flex items-center">
+                  Date
+                  <SortArrowsIcon
+                    direction={sortBy === "date" ? dir : null}
+                    className="ml-2 -translate-y-[1px]"
+                  />
+                </div>
+              </th>
+
+              <th
+                className={thBaseRight}
+                onClick={() => toggleSort("total")}
+                aria-sort={
+                  sortBy === "total"
+                    ? dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <div className="inline-flex items-center justify-end">
+                  Total
+                  <SortArrowsIcon
+                    direction={sortBy === "total" ? dir : null}
+                    className="ml-2 -translate-y-[1px]"
+                  />
+                </div>
+              </th>
             </tr>
           </thead>
 
           <tbody className="text-white">
-            {SALES.map((s, i) => (
+            {sorted.map((s, i) => (
               <tr
                 key={`${s.id}-${i}`}
                 className={clsx(
-                  "",
                   i % 2 === 0 ? "bg-neutral-800" : "bg-transparent"
                 )}
               >
-                <td className="pl-2 pr-1 py-2 align-middle text-neutral-200">
+                <td className="pl-2 py-2 align-middle text-neutral-200">
                   {s.id}
                 </td>
-                <td className="px-1 py-2">
+
+                <td className="py-2">
                   <div className="flex min-w-0 items-center gap-1">
                     <Avatar
                       text={(s.avatarText ?? "NA").slice(0, 2)}
@@ -221,13 +349,16 @@ export default function RecentSalesTable() {
                     </span>
                   </div>
                 </td>
-                <td className="px-1 py-2">
+
+                <td className="pr-2 py-2">
                   <span className="block truncate" title={s.event}>
                     {firstWordEllip(s.event)}
                   </span>
                 </td>
-                <td className="px-1 py-2">{s.date}</td>
-                <td className="px-1 py-2 text-right font-medium text-success-500">
+
+                <td className="px-2 py-2">{s.date}</td>
+
+                <td className="px-2 py-2 text-right font-medium text-success-500">
                   {fmtUsd(s.total)}
                 </td>
               </tr>
@@ -238,11 +369,11 @@ export default function RecentSalesTable() {
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
       </div>
 
-      {/* Bottom center pill (unchanged) */}
+      {/* Bottom center pill */}
       <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
         <button
           type="button"
-          className="pointer-events-auto rounded-full border border-white/10 bg-white/10 px-4 py-1.5 text-xs font-medium text-white/80 backdrop-blur-sm transition hover:bg-white/15"
+          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
           See All
         </button>

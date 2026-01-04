@@ -86,7 +86,7 @@ export default function KpiCard({
     if (hideDetails) return null;
 
     const cls =
-      "text-xs text-neutral-200 hover:text-white cursor-pointer inline-flex items-center";
+      "text-xs text-neutral-200 hover:text-primary-951 cursor-pointer inline-flex items-center transition-colors";
 
     if (detailsHref) {
       return (
@@ -118,9 +118,7 @@ export default function KpiCard({
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <div className="space-y-2 w-full">
-          <div className="text-[14px] font-extrabold uppercase tracking-[-0.28px] text-neutral-400">
-            {title}
-          </div>
+          <div className="font-bold uppercase text-neutral-400">{title}</div>
           <div className="flex items-center gap-3 justify-between w-full">
             <div className="flex items-center gap-1.5">
               <div className="text-[24px] font-extrabold tracking-[-0.48px] leading-[100%] text-white">

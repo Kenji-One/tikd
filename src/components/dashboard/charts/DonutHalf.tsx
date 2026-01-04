@@ -96,7 +96,7 @@ function DonutHalf({
             cy="100%"
             innerRadius={innerRadius}
             outerRadius={outerRadius}
-            cornerRadius={cornerRadiusPx}
+            // cornerRadius={cornerRadiusPx}
             paddingAngle={padAngle}
             minAngle={minSliceAngle}
             stroke="none"
@@ -110,13 +110,13 @@ function DonutHalf({
       </ResponsiveContainer>
 
       {/* Center value/label */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center justify-center">
         <div className="translate-y-1 text-center">
-          <div className="text-4xl font-extrabold leading-none text-white">
+          <div className="text-[32px] font-extrabold leading-none text-white">
             {formatNumber(centerPrimary)}
           </div>
           {centerLabel ? (
-            <div className="mt-2 text-[13px] leading-none text-white/60">
+            <div className="mt-2 font-medium leading-none text-neutral-400">
               {centerLabel}
             </div>
           ) : null}

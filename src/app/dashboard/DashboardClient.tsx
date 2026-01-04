@@ -1,6 +1,5 @@
 /* ------------------------------------------------------------------ */
 /*  src/app/dashboard/DashboardClient.tsx                              */
-/*  KPIs + charts with functional date-range filter (client)           */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -27,15 +26,15 @@ const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
 const sparkB = [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120];
 const sparkC = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
 const genderSegments = [
-  { value: 8283, label: "Male", color: "#7C3AED" }, // violet
-  { value: 3238, label: "Female", color: "#F97316" }, // orange
-  { value: 2162, label: "Other", color: "#22C55E" }, // green
+  { value: 8283, label: "Male", color: "#2F45C5" },
+  { value: 3238, label: "Female", color: "#FF7577" },
+  { value: 2162, label: "Other", color: "#C2C2D1" },
 ];
 
 const ageSegments = [
-  { value: 7643, label: "0–18", color: "#22C55E" }, // green
-  { value: 9823, label: "18–28", color: "#7C3AED" }, // violet
-  { value: 5817, label: "28–50+", color: "#60A5FA" }, // blue
+  { value: 7643, label: "0–18", color: "#9A46FF" },
+  { value: 9823, label: "18–28", color: "#FF7B45" },
+  { value: 5817, label: "28–50+", color: "#45FF79" },
 ];
 
 /* ------------------------ Date helpers ------------------------ */
@@ -110,17 +109,17 @@ export default function DashboardClient() {
             stretchChart
             detailsHref="/dashboard/finances/revenue"
             toolbar={
-              <div className="relative">
+              <div className="relative max-w-[185px]">
                 <button
                   onClick={() => setMenuOpen((v) => !v)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#1A1C29] px-3 py-2 text-xs text-white/80 hover:border-violet-500/40"
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-neutral-700 px-3 py-2 text-xs text-white/80 hover:text-white hover:border-primary-500 cursor-pointer focus:outline-none"
                 >
                   <CalendarIcon size={14} className="opacity-80" />
                   {range.label}
                   <ChevronDown size={14} className="opacity-70" />
                 </button>
                 {menuOpen && (
-                  <div className="absolute right-0 z-10 mt-2 w-56 rounded-lg border border-white/10 bg-[#1A1C29] p-1 text-xs text-white/80 shadow-lg">
+                  <div className="absolute right-0 z-10 mt-2 w-full rounded-lg border border-white/10 bg-[#121420] p-1 text-xs text-white/80">
                     {RANGES.map((r) => (
                       <button
                         key={r.id}
@@ -175,6 +174,8 @@ export default function DashboardClient() {
                 yTicks={[0, 100, 250, 500]}
                 xLabels={["12AM", "8AM", "4PM", "11PM"]}
                 stroke="#9A46FF"
+                deltaText="+24.6%"
+                deltaPositive
               />
             </KpiCard>
 
@@ -193,6 +194,8 @@ export default function DashboardClient() {
                 yTicks={[0, 100, 250, 500]}
                 xLabels={["12AM", "8AM", "4PM", "11PM"]}
                 stroke="#9A46FF"
+                deltaText="-24.6%"
+                deltaPositive={false}
               />
             </KpiCard>
           </div>
@@ -220,14 +223,12 @@ export default function DashboardClient() {
           />
         </div>
 
-        <div className="space-y-5">
-          <MyTeamTable
-            members={DEMO_MY_TEAM}
-            onDetailedView={() => {
-              console.log("Detailed View clicked");
-            }}
-          />
-        </div>
+        <MyTeamTable
+          members={DEMO_MY_TEAM}
+          onDetailedView={() => {
+            console.log("Detailed View clicked");
+          }}
+        />
       </section>
 
       <UpcomingEventsTable />

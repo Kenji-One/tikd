@@ -11,14 +11,11 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import type { LucideIcon } from "lucide-react";
 import {
-  BarChart3,
+  Landmark,
   Building2,
   ChevronDown,
   DollarSign,
   Eye,
-  Grid2X2,
-  Receipt,
-  Ticket,
   UserRound,
   Users,
   Users2,
@@ -290,9 +287,15 @@ const DASH_GROUPS: DashGroup[] = [
     items: [
       {
         href: "/dashboard/connections/organizations",
-        label: "Organization",
+        label: "Organizations",
         icon: Building2,
         match: (p) => p.startsWith("/dashboard/connections/organizations"),
+      },
+      {
+        href: "/dashboard/connections/establishments",
+        label: "Establishments",
+        icon: Landmark,
+        match: (p) => p.startsWith("/dashboard/connections/establishments"),
       },
       {
         href: "/dashboard/connections/teams",

@@ -181,19 +181,17 @@ function SmallKpiChart({
     [data, scaler]
   );
 
-  const { ticks, labelByIndex } = useMemo(() => {
-    if (rows.length === 0 || xLabels.length === 0) {
-      return { ticks: [] as number[], labelByIndex: new Map<number, string>() };
-    }
-    const maxIdx = rows.length - 1;
-    const idxs = xLabels.map((_, i) =>
-      Math.round((i / Math.max(1, xLabels.length - 1)) * maxIdx)
-    );
-    const uniq = Array.from(new Set(idxs)).sort((a, b) => a - b);
-    const map = new Map<number, string>();
-    uniq.forEach((idx, i) => map.set(idx, xLabels[i] ?? ""));
-    return { ticks: uniq, labelByIndex: map };
-  }, [rows, xLabels]);
+  const maxX = Math.max(0, rows.length - 1);
+
+  /**
+   * ✅ Evenly spaced X tick positions (no rounding).
+   * This guarantees the visible labels have equal spacing.
+   */
+  const xTickValues = useMemo(() => {
+    if (xLabels.length <= 1) return [0];
+    const step = maxX / Math.max(1, xLabels.length - 1);
+    return xLabels.map((_, i) => i * step);
+  }, [xLabels, maxX]);
 
   const rawDelta = (deltaText ?? "").trim();
   const fixedDeltaTxt = stripSign(rawDelta);
@@ -203,10 +201,11 @@ function SmallKpiChart({
 
   return (
     <div className="w-full">
-      <ResponsiveContainer width="100%" height={120}>
+      {/* ✅ slightly taller so Y ticks feel more “open” */}
+      <ResponsiveContainer width="100%" height={140}>
         <LineChart
           data={rows}
-          margin={{ top: 12, right: 10, left: 0, bottom: 18 }}
+          margin={{ top: 12, right: 8, left: 0, bottom: 18 }}
         >
           <CartesianGrid
             vertical={false}
@@ -231,16 +230,17 @@ function SmallKpiChart({
             allowDecimals={false}
           />
 
+          {/* ✅ Equal-spaced X ticks (labels) */}
           <XAxis
             dataKey="x"
             type="number"
-            ticks={ticks}
+            domain={[0, maxX]}
+            ticks={xTickValues}
             tick={{ ...AXIS_TICK_STYLE, textAnchor: "middle" }}
-            tickFormatter={(idx: number) => labelByIndex.get(idx) ?? ""}
+            tickFormatter={(_v: number, idx: number) => xLabels[idx] ?? ""}
             axisLine={{ stroke: "#2C2C44", strokeWidth: 1 }}
             tickLine={false}
             tickMargin={10}
-            domain={["dataMin", "dataMax"]}
             allowDecimals={false}
           />
 

@@ -112,10 +112,12 @@ function MiniSelect<T extends string>({
   value,
   onChange,
   options,
+  btnClassName,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { key: T; label: string }[];
+  btnClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -140,7 +142,8 @@ function MiniSelect<T extends string>({
           "inline-flex items-center gap-2 rounded-full border border-white/10",
           "bg-neutral-900 px-3 py-3 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
-          "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer"
+          "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer",
+          btnClassName
         )}
       >
         {label}
@@ -540,6 +543,7 @@ function EventsStatsListPanel({
             value={metric}
             onChange={setMetric}
             options={metricOptions}
+            btnClassName="!py-2"
           />
         </div>
 
@@ -567,9 +571,9 @@ function EventsStatsListPanel({
                   key={ev._id}
                   href={`/dashboard/events/${ev._id}`}
                   className={clsx(
-                    "group relative block overflow-hidden rounded-xl border",
+                    "group relative block overflow-hidden rounded-lg border",
                     activeRow
-                      ? "border-white/10 bg-neutral-948"
+                      ? "border-white/10 bg-neutral-948/10"
                       : "border-transparent bg-transparent hover:bg-white/4"
                   )}
                 >
@@ -617,8 +621,6 @@ function EventsStatsListPanel({
                       </div>
                     </div>
                   </div>
-
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-0 transition group-hover:ring-1 group-hover:ring-primary-700/25" />
                 </Link>
               );
             })
@@ -861,7 +863,7 @@ export default function DashboardEventsPage() {
             <button
               type="button"
               onClick={openOrgPicker}
-              className="inline-flex gap-1.5 items-center text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 px-4 py-3 rounded-full transition cursor-pointer"
+              className="inline-flex gap-1.5 items-center font-medium bg-primary-500 text-white hover:bg-primary-600 px-4 py-3 rounded-full transition cursor-pointer"
             >
               <CalendarPlus className="h-4 w-4" />
               Create Event

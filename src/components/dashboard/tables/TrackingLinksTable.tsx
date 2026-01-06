@@ -6,7 +6,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  Share2,
+  Download,
+} from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
 
 /* ------------------------------- Types ------------------------------ */
@@ -91,10 +98,324 @@ function statusRank(s: Status) {
   return 3;
 }
 
+function fullTrackingUrl(pathOnly: string) {
+  // For demo we keep it local; swap to your real tracking domain if needed.
+  if (!pathOnly) return "";
+  return `${typeof window !== "undefined" ? window.location.origin : ""}${pathOnly}`;
+}
+
+function useEscapeToClose(open: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+}
+
+/* ----------------------------- Dialogs ---------------------------- */
+function ArchiveLinkDialog({
+  open,
+  row,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  row: Row | null;
+  onClose: () => void;
+  onConfirm: (row: Row) => void;
+}) {
+  useEscapeToClose(open, onClose);
+  if (!open || !row) return null;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-md"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={clsx(
+          "relative mx-4 w-full max-w-[700px] overflow-hidden rounded-xl",
+          "border border-white/10 bg-neutral-900"
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-6 pb-7 pt-10 md:px-12 md:pb-10">
+          <h2 className="text-center text-3xl font-semibold tracking-[-0.48px] text-neutral-0">
+            Archive Link
+          </h2>
+          <p className="mt-2.5 text-center text-base text-neutral-400 tracking-[-0.32px]">
+            Are you sure you want to Archive “{row.name}”?
+          </p>
+
+          <div
+            className={clsx(
+              "mt-5 rounded-lg border border-error-500 bg-neutral-800 p-4"
+            )}
+          >
+            <div className="flex flex-col items-start gap-0.5">
+              <div className="items-center flex-shrink-0 gap-1 inline-flex">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  className="w-4 h-4 flex-shrink-0"
+                >
+                  <path
+                    d="M14.5067 10.6133L10.24 2.93333C9.66665 1.9 8.87332 1.33333 7.99998 1.33333C7.12665 1.33333 6.33332 1.9 5.75998 2.93333L1.49332 10.6133C0.953318 11.5933 0.893318 12.5333 1.32665 13.2733C1.75999 14.0133 2.61332 14.42 3.73332 14.42H12.2667C13.3867 14.42 14.24 14.0133 14.6733 13.2733C15.1067 12.5333 15.0467 11.5867 14.5067 10.6133ZM7.49998 6C7.49998 5.72666 7.72665 5.5 7.99998 5.5C8.27332 5.5 8.49998 5.72666 8.49998 6V9.33333C8.49998 9.60666 8.27332 9.83333 7.99998 9.83333C7.72665 9.83333 7.49998 9.60666 7.49998 9.33333V6ZM8.47332 11.8067C8.43998 11.8333 8.40665 11.86 8.37332 11.8867C8.33332 11.9133 8.29332 11.9333 8.25332 11.9467C8.21332 11.9667 8.17332 11.98 8.12665 11.9867C8.08665 11.9933 8.03998 12 7.99998 12C7.95998 12 7.91332 11.9933 7.86665 11.9867C7.82665 11.98 7.78665 11.9667 7.74665 11.9467C7.70665 11.9333 7.66665 11.9133 7.62665 11.8867C7.59332 11.86 7.55998 11.8333 7.52665 11.8067C7.40665 11.68 7.33332 11.5067 7.33332 11.3333C7.33332 11.16 7.40665 10.9867 7.52665 10.86C7.55998 10.8333 7.59332 10.8067 7.62665 10.78C7.66665 10.7533 7.70665 10.7333 7.74665 10.72C7.78665 10.7 7.82665 10.6867 7.86665 10.68C7.95332 10.66 8.04665 10.66 8.12665 10.68C8.17332 10.6867 8.21332 10.7 8.25332 10.72C8.29332 10.7333 8.33332 10.7533 8.37332 10.78C8.40665 10.8067 8.43998 10.8333 8.47332 10.86C8.59332 10.9867 8.66665 11.16 8.66665 11.3333C8.66665 11.5067 8.59332 11.68 8.47332 11.8067Z"
+                    fill="#FF454A"
+                  />
+                </svg>
+                <p className="text-base font-medium uppercase text-error-500 tracking-[-0.32px]">
+                  Reminder
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-base text-neutral-0">
+                  Links cannot be deleted as this may cause issues with your
+                  records. Instead, they’ll be safely moved to your
+                  <a
+                    href="/dashboard/tracking/archives"
+                    className="text-primary-500 underline decoration-primary-500 underline-offset-4 hover:text-primary-500 ml-1"
+                    onClick={(e) => {
+                      // keep dialog UX consistent; allow navigation but close first
+                      e.preventDefault();
+                      onClose();
+                      window.location.href = "/dashboard/tracking/archives";
+                    }}
+                  >
+                    Archives Folder
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <button
+              type="button"
+              onClick={onClose}
+              className={clsx(
+                "rounded-full",
+                "border border-white/40 bg-transparent py-3 px-6 text-base font-medium text-neutral-0 leading-[100%]",
+                "transition hover:border-white/60 cursor-pointer"
+              )}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onConfirm(row)}
+              className={clsx(
+                "rounded-full px-6 py-3",
+                "bg-error-500 text-base font-semibold text-white leading-[100%]",
+                "transition hover:bg-error-400 cursor-pointer"
+              )}
+            >
+              <span className="inline-flex items-center justify-center gap-2">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                >
+                  <path
+                    d="M14.0467 3.48666C12.9733 3.38 11.9 3.3 10.82 3.24V3.23333L10.6733 2.36666C10.5733 1.75333 10.4267 0.833328 8.86667 0.833328H7.12C5.56667 0.833328 5.42 1.71333 5.31334 2.35999L5.17334 3.21333C4.55334 3.25333 3.93334 3.29333 3.31334 3.35333L1.95334 3.48666C1.67334 3.51333 1.47334 3.76 1.5 4.03333C1.52667 4.30666 1.76667 4.50666 2.04667 4.47999L3.40667 4.34666C6.9 3.99999 10.42 4.13333 13.9533 4.48666C13.9733 4.48666 13.9867 4.48666 14.0067 4.48666C14.26 4.48666 14.48 4.29333 14.5067 4.03333C14.5267 3.76 14.3267 3.51333 14.0467 3.48666Z"
+                    fill="white"
+                  />
+                  <path
+                    d="M12.82 5.42666C12.66 5.26 12.44 5.16666 12.2133 5.16666H3.78667C3.56001 5.16666 3.33334 5.26 3.18001 5.42666C3.02667 5.59333 2.94001 5.82 2.95334 6.05333L3.36667 12.8933C3.44001 13.9067 3.53334 15.1733 5.86001 15.1733H10.14C12.4667 15.1733 12.56 13.9133 12.6333 12.8933L13.0467 6.06C13.06 5.82 12.9733 5.59333 12.82 5.42666ZM9.10667 11.8333H6.88667C6.61334 11.8333 6.38667 11.6067 6.38667 11.3333C6.38667 11.06 6.61334 10.8333 6.88667 10.8333H9.10667C9.38001 10.8333 9.60667 11.06 9.60667 11.3333C9.60667 11.6067 9.38001 11.8333 9.10667 11.8333ZM9.66667 9.16666H6.33334C6.06001 9.16666 5.83334 8.94 5.83334 8.66666C5.83334 8.39333 6.06001 8.16666 6.33334 8.16666H9.66667C9.94001 8.16666 10.1667 8.39333 10.1667 8.66666C10.1667 8.94 9.94001 9.16666 9.66667 9.16666Z"
+                    fill="white"
+                  />
+                </svg>
+                Archive
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QrDialog({
+  open,
+  row,
+  onClose,
+}: {
+  open: boolean;
+  row: Row | null;
+  onClose: () => void;
+}) {
+  useEscapeToClose(open, onClose);
+  if (!open || !row) return null;
+
+  const qrValue = fullTrackingUrl(row.url) || row.url;
+
+  // NOTE: Replace this with your internal QR generator if you already have one.
+  // This uses a public QR image endpoint so it works without extra deps.
+  const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(
+    qrValue
+  )}`;
+
+  const handleShare = async () => {
+    try {
+      if (typeof navigator !== "undefined" && "share" in navigator) {
+        await navigator.share({ title: row.name, text: qrValue, url: qrValue });
+        return;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(qrValue);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const a = document.createElement("a");
+      a.href = qrImg;
+      a.download = `${row.name || "qr"}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-md"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={clsx(
+          "relative mx-4 w-full max-w-[487px] overflow-hidden rounded-xl",
+          "border border-white/10 bg-neutral-900 "
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-8 pb-4 pt-10 md:px-12">
+          <div className="mx-auto flex w-full max-w-[360px] flex-col items-center">
+            <div
+              className={clsx(
+                "relative w-full max-w-[170px] overflow-hidden rounded-lg bg-white p-2"
+              )}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qrImg} alt="QR Code" className="h-auto w-full" />
+            </div>
+
+            <p className="mt-6 text-center text-neutral-400">
+              {row.name.toUpperCase()}
+            </p>
+
+            <p className="mt-1 text-center text-3xl font-semibold uppercase tracking-[-0.48px] text-neutral-0 ">
+              {row.url.replaceAll("/", " ").trim() || "TRACKING LINK"}
+            </p>
+
+            <div className="mt-6 flex w-full items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={handleShare}
+                className={clsx(
+                  "rounded-full",
+                  "border border-white/40 bg-transparent py-3 px-6 text-base font-medium text-neutral-0",
+                  "transition hover:border-white/60 cursor-pointer"
+                )}
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                  >
+                    <path
+                      d="M10.76 1.97333L4.74002 3.97333C0.693351 5.32666 0.693351 7.53333 4.74002 8.88L6.52668 9.47333L7.12002 11.26C8.46668 15.3067 10.68 15.3067 12.0267 11.26L14.0333 5.24666C14.9267 2.54666 13.46 1.07333 10.76 1.97333ZM10.9733 5.56L8.44002 8.10666C8.34002 8.20667 8.21335 8.25333 8.08668 8.25333C7.96002 8.25333 7.83335 8.20667 7.73335 8.10666C7.54002 7.91333 7.54002 7.59333 7.73335 7.4L10.2667 4.85333C10.46 4.66 10.78 4.66 10.9733 4.85333C11.1667 5.04666 11.1667 5.36666 10.9733 5.56Z"
+                      fill="white"
+                    />
+                  </svg>
+                  Share
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSave}
+                className={clsx(
+                  "rounded-full px-6 py-3",
+                  "bg-primary-500 text-base font-semibold text-white",
+                  "transition hover:bg-primary-400 cursor-pointer"
+                )}
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                  >
+                    <path
+                      d="M13.6667 6.79334H11.74C10.16 6.79334 8.87335 5.50667 8.87335 3.92667V2C8.87335 1.63334 8.57335 1.33334 8.20669 1.33334H5.38002C3.32669 1.33334 1.66669 2.66667 1.66669 5.04667V10.9533C1.66669 13.3333 3.32669 14.6667 5.38002 14.6667H10.62C12.6734 14.6667 14.3334 13.3333 14.3334 10.9533V7.46C14.3334 7.09334 14.0334 6.79334 13.6667 6.79334ZM8.18669 10.52L6.85335 11.8533C6.80669 11.9 6.74669 11.94 6.68669 11.96C6.62669 11.9867 6.56669 12 6.50002 12C6.43335 12 6.37335 11.9867 6.31335 11.96C6.26002 11.94 6.20669 11.9 6.16669 11.86C6.16002 11.8533 6.15335 11.8533 6.15335 11.8467L4.82002 10.5133C4.62669 10.32 4.62669 10 4.82002 9.80667C5.01335 9.61334 5.33335 9.61334 5.52669 9.80667L6.00002 10.2933V7.5C6.00002 7.22667 6.22669 7 6.50002 7C6.77335 7 7.00002 7.22667 7.00002 7.5V10.2933L7.48002 9.81334C7.67335 9.62 7.99335 9.62 8.18669 9.81334C8.38002 10.0067 8.38002 10.3267 8.18669 10.52Z"
+                      fill="white"
+                    />
+                    <path
+                      d="M11.62 5.87333C12.2533 5.88 13.1333 5.88 13.8867 5.88C14.2667 5.88 14.4667 5.43333 14.2 5.16667C13.24 4.2 11.52 2.46 10.5333 1.47333C10.26 1.2 9.78668 1.38667 9.78668 1.76667V4.09333C9.78668 5.06667 10.6133 5.87333 11.62 5.87333Z"
+                      fill="white"
+                    />
+                  </svg>
+                  Save
+                </span>
+              </button>
+            </div>
+
+            {/* subtle close affordance (keeps Figma clean: click outside / esc) */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-10 text-sm font-medium text-neutral-500 hover:text-neutral-0 cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ----------------------------- Component --------------------------- */
 export default function TrackingLinksTable() {
   const [sortBy, setSortBy] = useState<SortKey>("views");
   const [dir, setDir] = useState<SortDir>("desc");
+
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [activeRow, setActiveRow] = useState<Row | null>(null);
 
   const headerSortLabel =
     sortBy === "views"
@@ -169,6 +490,33 @@ export default function TrackingLinksTable() {
     }
   };
 
+  const openArchive = (row: Row) => {
+    setActiveRow(row);
+    setArchiveOpen(true);
+  };
+
+  const confirmArchive = (row: Row) => {
+    // TODO: replace with your real archive mutation
+    // e.g. await archiveTrackingLink(row.id)
+    setArchiveOpen(false);
+    setActiveRow(null);
+  };
+
+  const openQr = (row: Row) => {
+    setActiveRow(row);
+    setQrOpen(true);
+  };
+
+  const closeQr = () => {
+    setQrOpen(false);
+    setActiveRow(null);
+  };
+
+  const closeArchive = () => {
+    setArchiveOpen(false);
+    setActiveRow(null);
+  };
+
   const thRow = "[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-4";
   const thBase =
     "text-base text-left font-semibold cursor-pointer select-none hover:text-white/80";
@@ -236,7 +584,7 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              <th className="text-left font-semibold">QR Code</th>
+              <th className="text-left text-base font-semibold">QR Code</th>
 
               {/* Views */}
               <th
@@ -259,7 +607,7 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              <th className="text-left font-semibold">Link Type</th>
+              <th className="text-left text-base font-semibold">Link Type</th>
 
               {/* Status */}
               <th
@@ -360,19 +708,29 @@ export default function TrackingLinksTable() {
 
                   {/* QR Code */}
                   <td className="px-4 py-3">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="22"
-                      height="22"
-                      viewBox="0 0 22 22"
-                      fill="none"
-                      className="ml-3"
+                    <button
+                      type="button"
+                      onClick={() => openQr(r)}
+                      className={clsx(
+                        "inline-flex items-center justify-center rounded-md p-1 ml-2.5",
+                        "hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer"
+                      )}
+                      title="Open QR"
                     >
-                      <path
-                        d="M12.8333 11.9167C13.0579 11.9167 13.2746 11.9991 13.4423 12.1483C13.6101 12.2975 13.7173 12.5031 13.7436 12.7261L13.75 12.8333V18.3333C13.7497 18.567 13.6603 18.7917 13.4999 18.9616C13.3395 19.1315 13.1203 19.2337 12.8871 19.2474C12.6538 19.2611 12.4242 19.1852 12.245 19.0353C12.0658 18.8853 11.9507 18.6726 11.9231 18.4406L11.9167 18.3333V12.8333C11.9167 12.5902 12.0132 12.3571 12.1852 12.1852C12.3571 12.0132 12.5902 11.9167 12.8333 11.9167ZM15.5833 16.0417C15.8264 16.0417 16.0596 16.1382 16.2315 16.3102C16.4034 16.4821 16.5 16.7152 16.5 16.9583V18.3333C16.5 18.5764 16.4034 18.8096 16.2315 18.9815C16.0596 19.1534 15.8264 19.25 15.5833 19.25C15.3402 19.25 15.1071 19.1534 14.9352 18.9815C14.7632 18.8096 14.6667 18.5764 14.6667 18.3333V16.9583C14.6667 16.7152 14.7632 16.4821 14.9352 16.3102C15.1071 16.1382 15.3402 16.0417 15.5833 16.0417ZM18.3333 11.9167C18.5579 11.9167 18.7746 11.9991 18.9423 12.1483C19.1101 12.2975 19.2173 12.5031 19.2436 12.7261L19.25 12.8333V18.3333C19.2497 18.567 19.1603 18.7917 18.9999 18.9616C18.8395 19.1315 18.6203 19.2337 18.3871 19.2474C18.1538 19.2611 17.9242 19.1852 17.745 19.0353C17.5658 18.8853 17.4507 18.6726 17.4231 18.4406L17.4167 18.3333V12.8333C17.4167 12.5902 17.5132 12.3571 17.6852 12.1852C17.8571 12.0132 18.0902 11.9167 18.3333 11.9167ZM8.25 11.9167C8.73623 11.9167 9.20255 12.1098 9.54636 12.4536C9.89018 12.7975 10.0833 13.2638 10.0833 13.75V17.4167C10.0833 17.9029 9.89018 18.3692 9.54636 18.713C9.20255 19.0568 8.73623 19.25 8.25 19.25H4.58333C4.0971 19.25 3.63079 19.0568 3.28697 18.713C2.94315 18.3692 2.75 17.9029 2.75 17.4167V13.75C2.75 13.2638 2.94315 12.7975 3.28697 12.4536C3.63079 12.1098 4.0971 11.9167 4.58333 11.9167H8.25ZM15.5833 11.9167C15.8079 11.9167 16.0246 11.9991 16.1923 12.1483C16.3601 12.2975 16.4673 12.5031 16.4936 12.7261L16.5 12.8333V14.2083C16.4997 14.442 16.4103 14.6667 16.2499 14.8366C16.0895 15.0065 15.8703 15.1087 15.6371 15.1224C15.4038 15.1361 15.1742 15.0602 14.995 14.9103C14.8158 14.7603 14.7007 14.5476 14.6731 14.3156L14.6667 14.2083V12.8333C14.6667 12.5902 14.7632 12.3571 14.9352 12.1852C15.1071 12.0132 15.3402 11.9167 15.5833 11.9167ZM8.25 2.75C8.73623 2.75 9.20255 2.94315 9.54636 3.28697C9.89018 3.63079 10.0833 4.0971 10.0833 4.58333V8.25C10.0833 8.73623 9.89018 9.20255 9.54636 9.54636C9.20255 9.89018 8.73623 10.0833 8.25 10.0833H4.58333C4.0971 10.0833 3.63079 9.89018 3.28697 9.54636C2.94315 9.20255 2.75 8.73623 2.75 8.25V4.58333C2.75 4.0971 2.94315 3.63079 3.28697 3.28697C3.63079 2.94315 4.0971 2.75 4.58333 2.75H8.25ZM17.4167 2.75C17.9029 2.75 18.3692 2.94315 18.713 3.28697C19.0568 3.63079 19.25 4.0971 19.25 4.58333V8.25C19.25 8.73623 19.0568 9.20255 18.713 9.54636C18.3692 9.89018 17.9029 10.0833 17.4167 10.0833H13.75C13.2638 10.0833 12.7975 9.89018 12.4536 9.54636C12.1098 9.20255 11.9167 8.73623 11.9167 8.25V4.58333C11.9167 4.0971 12.1098 3.63079 12.4536 3.28697C12.7975 2.94315 13.2638 2.75 13.75 2.75H17.4167Z"
-                        fill="#A7A7BC"
-                      />
-                    </svg>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="22"
+                        height="22"
+                        viewBox="0 0 22 22"
+                        fill="none"
+                        className="w-7 h-7"
+                      >
+                        <path
+                          d="M12.8333 11.9167C13.0579 11.9167 13.2746 11.9991 13.4423 12.1483C13.6101 12.2975 13.7173 12.5031 13.7436 12.7261L13.75 12.8333V18.3333C13.7497 18.567 13.6603 18.7917 13.4999 18.9616C13.3395 19.1315 13.1203 19.2337 12.8871 19.2474C12.6538 19.2611 12.4242 19.1852 12.245 19.0353C12.0658 18.8853 11.9507 18.6726 11.9231 18.4406L11.9167 18.3333V12.8333C11.9167 12.5902 12.0132 12.3571 12.1852 12.1852C12.3571 12.0132 12.5902 11.9167 12.8333 11.9167ZM15.5833 16.0417C15.8264 16.0417 16.0596 16.1382 16.2315 16.3102C16.4034 16.4821 16.5 16.7152 16.5 16.9583V18.3333C16.5 18.5764 16.4034 18.8096 16.2315 18.9815C16.0596 19.1534 15.8264 19.25 15.5833 19.25C15.3402 19.25 15.1071 19.1534 14.9352 18.9815C14.7632 18.8096 14.6667 18.5764 14.6667 18.3333V16.9583C14.6667 16.7152 14.7632 16.4821 14.9352 16.3102C15.1071 16.1382 15.3402 16.0417 15.5833 16.0417ZM18.3333 11.9167C18.5579 11.9167 18.7746 11.9991 18.9423 12.1483C19.1101 12.2975 19.2173 12.5031 19.2436 12.7261L19.25 12.8333V18.3333C19.2497 18.567 19.1603 18.7917 18.9999 18.9616C18.8395 19.1315 18.6203 19.2337 18.3871 19.2474C18.1538 19.2611 17.9242 19.1852 17.745 19.0353C17.5658 18.8853 17.4507 18.6726 17.4231 18.4406L17.4167 18.3333V12.8333C17.4167 12.5902 17.5132 12.3571 17.6852 12.1852C17.8571 12.0132 18.0902 11.9167 18.3333 11.9167ZM8.25 11.9167C8.73623 11.9167 9.20255 12.1098 9.54636 12.4536C9.89018 12.7975 10.0833 13.2638 10.0833 13.75V17.4167C10.0833 17.9029 9.89018 18.3692 9.54636 18.713C9.20255 19.0568 8.73623 19.25 8.25 19.25H4.58333C4.0971 19.25 3.63079 19.0568 3.28697 18.713C2.94315 18.3692 2.75 17.9029 2.75 17.4167V13.75C2.75 13.2638 2.94315 12.7975 3.28697 12.4536C3.63079 12.1098 4.0971 11.9167 4.58333 11.9167H8.25ZM15.5833 11.9167C15.8079 11.9167 16.0246 11.9991 16.1923 12.1483C16.3601 12.2975 16.4673 12.5031 16.4936 12.7261L16.5 12.8333V14.2083C16.4997 14.442 16.4103 14.6667 16.2499 14.8366C16.0895 15.0065 15.8703 15.1087 15.6371 15.1224C15.4038 15.1361 15.1742 15.0602 14.995 14.9103C14.8158 14.7603 14.7007 14.5476 14.6731 14.3156L14.6667 14.2083V12.8333C14.6667 12.5902 14.7632 12.3571 14.9352 12.1852C15.1071 12.0132 15.3402 11.9167 15.5833 11.9167ZM8.25 2.75C8.73623 2.75 9.20255 2.94315 9.54636 3.28697C9.89018 3.63079 10.0833 4.0971 10.0833 4.58333V8.25C10.0833 8.73623 9.89018 9.20255 9.54636 9.54636C9.20255 9.89018 8.73623 10.0833 8.25 10.0833H4.58333C4.0971 10.0833 3.63079 9.89018 3.28697 9.54636C2.94315 9.20255 2.75 8.73623 2.75 8.25V4.58333C2.75 4.0971 2.94315 3.63079 3.28697 3.28697C3.63079 2.94315 4.0971 2.75 4.58333 2.75H8.25ZM17.4167 2.75C17.9029 2.75 18.3692 2.94315 18.713 3.28697C19.0568 3.63079 19.25 4.0971 19.25 4.58333V8.25C19.25 8.73623 19.0568 9.20255 18.713 9.54636C18.3692 9.89018 17.9029 10.0833 17.4167 10.0833H13.75C13.2638 10.0833 12.7975 9.89018 12.4536 9.54636C12.1098 9.20255 11.9167 8.73623 11.9167 8.25V4.58333C11.9167 4.0971 12.1098 3.63079 12.4536 3.28697C12.7975 2.94315 13.2638 2.75 13.75 2.75H17.4167Z"
+                          fill="#A7A7BC"
+                        />
+                      </svg>
+                    </button>
                   </td>
 
                   {/* Views */}
@@ -417,6 +775,7 @@ export default function TrackingLinksTable() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => openArchive(r)}
                         className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20"
                         title="Delete"
                       >
@@ -453,6 +812,15 @@ export default function TrackingLinksTable() {
           See All
         </Link>
       </div>
+
+      {/* Dialogs */}
+      <ArchiveLinkDialog
+        open={archiveOpen}
+        row={activeRow}
+        onClose={closeArchive}
+        onConfirm={confirmArchive}
+      />
+      <QrDialog open={qrOpen} row={activeRow} onClose={closeQr} />
     </div>
   );
 }

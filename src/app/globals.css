@@ -210,3 +210,10 @@ textarea,
 select {
   caret-color: white; /* keep it white in normal state as well */
 }
+
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus,
+.recharts-surface:focus-visible {
+  outline: none !important;
+}

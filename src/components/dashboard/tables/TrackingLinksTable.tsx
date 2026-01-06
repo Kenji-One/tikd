@@ -71,10 +71,11 @@ function Chip({
       : color === "warning"
         ? "bg-warning-800 text-warning-200 border-1 border-warning-500"
         : "bg-primary-800 text-primary-200 border-1 border-primary-500";
+
   return (
     <span
       className={clsx(
-        "rounded-md px-3 py-1.5 text-[10px] font-semibold leading-[100%] flex items-center justify-center",
+        "rounded-md px-3 py-1.5 text-xs font-semibold leading-[100%] flex items-center justify-center",
         cls
       )}
     >
@@ -84,7 +85,6 @@ function Chip({
 }
 
 function statusRank(s: Status) {
-  // For consistent sorting
   // Asc: Active < Paused < Disabled
   if (s === "Active") return 1;
   if (s === "Paused") return 2;
@@ -171,13 +171,19 @@ export default function TrackingLinksTable() {
 
   const thRow = "[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-4";
   const thBase =
-    "text-left font-semibold cursor-pointer select-none hover:text-white/80";
+    "text-base text-left font-semibold cursor-pointer select-none hover:text-white/80";
+
+  // One consistent separator style (same every time)
+  const separatorLine =
+    "bg-[linear-gradient(90deg,rgba(154,70,255,0)_0%,rgba(154,70,255,0.18)_30%,rgba(255,255,255,0.08)_50%,rgba(154,70,255,0.18)_70%,rgba(154,70,255,0)_100%)]";
 
   return (
     <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-4">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between px-4">
-        <h3 className="font-bold uppercase text-neutral-400">Tracking Links</h3>
+        <h3 className="text-base font-bold uppercase text-neutral-400">
+          Tracking Links
+        </h3>
 
         <button
           type="button"
@@ -206,7 +212,7 @@ export default function TrackingLinksTable() {
         className="relative overflow-hidden rounded-lg"
         style={{ height: isClamped ? `${MAX}px` : "auto" }}
       >
-        <table className="w-full border-collapse text-xs font-medium">
+        <table className="w-full border-collapse font-medium">
           <thead className="text-neutral-400">
             <tr className={thRow}>
               {/* Name */}
@@ -255,7 +261,7 @@ export default function TrackingLinksTable() {
 
               <th className="text-left font-semibold">Link Type</th>
 
-              {/* Status (sortable now) */}
+              {/* Status */}
               <th
                 className={thBase}
                 onClick={() => toggleSort("status")}
@@ -276,7 +282,7 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              {/* Created (sortable) */}
+              {/* Created */}
               <th
                 className={thBase}
                 onClick={() => toggleSort("created")}
@@ -302,124 +308,135 @@ export default function TrackingLinksTable() {
           </thead>
 
           <tbody className="text-white">
-            {sorted.map((r, i) => (
-              <tr
-                key={r.id}
-                className={clsx(
-                  "transition-colors",
-                  i % 2 === 0 ? "bg-neutral-800" : "bg-transparent"
-                )}
-              >
-                {/* Name & Link */}
-                <td className="px-4 py-3">
-                  <div className="min-w-0 flex items-center gap-5">
-                    <p className="truncate font-medium text-neutral-200 flex items-center">
-                      {r.name}
-                    </p>
+            {sorted.flatMap((r, i) => {
+              const isLast = i === sorted.length - 1;
 
-                    <div className="flex min-w-0 items-center gap-2 text-white/70">
-                      <TwitterIcon className="h-5 w-5 opacity-70" />
-                      <span className="truncate">{r.url}</span>
+              // solid zebra (no alpha → no “transparent” look)
+              const rowBg = i % 2 === 0 ? "bg-neutral-948" : "bg-neutral-900";
 
+              const dataRow = (
+                <tr key={r.id} className={clsx("transition-colors", rowBg)}>
+                  {/* Name & Link */}
+                  <td className="px-4 py-3">
+                    <div className="min-w-0 flex items-center gap-5">
+                      <p className="truncate font-medium text-neutral-200 flex items-center">
+                        {r.name}
+                      </p>
+
+                      <div className="flex min-w-0 items-center gap-2 text-white/70">
+                        <TwitterIcon className="h-5 w-5 opacity-70" />
+                        <span className="truncate">{r.url}</span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(r.url)}
+                          className="ml-1 inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:text-white hover:border-white/20"
+                          title="Copy link path"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                          >
+                            <path
+                              d="M4.6665 6.44469C4.6665 5.97313 4.85383 5.52089 5.18727 5.18745C5.52071 4.85401 5.97295 4.66669 6.4445 4.66669H12.2218C12.4553 4.66669 12.6865 4.71268 12.9022 4.80203C13.118 4.89138 13.314 5.02235 13.4791 5.18745C13.6442 5.35255 13.7751 5.54856 13.8645 5.76428C13.9538 5.97999 13.9998 6.2112 13.9998 6.44469V12.222C13.9998 12.4555 13.9538 12.6867 13.8645 12.9024C13.7751 13.1181 13.6442 13.3142 13.4791 13.4793C13.314 13.6444 13.118 13.7753 12.9022 13.8647C12.6865 13.954 12.4553 14 12.2218 14H6.4445C6.21101 14 5.97981 13.954 5.76409 13.8647C5.54838 13.7753 5.35237 13.6444 5.18727 13.4793C5.02217 13.3142 4.8912 13.1181 4.80185 12.9024C4.71249 12.6867 4.6665 12.4555 4.6665 12.222V6.44469Z"
+                              stroke="#727293"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M2.67467 11.158C2.47 11.0417 2.29977 10.8733 2.18127 10.6699C2.06277 10.4665 2.00023 10.2354 2 10V3.33333C2 2.6 2.6 2 3.33333 2H10C10.5 2 10.772 2.25667 11 2.66667"
+                              stroke="#727293"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* QR Code */}
+                  <td className="px-4 py-3">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="22"
+                      height="22"
+                      viewBox="0 0 22 22"
+                      fill="none"
+                      className="ml-3"
+                    >
+                      <path
+                        d="M12.8333 11.9167C13.0579 11.9167 13.2746 11.9991 13.4423 12.1483C13.6101 12.2975 13.7173 12.5031 13.7436 12.7261L13.75 12.8333V18.3333C13.7497 18.567 13.6603 18.7917 13.4999 18.9616C13.3395 19.1315 13.1203 19.2337 12.8871 19.2474C12.6538 19.2611 12.4242 19.1852 12.245 19.0353C12.0658 18.8853 11.9507 18.6726 11.9231 18.4406L11.9167 18.3333V12.8333C11.9167 12.5902 12.0132 12.3571 12.1852 12.1852C12.3571 12.0132 12.5902 11.9167 12.8333 11.9167ZM15.5833 16.0417C15.8264 16.0417 16.0596 16.1382 16.2315 16.3102C16.4034 16.4821 16.5 16.7152 16.5 16.9583V18.3333C16.5 18.5764 16.4034 18.8096 16.2315 18.9815C16.0596 19.1534 15.8264 19.25 15.5833 19.25C15.3402 19.25 15.1071 19.1534 14.9352 18.9815C14.7632 18.8096 14.6667 18.5764 14.6667 18.3333V16.9583C14.6667 16.7152 14.7632 16.4821 14.9352 16.3102C15.1071 16.1382 15.3402 16.0417 15.5833 16.0417ZM18.3333 11.9167C18.5579 11.9167 18.7746 11.9991 18.9423 12.1483C19.1101 12.2975 19.2173 12.5031 19.2436 12.7261L19.25 12.8333V18.3333C19.2497 18.567 19.1603 18.7917 18.9999 18.9616C18.8395 19.1315 18.6203 19.2337 18.3871 19.2474C18.1538 19.2611 17.9242 19.1852 17.745 19.0353C17.5658 18.8853 17.4507 18.6726 17.4231 18.4406L17.4167 18.3333V12.8333C17.4167 12.5902 17.5132 12.3571 17.6852 12.1852C17.8571 12.0132 18.0902 11.9167 18.3333 11.9167ZM8.25 11.9167C8.73623 11.9167 9.20255 12.1098 9.54636 12.4536C9.89018 12.7975 10.0833 13.2638 10.0833 13.75V17.4167C10.0833 17.9029 9.89018 18.3692 9.54636 18.713C9.20255 19.0568 8.73623 19.25 8.25 19.25H4.58333C4.0971 19.25 3.63079 19.0568 3.28697 18.713C2.94315 18.3692 2.75 17.9029 2.75 17.4167V13.75C2.75 13.2638 2.94315 12.7975 3.28697 12.4536C3.63079 12.1098 4.0971 11.9167 4.58333 11.9167H8.25ZM15.5833 11.9167C15.8079 11.9167 16.0246 11.9991 16.1923 12.1483C16.3601 12.2975 16.4673 12.5031 16.4936 12.7261L16.5 12.8333V14.2083C16.4997 14.442 16.4103 14.6667 16.2499 14.8366C16.0895 15.0065 15.8703 15.1087 15.6371 15.1224C15.4038 15.1361 15.1742 15.0602 14.995 14.9103C14.8158 14.7603 14.7007 14.5476 14.6731 14.3156L14.6667 14.2083V12.8333C14.6667 12.5902 14.7632 12.3571 14.9352 12.1852C15.1071 12.0132 15.3402 11.9167 15.5833 11.9167ZM8.25 2.75C8.73623 2.75 9.20255 2.94315 9.54636 3.28697C9.89018 3.63079 10.0833 4.0971 10.0833 4.58333V8.25C10.0833 8.73623 9.89018 9.20255 9.54636 9.54636C9.20255 9.89018 8.73623 10.0833 8.25 10.0833H4.58333C4.0971 10.0833 3.63079 9.89018 3.28697 9.54636C2.94315 9.20255 2.75 8.73623 2.75 8.25V4.58333C2.75 4.0971 2.94315 3.63079 3.28697 3.28697C3.63079 2.94315 4.0971 2.75 4.58333 2.75H8.25ZM17.4167 2.75C17.9029 2.75 18.3692 2.94315 18.713 3.28697C19.0568 3.63079 19.25 4.0971 19.25 4.58333V8.25C19.25 8.73623 19.0568 9.20255 18.713 9.54636C18.3692 9.89018 17.9029 10.0833 17.4167 10.0833H13.75C13.2638 10.0833 12.7975 9.89018 12.4536 9.54636C12.1098 9.20255 11.9167 8.73623 11.9167 8.25V4.58333C11.9167 4.0971 12.1098 3.63079 12.4536 3.28697C12.7975 2.94315 13.2638 2.75 13.75 2.75H17.4167Z"
+                        fill="#A7A7BC"
+                      />
+                    </svg>
+                  </td>
+
+                  {/* Views */}
+                  <td className="px-4 py-3">
+                    <span className="tabular-nums">{r.views}</span>
+                  </td>
+
+                  {/* Link Type */}
+                  <td className="px-4 py-3">
+                    <div className="inline-block">
+                      <Chip color="primary">{r.type}</Chip>
+                    </div>
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-4 py-3">
+                    <div className="inline-block">
+                      {r.status === "Active" ? (
+                        <Chip color="success">Active</Chip>
+                      ) : r.status === "Paused" ? (
+                        <Chip color="warning">Paused</Chip>
+                      ) : (
+                        <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[13px] text-white/60 ring-1 ring-white/15">
+                          Disabled
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Date */}
+                  <td className="px-4 py-3">{r.created}</td>
+
+                  {/* Actions */}
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => handleCopy(r.url)}
-                        className="ml-1 inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:text-white hover:border-white/20"
-                        title="Copy link path"
+                        className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20"
+                        title="Edit"
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                        >
-                          <path
-                            d="M4.6665 6.44469C4.6665 5.97313 4.85383 5.52089 5.18727 5.18745C5.52071 4.85401 5.97295 4.66669 6.4445 4.66669H12.2218C12.4553 4.66669 12.6865 4.71268 12.9022 4.80203C13.118 4.89138 13.314 5.02235 13.4791 5.18745C13.6442 5.35255 13.7751 5.54856 13.8645 5.76428C13.9538 5.97999 13.9998 6.2112 13.9998 6.44469V12.222C13.9998 12.4555 13.9538 12.6867 13.8645 12.9024C13.7751 13.1181 13.6442 13.3142 13.4791 13.4793C13.314 13.6444 13.118 13.7753 12.9022 13.8647C12.6865 13.954 12.4553 14 12.2218 14H6.4445C6.21101 14 5.97981 13.954 5.76409 13.8647C5.54838 13.7753 5.35237 13.6444 5.18727 13.4793C5.02217 13.3142 4.8912 13.1181 4.80185 12.9024C4.71249 12.6867 4.6665 12.4555 4.6665 12.222V6.44469Z"
-                            stroke="#727293"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M2.67467 11.158C2.47 11.0417 2.29977 10.8733 2.18127 10.6699C2.06277 10.4665 2.00023 10.2354 2 10V3.33333C2 2.6 2.6 2 3.33333 2H10C10.5 2 10.772 2.25667 11 2.66667"
-                            stroke="#727293"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
-                  </div>
-                </td>
+                  </td>
+                </tr>
+              );
 
-                {/* QR Code */}
-                <td className="px-4 py-3">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="22"
-                    height="22"
-                    viewBox="0 0 22 22"
-                    fill="none"
-                    className="ml-3"
-                  >
-                    <path
-                      d="M12.8333 11.9167C13.0579 11.9167 13.2746 11.9991 13.4423 12.1483C13.6101 12.2975 13.7173 12.5031 13.7436 12.7261L13.75 12.8333V18.3333C13.7497 18.567 13.6603 18.7917 13.4999 18.9616C13.3395 19.1315 13.1203 19.2337 12.8871 19.2474C12.6538 19.2611 12.4242 19.1852 12.245 19.0353C12.0658 18.8853 11.9507 18.6726 11.9231 18.4406L11.9167 18.3333V12.8333C11.9167 12.5902 12.0132 12.3571 12.1852 12.1852C12.3571 12.0132 12.5902 11.9167 12.8333 11.9167ZM15.5833 16.0417C15.8264 16.0417 16.0596 16.1382 16.2315 16.3102C16.4034 16.4821 16.5 16.7152 16.5 16.9583V18.3333C16.5 18.5764 16.4034 18.8096 16.2315 18.9815C16.0596 19.1534 15.8264 19.25 15.5833 19.25C15.3402 19.25 15.1071 19.1534 14.9352 18.9815C14.7632 18.8096 14.6667 18.5764 14.6667 18.3333V16.9583C14.6667 16.7152 14.7632 16.4821 14.9352 16.3102C15.1071 16.1382 15.3402 16.0417 15.5833 16.0417ZM18.3333 11.9167C18.5579 11.9167 18.7746 11.9991 18.9423 12.1483C19.1101 12.2975 19.2173 12.5031 19.2436 12.7261L19.25 12.8333V18.3333C19.2497 18.567 19.1603 18.7917 18.9999 18.9616C18.8395 19.1315 18.6203 19.2337 18.3871 19.2474C18.1538 19.2611 17.9242 19.1852 17.745 19.0353C17.5658 18.8853 17.4507 18.6726 17.4231 18.4406L17.4167 18.3333V12.8333C17.4167 12.5902 17.5132 12.3571 17.6852 12.1852C17.8571 12.0132 18.0902 11.9167 18.3333 11.9167ZM8.25 11.9167C8.73623 11.9167 9.20255 12.1098 9.54636 12.4536C9.89018 12.7975 10.0833 13.2638 10.0833 13.75V17.4167C10.0833 17.9029 9.89018 18.3692 9.54636 18.713C9.20255 19.0568 8.73623 19.25 8.25 19.25H4.58333C4.0971 19.25 3.63079 19.0568 3.28697 18.713C2.94315 18.3692 2.75 17.9029 2.75 17.4167V13.75C2.75 13.2638 2.94315 12.7975 3.28697 12.4536C3.63079 12.1098 4.0971 11.9167 4.58333 11.9167H8.25ZM15.5833 11.9167C15.8079 11.9167 16.0246 11.9991 16.1923 12.1483C16.3601 12.2975 16.4673 12.5031 16.4936 12.7261L16.5 12.8333V14.2083C16.4997 14.442 16.4103 14.6667 16.2499 14.8366C16.0895 15.0065 15.8703 15.1087 15.6371 15.1224C15.4038 15.1361 15.1742 15.0602 14.995 14.9103C14.8158 14.7603 14.7007 14.5476 14.6731 14.3156L14.6667 14.2083V12.8333C14.6667 12.5902 14.7632 12.3571 14.9352 12.1852C15.1071 12.0132 15.3402 11.9167 15.5833 11.9167ZM8.25 2.75C8.73623 2.75 9.20255 2.94315 9.54636 3.28697C9.89018 3.63079 10.0833 4.0971 10.0833 4.58333V8.25C10.0833 8.73623 9.89018 9.20255 9.54636 9.54636C9.20255 9.89018 8.73623 10.0833 8.25 10.0833H4.58333C4.0971 10.0833 3.63079 9.89018 3.28697 9.54636C2.94315 9.20255 2.75 8.73623 2.75 8.25V4.58333C2.75 4.0971 2.94315 3.63079 3.28697 3.28697C3.63079 2.94315 4.0971 2.75 4.58333 2.75H8.25ZM17.4167 2.75C17.9029 2.75 18.3692 2.94315 18.713 3.28697C19.0568 3.63079 19.25 4.0971 19.25 4.58333V8.25C19.25 8.73623 19.0568 9.20255 18.713 9.54636C18.3692 9.89018 17.9029 10.0833 17.4167 10.0833H13.75C13.2638 10.0833 12.7975 9.89018 12.4536 9.54636C12.1098 9.20255 11.9167 8.73623 11.9167 8.25V4.58333C11.9167 4.0971 12.1098 3.63079 12.4536 3.28697C12.7975 2.94315 13.2638 2.75 13.75 2.75H17.4167Z"
-                      fill="#A7A7BC"
-                    />
-                  </svg>
-                </td>
+              const separatorRow = !isLast ? (
+                <tr key={`${r.id}-sep`} aria-hidden className="bg-neutral-900">
+                  <td colSpan={7} className="p-0">
+                    <div className={clsx("mx-4 h-px", separatorLine)} />
+                  </td>
+                </tr>
+              ) : null;
 
-                {/* Views */}
-                <td className="px-4 py-3">
-                  <span className="tabular-nums">{r.views}</span>
-                </td>
-
-                {/* Link Type */}
-                <td className="px-4 py-3">
-                  <div className="inline-block">
-                    <Chip color="primary">{r.type}</Chip>
-                  </div>
-                </td>
-
-                {/* Status */}
-                <td className="px-4 py-3">
-                  <div className="inline-block">
-                    {r.status === "Active" ? (
-                      <Chip color="success">Active</Chip>
-                    ) : r.status === "Paused" ? (
-                      <Chip color="warning">Paused</Chip>
-                    ) : (
-                      <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] text-white/60 ring-1 ring-white/15">
-                        Disabled
-                      </span>
-                    )}
-                  </div>
-                </td>
-
-                {/* Date */}
-                <td className="px-4 py-3">{r.created}</td>
-
-                {/* Actions */}
-                <td className="px-4 py-3 text-right">
-                  <div className="inline-flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20"
-                      title="Edit"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20"
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+              return separatorRow ? [dataRow, separatorRow] : [dataRow];
+            })}
           </tbody>
         </table>
 
@@ -431,7 +448,7 @@ export default function TrackingLinksTable() {
       <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
         <Link
           href="/dashboard/tracking"
-          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700/50 px-3 py-1 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700/50 px-3 py-2 font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
           See All
         </Link>

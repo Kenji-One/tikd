@@ -33,7 +33,7 @@ const SALES: Sale[] = [
     avatarText: "DV",
   },
   {
-    id: "#2935",
+    id: "#2936",
     name: "Dennis Collis",
     event: "Valentines Gala",
     date: "Sep 16, 2025",
@@ -42,7 +42,7 @@ const SALES: Sale[] = [
     avatarText: "DC",
   },
   {
-    id: "#2935",
+    id: "#2937",
     name: "Dennis F.",
     event: "Valentines Gala",
     date: "Sep 2, 2025",
@@ -51,7 +51,7 @@ const SALES: Sale[] = [
     avatarText: "DF",
   },
   {
-    id: "#2935",
+    id: "#2938",
     name: "Dennis R.",
     event: "Valentines Gala",
     date: "Aug 29, 2025",
@@ -60,7 +60,7 @@ const SALES: Sale[] = [
     avatarText: "DR",
   },
   {
-    id: "#2935",
+    id: "#2939",
     name: "Dennis S.",
     event: "Valentines Gala",
     date: "Aug 27, 2025",
@@ -69,7 +69,7 @@ const SALES: Sale[] = [
     avatarText: "DS",
   },
   {
-    id: "#2935",
+    id: "#2940",
     name: "Dennis K.",
     event: "Valentines Gala",
     date: "Sep 9, 2025",
@@ -78,7 +78,7 @@ const SALES: Sale[] = [
     avatarText: "DK",
   },
   {
-    id: "#2935",
+    id: "#2941",
     name: "Denise P.",
     event: "Valentines Gala",
     date: "Sep 4, 2025",
@@ -87,7 +87,7 @@ const SALES: Sale[] = [
     avatarText: "DP",
   },
   {
-    id: "#2935",
+    id: "#2942",
     name: "Dennis W.",
     event: "Valentines Gala",
     date: "Sep 15, 2025",
@@ -96,13 +96,76 @@ const SALES: Sale[] = [
     avatarText: "DW",
   },
   {
-    id: "#2935",
+    id: "#2943",
+    name: "Goga G.",
+    event: "Valentines Gala",
+    date: "Dec 21, 2025",
+    total: 232.2,
+    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
+    avatarText: "GG",
+  },
+  {
+    id: "#2944",
     name: "Dennis Y.",
     event: "Valentines Gala",
-    date: "Dec 21",
+    date: "Dec 21, 2025",
     total: 232.2,
     avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
     avatarText: "DY",
+  },
+  {
+    id: "#2945",
+    name: "Jake P.",
+    event: "Valentines Gala",
+    date: "Dec 23, 2025",
+    total: 232.2,
+    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
+    avatarText: "JP",
+  },
+  {
+    id: "#2946",
+    name: "Mike T.",
+    event: "Valentines Gala",
+    date: "Dec 26, 2025",
+    total: 232.2,
+    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
+    avatarText: "MT",
+  },
+  {
+    id: "#2947",
+    name: "John M.",
+    event: "Valentines Gala",
+    date: "Dec 27, 2025",
+    total: 232.2,
+    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
+    avatarText: "JM",
+  },
+  {
+    id: "#2947",
+    name: "John Y.",
+    event: "Valentines Gala",
+    date: "Dec 27, 2025",
+    total: 232.2,
+    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
+    avatarText: "JY",
+  },
+  {
+    id: "#2947",
+    name: "John W.",
+    event: "Valentines Gala",
+    date: "Dec 27, 2025",
+    total: 232.2,
+    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
+    avatarText: "JW",
+  },
+  {
+    id: "#2947",
+    name: "John B.",
+    event: "Valentines Gala",
+    date: "Dec 27, 2025",
+    total: 232.2,
+    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
+    avatarText: "JB",
   },
 ];
 
@@ -144,7 +207,7 @@ function dateToMs(label: string) {
 export default function RecentSalesTable() {
   const clipRef = useRef<HTMLDivElement | null>(null);
   const [isClamped, setIsClamped] = useState(false);
-  const MAX = 458;
+  const MAX = 519;
 
   // ✅ sort state (same behavior as MyTeamTable)
   const [sortBy, setSortBy] = useState<SortKey>("date");
@@ -209,7 +272,7 @@ export default function RecentSalesTable() {
     "text-right font-semibold cursor-pointer select-none hover:text-white/80";
 
   return (
-    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-4">
+    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-4 overflow-hidden">
       {/* Header */}
       <div className="mb-3 flex items-center justify-between px-4">
         <h3 className="font-bold uppercase text-neutral-400">Recent Sales</h3>
@@ -366,6 +429,7 @@ export default function RecentSalesTable() {
           </tbody>
         </table>
 
+        {/* Fade */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
       </div>
 

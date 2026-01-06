@@ -185,9 +185,9 @@ export default function UpcomingEventsTable() {
   }, [sortOpen]);
 
   return (
-    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 p-4">
+    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 py-2 overflow-hidden">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="pb-2 border-b border-neutral-700 flex items-center justify-between gap-3 px-4">
         <h3 className="font-bold uppercase text-neutral-400">
           Upcoming Events
         </h3>
@@ -199,7 +199,7 @@ export default function UpcomingEventsTable() {
             onClick={() => setSortOpen((v) => !v)}
             aria-haspopup="listbox"
             aria-expanded={sortOpen}
-            className="flex w-full items-center justify-between rounded-lg border border-white/10 bg-neutral-700 px-3 py-[9px] text-left text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white focus-visible:border-primary-500 cursor-pointer"
+            className="flex w-full items-center justify-between rounded-lg border border-white/10 bg-neutral-700 px-3 py-[6.8px] text-left text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white focus-visible:border-primary-500 cursor-pointer"
           >
             <span className="truncate">Sort by: {sortLabel}</span>
             <ChevronDown
@@ -252,91 +252,103 @@ export default function UpcomingEventsTable() {
       </div>
 
       {/* List */}
-      <ul className="space-y-3">
-        {sortedRows.map((r) => {
-          const slug = toSlug(r.title);
+      <div className="">
+        <ul className="">
+          {sortedRows.map((r) => {
+            const slug = toSlug(r.title);
 
-          return (
-            <li key={slug} className="relative">
-              <Link
-                href={`/events/${slug}`} // adjust if your route is different (e.g., /dashboard/events/[slug])
+            return (
+              <li
+                key={slug}
                 className={[
-                  "group block cursor-pointer",
-                  "p-2",
-                  "hover:bg-neutral-800 focus:outline-none rounded-md",
+                  "relative",
+                  // gradient divider (hidden on last row)
+                  "after:pointer-events-none after:absolute after:bottom-0 after:left-4 after:right-4 after:h-px",
+                  "after:bg-gradient-to-r after:from-transparent after:via-white/10 after:to-transparent",
+                  "after:opacity-70",
+                  "last:after:hidden",
                 ].join(" ")}
-                aria-label={`Open event ${r.title}`}
               >
-                <div className="flex items-center gap-3">
-                  {/* Poster */}
-                  <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-md">
-                    <Image
-                      src={r.img}
-                      width={64}
-                      height={80}
-                      alt=""
-                      className="h-full w-full object-cover"
-                      unoptimized
-                    />
+                <Link
+                  href={`/events/${slug}`} // adjust if your route is different (e.g., /dashboard/events/[slug])
+                  className={[
+                    "group block cursor-pointer",
+                    "px-4 py-2",
+                    "hover:bg-neutral-800 focus:outline-none",
+                  ].join(" ")}
+                  aria-label={`Open event ${r.title}`}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Poster */}
+                    <div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-md">
+                      <Image
+                        src={r.img}
+                        width={64}
+                        height={80}
+                        alt=""
+                        className="h-full w-full object-cover"
+                        unoptimized
+                      />
+                    </div>
+
+                    {/* Content grid */}
+                    <div className="grid grow items-center gap-2 sm:grid-cols-[minmax(0,1fr)_180px_140px_170px]">
+                      {/* Title + datetime (left) */}
+                      <div className="min-w-0">
+                        <div className="text-base uppercase truncate font-extrabold text-white group-hover:text-white">
+                          {r.title}
+                        </div>
+                        <div className="truncate text-xs text-primary-951 font-medium mt-1">
+                          {r.date}
+                        </div>
+                      </div>
+
+                      {/* Revenue */}
+                      <div className="flex items-center sm:justify-end">
+                        <div className="text-right">
+                          <div className="text-base font-extrabold">
+                            {r.revenue}
+                          </div>
+                          <div className="text-xs text-neutral-400 mt-1">
+                            Revenue
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Tickets Sold */}
+                      <div className="flex items-center sm:justify-end">
+                        <div className="text-right">
+                          <div className="text-base font-extrabold">
+                            {r.tickets}
+                          </div>
+                          <div className="text-xs text-neutral-400 mt-1">
+                            Tickets Sold
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Event Date */}
+                      <div className="flex items-center sm:justify-end">
+                        <div className="text-right">
+                          <div className="text-base font-extrabold uppercase">
+                            {r.eventDate}
+                          </div>
+                          <div className="text-xs text-neutral-400 mt-1">
+                            Event Date
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-
-                  {/* Content grid */}
-                  <div className="grid grow items-center gap-2 sm:grid-cols-[minmax(0,1fr)_180px_140px_170px]">
-                    {/* Title + datetime (left) */}
-                    <div className="min-w-0">
-                      <div className="text-base uppercase truncate font-extrabold text-white group-hover:text-white">
-                        {r.title}
-                      </div>
-                      <div className="truncate text-xs text-primary-951 font-medium mt-1">
-                        {r.date}
-                      </div>
-                    </div>
-
-                    {/* Revenue */}
-                    <div className="flex items-center sm:justify-end">
-                      <div className="text-right">
-                        <div className="text-base font-extrabold">
-                          {r.revenue}
-                        </div>
-                        <div className="text-xs text-neutral-400 mt-1">
-                          Revenue
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tickets Sold */}
-                    <div className="flex items-center sm:justify-end">
-                      <div className="text-right">
-                        <div className="text-base font-extrabold">
-                          {r.tickets}
-                        </div>
-                        <div className="text-xs text-neutral-400 mt-1">
-                          Tickets Sold
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Event Date */}
-                    <div className="flex items-center sm:justify-end">
-                      <div className="text-right">
-                        <div className="text-base font-extrabold uppercase">
-                          {r.eventDate}
-                        </div>
-                        <div className="text-xs text-neutral-400 mt-1">
-                          Event Date
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-
-      {/* View All – pill bottom-right */}
-      <div className="pointer-events-none w-full flex justify-end mt-4">
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+        {/* Fade */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-2.5 flex justify-center">
         <Link
           href="/events"
           className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"

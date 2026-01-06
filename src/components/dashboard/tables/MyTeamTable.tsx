@@ -146,7 +146,7 @@ export default function MyTeamTable({
   /* Clamp + fade like RecentSalesTable */
   const clipRef = useRef<HTMLDivElement | null>(null);
   const [isClamped, setIsClamped] = useState(false);
-  const MAX = 458;
+  const MAX = 386;
 
   useEffect(() => {
     if (!clipRef.current) return;
@@ -203,7 +203,7 @@ export default function MyTeamTable({
       <div
         ref={clipRef}
         className="relative overflow-hidden rounded-lg"
-        style={{ height: isClamped ? `${MAX}px` : "auto" }}
+        style={{ maxHeight: `${MAX}px` }}
       >
         <table className="w-full border-collapse text-xs font-medium">
           <thead className="text-neutral-400">
@@ -315,7 +315,7 @@ export default function MyTeamTable({
 
                 {/* Tickets */}
                 <td className="px-4 py-2 text-right">
-                  <div className="inline-flex items-center gap-1.5">
+                  <div className="inline-flex items-center gap-1.5 mr-4">
                     <span className="tabular-nums">{m.tickets}</span>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -335,8 +335,8 @@ export default function MyTeamTable({
                 </td>
 
                 {/* Views */}
-                <td className="px-4 py-2 text-end">
-                  <div className="inline-flex items-center gap-1.5 justify-end">
+                <td className="px-4 py-2 text-right">
+                  <div className="inline-flex items-center gap-1.5 mr-1">
                     <span className="tabular-nums">{m.views}</span>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -413,10 +413,45 @@ export const DEMO_MY_TEAM: TeamMember[] = [
     avatarText: "JD",
   },
   {
-    name: "Paula Mora",
+    name: "Jake Mora",
+    tickets: 900,
+    views: 980,
+    earned: 16806.81,
+    avatarText: "JM",
+  },
+  {
+    name: "Mike Tyson",
     tickets: 9,
     views: 98,
     earned: 6806.81,
+    avatarText: "MT",
+  },
+  {
+    name: "Paul Moraga",
+    tickets: 19,
+    views: 98,
+    earned: 8806.81,
     avatarText: "PM",
+  },
+  {
+    name: "Paula Kora",
+    tickets: 9,
+    views: 98,
+    earned: 4806.81,
+    avatarText: "PK",
+  },
+  {
+    name: "Thousend Kora",
+    tickets: 9,
+    views: 98,
+    earned: 4806.81,
+    avatarText: "TK",
+  },
+  {
+    name: "Morgan Foden",
+    tickets: 9,
+    views: 98,
+    earned: 4806.81,
+    avatarText: "MF",
   },
 ];

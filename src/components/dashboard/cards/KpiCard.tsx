@@ -86,7 +86,7 @@ export default function KpiCard({
     if (hideDetails) return null;
 
     const cls =
-      "text-xs text-neutral-200 hover:text-primary-951 cursor-pointer inline-flex items-center transition-colors";
+      "pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50";
 
     if (detailsHref) {
       return (

@@ -206,8 +206,8 @@ export default function DashboardClient() {
 
       {/* Donuts + Right column lists ------------------------------------ */}
       <section className="grid gap-5 lg:grid-cols-3">
-        <div className="grid gap-5 md:grid-cols-2 lg:col-span-2">
-          <BreakdownCard
+        <div className="lg:col-span-2">
+          {/* <BreakdownCard
             title="Gender Breakdown"
             segments={genderSegments}
             onDetailedView={() =>
@@ -220,7 +220,8 @@ export default function DashboardClient() {
             onDetailedView={() =>
               router.push("/dashboard/finances/age-breakdown")
             }
-          />
+          /> */}
+          <UpcomingEventsTable />
         </div>
 
         <MyTeamTable
@@ -231,7 +232,6 @@ export default function DashboardClient() {
         />
       </section>
 
-      <UpcomingEventsTable />
       <TrackingLinksTable />
     </div>
   );

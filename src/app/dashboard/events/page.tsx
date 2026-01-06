@@ -1,6 +1,5 @@
 /* ------------------------------------------------------------------ */
 /*  src/app/dashboard/connections/events/page.tsx                      */
-/*  Tikd – Events (moved out of /dashboard home)                       */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -15,6 +14,7 @@ import { CalendarPlus, ChevronDown, X, CheckCircle2, Plus } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
+import { EventCard } from "@/components/ui/EventCard";
 
 /* ------------------------------ Types ------------------------------ */
 type Org = {
@@ -138,9 +138,9 @@ function MiniSelect<T extends string>({
         onClick={() => setOpen((v) => !v)}
         className={clsx(
           "inline-flex items-center gap-2 rounded-full border border-white/10",
-          "bg-white/5 px-3 py-2 text-xs font-medium text-neutral-200",
+          "bg-neutral-900 px-3 py-3 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
-          "focus:outline-none focus:ring-1 focus:ring-primary-600/35"
+          "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer"
         )}
       >
         {label}
@@ -155,7 +155,7 @@ function MiniSelect<T extends string>({
       {open && (
         <div
           className={clsx(
-            "absolute right-0 z-30 mt-2 w-44 overflow-hidden rounded-2xl",
+            "absolute right-0 z-30 mt-2 w-full overflow-hidden rounded-2xl",
             "border border-white/10 bg-neutral-950/95 shadow-xl backdrop-blur"
           )}
         >
@@ -379,6 +379,101 @@ function OrgPickerModal({
   );
 }
 
+/* -------------------- Upcoming (GRID) panel ------------------------- */
+function UpcomingEventsGridPanel({
+  list,
+  eventsLoading,
+  emptyTitle,
+  emptySub,
+}: {
+  list: MyEvent[];
+  eventsLoading: boolean;
+  emptyTitle: string;
+  emptySub: string;
+}) {
+  // keep a sensible order (soonest first)
+  const sorted = useMemo(() => {
+    const arr = [...list];
+    return arr.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+  }, [list]);
+
+  // Auto columns with a fixed card width (no phantom empty columns)
+  const gridCols =
+    "grid-cols-[repeat(auto-fill,minmax(170px,170px))] " +
+    "sm:grid-cols-[repeat(auto-fill,minmax(190px,190px))] " +
+    "md:grid-cols-[repeat(auto-fill,minmax(200px,200px))] " +
+    "lg:grid-cols-[repeat(auto-fill,minmax(210px,210px))]";
+
+  return (
+    <section
+      className={clsx(
+        "mt-4 overflow-hidden rounded-2xl border border-white/10",
+        "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+      )}
+    >
+      <div
+        className={clsx(
+          "relative p-4",
+          "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-semibold uppercase tracking-[0.18em] text-neutral-300">
+            Upcoming Events
+          </p>
+
+          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-neutral-200">
+            {eventsLoading ? "…" : sorted.length}
+          </span>
+        </div>
+
+        {eventsLoading ? (
+          <div className={clsx("mt-4 grid gap-3", gridCols, "justify-start")}>
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="w-full">
+                <Skeleton className="aspect-[71/114] w-full rounded-lg" />
+                <div className="mt-2 space-y-1">
+                  <Skeleton className="h-4 w-3/4 rounded-md" />
+                  <Skeleton className="h-3 w-1/2 rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : sorted.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-10 text-center">
+            <p className="text-sm font-medium text-neutral-0">{emptyTitle}</p>
+            <p className="mt-1 text-xs text-neutral-300">{emptySub}</p>
+          </div>
+        ) : (
+          <div
+            className={clsx(
+              "mt-4 grid gap-3",
+              gridCols,
+              "justify-start content-start"
+            )}
+          >
+            {sorted.map((ev) => (
+              <EventCard
+                key={ev._id}
+                id={ev._id}
+                title={ev.title}
+                dateLabel={formatEventDate(ev.date)}
+                venue={ev.location ?? ""}
+                category={ev.category ?? ""}
+                img={ev.image ?? "/placeholder.jpg"}
+                href={`/dashboard/events/${ev._id}`}
+                className="w-full"
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* -------------------- Shared: Stats list panel (Figma design) ------- */
 function EventsStatsListPanel({
   title,
@@ -432,12 +527,12 @@ function EventsStatsListPanel({
     >
       <div
         className={clsx(
-          "relative p-4 md:p-5",
+          "relative p-4",
           "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
         )}
       >
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
+          <p className="font-semibold uppercase tracking-[0.18em] text-neutral-300">
             {title}
           </p>
 
@@ -472,9 +567,9 @@ function EventsStatsListPanel({
                   key={ev._id}
                   href={`/dashboard/events/${ev._id}`}
                   className={clsx(
-                    "group relative block overflow-hidden rounded-2xl border",
+                    "group relative block overflow-hidden rounded-xl border",
                     activeRow
-                      ? "border-white/10 bg-[#2a2a45]/90"
+                      ? "border-white/10 bg-neutral-948"
                       : "border-transparent bg-transparent hover:bg-white/4"
                   )}
                 >
@@ -501,28 +596,24 @@ function EventsStatsListPanel({
 
                     <div className="grid flex-1 grid-cols-1 gap-3 text-left sm:grid-cols-3 sm:text-center">
                       <div>
-                        <p className="text-sm font-semibold text-neutral-0">
+                        <p className="text-base font-semibold text-neutral-0">
                           {money(revenue)}
                         </p>
-                        <p className="mt-1 text-xs text-neutral-400">Revenue</p>
+                        <p className="mt-1 text-neutral-400">Revenue</p>
                       </div>
 
                       <div>
-                        <p className="text-sm font-semibold text-neutral-0">
+                        <p className="text-base font-semibold text-neutral-0">
                           {ticketsSold.toLocaleString()}
                         </p>
-                        <p className="mt-1 text-xs text-neutral-400">
-                          Tickets Sold
-                        </p>
+                        <p className="mt-1 text-neutral-400">Tickets Sold</p>
                       </div>
 
                       <div>
-                        <p className="text-sm font-semibold text-neutral-0">
+                        <p className="text-base font-semibold text-neutral-0">
                           {formatEventDate(ev.date)}
                         </p>
-                        <p className="mt-1 text-xs text-neutral-400">
-                          Event Date
-                        </p>
+                        <p className="mt-1 text-neutral-400">Event Date</p>
                       </div>
                     </div>
                   </div>
@@ -588,12 +679,12 @@ function DraftsListPanel({
     >
       <div
         className={clsx(
-          "relative p-4 md:p-5",
+          "relative p-4",
           "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
         )}
       >
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
+          <p className="font-semibold uppercase tracking-[0.18em] text-neutral-300">
             Drafts
           </p>
 
@@ -620,11 +711,13 @@ function DraftsListPanel({
                 Start creating an event and save it as a draft to keep building
                 it later.
               </p>
-              <button type="button" onClick={openOrgPicker} className="mt-4">
-                <Button variant="primary" size="sm">
-                  <CalendarPlus className="mr-2 h-4 w-4" />
-                  Create Event
-                </Button>
+              <button
+                type="button"
+                onClick={openOrgPicker}
+                className="mt-4 inline-flex gap-1.5 items-center text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 px-4 py-3 rounded-full transition cursor-pointer"
+              >
+                <CalendarPlus className="h-4 w-4" />
+                Create Event
               </button>
             </div>
           ) : (
@@ -752,12 +845,12 @@ export default function DashboardEventsPage() {
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       <section className="pb-20">
         {/* Header row */}
-        <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-neutral-300">
+            <p className="text-base font-semibold uppercase tracking-[0.18em] text-neutral-300">
               Events
             </p>
-            <p className="mt-1 text-xs text-neutral-400">
+            <p className="mt-1 text-neutral-400">
               Track performance, manage drafts, and jump into event setup.
             </p>
           </div>
@@ -765,23 +858,22 @@ export default function DashboardEventsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <MiniSelect value={view} onChange={setView} options={viewOptions} />
 
-            <button type="button" onClick={openOrgPicker}>
-              <Button variant="primary" size="sm">
-                <CalendarPlus className="mr-2 h-4 w-4" />
-                Create Event
-              </Button>
+            <button
+              type="button"
+              onClick={openOrgPicker}
+              className="inline-flex gap-1.5 items-center text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 px-4 py-3 rounded-full transition cursor-pointer"
+            >
+              <CalendarPlus className="h-4 w-4" />
+              Create Event
             </button>
           </div>
         </div>
 
         {/* Active panel */}
         {view === "upcoming" ? (
-          <EventsStatsListPanel
-            title="Upcoming Events"
+          <UpcomingEventsGridPanel
             list={upcoming}
             eventsLoading={eventsLoading}
-            defaultMetric="revenue"
-            dateSortMode="soonest"
             emptyTitle="No upcoming events yet"
             emptySub="Create an event and it will appear here once scheduled."
           />

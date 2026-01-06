@@ -315,7 +315,7 @@ export default function MyTeamTable({
 
                 {/* Tickets */}
                 <td className="px-4 py-2 text-right">
-                  <div className="inline-flex items-center gap-1.5 mr-4">
+                  <div className="inline-flex items-center gap-1.5 mr-5">
                     <span className="tabular-nums">{m.tickets}</span>
                     <svg
                       xmlns="http://www.w3.org/2000/svg"

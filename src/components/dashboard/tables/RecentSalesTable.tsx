@@ -265,17 +265,19 @@ export default function RecentSalesTable() {
     };
   }, []);
 
-  const thRow = "[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-2";
+  const thRow = "[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-4";
   const thBase =
     "text-left font-semibold cursor-pointer select-none hover:text-white/80";
   const thBaseRight =
     "text-right font-semibold cursor-pointer select-none hover:text-white/80";
 
   return (
-    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-4 overflow-hidden">
+    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-2.5 overflow-hidden">
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between px-4">
-        <h3 className="font-bold uppercase text-neutral-400">Recent Sales</h3>
+      <div className="mb-2 pb-2.5 border-b border-neutral-700 flex items-center justify-between px-4">
+        <h3 className="text-base font-bold uppercase text-neutral-400">
+          Recent Sales
+        </h3>
       </div>
 
       {/* Clipping wrapper */}
@@ -397,7 +399,7 @@ export default function RecentSalesTable() {
                   i % 2 === 0 ? "bg-neutral-800" : "bg-transparent"
                 )}
               >
-                <td className="pl-2 py-2 align-middle text-neutral-200">
+                <td className="pl-4 py-2 align-middle text-neutral-200">
                   {s.id}
                 </td>
 
@@ -439,7 +441,7 @@ export default function RecentSalesTable() {
           type="button"
           className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
-          See All
+          View All
         </button>
       </div>
     </div>

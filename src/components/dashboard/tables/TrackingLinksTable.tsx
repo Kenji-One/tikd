@@ -6,14 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import {
-  ChevronDown,
-  Pencil,
-  Trash2,
-  AlertTriangle,
-  Share2,
-  Download,
-} from "lucide-react";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
 
 /* ------------------------------- Types ------------------------------ */
@@ -526,9 +519,9 @@ export default function TrackingLinksTable() {
     "bg-[linear-gradient(90deg,rgba(154,70,255,0)_0%,rgba(154,70,255,0.18)_30%,rgba(255,255,255,0.08)_50%,rgba(154,70,255,0.18)_70%,rgba(154,70,255,0)_100%)]";
 
   return (
-    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-4">
+    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-2">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between px-4">
+      <div className="mb-2 pb-2 border-b border-neutral-700 flex items-center justify-between px-4">
         <h3 className="text-base font-bold uppercase text-neutral-400">
           Tracking Links
         </h3>
@@ -547,7 +540,7 @@ export default function TrackingLinksTable() {
             )
           }
           title="Change sort column"
-          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-1 text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white cursor-pointer"
+          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-[6.8px] text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white cursor-pointer"
         >
           {headerSortLabel}
           <ChevronDown size={14} className="opacity-70" />
@@ -735,7 +728,24 @@ export default function TrackingLinksTable() {
 
                   {/* Views */}
                   <td className="px-4 py-3">
-                    <span className="tabular-nums">{r.views}</span>
+                    <span className="tabular-nums flex items-center gap-1 ml-1">
+                      {r.views}{" "}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        className="w-4 h-4"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          clipRule="evenodd"
+                          d="M10.8749 6.00001L11.1862 5.84401V5.84251L11.1839 5.84026L11.1794 5.83126L11.1637 5.80126L11.1037 5.69326C11.0304 5.56696 10.9526 5.44338 10.8704 5.32276C10.596 4.91997 10.2806 4.54673 9.92916 4.20901C9.08467 3.39901 7.78491 2.57251 5.99992 2.57251C4.21642 2.57251 2.91592 3.39826 2.07142 4.20901C1.72001 4.54673 1.40457 4.91997 1.13017 5.32276C1.01882 5.48704 0.915692 5.65675 0.821166 5.83126L0.816666 5.84026L0.815166 5.84251V5.84326C0.815166 5.84326 0.814416 5.84401 1.12567 6.00001L0.814416 5.84326C0.790351 5.89188 0.777832 5.94539 0.777832 5.99963C0.777832 6.05388 0.790351 6.10739 0.814416 6.15601L0.813666 6.15751L0.815916 6.15976L0.820416 6.16876C0.843802 6.21562 0.868817 6.26165 0.895416 6.30676C1.21836 6.85232 1.61343 7.35182 2.06992 7.79176C2.91517 8.60176 4.21492 9.42676 5.99992 9.42676C7.78416 9.42676 9.08466 8.60176 9.92991 7.79101C10.2807 7.45289 10.5958 7.07969 10.8704 6.67726C10.9756 6.52242 11.0734 6.36275 11.1637 6.19876L11.1794 6.16876L11.1839 6.15976L11.1854 6.15751V6.15676C11.1854 6.15676 11.1862 6.15601 10.8749 6.00001ZM10.8749 6.00001L11.1862 6.15676C11.2102 6.10814 11.2227 6.05463 11.2227 6.00038C11.2227 5.94614 11.2102 5.89262 11.1862 5.84401L10.8749 6.00001ZM5.95492 4.84801C5.64939 4.84801 5.35637 4.96938 5.14033 5.18542C4.92429 5.40146 4.80292 5.69448 4.80292 6.00001C4.80292 6.30554 4.92429 6.59855 5.14033 6.8146C5.35637 7.03064 5.64939 7.15201 5.95492 7.15201C6.26044 7.15201 6.55346 7.03064 6.7695 6.8146C6.98554 6.59855 7.10691 6.30554 7.10691 6.00001C7.10691 5.69448 6.98554 5.40146 6.7695 5.18542C6.55346 4.96938 6.26044 4.84801 5.95492 4.84801ZM4.10842 6.00001C4.10842 5.50989 4.30311 5.03984 4.64968 4.69328C4.99625 4.34671 5.4663 4.15201 5.95642 4.15201C6.44654 4.15201 6.91658 4.34671 7.26315 4.69328C7.60972 5.03984 7.80442 5.50989 7.80442 6.00001C7.80442 6.49013 7.60972 6.96018 7.26315 7.30674C6.91658 7.65331 6.44654 7.84801 5.95642 7.84801C5.4663 7.84801 4.99625 7.65331 4.64968 7.30674C4.30311 6.96018 4.10842 6.49013 4.10842 6.00001Z"
+                          fill="#A7A7BC"
+                        />
+                      </svg>
+                    </span>
                   </td>
 
                   {/* Link Type */}
@@ -761,7 +771,9 @@ export default function TrackingLinksTable() {
                   </td>
 
                   {/* Date */}
-                  <td className="px-4 py-3">{r.created}</td>
+                  <td className="px-4 py-3">
+                    <span className="ml-4.5">{r.created}</span>
+                  </td>
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-right">
@@ -809,7 +821,7 @@ export default function TrackingLinksTable() {
           href="/dashboard/tracking"
           className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700/50 px-3 py-2 font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
-          See All
+          View All
         </Link>
       </div>
 

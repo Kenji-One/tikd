@@ -170,13 +170,15 @@ export default function MyTeamTable({
   return (
     <div
       className={clsx(
-        "relative rounded-lg border border-neutral-700 bg-neutral-900 pt-4",
+        "relative rounded-lg border border-neutral-700 bg-neutral-900 pt-2",
         className
       )}
     >
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between px-4">
-        <h3 className="font-bold uppercase text-neutral-400">{title}</h3>
+      <div className="mb-2 pb-2 border-b border-neutral-700 flex items-center justify-between px-4">
+        <h3 className="text-base font-bold uppercase text-neutral-400">
+          {title}
+        </h3>
 
         <button
           type="button"
@@ -192,7 +194,7 @@ export default function MyTeamTable({
             )
           }
           title="Change sort column"
-          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-1 text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white cursor-pointer"
+          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-[6.8px] text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white cursor-pointer"
         >
           {headerSortLabel}
           <ChevronDown size={14} className="opacity-70" />

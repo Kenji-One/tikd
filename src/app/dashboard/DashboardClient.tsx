@@ -172,7 +172,7 @@ export default function DashboardClient() {
                 data={sparkB}
                 domain={[0, 500]}
                 yTicks={[0, 100, 250, 500]}
-                xLabels={["12AM", "8AM", "4PM", "11PM"]}
+                xLabels={labels}
                 stroke="#9A46FF"
                 deltaText="+24.6%"
                 deltaPositive
@@ -192,7 +192,7 @@ export default function DashboardClient() {
                 data={sparkC}
                 domain={[0, 500]}
                 yTicks={[0, 100, 250, 500]}
-                xLabels={["12AM", "8AM", "4PM", "11PM"]}
+                xLabels={labels}
                 stroke="#9A46FF"
                 deltaText="-24.6%"
                 deltaPositive={false}

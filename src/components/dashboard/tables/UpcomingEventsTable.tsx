@@ -188,7 +188,7 @@ export default function UpcomingEventsTable() {
     <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 py-2 overflow-hidden">
       {/* Header */}
       <div className="pb-2 border-b border-neutral-700 flex items-center justify-between gap-3 px-4">
-        <h3 className="font-bold uppercase text-neutral-400">
+        <h3 className="text-base font-bold uppercase text-neutral-400">
           Upcoming Events
         </h3>
 
@@ -350,7 +350,7 @@ export default function UpcomingEventsTable() {
       </div>
       <div className="pointer-events-none absolute inset-x-0 bottom-2.5 flex justify-center">
         <Link
-          href="/events"
+          href="/dashboard/events"
           className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
           View All

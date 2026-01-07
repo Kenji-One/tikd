@@ -202,10 +202,10 @@ function SmallKpiChart({
   return (
     <div className="w-full">
       {/* ✅ slightly taller so Y ticks feel more “open” */}
-      <ResponsiveContainer width="100%" height={140}>
+      <ResponsiveContainer width="100%" height={150}>
         <LineChart
           data={rows}
-          margin={{ top: 12, right: 8, left: 0, bottom: 18 }}
+          margin={{ top: 12, right: 8, left: 0, bottom: 3 }}
         >
           <CartesianGrid
             vertical={false}

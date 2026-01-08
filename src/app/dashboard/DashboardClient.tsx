@@ -5,8 +5,6 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
-import clsx from "clsx";
 
 import KpiCard from "@/components/dashboard/cards/KpiCard";
 import RevenueChart from "@/components/dashboard/charts/RevenueChart";
@@ -17,7 +15,10 @@ import MyTeamTable, {
   DEMO_MY_TEAM,
 } from "@/components/dashboard/tables/MyTeamTable";
 import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
-import BreakdownCard from "@/components/dashboard/cards/BreakdownCard";
+
+import DateRangePicker, {
+  type DateRangeValue,
+} from "@/components/ui/DateRangePicker";
 
 /* Demo data */
 const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
@@ -25,32 +26,6 @@ const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
 );
 const sparkB = [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120];
 const sparkC = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
-const genderSegments = [
-  { value: 8283, label: "Male", color: "#2F45C5" },
-  { value: 3238, label: "Female", color: "#FF7577" },
-  { value: 2162, label: "Other", color: "#C2C2D1" },
-];
-
-const ageSegments = [
-  { value: 7643, label: "0–18", color: "#9A46FF" },
-  { value: 9823, label: "18–28", color: "#FF7B45" },
-  { value: 5817, label: "28–50+", color: "#45FF79" },
-];
-
-/* ------------------------ Date helpers ------------------------ */
-type Range = { id: string; label: string; start: Date; end: Date };
-
-const makeRange = (label: string, y: number): Range => ({
-  id: `y-${y}`,
-  label,
-  start: new Date(y, 0, 1),
-  end: new Date(y, 11, 31),
-});
-
-const RANGES: Range[] = [
-  makeRange("Jan 2024 – Dec 2024", 2024),
-  makeRange("Jan 2025 – Dec 2025", 2025),
-];
 
 const monthLabels = (start: Date, end: Date) => {
   const labels: string[] = [];
@@ -83,11 +58,26 @@ const mapSeriesToRange = (vals: number[], monthsCount: number) => {
 
 export default function DashboardClient() {
   const router = useRouter();
-  const [range, setRange] = useState<Range>(RANGES[0]);
-  const [menuOpen, setMenuOpen] = useState(false);
 
-  const labels = useMemo(() => monthLabels(range.start, range.end), [range]);
-  const dates = useMemo(() => monthDates(range.start, range.end), [range]);
+  // ✅ Replaces old preset dropdown with a real date-range picker
+  const [dateRange, setDateRange] = useState<DateRangeValue>({
+    start: new Date(2024, 0, 1),
+    end: new Date(2024, 11, 31),
+  });
+
+  // For this dashboard demo, we still render MONTH points,
+  // so we convert the selected date span into month buckets.
+  const start = useMemo(
+    () => dateRange.start ?? new Date(2024, 0, 1),
+    [dateRange.start]
+  );
+  const end = useMemo(
+    () => dateRange.end ?? new Date(2024, 11, 31),
+    [dateRange.end]
+  );
+
+  const labels = useMemo(() => monthLabels(start, end), [start, end]);
+  const dates = useMemo(() => monthDates(start, end), [start, end]);
 
   const revenueData = useMemo(
     () => mapSeriesToRange(sparkA, labels.length),
@@ -109,34 +99,8 @@ export default function DashboardClient() {
             stretchChart
             detailsHref="/dashboard/finances/revenue"
             toolbar={
-              <div className="relative max-w-[185px]">
-                <button
-                  onClick={() => setMenuOpen((v) => !v)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-neutral-700 px-3 py-2 text-xs text-white/80 hover:text-white hover:border-primary-500 cursor-pointer focus:outline-none"
-                >
-                  <CalendarIcon size={14} className="opacity-80" />
-                  {range.label}
-                  <ChevronDown size={14} className="opacity-70" />
-                </button>
-                {menuOpen && (
-                  <div className="absolute right-0 z-10 mt-2 w-full rounded-lg border border-white/10 bg-[#121420] p-1 text-xs text-white/80">
-                    {RANGES.map((r) => (
-                      <button
-                        key={r.id}
-                        onClick={() => {
-                          setRange(r);
-                          setMenuOpen(false);
-                        }}
-                        className={clsx(
-                          "w-full rounded-md px-3 py-2 text-left hover:bg-white/5",
-                          r.id === range.id ? "bg-white/10" : ""
-                        )}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="max-w-[220px]">
+                <DateRangePicker value={dateRange} onChange={setDateRange} />
               </div>
             }
           >

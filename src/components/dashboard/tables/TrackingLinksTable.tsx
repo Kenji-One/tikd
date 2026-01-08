@@ -8,6 +8,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
+import CopyButton from "@/components/ui/CopyButton";
 
 /* ------------------------------- Types ------------------------------ */
 type Status = "Active" | "Paused" | "Disabled";
@@ -179,7 +180,6 @@ function ArchiveLinkDialog({
                     href="/dashboard/tracking/archives"
                     className="text-primary-500 underline decoration-primary-500 underline-offset-4 hover:text-primary-500 ml-1"
                     onClick={(e) => {
-                      // keep dialog UX consistent; allow navigation but close first
                       e.preventDefault();
                       onClose();
                       window.location.href = "/dashboard/tracking/archives";
@@ -255,8 +255,6 @@ function QrDialog({
 
   const qrValue = fullTrackingUrl(row.url) || row.url;
 
-  // NOTE: Replace this with your internal QR generator if you already have one.
-  // This uses a public QR image endpoint so it works without extra deps.
   const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(
     qrValue
   )}`;
@@ -386,7 +384,6 @@ function QrDialog({
               </button>
             </div>
 
-            {/* subtle close affordance (keeps Figma clean: click outside / esc) */}
             <button
               type="button"
               onClick={onClose}
@@ -477,12 +474,6 @@ export default function TrackingLinksTable() {
     };
   }, []);
 
-  const handleCopy = (text: string) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(text).catch(() => {});
-    }
-  };
-
   const openArchive = (row: Row) => {
     setActiveRow(row);
     setArchiveOpen(true);
@@ -490,7 +481,6 @@ export default function TrackingLinksTable() {
 
   const confirmArchive = (row: Row) => {
     // TODO: replace with your real archive mutation
-    // e.g. await archiveTrackingLink(row.id)
     setArchiveOpen(false);
     setActiveRow(null);
   };
@@ -514,7 +504,6 @@ export default function TrackingLinksTable() {
   const thBase =
     "text-base text-left font-semibold cursor-pointer select-none hover:text-white/80";
 
-  // One consistent separator style (same every time)
   const separatorLine =
     "bg-[linear-gradient(90deg,rgba(154,70,255,0)_0%,rgba(154,70,255,0.18)_30%,rgba(255,255,255,0.08)_50%,rgba(154,70,255,0.18)_70%,rgba(154,70,255,0)_100%)]";
 
@@ -556,7 +545,6 @@ export default function TrackingLinksTable() {
         <table className="w-full border-collapse font-medium">
           <thead className="text-neutral-400">
             <tr className={thRow}>
-              {/* Name */}
               <th
                 className={thBase}
                 onClick={() => toggleSort("name")}
@@ -579,7 +567,6 @@ export default function TrackingLinksTable() {
 
               <th className="text-left text-base font-semibold">QR Code</th>
 
-              {/* Views */}
               <th
                 className={thBase}
                 onClick={() => toggleSort("views")}
@@ -602,7 +589,6 @@ export default function TrackingLinksTable() {
 
               <th className="text-left text-base font-semibold">Link Type</th>
 
-              {/* Status */}
               <th
                 className={thBase}
                 onClick={() => toggleSort("status")}
@@ -623,7 +609,6 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              {/* Created */}
               <th
                 className={thBase}
                 onClick={() => toggleSort("created")}
@@ -651,8 +636,6 @@ export default function TrackingLinksTable() {
           <tbody className="text-white">
             {sorted.flatMap((r, i) => {
               const isLast = i === sorted.length - 1;
-
-              // solid zebra (no alpha → no “transparent” look)
               const rowBg = i % 2 === 0 ? "bg-neutral-948" : "bg-neutral-900";
 
               const dataRow = (
@@ -668,11 +651,12 @@ export default function TrackingLinksTable() {
                         <TwitterIcon className="h-5 w-5 opacity-70" />
                         <span className="truncate">{r.url}</span>
 
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(r.url)}
-                          className="ml-1 inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:text-white hover:border-white/20"
+                        {/* Refokus-style Copy */}
+                        <CopyButton
+                          text={r.url}
                           title="Copy link path"
+                          ariaLabel="Copy link path"
+                          className="ml-1 inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:text-white hover:border-white/20"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -694,7 +678,7 @@ export default function TrackingLinksTable() {
                               strokeLinejoin="round"
                             />
                           </svg>
-                        </button>
+                        </CopyButton>
                       </div>
                     </div>
                   </td>
@@ -811,11 +795,9 @@ export default function TrackingLinksTable() {
           </tbody>
         </table>
 
-        {/* Fade like the other tables */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
       </div>
 
-      {/* Bottom-right pill */}
       <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
         <Link
           href="/dashboard/tracking"
@@ -825,7 +807,6 @@ export default function TrackingLinksTable() {
         </Link>
       </div>
 
-      {/* Dialogs */}
       <ArchiveLinkDialog
         open={archiveOpen}
         row={activeRow}

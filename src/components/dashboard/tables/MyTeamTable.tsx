@@ -146,7 +146,7 @@ export default function MyTeamTable({
   /* Clamp + fade like RecentSalesTable */
   const clipRef = useRef<HTMLDivElement | null>(null);
   const [isClamped, setIsClamped] = useState(false);
-  const MAX = 386;
+  const MAX = 383;
 
   useEffect(() => {
     if (!clipRef.current) return;
@@ -176,9 +176,7 @@ export default function MyTeamTable({
     >
       {/* Header */}
       <div className="mb-2 pb-2 border-b border-neutral-700 flex items-center justify-between px-4">
-        <h3 className="text-base font-bold uppercase text-neutral-400">
-          {title}
-        </h3>
+        <h3 className="font-bold uppercase text-neutral-400">{title}</h3>
 
         <button
           type="button"

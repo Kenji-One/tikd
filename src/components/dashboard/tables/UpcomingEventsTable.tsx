@@ -199,7 +199,7 @@ export default function UpcomingEventsTable() {
             onClick={() => setSortOpen((v) => !v)}
             aria-haspopup="listbox"
             aria-expanded={sortOpen}
-            className="flex w-full items-center justify-between rounded-lg border border-white/10 bg-neutral-700 px-3 py-[6.8px] text-left text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white focus-visible:border-primary-500 cursor-pointer"
+            className="flex w-full items-center justify-between rounded-md border border-white/10 bg-neutral-700 px-3 py-[6.8px] text-left text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white focus-visible:border-primary-500 cursor-pointer"
           >
             <span className="truncate">Sort by: {sortLabel}</span>
             <ChevronDown

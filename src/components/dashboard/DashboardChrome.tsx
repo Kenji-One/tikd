@@ -39,17 +39,18 @@ export default function DashboardChrome({ children }: Props) {
     <div className="min-h-dvh w-full bg-neutral-950 text-white">
       <div
         className={clsx(
+          "tikd-dashboard-shell",
           // When a sidebar is present, the layout must be flush-left (no mx-auto centering)
           hasSidebar ? "flex w-full" : "mx-auto max-w-[1600px]"
         )}
       >
         {hasSidebar && (
-          <aside className="sticky top-0 hidden h-dvh shrink-0 md:block">
+          <aside className="sticky top-0 hidden h-dvh shrink-0 md:block z-50">
             <Sidebar variant={sidebarVariant} />
           </aside>
         )}
 
-        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 !pt-0">
+        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 !pt-0 max-w-[1400px] mx-auto">
           <Topbar hideLogo={isOrgSubpage} />
           {children}
         </main>

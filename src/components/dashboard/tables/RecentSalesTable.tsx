@@ -272,12 +272,10 @@ export default function RecentSalesTable() {
     "text-right font-semibold cursor-pointer select-none hover:text-white/80";
 
   return (
-    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-2.5 overflow-hidden">
+    <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-3 overflow-hidden">
       {/* Header */}
-      <div className="mb-2 pb-2.5 border-b border-neutral-700 flex items-center justify-between px-4">
-        <h3 className="text-base font-bold uppercase text-neutral-400">
-          Recent Sales
-        </h3>
+      <div className="mb-2 pb-3 border-b border-neutral-700 flex items-center justify-between px-4">
+        <h3 className="font-bold uppercase text-neutral-400">Recent Sales</h3>
       </div>
 
       {/* Clipping wrapper */}
@@ -424,7 +422,7 @@ export default function RecentSalesTable() {
                 <td className="px-2 py-2">{s.date}</td>
 
                 <td className="px-2 py-2 text-right font-medium text-success-500">
-                  {fmtUsd(s.total)}
+                  <span className="mr-3">{fmtUsd(s.total)}</span>
                 </td>
               </tr>
             ))}

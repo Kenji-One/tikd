@@ -111,30 +111,6 @@ const fmtFullDate = (d?: Date) =>
       })
     : "";
 
-const tooltipClasses = (variant: NonNullable<Props["tooltipVariant"]>) => {
-  if (variant === "light") {
-    return {
-      wrapper:
-        "pointer-events-none rounded-lg bg-white text-neutral-900 shadow px-3 py-2.5",
-      value: "text-[18px] font-extrabold",
-      sub: "mt-1 text-xs text-neutral-500",
-    };
-  }
-  if (variant === "dark") {
-    return {
-      wrapper:
-        "pointer-events-none rounded-lg bg-[#141625] border border-white/10 text-white px-3 py-2.5",
-      value: "text-[18px] font-extrabold text-white",
-      sub: "mt-1 text-xs text-neutral-400",
-    };
-  }
-  return {
-    wrapper: "pointer-events-none rounded-lg bg-primary-800 p-2.5",
-    value: "text-white font-extrabold text-[18px]",
-    sub: "mt-1 text-xs text-neutral-300",
-  };
-};
-
 function stripSign(s?: string) {
   return (s ?? "").trim().replace(/^[-+]\s*/, "");
 }
@@ -326,11 +302,20 @@ function RevenueChart({
     tooltip && Number.isFinite(tooltip.index) ? tooltip.index : undefined;
   const pinnedRow = pinIndex != null ? rows[pinIndex] : undefined;
 
-  const tipCls = tooltipClasses(tooltipVariant);
   const autoId = useId();
   const gradId = gradientId ?? `rev-fill-${autoId}`;
+  const shadowId = `rev-tip-shadow-${autoId}`;
 
   const fixedDelta = fixedDeltaFromTooltip(tooltip);
+
+  // ✅ New “glass purple” tooltip style (matches new reference)
+  const tipWrapper =
+    "pointer-events-none rounded-xl border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md px-4 py-3 text-white";
+  const tipValue = "text-[22px] font-extrabold leading-none";
+  const tipDate = "mt-2 text-[14px] font-medium text-white/80";
+  const tipDivider = "my-3 h-px w-full bg-white/10";
+  const tipBottomRow = "flex items-center gap-2 text-[13px] font-medium";
+  const tipVs = "text-white/60";
 
   return (
     <div className="w-full h-full">
@@ -352,6 +337,17 @@ function RevenueChart({
                 stopOpacity={fillEndOpacity}
               />
             </linearGradient>
+
+            {/* ✅ Soft shadow for pinned SVG tooltip */}
+            <filter id={shadowId} x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow
+                dx="0"
+                dy="16"
+                stdDeviation="16"
+                floodColor="#000000"
+                floodOpacity="0.45"
+              />
+            </filter>
           </defs>
 
           {/* ✅ Equal-spaced Y ticks (Figma-like) */}
@@ -387,6 +383,8 @@ function RevenueChart({
             activeDot={false}
             isAnimationActive={false}
           />
+
+          {/* Main stroke line (with hover dot) */}
           <Area
             type="monotone"
             dataKey="y"
@@ -397,6 +395,12 @@ function RevenueChart({
             strokeLinejoin="round"
             strokeLinecap="round"
             dot={false}
+            activeDot={{
+              r: 5,
+              fill: "#FFFFFF",
+              stroke: "#BD99FF",
+              strokeWidth: 2,
+            }}
           />
 
           {/* Pinned dot + pinned callout */}
@@ -404,7 +408,7 @@ function RevenueChart({
             <ReferenceDot
               x={pinnedRow.name}
               y={pinnedRow.y}
-              r={4.5}
+              r={5}
               fill="#FFFFFF"
               stroke="#BD99FF"
               strokeWidth={2}
@@ -414,15 +418,21 @@ function RevenueChart({
                 if (typeof x !== "number" || typeof y !== "number")
                   return <g />;
 
-                const w = 170;
-                const h = 54;
+                // ✅ New layout matches reference (value, date, divider, delta + vs text)
+                const w = 220;
+                const h = 86;
+
                 const ox = x - w / 2;
-                const oy = y - h - 14;
+                const oy = y - h - 16;
 
-                const deltaTxt = stripSign(tooltip.deltaText);
-                const isPos = tooltip.deltaPositive !== false;
+                const raw = (tooltip.deltaText ?? "").trim();
+                const deltaTxt = stripSign(raw);
+                const inferredPos = raw ? !raw.startsWith("-") : true;
+                const isPos = tooltip.deltaPositive ?? inferredPos;
 
-                const bg = tooltipVariant === "dark" ? "#141625" : "#6D28D9";
+                const panelFill = "rgba(154,70,255,0.18)";
+                const panelStroke = "rgba(255,255,255,0.10)";
+
                 const badgeBg = isPos
                   ? "rgba(69,255,121,0.18)"
                   : "rgba(255,69,74,0.18)";
@@ -431,70 +441,111 @@ function RevenueChart({
                   : "rgba(255,69,74,0.30)";
                 const badgeText = isPos ? "#45FF79" : "#FF454A";
 
+                const badgeW = 64;
+                const badgeH = 22;
+
                 return (
                   <g transform={`translate(${ox}, ${oy})`}>
-                    <rect x="0" y="0" width={w} height={h} rx="10" fill={bg} />
-                    <path
-                      d={`M${w / 2 - 7} ${h} L${w / 2} ${h + 8} L${
-                        w / 2 + 7
-                      } ${h} Z`}
-                      fill={bg}
+                    <rect
+                      x="0"
+                      y="0"
+                      width={w}
+                      height={h}
+                      rx="16"
+                      fill={panelFill}
+                      stroke={panelStroke}
+                      filter={`url(#${shadowId})`}
                     />
 
+                    {/* pointer */}
+                    <path
+                      d={`M${w / 2 - 8} ${h} L${w / 2} ${h + 9} L${
+                        w / 2 + 8
+                      } ${h} Z`}
+                      fill={panelFill}
+                      stroke={panelStroke}
+                    />
+
+                    {/* Value */}
                     <text
-                      x="12"
-                      y="20"
+                      x="16"
+                      y="30"
                       fill="#FFFFFF"
-                      fontSize="16"
+                      fontSize="22"
                       fontWeight="800"
                       fontFamily="Gilroy, ui-sans-serif, system-ui"
                     >
                       {tooltip.valueLabel}
                     </text>
 
-                    {deltaTxt ? (
-                      <g transform={`translate(${w - 12 - 62}, 8)`}>
-                        <rect
-                          x="0"
-                          y="0"
-                          width="62"
-                          height="22"
-                          rx="7"
-                          fill={badgeBg}
-                          stroke={badgeStroke}
-                        />
-                        <path
-                          d={
-                            isPos
-                              ? "M10 15 L15 10 L15 13.5 L19 13.5 L19 7 L12.5 7 L12.5 11 L16 11 L11 16 Z"
-                              : "M10 7 L15 12 L15 8.5 L19 8.5 L19 15 L12.5 15 L12.5 11 L16 11 L11 6 Z"
-                          }
-                          fill={badgeText}
-                        />
-                        <text
-                          x="28"
-                          y="15.5"
-                          fill={badgeText}
-                          fontSize="11"
-                          fontWeight="700"
-                          fontFamily="Gilroy, ui-sans-serif, system-ui"
-                        >
-                          {deltaTxt}
-                        </text>
-                      </g>
-                    ) : null}
-
+                    {/* Date */}
                     {tooltip.subLabel ? (
                       <text
-                        x="12"
-                        y="42"
-                        fill="rgba(255,255,255,0.70)"
-                        fontSize="11"
+                        x="16"
+                        y="54"
+                        fill="rgba(255,255,255,0.80)"
+                        fontSize="13"
                         fontWeight="600"
                         fontFamily="Gilroy, ui-sans-serif, system-ui"
                       >
                         {tooltip.subLabel}
                       </text>
+                    ) : null}
+
+                    {/* Divider */}
+                    <line
+                      x1="16"
+                      y1="64"
+                      x2={w - 16}
+                      y2="64"
+                      stroke="rgba(255,255,255,0.12)"
+                      strokeWidth="1"
+                    />
+
+                    {/* Bottom row: delta + vs previous month */}
+                    {deltaTxt ? (
+                      <>
+                        <g transform={`translate(16, 70)`}>
+                          <rect
+                            x="0"
+                            y="0"
+                            width={badgeW}
+                            height={badgeH}
+                            rx="7"
+                            fill={badgeBg}
+                            stroke={badgeStroke}
+                          />
+                          <path
+                            d={
+                              isPos
+                                ? "M10 15 L15 10 L15 13.5 L19 13.5 L19 7 L12.5 7 L12.5 11 L16 11 L11 16 Z"
+                                : "M10 7 L15 12 L15 8.5 L19 8.5 L19 15 L12.5 15 L12.5 11 L16 11 L11 6 Z"
+                            }
+                            fill={badgeText}
+                          />
+                          <text
+                            x="28"
+                            y="15.5"
+                            fill={badgeText}
+                            fontSize="11"
+                            fontWeight="700"
+                            fontFamily="Gilroy, ui-sans-serif, system-ui"
+                          >
+                            {deltaTxt}
+                          </text>
+                        </g>
+
+                        <text
+                          x={16 + badgeW + 10}
+                          y={86 - 10}
+                          fill="rgba(255,255,255,0.60)"
+                          fontSize="13"
+                          fontWeight="600"
+                          fontFamily="Gilroy, ui-sans-serif, system-ui"
+                        >
+                          vs previous month.
+                        </text>
+                      </>
                     ) : null}
                   </g>
                 );
@@ -502,7 +553,7 @@ function RevenueChart({
             />
           ) : null}
 
-          {/* Hover tooltip (REAL value + ✅ KpiCard delta pill) */}
+          {/* Hover tooltip (NEW glass purple + delta + “vs previous month.”) */}
           <Tooltip
             cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1 }}
             isAnimationActive={false}
@@ -521,21 +572,28 @@ function RevenueChart({
                 fixedDelta ?? calcDeltaFromPrev(rows, row.i) ?? null;
 
               return (
-                <div className={tipCls.wrapper}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className={tipCls.value}>
-                      {valuePrefix}
-                      {fmtTooltipK(row.value)}
-                      {valueSuffix}
-                    </div>
-
-                    {delta?.text ? (
-                      <DeltaPill text={delta.text} positive={delta.positive} />
-                    ) : null}
+                <div className={tipWrapper}>
+                  <div className={tipValue}>
+                    {valuePrefix}
+                    {fmtTooltipK(row.value)}
+                    {valueSuffix}
                   </div>
 
                   {showDateInTooltip ? (
-                    <div className={tipCls.sub}>{fmtFullDate(row.date)}</div>
+                    <div className={tipDate}>{fmtFullDate(row.date)}</div>
+                  ) : null}
+
+                  {delta?.text ? (
+                    <>
+                      <div className={tipDivider} />
+                      <div className={tipBottomRow}>
+                        <DeltaPill
+                          text={delta.text}
+                          positive={delta.positive}
+                        />
+                        <span className={tipVs}>vs previous month.</span>
+                      </div>
+                    </>
                   ) : null}
                 </div>
               );

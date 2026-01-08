@@ -109,8 +109,14 @@ function makePiecewiseScaler(breakpoints: number[]) {
   };
 }
 
-/** ✅ EXACT same delta pill design as KpiCard */
-function DeltaPill({ text, positive }: { text: string; positive: boolean }) {
+/** Smaller delta pill for SmallKpi tooltip */
+function DeltaPillSmall({
+  text,
+  positive,
+}: {
+  text: string;
+  positive: boolean;
+}) {
   const isNegative = !positive;
 
   const deltaColor = isNegative
@@ -120,8 +126,8 @@ function DeltaPill({ text, positive }: { text: string; positive: boolean }) {
   const deltaIcon = isNegative ? (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
+      width="12"
+      height="12"
       viewBox="0 0 16 16"
       fill="none"
       aria-hidden="true"
@@ -135,8 +141,8 @@ function DeltaPill({ text, positive }: { text: string; positive: boolean }) {
   ) : (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
+      width="12"
+      height="12"
       viewBox="0 0 16 16"
       fill="none"
       aria-hidden="true"
@@ -151,7 +157,7 @@ function DeltaPill({ text, positive }: { text: string; positive: boolean }) {
 
   return (
     <span
-      className={`flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[12px] font-semibold leading-none border ${deltaColor}`}
+      className={`flex items-center gap-0.5 rounded-[7px] px-1 py-[3px] text-[10px] font-semibold leading-none border ${deltaColor}`}
       aria-label={`Change ${text}${isNegative ? " decrease" : " increase"}`}
     >
       {deltaIcon}
@@ -183,10 +189,6 @@ function SmallKpiChart({
 
   const maxX = Math.max(0, rows.length - 1);
 
-  /**
-   * ✅ Evenly spaced X tick positions (no rounding).
-   * This guarantees the visible labels have equal spacing.
-   */
   const xTickValues = useMemo(() => {
     if (xLabels.length <= 1) return [0];
     const step = maxX / Math.max(1, xLabels.length - 1);
@@ -199,9 +201,23 @@ function SmallKpiChart({
   const inferredPositive = rawDelta ? !rawDelta.startsWith("-") : true;
   const fixedIsPositive = deltaPositive ?? inferredPositive;
 
+  // ✅ Smaller footprint tooltip (still same “family” as RevenueChart)
+  const tipWrapper =
+    "pointer-events-none inline-block max-w-[170px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md shadow-[0_10px_26px_rgba(0,0,0,0.50)] px-2.5 py-2 text-white";
+  const tipValue = "text-[14px] font-extrabold leading-none tabular-nums";
+  const tipLabel = "mt-0.5 text-[11px] font-medium text-white/80 leading-tight";
+  const tipDivider = "my-1.5 h-px w-full bg-white/10";
+  const tipBottomRow = "flex items-center gap-1.5 text-[10px] font-medium";
+  const tipVs = "text-white/60 leading-tight";
+
+  const labelForPoint = (row: Row) => {
+    const idx = Math.round(row.x);
+    if (xLabels[idx]) return xLabels[idx];
+    return `#${idx + 1}`;
+  };
+
   return (
     <div className="w-full">
-      {/* ✅ slightly taller so Y ticks feel more “open” */}
       <ResponsiveContainer width="100%" height={150}>
         <LineChart
           data={rows}
@@ -214,7 +230,6 @@ function SmallKpiChart({
             strokeDasharray="0"
           />
 
-          {/* ✅ Equal-spaced Y ticks (Figma-like) */}
           <YAxis
             dataKey="y"
             type="number"
@@ -230,7 +245,6 @@ function SmallKpiChart({
             allowDecimals={false}
           />
 
-          {/* ✅ Equal-spaced X ticks (labels) */}
           <XAxis
             dataKey="x"
             type="number"
@@ -244,20 +258,30 @@ function SmallKpiChart({
             allowDecimals={false}
           />
 
+          {/* soft glow line */}
           <Line
             dataKey="y"
             stroke={stroke}
             strokeOpacity={0.35}
             strokeWidth={1}
             dot={false}
+            activeDot={false}
             isAnimationActive={false}
           />
+
+          {/* main line + hover dot */}
           <Line
             dataKey="y"
             stroke={stroke}
             strokeWidth={2}
             dot={false}
             isAnimationActive={false}
+            activeDot={{
+              r: 4.5,
+              fill: "#FFFFFF",
+              stroke: "#BD99FF",
+              strokeWidth: 2,
+            }}
           />
 
           <Tooltip
@@ -272,21 +296,25 @@ function SmallKpiChart({
               if (!isRow(candidate)) return null;
 
               const row = candidate;
+              const label = labelForPoint(row);
 
               return (
-                <div className="pointer-events-none rounded-lg bg-[#141625] border border-white/10 text-white px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-[16px] font-extrabold tabular-nums">
-                      {row.value}
-                    </div>
+                <div className={tipWrapper}>
+                  <div className={tipValue}>{row.value}</div>
+                  <div className={tipLabel}>{label}</div>
 
-                    {fixedDeltaTxt ? (
-                      <DeltaPill
-                        text={fixedDeltaTxt}
-                        positive={fixedIsPositive}
-                      />
-                    ) : null}
-                  </div>
+                  {fixedDeltaTxt ? (
+                    <>
+                      <div className={tipDivider} />
+                      <div className={tipBottomRow}>
+                        <DeltaPillSmall
+                          text={fixedDeltaTxt}
+                          positive={fixedIsPositive}
+                        />
+                        <span className={tipVs}>vs previous month.</span>
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               );
             }}

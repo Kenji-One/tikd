@@ -3,8 +3,8 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import type { ReactElement } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { ReactElement, ElementType } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -19,17 +19,19 @@ import {
   UserRound,
   Users,
   Users2,
+  ChevronLeft,
+  Sparkles,
+  Type as TypeIcon,
 } from "lucide-react";
 
 /* ------------------------------- Icons ----------------------------- */
 /**
- * Org icons are kept as your custom SVGs (as-is).
- * Dashboard + dropdown/subnav icons use lucide-react (as requested).
+ * NOTE:
+ * Per your request, ALL custom SVG icon implementations are placeholders.
+ * Replace the <svg></svg> contents with your real paths later.
  */
 
 type IconProps = { className?: string };
-
-/* ----- Org dashboard icons (Home / Events / Edit / Team / Finance) --- */
 
 function DashboardIcon({ className }: IconProps): ReactElement {
   return (
@@ -48,7 +50,6 @@ function DashboardIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function TicketIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -66,7 +67,6 @@ function TicketIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function DataIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -84,7 +84,6 @@ function DataIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function ConnectionIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -102,7 +101,6 @@ function ConnectionIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function FinancesIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -120,7 +118,23 @@ function FinancesIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
+function SettingsCogIcon({ className }: IconProps): ReactElement {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+    >
+      <path
+        d="M21.32 9.55L19.43 8.92L20.32 7.14C20.4102 6.95369 20.4404 6.74397 20.4064 6.53978C20.3723 6.33558 20.2758 6.14699 20.13 6L18 3.87C17.8522 3.72209 17.6618 3.62421 17.4555 3.59013C17.2493 3.55605 17.0375 3.58748 16.85 3.68L15.07 4.57L14.44 2.68C14.3735 2.483 14.2472 2.31163 14.0787 2.18975C13.9102 2.06787 13.7079 2.00155 13.5 2H10.5C10.2904 1.99946 10.0858 2.06482 9.91537 2.18685C9.7449 2.30887 9.61709 2.48138 9.55 2.68L8.92 4.57L7.14 3.68C6.95369 3.58978 6.74397 3.55961 6.53978 3.59364C6.33558 3.62767 6.14699 3.72423 6 3.87L3.87 6C3.72209 6.14777 3.62421 6.33818 3.59013 6.54446C3.55605 6.75074 3.58748 6.96251 3.68 7.15L4.57 8.93L2.68 9.56C2.483 9.62654 2.31163 9.75283 2.18975 9.92131C2.06787 10.0898 2.00155 10.2921 2 10.5V13.5C1.99946 13.7096 2.06482 13.9142 2.18685 14.0846C2.30887 14.2551 2.48138 14.3829 2.68 14.45L4.57 15.08L3.68 16.86C3.58978 17.0463 3.55961 17.256 3.59364 17.4602C3.62767 17.6644 3.72423 17.853 3.87 18L6 20.13C6.14777 20.2779 6.33818 20.3758 6.54446 20.4099C6.75074 20.444 6.96251 20.4125 7.15 20.32L8.93 19.43L9.56 21.32C9.62709 21.5186 9.7549 21.6911 9.92537 21.8132C10.0958 21.9352 10.3004 22.0005 10.51 22H13.51C13.7196 22.0005 13.9242 21.9352 14.0946 21.8132C14.2651 21.6911 14.3929 21.5186 14.46 21.32L15.09 19.43L16.87 20.32C17.0551 20.4079 17.2628 20.4369 17.4649 20.4029C17.667 20.3689 17.8538 20.2737 18 20.13L20.13 18C20.2779 17.8522 20.3758 17.6618 20.4099 17.4555C20.444 17.2493 20.4125 17.0375 20.32 16.85L19.43 15.07L21.32 14.44C21.517 14.3735 21.6884 14.2472 21.8103 14.0787C21.9321 13.9102 21.9985 13.7079 22 13.5V10.5C22.0005 10.2904 21.9352 10.0858 21.8132 9.91537C21.6911 9.7449 21.5186 9.61709 21.32 9.55ZM20 12.78L18.8 13.18C18.5241 13.2695 18.2709 13.418 18.0581 13.6151C17.8452 13.8122 17.6778 14.0533 17.5675 14.3216C17.4571 14.5899 17.4064 14.879 17.419 15.1688C17.4315 15.4586 17.5069 15.7422 17.64 16L18.21 17.14L17.11 18.24L16 17.64C15.7436 17.5122 15.4627 17.4411 15.1763 17.4313C14.89 17.4215 14.6049 17.4734 14.3403 17.5834C14.0758 17.6934 13.8379 17.8589 13.6429 18.0688C13.4479 18.2787 13.3003 18.5281 13.21 18.8L12.81 20H11.22L10.82 18.8C10.7305 18.5241 10.582 18.2709 10.3849 18.0581C10.1878 17.8452 9.94671 17.6778 9.67842 17.5675C9.41014 17.4571 9.12105 17.4064 8.83123 17.419C8.5414 17.4315 8.25777 17.5069 8 17.64L6.86 18.21L5.76 17.11L6.36 16C6.4931 15.7422 6.56852 15.4586 6.58105 15.1688C6.59358 14.879 6.5429 14.5899 6.43254 14.3216C6.32218 14.0533 6.15478 13.8122 5.94195 13.6151C5.72912 13.418 5.47595 13.2695 5.2 13.18L4 12.78V11.22L5.2 10.82C5.47595 10.7305 5.72912 10.582 5.94195 10.3849C6.15478 10.1878 6.32218 9.94671 6.43254 9.67842C6.5429 9.41014 6.59358 9.12105 6.58105 8.83123C6.56852 8.5414 6.4931 8.25777 6.36 8L5.79 6.89L6.89 5.79L8 6.36C8.25777 6.4931 8.5414 6.56852 8.83123 6.58105C9.12105 6.59358 9.41014 6.5429 9.67842 6.43254C9.94671 6.32218 10.1878 6.15478 10.3849 5.94195C10.582 5.72912 10.7305 5.47595 10.82 5.2L11.22 4H12.78L13.18 5.2C13.2695 5.47595 13.418 5.72912 13.6151 5.94195C13.8122 6.15478 14.0533 6.32218 14.3216 6.43254C14.5899 6.5429 14.879 6.59358 15.1688 6.58105C15.4586 6.56852 15.7422 6.4931 16 6.36L17.14 5.79L18.24 6.89L17.64 8C17.5122 8.25645 17.4411 8.53735 17.4313 8.82369C17.4215 9.11003 17.4734 9.39513 17.5834 9.65969C17.6934 9.92424 17.8589 10.1621 18.0688 10.3571C18.2787 10.5521 18.5281 10.6997 18.8 10.79L20 11.19V12.78ZM12 8C11.2089 8 10.4355 8.2346 9.77772 8.67413C9.11993 9.11365 8.60724 9.73836 8.30448 10.4693C8.00173 11.2002 7.92252 12.0044 8.07686 12.7804C8.2312 13.5563 8.61217 14.269 9.17158 14.8284C9.73099 15.3878 10.4437 15.7688 11.2196 15.9231C11.9956 16.0775 12.7998 15.9983 13.5307 15.6955C14.2616 15.3928 14.8864 14.8801 15.3259 14.2223C15.7654 13.5645 16 12.7911 16 12C16 10.9391 15.5786 9.92172 14.8284 9.17158C14.0783 8.42143 13.0609 8 12 8ZM12 14C11.6044 14 11.2178 13.8827 10.8889 13.6629C10.56 13.4432 10.3036 13.1308 10.1522 12.7654C10.0009 12.3999 9.96126 11.9978 10.0384 11.6098C10.1156 11.2219 10.3061 10.8655 10.5858 10.5858C10.8655 10.3061 11.2219 10.1156 11.6098 10.0384C11.9978 9.96126 12.3999 10.0009 12.7654 10.1522C13.1308 10.3036 13.4432 10.56 13.6629 10.8889C13.8827 11.2178 14 11.6044 14 12C14 12.5304 13.7893 13.0391 13.4142 13.4142C13.0391 13.7893 12.5304 14 12 14Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 function OrgHomeIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -138,7 +152,6 @@ function OrgHomeIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function OrgEventsIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -156,7 +169,6 @@ function OrgEventsIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function OrgEditIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -174,7 +186,6 @@ function OrgEditIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function OrgTeamIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -192,7 +203,6 @@ function OrgTeamIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-
 function OrgFinanceIcon({ className }: IconProps): ReactElement {
   return (
     <svg
@@ -211,29 +221,10 @@ function OrgFinanceIcon({ className }: IconProps): ReactElement {
   );
 }
 
-function SettingsCogIcon({ className }: IconProps): ReactElement {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      className={className}
-    >
-      <path
-        d="M21.32 9.55L19.43 8.92L20.32 7.14C20.4102 6.95369 20.4404 6.74397 20.4064 6.53978C20.3723 6.33558 20.2758 6.14699 20.13 6L18 3.87C17.8522 3.72209 17.6618 3.62421 17.4555 3.59013C17.2493 3.55605 17.0375 3.58748 16.85 3.68L15.07 4.57L14.44 2.68C14.3735 2.483 14.2472 2.31163 14.0787 2.18975C13.9102 2.06787 13.7079 2.00155 13.5 2H10.5C10.2904 1.99946 10.0858 2.06482 9.91537 2.18685C9.7449 2.30887 9.61709 2.48138 9.55 2.68L8.92 4.57L7.14 3.68C6.95369 3.58978 6.74397 3.55961 6.53978 3.59364C6.33558 3.62767 6.14699 3.72423 6 3.87L3.87 6C3.72209 6.14777 3.62421 6.33818 3.59013 6.54446C3.55605 6.75074 3.58748 6.96251 3.68 7.15L4.57 8.93L2.68 9.56C2.483 9.62654 2.31163 9.75283 2.18975 9.92131C2.06787 10.0898 2.00155 10.2921 2 10.5V13.5C1.99946 13.7096 2.06482 13.9142 2.18685 14.0846C2.30887 14.2551 2.48138 14.3829 2.68 14.45L4.57 15.08L3.68 16.86C3.58978 17.0463 3.55961 17.256 3.59364 17.4602C3.62767 17.6644 3.72423 17.853 3.87 18L6 20.13C6.14777 20.2779 6.33818 20.3758 6.54446 20.4099C6.75074 20.444 6.96251 20.4125 7.15 20.32L8.93 19.43L9.56 21.32C9.62709 21.5186 9.7549 21.6911 9.92537 21.8132C10.0958 21.9352 10.3004 22.0005 10.51 22H13.51C13.7196 22.0005 13.9242 21.9352 14.0946 21.8132C14.2651 21.6911 14.3929 21.5186 14.46 21.32L15.09 19.43L16.87 20.32C17.0551 20.4079 17.2628 20.4369 17.4649 20.4029C17.667 20.3689 17.8538 20.2737 18 20.13L20.13 18C20.2779 17.8522 20.3758 17.6618 20.4099 17.4555C20.444 17.2493 20.4125 17.0375 20.32 16.85L19.43 15.07L21.32 14.44C21.517 14.3735 21.6884 14.2472 21.8103 14.0787C21.9321 13.9102 21.9985 13.7079 22 13.5V10.5C22.0005 10.2904 21.9352 10.0858 21.8132 9.91537C21.6911 9.7449 21.5186 9.61709 21.32 9.55ZM20 12.78L18.8 13.18C18.5241 13.2695 18.2709 13.418 18.0581 13.6151C17.8452 13.8122 17.6778 14.0533 17.5675 14.3216C17.4571 14.5899 17.4064 14.879 17.419 15.1688C17.4315 15.4586 17.5069 15.7422 17.64 16L18.21 17.14L17.11 18.24L16 17.64C15.7436 17.5122 15.4627 17.4411 15.1763 17.4313C14.89 17.4215 14.6049 17.4734 14.3403 17.5834C14.0758 17.6934 13.8379 17.8589 13.6429 18.0688C13.4479 18.2787 13.3003 18.5281 13.21 18.8L12.81 20H11.22L10.82 18.8C10.7305 18.5241 10.582 18.2709 10.3849 18.0581C10.1878 17.8452 9.94671 17.6778 9.67842 17.5675C9.41014 17.4571 9.12105 17.4064 8.83123 17.419C8.5414 17.4315 8.25777 17.5069 8 17.64L6.86 18.21L5.76 17.11L6.36 16C6.4931 15.7422 6.56852 15.4586 6.58105 15.1688C6.59358 14.879 6.5429 14.5899 6.43254 14.3216C6.32218 14.0533 6.15478 13.8122 5.94195 13.6151C5.72912 13.418 5.47595 13.2695 5.2 13.18L4 12.78V11.22L5.2 10.82C5.47595 10.7305 5.72912 10.582 5.94195 10.3849C6.15478 10.1878 6.32218 9.94671 6.43254 9.67842C6.5429 9.41014 6.59358 9.12105 6.58105 8.83123C6.56852 8.5414 6.4931 8.25777 6.36 8L5.79 6.89L6.89 5.79L8 6.36C8.25777 6.4931 8.5414 6.56852 8.83123 6.58105C9.12105 6.59358 9.41014 6.5429 9.67842 6.43254C9.94671 6.32218 10.1878 6.15478 10.3849 5.94195C10.582 5.72912 10.7305 5.47595 10.82 5.2L11.22 4H12.78L13.18 5.2C13.2695 5.47595 13.418 5.72912 13.6151 5.94195C13.8122 6.15478 14.0533 6.32218 14.3216 6.43254C14.5899 6.5429 14.879 6.59358 15.1688 6.58105C15.4586 6.56852 15.7422 6.4931 16 6.36L17.14 5.79L18.24 6.89L17.64 8C17.5122 8.25645 17.4411 8.53735 17.4313 8.82369C17.4215 9.11003 17.4734 9.39513 17.5834 9.65969C17.6934 9.92424 17.8589 10.1621 18.0688 10.3571C18.2787 10.5521 18.5281 10.6997 18.8 10.79L20 11.19V12.78ZM12 8C11.2089 8 10.4355 8.2346 9.77772 8.67413C9.11993 9.11365 8.60724 9.73836 8.30448 10.4693C8.00173 11.2002 7.92252 12.0044 8.07686 12.7804C8.2312 13.5563 8.61217 14.269 9.17158 14.8284C9.73099 15.3878 10.4437 15.7688 11.2196 15.9231C11.9956 16.0775 12.7998 15.9983 13.5307 15.6955C14.2616 15.3928 14.8864 14.8801 15.3259 14.2223C15.7654 13.5645 16 12.7911 16 12C16 10.9391 15.5786 9.92172 14.8284 9.17158C14.0783 8.42143 13.0609 8 12 8ZM12 14C11.6044 14 11.2178 13.8827 10.8889 13.6629C10.56 13.4432 10.3036 13.1308 10.1522 12.7654C10.0009 12.3999 9.96126 11.9978 10.0384 11.6098C10.1156 11.2219 10.3061 10.8655 10.5858 10.5858C10.8655 10.3061 11.2219 10.1156 11.6098 10.0384C11.9978 9.96126 12.3999 10.0009 12.7654 10.1522C13.1308 10.3036 13.4432 10.56 13.6629 10.8889C13.8827 11.2178 14 11.6044 14 12C14 12.5304 13.7893 13.0391 13.4142 13.4142C13.0391 13.7893 12.5304 14 12 14Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 /* ------------------------------- Data ------------------------------ */
 type SidebarVariant = "dashboard" | "organization";
 
 type OrgIconLike = (props: IconProps) => ReactElement;
-
 type IconLike = OrgIconLike | LucideIcon;
 
 type OrgNavItem = {
@@ -258,6 +249,7 @@ type DashSubItem = {
 };
 
 type DashGroup = {
+  key: "connections" | "finances";
   label: string;
   icon: IconLike;
   isActive: (pathname: string) => boolean;
@@ -279,8 +271,14 @@ const DASH_ITEMS: DashNavItem[] = [
   },
 ];
 
+const DASH_COMING_SOON: Array<{ label: string; icon: LucideIcon }> = [
+  { label: "Tixsy AI (Coming Soon)", icon: Sparkles },
+  { label: "Text Blaster (Coming Soon)", icon: TypeIcon },
+];
+
 const DASH_GROUPS: DashGroup[] = [
   {
+    key: "connections",
     label: "Connections",
     icon: ConnectionIcon,
     isActive: (p) => p.startsWith("/dashboard/connections"),
@@ -306,6 +304,7 @@ const DASH_GROUPS: DashGroup[] = [
     ],
   },
   {
+    key: "finances",
     label: "Finances",
     icon: FinancesIcon,
     isActive: (p) => p.startsWith("/dashboard/finances"),
@@ -347,7 +346,7 @@ const DASH_FOOTER: DashNavItem = {
 
 const orgItems: OrgNavItem[] = [
   {
-    href: ".", // will become /dashboard/organizations/:id
+    href: ".", // /dashboard/organizations/:id
     label: "Home",
     icon: OrgHomeIcon,
     match: (pathname) => {
@@ -383,74 +382,477 @@ const orgItems: OrgNavItem[] = [
   },
 ];
 
+/* ----------------------------- Helpers ---------------------------- */
+
+const COLLAPSE_KEY = "ui:sidebar-collapsed";
+
+// Nice easing for width / layout transitions
+const EASE_OUT = "ease-[cubic-bezier(0.22,1,0.36,1)]";
+
+type MotionPhase = "opening" | "closing" | null;
+
+type MotionClasses = {
+  shellWidth: string;
+  label: string;
+  logo: string;
+  chevron: string;
+};
+
+function SectionLabel({
+  children,
+  collapsed,
+}: {
+  children: string;
+  collapsed: boolean;
+}) {
+  return (
+    <div
+      className={clsx(
+        "px-2 pt-3 pb-1 text-[11px] font-semibold tracking-[0.16em] text-neutral-500",
+        collapsed && "sr-only"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Divider({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div
+      className={clsx(
+        "my-3 h-px w-full bg-neutral-800/70",
+        collapsed && "mx-auto w-10"
+      )}
+    />
+  );
+}
+
+/**
+ * Tooltip:
+ * - only visible on hover
+ * - only rendered for collapsed mode
+ */
+function TooltipBubble({ label }: { label: string }) {
+  return (
+    <div
+      className={clsx(
+        "pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap",
+        "rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-[13px] font-semibold text-neutral-100",
+        "shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
+        "opacity-0 -translate-x-1 transition-all duration-150",
+        "group-hover:opacity-100 group-hover:translate-x-0"
+      )}
+    >
+      {label}
+    </div>
+  );
+}
+
+function NavRow({
+  href,
+  label,
+  Icon,
+  active,
+  collapsed,
+  disabled,
+  motion,
+}: {
+  href?: string;
+  label: string;
+  Icon: IconLike;
+  active?: boolean;
+  collapsed: boolean;
+  disabled?: boolean;
+  motion: MotionClasses;
+}) {
+  const IconComp = Icon as ElementType<{ className?: string }>;
+
+  const base = clsx(
+    "group relative flex items-center",
+    "transition-colors duration-200",
+    collapsed
+      ? clsx(
+          "mx-auto h-11 w-11 justify-center rounded-lg",
+          active
+            ? "bg-neutral-800/90"
+            : "bg-transparent hover:bg-neutral-800/60"
+        )
+      : clsx(
+          "h-11 justify-start rounded-lg px-3",
+          active ? "bg-neutral-800/90" : "hover:bg-neutral-800/60"
+        ),
+    disabled ? "cursor-not-allowed text-neutral-500" : "text-neutral-200"
+  );
+
+  const iconCls = clsx(
+    "shrink-0",
+    "h-5 w-5",
+    disabled
+      ? "text-neutral-600"
+      : active
+        ? "text-white"
+        : "text-neutral-500 group-hover:text-white"
+  );
+
+  const labelCls = clsx(
+    "min-w-0 truncate font-semibold",
+    "overflow-hidden whitespace-nowrap",
+    "transition-[max-width,opacity,transform]",
+    motion.label,
+    EASE_OUT,
+    collapsed
+      ? "max-w-0 opacity-0 translate-x-1"
+      : "ml-3 max-w-[220px] opacity-100 translate-x-0"
+  );
+
+  const content = (
+    <>
+      <IconComp className={iconCls} />
+      <span className={labelCls}>{label}</span>
+
+      {collapsed && <TooltipBubble label={label} />}
+
+      {/* Active indicator rail */}
+      {collapsed && active && (
+        <span className="absolute -left-[10px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-primary-500" />
+      )}
+    </>
+  );
+
+  if (disabled || !href) return <div className={base}>{content}</div>;
+
+  return (
+    <Link href={href} className={base}>
+      {content}
+    </Link>
+  );
+}
+
+function CollapsedGroupPopover({
+  title,
+  items,
+  pathname,
+  onEnter,
+  onLeave,
+}: {
+  title: string;
+  items: DashSubItem[];
+  pathname: string;
+  onEnter: () => void;
+  onLeave: () => void;
+}) {
+  return (
+    <div
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      className={clsx(
+        "absolute left-full top-1/2 z-[99999999] ml-2 -translate-y-1/2",
+        "w-[248px] overflow-hidden rounded-xl",
+        "border border-white/10 bg-neutral-900/90 backdrop-blur-xl",
+        "shadow-[0_22px_70px_rgba(0,0,0,0.65)]"
+      )}
+    >
+      {/* wider hover-bridge so you can move into the popover without it collapsing */}
+      <div className="absolute -left-10 top-0 h-full w-10" />
+
+      {/* subtle inner glow */}
+      <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-white/5" />
+
+      <div className="px-3 pb-2 pt-2.5">
+        <div className="text-[11px] font-semibold tracking-wide text-neutral-400">
+          {title}
+        </div>
+      </div>
+
+      <div className="px-2 pb-2">
+        <div className="space-y-1">
+          {items.map((sub) => {
+            const IconComp = sub.icon as ElementType<{ className?: string }>;
+            const isActive = sub.match
+              ? sub.match(pathname)
+              : pathname === sub.href;
+
+            return (
+              <Link
+                key={sub.href}
+                href={sub.href}
+                className={clsx(
+                  "group relative flex items-center gap-2.5 rounded-lg px-3 py-2",
+                  "transition-[background-color] duration-200",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50",
+                  isActive
+                    ? "bg-neutral-800/85 text-white"
+                    : "text-neutral-200 hover:bg-neutral-800/55"
+                )}
+              >
+                <span
+                  className={clsx(
+                    "pointer-events-none absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full",
+                    isActive ? "bg-primary-500" : "bg-transparent"
+                  )}
+                />
+
+                <IconComp
+                  className={clsx(
+                    "h-4 w-4 shrink-0 transition-colors",
+                    isActive
+                      ? "text-white"
+                      : "text-neutral-500 group-hover:text-white"
+                  )}
+                />
+
+                <span className="truncate text-[13px] font-semibold">
+                  {sub.label}
+                </span>
+
+                {isActive && (
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary-500/90" />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupRow({
+  group,
+  pathname,
+  open,
+  setOpen,
+  collapsed,
+  isPopoverOpen,
+  openPopover,
+  scheduleClosePopover,
+  motion,
+}: {
+  group: DashGroup;
+  pathname: string;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  collapsed: boolean;
+
+  isPopoverOpen: boolean;
+  openPopover: () => void;
+  scheduleClosePopover: () => void;
+
+  motion: MotionClasses;
+}) {
+  const active = group.isActive(pathname);
+  const IconComp = group.icon as ElementType<{ className?: string }>;
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => collapsed && openPopover()}
+      onMouseLeave={() => collapsed && scheduleClosePopover()}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (collapsed) return;
+          setOpen(!open);
+        }}
+        aria-expanded={collapsed ? isPopoverOpen : open}
+        className={clsx(
+          "group relative flex items-center transition-colors duration-200",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+          collapsed
+            ? clsx(
+                "mx-auto h-11 w-11 justify-center rounded-lg",
+                active
+                  ? "bg-neutral-800/90"
+                  : "bg-transparent hover:bg-neutral-800/60"
+              )
+            : clsx(
+                "h-11 w-full justify-start rounded-lg px-3",
+                active ? "bg-neutral-800/90" : "hover:bg-neutral-800/60"
+              ),
+          "text-neutral-200"
+        )}
+      >
+        <IconComp
+          className={clsx(
+            "h-5 w-5 shrink-0 transition-colors",
+            active ? "text-white" : "text-neutral-500 group-hover:text-white"
+          )}
+        />
+
+        <span
+          className={clsx(
+            "min-w-0 truncate font-semibold",
+            "overflow-hidden whitespace-nowrap",
+            "transition-[max-width,opacity,transform]",
+            motion.label,
+            EASE_OUT,
+            collapsed
+              ? "max-w-0 opacity-0 translate-x-1"
+              : "ml-3 max-w-[220px] opacity-100 translate-x-0"
+          )}
+        >
+          {group.label}
+        </span>
+
+        {!collapsed && (
+          <ChevronDown
+            className={clsx(
+              "ml-auto h-5 w-5 shrink-0",
+              "text-neutral-500 group-hover:text-neutral-300",
+              "transition-transform",
+              motion.chevron,
+              EASE_OUT,
+              open && "rotate-180"
+            )}
+          />
+        )}
+
+        {collapsed && active && (
+          <span className="absolute -left-[10px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-primary-500" />
+        )}
+      </button>
+
+      {/* Expanded accordion */}
+      {!collapsed && (
+        <div
+          className={clsx(
+            "overflow-hidden transition-[max-height,opacity]",
+            motion.label,
+            EASE_OUT,
+            open ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
+          )}
+        >
+          <div className="mt-2 pb-1">
+            <div className="rounded-lg bg-neutral-900/20 px-2">
+              {/* REAL TREE: left column is the tree, right column is the rows */}
+              <ul
+                role="tree"
+                aria-label={`${group.label} navigation`}
+                className="relative grid grid-cols-[44px,1fr]"
+              >
+                {/* One continuous spine */}
+                <span
+                  aria-hidden="true"
+                  className={clsx(
+                    "pointer-events-none absolute",
+                    "left-[16px] top-[18px] bottom-[18px]",
+                    "w-[2px] -translate-x-1/2 rounded-full",
+                    "bg-neutral-700/40"
+                  )}
+                />
+
+                {group.items.map((sub, idx) => {
+                  const SubIcon = sub.icon as ElementType<{
+                    className?: string;
+                  }>;
+                  const isActive = sub.match
+                    ? sub.match(pathname)
+                    : pathname === sub.href;
+                  const isLast = idx === group.items.length - 1;
+
+                  return (
+                    <li
+                      key={sub.href}
+                      role="treeitem"
+                      className="contents flex items-center gap-10"
+                    >
+                      {/* LEFT: tree connectors */}
+                      <div className="relative h-11">
+                        {/* Cut the spine after the last node (so it doesn't run forever) */}
+                        {isLast && (
+                          <span
+                            aria-hidden="true"
+                            className={clsx(
+                              "pointer-events-none absolute",
+                              "left-[16px] top-1/2 bottom-0",
+                              "w-[10px] -translate-x-1/2",
+                              // match container bg to “erase” the spine under the last node
+                              "bg-neutral-900/20"
+                            )}
+                          />
+                        )}
+
+                        {/* Node dot */}
+                        <span
+                          aria-hidden="true"
+                          className={clsx(
+                            "pointer-events-none absolute left-[16px] top-1/2",
+                            "h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                            isActive ? "bg-primary-500" : "bg-neutral-700/60"
+                          )}
+                        />
+
+                        {/* Horizontal stub into the row */}
+                        <span
+                          aria-hidden="true"
+                          className={clsx(
+                            "pointer-events-none absolute left-[25px] top-1/2",
+                            "h-[2px] w-[14px] -translate-y-1/2 rounded-full",
+                            isActive ? "bg-neutral-500/70" : "bg-neutral-700/40"
+                          )}
+                        />
+                      </div>
+
+                      {/* RIGHT: nav row */}
+                      <Link
+                        href={sub.href}
+                        className={clsx(
+                          "group flex min-w-0 items-center gap-3",
+                          "h-10 rounded-lg px-2.5",
+                          "transition-[background-color,color] duration-200",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                          isActive
+                            ? "bg-neutral-800/70 text-white"
+                            : "bg-transparent text-neutral-200 hover:bg-neutral-800/45 hover:text-white"
+                        )}
+                      >
+                        <SubIcon
+                          className={clsx(
+                            "h-5 w-5 shrink-0 transition-colors",
+                            isActive
+                              ? "text-neutral-200"
+                              : "text-neutral-500 group-hover:text-neutral-200"
+                          )}
+                        />
+
+                        <span className="min-w-0 truncate text-[14px] font-semibold">
+                          {sub.label}
+                        </span>
+
+                        {isActive && (
+                          <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500/90" />
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Collapsed popover */}
+      {collapsed && isPopoverOpen && (
+        <CollapsedGroupPopover
+          title={group.label}
+          items={group.items}
+          pathname={pathname}
+          onEnter={openPopover}
+          onLeave={scheduleClosePopover}
+        />
+      )}
+    </div>
+  );
+}
+
 /* ----------------------------- Component --------------------------- */
 
 type SidebarProps = {
   variant?: SidebarVariant;
 };
-
-function NavLink({
-  href,
-  label,
-  Icon,
-  active,
-}: {
-  href: string;
-  label: string;
-  Icon: OrgIconLike;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={clsx(
-        "flex items-center gap-3 rounded-lg px-4 py-3 font-semibold transition-colors",
-        "hover:bg-neutral-800 hover:text-white",
-        active ? "bg-neutral-800 text-white" : "text-neutral-200"
-      )}
-    >
-      <Icon
-        className={clsx(
-          " shrink-0",
-          active ? "text-white" : "text-neutral-500"
-        )}
-      />
-      <span>{label}</span>
-    </Link>
-  );
-}
-
-function SubLink({
-  href,
-  label,
-  Icon,
-  active,
-}: {
-  href: string;
-  label: string;
-  Icon: IconLike;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={clsx(
-        "flex items-center gap-2.5 rounded-lg px-4 py-3 font-semibold transition-colors",
-        "hover:bg-neutral-800 hover:text-white",
-        "ml-6",
-        active ? "bg-neutral-800 text-white" : "text-neutral-200"
-      )}
-    >
-      <Icon
-        className={clsx(
-          "w-5 h-5 shrink-0",
-          active ? "text-white" : "text-neutral-500"
-        )}
-      />
-      <span className="text-[14px]">{label}</span>
-    </Link>
-  );
-}
 
 export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
   const pathnameRaw = usePathname();
@@ -463,9 +865,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
   let orgBase: string | null = null;
   if (isOrg && pathname) {
     const match = pathname.match(/^\/dashboard\/organizations\/([^\/]+)/);
-    if (match) {
-      orgBase = `/dashboard/organizations/${match[1]}`;
-    }
+    if (match) orgBase = `/dashboard/organizations/${match[1]}`;
   }
 
   const groupsActive = useMemo(
@@ -476,6 +876,8 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     [pathname]
   );
 
+  const [collapsed, setCollapsed] = useState(false);
+
   const [connectionsOpen, setConnectionsOpen] = useState<boolean>(
     groupsActive.connections
   );
@@ -483,218 +885,417 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     groupsActive.finances
   );
 
+  // hover popover state (collapsed)
+  const [hoveredGroup, setHoveredGroup] = useState<DashGroup["key"] | null>(
+    null
+  );
+  const hoverCloseTimer = useRef<number | null>(null);
+
+  // responsive mode flags
+  const [isUnder1400, setIsUnder1400] = useState(false);
+  const [isMdUp, setIsMdUp] = useState(false);
+
+  // animation phase
+  const [motionPhase, setMotionPhase] = useState<MotionPhase>(null);
+  const motionTimer = useRef<number | null>(null);
+
+  const motion: MotionClasses = useMemo(() => {
+    if (motionPhase === "opening") {
+      return {
+        shellWidth: "duration-700",
+        // reveal after width begins moving (feels “controlled” instead of chaotic)
+        label: "duration-450 delay-150",
+        logo: "duration-450 delay-120",
+        chevron: "duration-450",
+      };
+    }
+    if (motionPhase === "closing") {
+      return {
+        // shell closes faster than open, still smooth
+        shellWidth: "duration-420",
+        // content collapses super fast (user shouldn't see the chaos)
+        label: "duration-100",
+        logo: "duration-120",
+        chevron: "duration-150",
+      };
+    }
+    return {
+      shellWidth: "duration-500",
+      label: "duration-300",
+      logo: "duration-300",
+      chevron: "duration-300",
+    };
+  }, [motionPhase]);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(COLLAPSE_KEY);
+      if (v === "1") setCollapsed(true);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [collapsed]);
+
   useEffect(() => {
     if (groupsActive.connections) setConnectionsOpen(true);
     if (groupsActive.finances) setFinancesOpen(true);
   }, [groupsActive.connections, groupsActive.finances]);
 
-  const ConnectionsIcon = DASH_GROUPS[0].icon as React.ElementType<IconProps>;
-  const FinancesIcon = DASH_GROUPS[1].icon as React.ElementType<IconProps>;
+  // media queries
+  useEffect(() => {
+    const mq1400 = window.matchMedia("(max-width: 1399px)");
+    const mqMd = window.matchMedia("(min-width: 768px)");
+
+    const apply = () => {
+      setIsUnder1400(mq1400.matches);
+      setIsMdUp(mqMd.matches);
+    };
+
+    apply();
+
+    mq1400.addEventListener?.("change", apply);
+    mqMd.addEventListener?.("change", apply);
+
+    return () => {
+      mq1400.removeEventListener?.("change", apply);
+      mqMd.removeEventListener?.("change", apply);
+    };
+  }, []);
+
+  const isExpandedOverlay = !collapsed && isMdUp && isUnder1400;
+  const pinOverlayDuringClose =
+    isMdUp && isUnder1400 && motionPhase === "closing";
+
+  const isOverlayPinned = isExpandedOverlay || pinOverlayDuringClose;
+
+  // hover open/close helpers (collapsed popover)
+  function cancelHoverClose() {
+    if (hoverCloseTimer.current) {
+      window.clearTimeout(hoverCloseTimer.current);
+      hoverCloseTimer.current = null;
+    }
+  }
+
+  function openHover(key: DashGroup["key"]) {
+    cancelHoverClose();
+    setHoveredGroup(key);
+  }
+
+  function scheduleCloseHover() {
+    cancelHoverClose();
+    hoverCloseTimer.current = window.setTimeout(() => {
+      setHoveredGroup(null);
+      hoverCloseTimer.current = null;
+    }, 180); // small grace period to move the mouse into the popover
+  }
+
+  // collapse / expand with different animation behavior
+  function toggleCollapsed() {
+    const next = !collapsed;
+
+    // manage phase
+    if (motionTimer.current) {
+      window.clearTimeout(motionTimer.current);
+      motionTimer.current = null;
+    }
+    setMotionPhase(next ? "closing" : "opening");
+
+    // clear phase after animation finishes
+    motionTimer.current = window.setTimeout(
+      () => {
+        setMotionPhase(null);
+        motionTimer.current = null;
+      },
+      next ? 520 : 860
+    );
+
+    // close any hover popovers immediately when toggling
+    setHoveredGroup(null);
+    cancelHoverClose();
+
+    setCollapsed(next);
+  }
+
+  useEffect(() => {
+    if (!isOverlayPinned) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") toggleCollapsed();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+
+    // ✅ Prevent layout shift when scrollbar disappears
+    const sbw = window.innerWidth - document.documentElement.clientWidth;
+
+    body.style.overflow = "hidden";
+    if (sbw > 0) body.style.paddingRight = `${sbw}px`;
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
+  }, [isOverlayPinned]);
 
   return (
-    <nav className="flex h-full w-[248px] flex-col bg-neutral-900 px-6 py-8">
-      {/* Logo */}
-      <div className="mb-8">
-        <Link href="/dashboard" className="flex items-center">
-          <Image src="/Logo.svg" alt="Tikd." width={72} height={24} priority />
-        </Link>
-      </div>
-
-      {/* Create event button for organization sidebar */}
-      {isOrg && (
-        <div className="mb-8">
-          <Link
-            href={orgBase ? `${orgBase}/events/create` : "/dashboard/events"}
-            className="flex h-9 w-full items-center justify-center rounded-full bg-neutral-0 font-semibold text-neutral-950 transition hover:bg-primary-500"
-          >
-            Create event <span className="ml-2 text-lg leading-none">+</span>
-          </Link>
-        </div>
+    <>
+      {isOverlayPinned && (
+        <div aria-hidden="true" className="relative h-full w-[84px] shrink-0" />
       )}
 
-      {/* ---------------- Dashboard sidebar ---------------- */}
-      {isDashboard && (
-        <ul className="space-y-4">
-          {/* Dashboard + Events */}
-          {DASH_ITEMS.map((item) => (
-            <li key={item.href}>
-              <NavLink
-                href={item.href}
-                label={item.label}
-                Icon={item.icon}
-                active={item.match(pathname)}
-              />
-            </li>
-          ))}
-
-          {/* Connections dropdown */}
-          <li>
-            <button
-              type="button"
-              onClick={() => setConnectionsOpen((v) => !v)}
-              aria-expanded={connectionsOpen}
-              className={clsx(
-                "flex w-full items-center gap-3 rounded-lg px-4 py-3 font-semibold transition-colors",
-                "hover:bg-neutral-800 hover:text-white",
-                groupsActive.connections
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-200"
-              )}
-            >
-              <ConnectionsIcon
-                className={clsx(
-                  "shrink-0",
-                  groupsActive.connections ? "text-white" : "text-neutral-500"
-                )}
-              />
-              <span>Connections</span>
-              <ChevronDown
-                className={clsx(
-                  "ml-auto h-5 w-5 shrink-0 text-neutral-500 transition-transform",
-                  connectionsOpen && "rotate-180"
-                )}
-              />
-            </button>
-
-            {connectionsOpen && (
-              <ul className="mt-1 space-y-2">
-                {DASH_GROUPS[0].items.map((sub) => {
-                  const active = sub.match
-                    ? sub.match(pathname)
-                    : pathname === sub.href;
-                  return (
-                    <li key={sub.href}>
-                      <SubLink
-                        href={sub.href}
-                        label={sub.label}
-                        Icon={sub.icon}
-                        active={active}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </li>
-
-          {/* Finances dropdown */}
-          <li>
-            <button
-              type="button"
-              onClick={() => setFinancesOpen((v) => !v)}
-              aria-expanded={financesOpen}
-              className={clsx(
-                "flex w-full items-center gap-3 rounded-lg px-4 py-3 font-semibold transition-colors",
-                "hover:bg-neutral-800 hover:text-white",
-                groupsActive.finances
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-200"
-              )}
-            >
-              <FinancesIcon
-                className={clsx(
-                  " shrink-0",
-                  groupsActive.finances ? "text-white" : "text-neutral-500"
-                )}
-              />
-              <span>Finances</span>
-              <ChevronDown
-                className={clsx(
-                  "ml-auto h-5 w-5 shrink-0 text-neutral-500 transition-transform",
-                  financesOpen && "rotate-180"
-                )}
-              />
-            </button>
-
-            {financesOpen && (
-              <ul className="mt-1 space-y-2">
-                {DASH_GROUPS[1].items.map((sub) => {
-                  const active = sub.match
-                    ? sub.match(pathname)
-                    : pathname === sub.href;
-                  return (
-                    <li key={sub.href}>
-                      <SubLink
-                        href={sub.href}
-                        label={sub.label}
-                        Icon={sub.icon}
-                        active={active}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </li>
-
-          {/* Data */}
-          <li>
-            <NavLink
-              href={DASH_FOOTER.href}
-              label={DASH_FOOTER.label}
-              Icon={DASH_FOOTER.icon}
-              active={DASH_FOOTER.match(pathname)}
-            />
-          </li>
-        </ul>
-      )}
-
-      {/* ---------------- Organization sidebar ---------------- */}
-      {isOrg && (
-        <ul className="space-y-2">
-          {orgItems.map(({ href, label, icon: Icon, match }) => {
-            const computedHref = orgBase
-              ? href === "." || href === ""
-                ? orgBase
-                : href.startsWith("/")
-                  ? href
-                  : `${orgBase}/${href}`
-              : href;
-
-            const active = match ? match(pathname) : pathname === computedHref;
-
-            return (
-              <li key={`${variant}-${label}`}>
-                <Link
-                  href={computedHref}
-                  className={clsx(
-                    "flex items-center gap-3 rounded-lg px-4 py-3 font-semibold transition-colors",
-                    "hover:bg-neutral-800 hover:text-white",
-                    active ? "bg-neutral-800 text-white" : "text-neutral-200"
-                  )}
-                >
-                  <Icon
-                    className={clsx(
-                      "h-6 w-6 shrink-0",
-                      active ? "text-white" : "text-neutral-500"
-                    )}
-                  />
-                  <span>{label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {/* Bottom Settings link */}
-      <div className="mt-auto hidden md:block">
-        <Link
-          href={
-            isOrg && orgBase ? `${orgBase}/settings` : "/dashboard/settings"
-          }
+      {isExpandedOverlay && (
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          onClick={toggleCollapsed}
           className={clsx(
-            "mt-10 flex items-center gap-4 rounded-lg px-4 py-3 font-semibold transition-colors",
-            "hover:bg-neutral-800 hover:text-white",
-            pathname.includes("/settings")
-              ? "bg-neutral-800 text-white"
-              : "text-neutral-200"
+            "fixed inset-0 z-40",
+            "bg-black/40 backdrop-blur-[1px]"
+          )}
+        />
+      )}
+
+      <div
+        className={clsx(
+          isOverlayPinned ? "fixed left-0 top-0 z-50 h-dvh" : "relative h-full",
+          "shrink-0",
+          "will-change-[width]",
+          "transition-[width]",
+          motion.shellWidth,
+          EASE_OUT,
+          "motion-reduce:transition-none",
+          collapsed ? "w-[84px]" : "w-[256px]"
+        )}
+      >
+        <nav
+          className={clsx(
+            "flex h-full flex-col rounded-none border border-neutral-800/60 bg-neutral-900",
+            "shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
+            collapsed ? "px-2 py-4" : "px-3 py-4"
           )}
         >
-          <SettingsCogIcon className=" shrink-0 text-neutral-500" />
-          <span>Settings</span>
-        </Link>
+          {/* Top / Logo */}
+          <div className={clsx("relative flex items-center px-2")}>
+            <Link
+              href="/dashboard"
+              className={clsx("flex items-center h-10", collapsed && "mx-auto")}
+            >
+              {/* keep stable layout (Image size constant), animate with transform */}
+              <div
+                className={clsx(
+                  "origin-left transition",
+                  motion.logo,
+                  EASE_OUT
+                )}
+              >
+                <Image
+                  src="/Logo.svg"
+                  alt="Tixsy"
+                  width={92}
+                  height={28}
+                  priority
+                />
+              </div>
+            </Link>
+
+            {/* Collapse / Expand toggle */}
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={clsx(
+                "absolute -right-4 top-1/2 z-20 -translate-y-1/2 translate-x-1/2",
+                "grid h-7 w-7 place-items-center rounded-lg",
+                "border border-neutral-800/80 bg-neutral-900",
+                "text-neutral-200 shadow-[0_18px_60px_rgba(0,0,0,0.6)]",
+                "transition-[transform,background-color,color] duration-300",
+                EASE_OUT,
+                "hover:bg-neutral-800/50 hover:text-white",
+                "active:scale-[0.98]"
+              )}
+            >
+              <ChevronLeft
+                className={clsx(
+                  "h-4 w-4 transition-transform",
+                  motion.chevron,
+                  EASE_OUT,
+                  collapsed && "rotate-180"
+                )}
+              />
+            </button>
+          </div>
+
+          <Divider collapsed={collapsed} />
+
+          {/* Create event button for organization sidebar */}
+          {isOrg && (
+            <div className={clsx("px-2", collapsed && "px-0")}>
+              {collapsed ? (
+                <div className="relative">
+                  <Link
+                    href={
+                      orgBase ? `${orgBase}/events/create` : "/dashboard/events"
+                    }
+                    className={clsx(
+                      "group relative mx-auto flex h-11 w-11 items-center justify-center rounded-2xl",
+                      "bg-neutral-0 text-neutral-950 transition hover:bg-primary-500"
+                    )}
+                  >
+                    <span className="text-lg font-black leading-none">+</span>
+                    <TooltipBubble label="Create event" />
+                  </Link>
+                </div>
+              ) : (
+                <Link
+                  href={
+                    orgBase ? `${orgBase}/events/create` : "/dashboard/events"
+                  }
+                  className={clsx(
+                    "flex h-11 w-full items-center justify-center rounded-full bg-neutral-0",
+                    "font-semibold text-neutral-950 transition hover:bg-primary-500"
+                  )}
+                >
+                  Create event
+                  <span className="ml-2 text-lg leading-none">+</span>
+                </Link>
+              )}
+            </div>
+          )}
+
+          {/* Dashboard sidebar */}
+          {isDashboard && (
+            <div className={clsx("space-y-2")}>
+              {DASH_ITEMS.map((item) => (
+                <NavRow
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  Icon={item.icon}
+                  active={item.match(pathname)}
+                  collapsed={collapsed}
+                  motion={motion}
+                />
+              ))}
+
+              {DASH_COMING_SOON.map((x) => (
+                <NavRow
+                  key={x.label}
+                  label={x.label}
+                  Icon={x.icon}
+                  collapsed={collapsed}
+                  disabled
+                  motion={motion}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Organization sidebar */}
+          {isOrg && (
+            <div className={clsx("space-y-2", collapsed ? "px-0" : "px-2")}>
+              {orgItems.map(({ href, label, icon: Icon, match }) => {
+                const computedHref = orgBase
+                  ? href === "." || href === ""
+                    ? orgBase
+                    : href.startsWith("/")
+                      ? href
+                      : `${orgBase}/${href}`
+                  : href;
+
+                const active = match
+                  ? match(pathname)
+                  : pathname === computedHref;
+
+                return (
+                  <NavRow
+                    key={`${variant}-${label}`}
+                    href={computedHref}
+                    label={label}
+                    Icon={Icon}
+                    active={active}
+                    collapsed={collapsed}
+                    motion={motion}
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          <Divider collapsed={collapsed} />
+
+          {/* Groups (dashboard only) */}
+          {isDashboard && (
+            <>
+              <div className={clsx("space-y-2", collapsed ? "px-0" : "px-2")}>
+                <GroupRow
+                  group={DASH_GROUPS[0]}
+                  pathname={pathname}
+                  open={connectionsOpen}
+                  setOpen={setConnectionsOpen}
+                  collapsed={collapsed}
+                  isPopoverOpen={collapsed && hoveredGroup === "connections"}
+                  openPopover={() => openHover("connections")}
+                  scheduleClosePopover={scheduleCloseHover}
+                  motion={motion}
+                />
+                <GroupRow
+                  group={DASH_GROUPS[1]}
+                  pathname={pathname}
+                  open={financesOpen}
+                  setOpen={setFinancesOpen}
+                  collapsed={collapsed}
+                  isPopoverOpen={collapsed && hoveredGroup === "finances"}
+                  openPopover={() => openHover("finances")}
+                  scheduleClosePopover={scheduleCloseHover}
+                  motion={motion}
+                />
+              </div>
+
+              <Divider collapsed={collapsed} />
+
+              <div className={clsx("space-y-2", collapsed ? "px-0" : "px-2")}>
+                <NavRow
+                  href={DASH_FOOTER.href}
+                  label={DASH_FOOTER.label}
+                  Icon={DASH_FOOTER.icon}
+                  active={DASH_FOOTER.match(pathname)}
+                  collapsed={collapsed}
+                  motion={motion}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Bottom Settings link */}
+          <div className={clsx("mt-auto pb-1", collapsed ? "px-0" : "px-2")}>
+            <SectionLabel collapsed={collapsed}>SETTINGS</SectionLabel>
+
+            <NavRow
+              href={
+                isOrg && orgBase ? `${orgBase}/settings` : "/dashboard/settings"
+              }
+              label="Settings"
+              Icon={SettingsCogIcon}
+              active={pathname.includes("/settings")}
+              collapsed={collapsed}
+              motion={motion}
+            />
+          </div>
+        </nav>
       </div>
-    </nav>
+    </>
   );
 }

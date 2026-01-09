@@ -19,7 +19,7 @@ export default function LabelledInput({
   label,
   noLabel,
   size = "sm",
-  variant = "full",
+  variant = "transparent",
   className,
   hint,
   error,

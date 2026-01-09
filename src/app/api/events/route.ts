@@ -1,3 +1,4 @@
+// src/app/api/events/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
@@ -19,11 +20,15 @@ const bodySchema = z.object({
   // start datetime in ISO, required
   date: z.coerce.date(),
 
-  // extra metadata
+  // end datetime (supports multi-day events)
+  endDate: z.coerce.date().optional(),
+
+  // legacy / fallback
   duration: z
     .string()
     .regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/)
     .optional(),
+
   minAge: z.number().int().min(0).max(99).optional(),
 
   location: z.string().min(1),
@@ -51,10 +56,21 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const owned = searchParams.get("owned");
 
+  const now = new Date();
+
   const filter =
     owned === "1"
       ? { createdByUserId: session.user.id }
-      : { date: { $gte: new Date() }, status: "published" };
+      : {
+          status: "published",
+          $or: [
+            // multi-day / has endDate: show if still ongoing
+            { endDate: { $gte: now } },
+            // single-day / no endDate: show if starts in future
+            { endDate: { $exists: false }, date: { $gte: now } },
+            { endDate: null as unknown as undefined, date: { $gte: now } },
+          ],
+        };
 
   const events = await Event.find(filter).lean();
   return NextResponse.json(events);
@@ -96,21 +112,33 @@ export async function POST(req: Request) {
     })
   );
 
-  // Convert HH:MM -> minutes
-  const durationMinutes = parsed.data.duration
-    ? (() => {
-        const [h, m] = parsed.data.duration
-          .split(":")
-          .map((n) => parseInt(n, 10));
-        return h * 60 + m;
-      })()
-    : undefined;
+  // Duration minutes:
+  // Prefer endDate if present; otherwise use legacy duration ("HH:MM") if provided.
+  const durationMinutes = (() => {
+    if (parsed.data.endDate) {
+      const ms = parsed.data.endDate.getTime() - parsed.data.date.getTime();
+      if (!Number.isFinite(ms) || ms <= 0) return undefined;
+      return Math.round(ms / 60000);
+    }
+
+    if (parsed.data.duration) {
+      const [h, m] = parsed.data.duration
+        .split(":")
+        .map((n) => parseInt(n, 10));
+      return h * 60 + m;
+    }
+
+    return undefined;
+  })();
 
   const event = await Event.create({
     title: parsed.data.title,
     description: parsed.data.description,
+
     date: parsed.data.date,
+    endDate: parsed.data.endDate,
     durationMinutes,
+
     minAge: parsed.data.minAge,
     location: parsed.data.location,
     image: parsed.data.image,

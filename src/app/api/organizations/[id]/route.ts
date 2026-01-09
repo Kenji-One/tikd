@@ -23,6 +23,11 @@ export async function GET(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const include = req.nextUrl.searchParams.get("include")?.split(",") ?? [];
 
   /* --------------------- fetch org ------------------------------------ */
@@ -31,6 +36,14 @@ export async function GET(
     return NextResponse.json(
       { error: "Organization not found" },
       { status: 404 }
+    );
+  }
+
+  // ✅ security: only allow owner for now
+  if (org.ownerId.toString() !== session.user.id) {
+    return NextResponse.json(
+      { error: "Forbidden – not your organization" },
+      { status: 403 }
     );
   }
 

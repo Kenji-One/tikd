@@ -1,18 +1,27 @@
+// src/models/Event.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 export interface IEvent extends Document {
   title: string;
   description?: string;
+
+  /** Start datetime */
   date: Date;
-  durationMinutes?: number; // derived from HH:MM
+
+  /** End datetime (optional, but used for multi-day events) */
+  endDate?: Date;
+
+  /** Derived from either duration OR (endDate - date) */
+  durationMinutes?: number;
+
   minAge?: number;
   location: string;
   image?: string;
 
   categories: string[];
-  coHosts: string[]; // email list
-  promotionalTeamEmails: string[]; // email list
-  promoters: string[]; // email list
+  coHosts: string[];
+  promotionalTeamEmails: string[];
+  promoters: string[];
   message?: string;
 
   organizationId: Types.ObjectId;
@@ -28,7 +37,10 @@ const EventSchema = new Schema<IEvent>(
   {
     title: { type: String, required: true },
     description: String,
+
     date: { type: Date, required: true },
+    endDate: { type: Date, default: undefined },
+
     durationMinutes: { type: Number, default: undefined },
     minAge: { type: Number, default: undefined },
     location: { type: String, required: true },

@@ -20,14 +20,41 @@ import DateRangePicker, {
   type DateRangeValue,
 } from "@/components/ui/DateRangePicker";
 
-/* Demo data */
+/* Demo data (MONTHLY totals / points) */
 const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
   (v) => v * 1000
 );
 const sparkB = [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120];
 const sparkC = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
 
-const monthLabels = (start: Date, end: Date) => {
+function clampToDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function daysInMonth(year: number, month0: number) {
+  return new Date(year, month0 + 1, 0).getDate();
+}
+
+function addDays(d: Date, delta: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + delta);
+  return x;
+}
+
+function diffDaysInclusive(a: Date, b: Date) {
+  const A = clampToDay(a).getTime();
+  const B = clampToDay(b).getTime();
+  const ms = Math.abs(B - A);
+  return Math.floor(ms / (24 * 60 * 60 * 1000)) + 1;
+}
+
+function dateIsSameMonth(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
+function monthLabels(start: Date, end: Date) {
   const labels: string[] = [];
   const d = new Date(start);
   d.setDate(1);
@@ -36,9 +63,9 @@ const monthLabels = (start: Date, end: Date) => {
     d.setMonth(d.getMonth() + 1);
   }
   return labels;
-};
+}
 
-const monthDates = (start: Date, end: Date) => {
+function monthDates(start: Date, end: Date) {
   const out: Date[] = [];
   const d = new Date(start);
   d.setDate(21);
@@ -47,49 +74,195 @@ const monthDates = (start: Date, end: Date) => {
     d.setMonth(d.getMonth() + 1);
   }
   return out;
-};
+}
 
-const mapSeriesToRange = (vals: number[], monthsCount: number) => {
-  if (monthsCount === vals.length) return vals;
+function mapSeriesToCount(vals: number[], count: number) {
+  if (count === vals.length) return vals;
   const a = [...vals];
-  while (a.length < monthsCount) a.push(a[a.length % vals.length]);
-  return a.slice(0, monthsCount);
-};
+  while (a.length < count) a.push(a[a.length % vals.length]);
+  return a.slice(0, count);
+}
+
+function buildDailyDates(start: Date, end: Date) {
+  const out: Date[] = [];
+  const s = clampToDay(start);
+  const e = clampToDay(end);
+  const forward = s.getTime() <= e.getTime();
+  const a = forward ? s : e;
+  const b = forward ? e : s;
+
+  let cur = a;
+  while (cur <= b) {
+    out.push(new Date(cur));
+    cur = addDays(cur, 1);
+  }
+  return forward ? out : out.reverse();
+}
+
+function buildDailyLabels(dates: Date[]) {
+  const n = dates.length;
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const sameMonth = first && last ? dateIsSameMonth(first, last) : false;
+
+  if (n <= 7) {
+    return dates.map((d) =>
+      d.toLocaleDateString(undefined, { weekday: "short" })
+    );
+  }
+
+  if (sameMonth) {
+    return dates.map((d) => `${d.getDate()}`);
+  }
+
+  return dates.map((d) =>
+    d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+  );
+}
+
+/**
+ * Turn MONTHLY demo series into DAILY values for the selected range.
+ */
+function dailyizeFromMonthly(monthly: number[], dates: Date[]) {
+  return dates.map((d, i) => {
+    const m = d.getMonth();
+    const y = d.getFullYear();
+    const dim = daysInMonth(y, m) || 30;
+
+    const monthTotal = monthly[m % monthly.length] ?? monthly[0] ?? 0;
+    const base = monthTotal / dim;
+
+    const wiggle =
+      1 +
+      0.22 * Math.sin(i * 0.85) +
+      0.1 * Math.cos(i * 0.33) +
+      0.06 * Math.sin(i * 0.17);
+
+    return Math.max(0, base * wiggle);
+  });
+}
+
+function niceTicks(maxValue: number, targetCount = 6) {
+  const max = Math.max(1, maxValue);
+  const pow = Math.pow(10, Math.floor(Math.log10(max)));
+  const norm = max / pow;
+
+  let stepNorm = 1;
+  if (norm <= 1.2) stepNorm = 0.2;
+  else if (norm <= 2.5) stepNorm = 0.5;
+  else if (norm <= 6) stepNorm = 1;
+  else stepNorm = 2;
+
+  const step = stepNorm * pow;
+  const top = Math.ceil(max / step) * step;
+
+  const ticks: number[] = [];
+  const count = Math.max(2, Math.min(8, targetCount));
+  const actualStep = top / (count - 1);
+
+  for (let i = 0; i < count; i++) ticks.push(Math.round(i * actualStep));
+
+  ticks[0] = 0;
+  ticks[ticks.length - 1] = top;
+
+  const uniq: number[] = [];
+  for (const t of ticks) {
+    if (uniq.length === 0 || uniq[uniq.length - 1] !== t) uniq.push(t);
+  }
+  return uniq;
+}
+
+// “All-time” for the demo = the full available dataset range
+const ALL_TIME_START = new Date(2024, 0, 1);
+const ALL_TIME_END = new Date(2024, 11, 31);
 
 export default function DashboardClient() {
   const router = useRouter();
 
-  // ✅ Replaces old preset dropdown with a real date-range picker
   const [dateRange, setDateRange] = useState<DateRangeValue>({
-    start: new Date(2024, 0, 1),
-    end: new Date(2024, 11, 31),
+    start: null,
+    end: null,
   });
 
-  // For this dashboard demo, we still render MONTH points,
-  // so we convert the selected date span into month buckets.
-  const start = useMemo(
-    () => dateRange.start ?? new Date(2024, 0, 1),
-    [dateRange.start]
-  );
-  const end = useMemo(
-    () => dateRange.end ?? new Date(2024, 11, 31),
-    [dateRange.end]
+  const hasChosenRange = !!dateRange.start && !!dateRange.end;
+
+  const effectiveStart = useMemo(
+    () => (hasChosenRange ? (dateRange.start as Date) : ALL_TIME_START),
+    [hasChosenRange, dateRange.start]
   );
 
-  const labels = useMemo(() => monthLabels(start, end), [start, end]);
-  const dates = useMemo(() => monthDates(start, end), [start, end]);
-
-  const revenueData = useMemo(
-    () => mapSeriesToRange(sparkA, labels.length),
-    [labels.length]
+  const effectiveEnd = useMemo(
+    () => (hasChosenRange ? (dateRange.end as Date) : ALL_TIME_END),
+    [hasChosenRange, dateRange.end]
   );
+
+  const rangeDays = useMemo(
+    () => diffDaysInclusive(effectiveStart, effectiveEnd),
+    [effectiveStart, effectiveEnd]
+  );
+
+  const dailyMode = useMemo(() => {
+    if (!hasChosenRange) return false;
+    return rangeDays <= 31;
+  }, [hasChosenRange, rangeDays]);
+
+  const labels = useMemo(() => {
+    if (!dailyMode) return monthLabels(effectiveStart, effectiveEnd);
+    const ds = buildDailyDates(effectiveStart, effectiveEnd);
+    return buildDailyLabels(ds);
+  }, [dailyMode, effectiveStart, effectiveEnd]);
+
+  const dates = useMemo(() => {
+    if (!dailyMode) return monthDates(effectiveStart, effectiveEnd);
+    return buildDailyDates(effectiveStart, effectiveEnd);
+  }, [dailyMode, effectiveStart, effectiveEnd]);
+
+  const revenueData = useMemo(() => {
+    if (!dailyMode) return mapSeriesToCount(sparkA, labels.length);
+    return dailyizeFromMonthly(sparkA, dates);
+  }, [dailyMode, labels.length, dates]);
+
+  const pageViewsData = useMemo(() => {
+    if (!dailyMode) return mapSeriesToCount(sparkB, labels.length);
+    return dailyizeFromMonthly(sparkB, dates).map((v) => Math.round(v));
+  }, [dailyMode, labels.length, dates]);
+
+  const ticketsSoldData = useMemo(() => {
+    if (!dailyMode) return mapSeriesToCount(sparkC, labels.length);
+    return dailyizeFromMonthly(sparkC, dates).map((v) => Math.round(v));
+  }, [dailyMode, labels.length, dates]);
+
+  const revenueMax = useMemo(() => Math.max(0, ...revenueData), [revenueData]);
+  const revenueDomain = useMemo<[number, number]>(
+    () => [0, Math.max(1, revenueMax)],
+    [revenueMax]
+  );
+  const revenueTicks = useMemo(
+    () => niceTicks(revenueDomain[1], 6),
+    [revenueDomain]
+  );
+
+  const pvMax = useMemo(() => Math.max(0, ...pageViewsData), [pageViewsData]);
+  const pvDomain = useMemo<[number, number]>(
+    () => [0, Math.max(1, pvMax)],
+    [pvMax]
+  );
+  const pvTicks = useMemo(() => niceTicks(pvDomain[1], 4), [pvDomain]);
+
+  const tsMax = useMemo(
+    () => Math.max(0, ...ticketsSoldData),
+    [ticketsSoldData]
+  );
+  const tsDomain = useMemo<[number, number]>(
+    () => [0, Math.max(1, tsMax)],
+    [tsMax]
+  );
+  const tsTicks = useMemo(() => niceTicks(tsDomain[1], 4), [tsDomain]);
 
   return (
     <div className="space-y-5">
-      {/* KPIs + Charts --------------------------------------------------- */}
       <section className="grid grid-cols-[3.10fr_1.51fr] gap-5">
         <div className="grid grid-cols-[3.15fr_1.74fr] rounded-lg border border-neutral-700 bg-neutral-900 pl-4">
-          {/* Big Revenue card (left) */}
           <KpiCard
             title="Total Revenue"
             value="$240,8K"
@@ -99,7 +272,8 @@ export default function DashboardClient() {
             stretchChart
             detailsHref="/dashboard/finances/revenue"
             toolbar={
-              <div className="max-w-[220px]">
+              // ✅ smaller so picker never “dominates” the card
+              <div className="max-w-[210px]">
                 <DateRangePicker value={dateRange} onChange={setDateRange} />
               </div>
             }
@@ -107,11 +281,11 @@ export default function DashboardClient() {
             <RevenueChart
               data={revenueData}
               dates={dates}
-              domain={[0, 250_000]}
-              yTicks={[0, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000]}
+              domain={revenueDomain}
+              yTicks={revenueTicks}
               xLabels={labels}
               tooltip={{
-                index: 6,
+                index: Math.min(6, Math.max(0, revenueData.length - 1)),
                 valueLabel: "$240,8K",
                 subLabel: "June 21, 2025",
                 deltaText: "+24.6%",
@@ -123,7 +297,6 @@ export default function DashboardClient() {
           </KpiCard>
 
           <div>
-            {/* Right top: Page Views */}
             <KpiCard
               title="Total Page Views"
               value="400"
@@ -133,9 +306,9 @@ export default function DashboardClient() {
               detailsHref="/dashboard/finances/page-views"
             >
               <SmallKpiChart
-                data={sparkB}
-                domain={[0, 500]}
-                yTicks={[0, 100, 250, 500]}
+                data={pageViewsData}
+                domain={pvDomain}
+                yTicks={pvTicks}
                 xLabels={labels}
                 stroke="#9A46FF"
                 deltaText="+24.6%"
@@ -143,7 +316,6 @@ export default function DashboardClient() {
               />
             </KpiCard>
 
-            {/* Right bottom: Tickets Sold */}
             <KpiCard
               title="Total Tickets Sold"
               value="400"
@@ -153,9 +325,9 @@ export default function DashboardClient() {
               detailsHref="/dashboard/finances/tickets-sold"
             >
               <SmallKpiChart
-                data={sparkC}
-                domain={[0, 500]}
-                yTicks={[0, 100, 250, 500]}
+                data={ticketsSoldData}
+                domain={tsDomain}
+                yTicks={tsTicks}
                 xLabels={labels}
                 stroke="#9A46FF"
                 deltaText="-24.6%"
@@ -168,25 +340,8 @@ export default function DashboardClient() {
         <RecentSalesTable />
       </section>
 
-      {/* Donuts + Right column lists ------------------------------------ */}
-      <section className="grid gap-5 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          {/* <BreakdownCard
-            title="Gender Breakdown"
-            segments={genderSegments}
-            onDetailedView={() =>
-              router.push("/dashboard/finances/gender-breakdown")
-            }
-          />
-          <BreakdownCard
-            title="Age Breakdown"
-            segments={ageSegments}
-            onDetailedView={() =>
-              router.push("/dashboard/finances/age-breakdown")
-            }
-          /> */}
-          <UpcomingEventsTable />
-        </div>
+      <section className="grid gap-5 grid-cols-[3.10fr_1.51fr]">
+        <UpcomingEventsTable />
 
         <MyTeamTable
           members={DEMO_MY_TEAM}

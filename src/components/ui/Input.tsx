@@ -38,7 +38,7 @@ const InputWrapper = ({ children, ...rest }: WrapperProps) => (
 /*  Class maps                                                                */
 /* -------------------------------------------------------------------------- */
 const base =
-  "w-full font-[Gilroy] text-white font-normal text-[14px] leading-[100%] tracking-[-0.28px] " +
+  "w-full font-[Gilroy] rounded-lg text-white font-normal text-[14px] leading-[100%] tracking-[-0.28px] " +
   "placeholder:text-white/40 focus:outline-none " +
   "focus-visible:ring focus-visible:ring-primary-500 " +
   "aria-[invalid=true]:border-error-500 " +

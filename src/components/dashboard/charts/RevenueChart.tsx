@@ -311,8 +311,8 @@ function RevenueChart({
   // ✅ New “glass purple” tooltip style (matches new reference)
   const tipWrapper =
     "pointer-events-none rounded-xl border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md px-4 py-3 text-white";
-  const tipValue = "text-[22px] font-extrabold leading-none";
-  const tipDate = "mt-2 text-[14px] font-medium text-white/80";
+  const tipValue = "text-[22px] font-extrabold leading-none text-center";
+  const tipDate = "mt-2 text-[14px] font-medium text-white/80 text-center";
   const tipDivider = "my-3 h-px w-full bg-white/10";
   const tipBottomRow = "flex items-center gap-2 text-[13px] font-medium";
   const tipVs = "text-white/60";

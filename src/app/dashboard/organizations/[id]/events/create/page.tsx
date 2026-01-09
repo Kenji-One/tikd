@@ -14,15 +14,14 @@ import { v4 as uuid } from "uuid";
 import { useRouter, useParams } from "next/navigation";
 import clsx from "clsx";
 import {
-  CalendarClock,
   MapPin,
   ImagePlus,
   Users as UsersIcon,
   Plus,
   Trash2,
   Sparkles,
-  Clock,
-  MailPlus,
+  Info,
+  FileText,
 } from "lucide-react";
 
 import ImageUpload from "@/components/ui/ImageUpload";
@@ -30,6 +29,11 @@ import { Button } from "@/components/ui/Button";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { TextArea } from "@/components/ui/TextArea";
 import { EventCard } from "@/components/ui/EventCard";
+import DateRangePicker, {
+  type DateRangeValue,
+} from "@/components/ui/DateRangePicker";
+import TimePicker from "@/components/ui/TimePicker";
+import PlacesAddressInput from "@/components/ui/PlacesAddressInput";
 
 /* ----------------------------- Types ------------------------------ */
 
@@ -39,91 +43,205 @@ type OrgMember = {
   email: string;
 };
 
+type OrgInfo = {
+  _id: string;
+  name?: string;
+  title?: string;
+  organizationName?: string;
+  slug?: string;
+  image?: string;
+  logo?: string;
+};
+
+type LocationMode = "specific" | "city" | "tbd" | "tba" | "secret";
+
 /* ----------------------------- Schema ----------------------------- */
-/** Duration "HH:MM" 00:15 - 23:59 */
-const hhmm = z
+
+const timeHHMM = z
   .string()
-  .regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "Use HH:MM (e.g. 03:45)");
+  .regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "Use HH:MM (e.g. 18:10)");
 
-const FormSchema = z.object({
-  title: z.string().min(3, "Event name is required"),
-  description: z.string().optional(),
+const FormSchema = z
+  .object({
+    title: z.string().min(3, "Event name is required"),
+    description: z.string().optional(),
 
-  /** Date + Start time + Duration (figma) */
-  dateOnly: z.string().min(1, "Date is required"),
-  startTime: z.string().regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "HH:MM"),
-  duration: hhmm, // "HH:MM"
-
-  /** Derived ISO sent to API (hidden field) */
-  date: z.string().optional(),
-
-  /** Meta */
-  minAge: z.coerce.number().int().min(0).max(99).optional(),
-  location: z.string().min(2, "Location is required"),
-  image: z.string().url().optional(),
-
-  /** Org is now taken from URL, but still validated here */
-  organizationId: z.string().min(1, "Organization is required"),
-
-  /** Categories (chips) */
-  categories: z.array(z.string()).default([]),
-
-  /** People & comms – coHosts & promo team removed */
-  promoters: z.array(z.string().email()).default([]),
-  message: z.string().optional(),
-
-  /** Artists block */
-  artists: z
-    .array(
-      z.object({
-        name: z.string().min(1, "Artist name required"),
-        image: z.string().url().optional(),
+    /** Multi-day Date Range + Start/End time */
+    dateRange: z
+      .object({
+        start: z.date().nullable(),
+        end: z.date().nullable(),
       })
-    )
-    .default([]),
+      .refine((v) => !!v.start, {
+        message: "Date is required",
+        path: ["start"],
+      }),
 
-  /** Status */
-  status: z.enum(["published", "draft"]).default("published"),
-});
+    startTime: timeHHMM,
+    endTime: timeHHMM,
+
+    /** Derived ISO (sent to API) */
+    date: z.string().optional(),
+    endDate: z.string().optional(),
+
+    /** Meta */
+    minAge: z.coerce.number().int().min(0).max(99).optional(),
+    image: z.string().url().optional(),
+
+    /** Location (new UI fields) */
+    locationMode: z
+      .enum(["specific", "city", "tbd", "tba", "secret"])
+      .default("specific"),
+    locationCity: z.string().trim().optional(),
+    locationAddress: z.string().trim().optional(),
+    locationName: z.string().trim().optional(),
+
+    /** Org is taken from URL */
+    organizationId: z.string().min(1, "Organization is required"),
+
+    /** Categories (chips) */
+    categories: z.array(z.string()).default([]),
+
+    /** People & comms */
+    promoters: z.array(z.string().email()).default([]),
+    message: z.string().optional(),
+
+    /** Artists */
+    artists: z
+      .array(
+        z.object({
+          name: z.string().min(1, "Artist name required"),
+          image: z.string().url().optional(),
+        })
+      )
+      .default([]),
+
+    /** Status */
+    status: z.enum(["published", "draft"]).default("published"),
+  })
+  .superRefine((v, ctx) => {
+    const cityNeeded =
+      v.locationMode === "specific" || v.locationMode === "city";
+    const addressNeeded = v.locationMode === "specific";
+
+    if (cityNeeded) {
+      if (!v.locationCity || v.locationCity.trim().length < 2) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["locationCity"],
+          message: "City is required",
+        });
+      }
+    }
+
+    if (addressNeeded) {
+      if (!v.locationAddress || v.locationAddress.trim().length < 4) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["locationAddress"],
+          message: "Address is required",
+        });
+      }
+    }
+  });
 
 type Schema = typeof FormSchema;
-/** Values BEFORE resolver transform (z.input). Optional arrays here => can be undefined. */
 type FormInput = z.input<Schema>;
-/** Values AFTER resolver transform (z.output). Arrays are concrete here. */
 type FormValues = z.output<Schema>;
 
 /* ----------------------------- Helpers ---------------------------- */
-function isoFromDateAndTime(dateOnly: string, time: string) {
-  if (!dateOnly || !time) return "";
-  const [h, m] = time.split(":").map((n) => parseInt(n, 10));
-  const d = new Date(dateOnly);
-  if (Number.isNaN(d.getTime())) return "";
+
+function clampToDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function isoFromDayAndTime(day: Date, timeHHMM: string) {
+  const [h, m] = timeHHMM.split(":").map((n) => parseInt(n, 10));
+  const d = new Date(day);
   d.setHours(h, m, 0, 0);
   return d.toISOString();
 }
 
-function endTimeFromStartAndDuration(startISO: string, hhmmDur: string) {
-  if (!startISO || !hhmmDur) return "";
-  const [h, m] = hhmmDur.split(":").map((n) => parseInt(n, 10));
-  const d = new Date(startISO);
-  d.setMinutes(d.getMinutes() + h * 60 + m);
+function addDays(d: Date, days: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+}
+
+function fmtDateShort(d: Date) {
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function fmtDateRangeShort(a: Date, b: Date) {
+  const a0 = clampToDay(a);
+  const b0 = clampToDay(b);
+  const same = a0.getTime() === b0.getTime();
+  if (same) return fmtDateShort(a0);
+
+  return `${fmtDateShort(a0)} – ${fmtDateShort(b0)}`;
+}
+
+function fmtTimeFromISO(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "--:--";
   return d.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-function formatDateLabel(input?: string) {
-  if (!input) return "";
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function fmtDateTimeLabel(startISO: string, endISO?: string) {
+  if (!startISO) return "";
+  const a = new Date(startISO);
+  if (Number.isNaN(a.getTime())) return "";
+
+  if (!endISO) {
+    return `${fmtDateShort(a)} • ${fmtTimeFromISO(startISO)}`;
+  }
+
+  const b = new Date(endISO);
+  if (Number.isNaN(b.getTime())) {
+    return `${fmtDateShort(a)} • ${fmtTimeFromISO(startISO)}`;
+  }
+
+  const range = fmtDateRangeShort(a, b);
+  return `${range} • ${fmtTimeFromISO(startISO)}`;
+}
+
+function RequiredAsterisk() {
+  return (
+    <span aria-hidden className="ml-1 text-error-400">
+      *
+    </span>
+  );
+}
+
+function FieldLabel({
+  children,
+  required,
+  htmlFor,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+  htmlFor?: string;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="block text-sm font-medium text-neutral-0"
+    >
+      <span className="inline-flex items-center">
+        {children}
+        {required ? <RequiredAsterisk /> : null}
+      </span>
+    </label>
+  );
 }
 
 function Section({
@@ -138,18 +256,16 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5 md:p-6">
-      <div className="mb-4 flex items-start gap-3">
+    <section className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+      <div className="mb-6 flex items-start gap-3">
         {icon ? (
-          <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-primary-900/50 ring-1 ring-primary-700/40">
+          <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-md bg-primary-900/50 ring-1 ring-primary-500">
             {icon}
           </div>
         ) : null}
         <div>
           <h2 className="text-base font-semibold md:text-lg">{title}</h2>
-          {desc ? (
-            <p className="mt-1 text-sm text-neutral-300">{desc}</p>
-          ) : null}
+          {desc ? <p className="mt-1 text-neutral-300">{desc}</p> : null}
         </div>
       </div>
       {children}
@@ -157,11 +273,45 @@ function Section({
   );
 }
 
+function buildLocationString(v: FormValues) {
+  switch (v.locationMode) {
+    case "tbd":
+      return "TBD";
+    case "tba":
+      return "TBA";
+    case "secret":
+      return "It’s a secret";
+    case "city":
+      return (v.locationCity || "").trim();
+    case "specific": {
+      const name = (v.locationName || "").trim();
+      const addr = (v.locationAddress || "").trim();
+      const city = (v.locationCity || "").trim();
+
+      // Clean, readable, and still one string for the current DB model/API.
+      // Example: "Madison Square Garden · 4 Pennsylvania Plaza, New York, NY 10001, USA"
+      // If you want city appended even when Google already includes it, uncomment the city logic.
+      const parts = [name, addr].filter(Boolean);
+      let out = parts.join(" · ");
+
+      // If address is missing (shouldn’t pass validation), fall back to city.
+      if (!out) out = city;
+
+      return out;
+    }
+    default:
+      return "";
+  }
+}
+
 /* ------------------------------ Page ------------------------------ */
 export default function NewEventPage() {
   const router = useRouter();
   const params = useParams() as { id?: string };
   const orgIdFromRoute = params?.id ?? "";
+
+  const errorRing =
+    "rounded-lg ring-1 ring-inset ring-error-500 border-transparent";
 
   const {
     register,
@@ -173,10 +323,17 @@ export default function NewEventPage() {
   } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(FormSchema),
     defaultValues: {
+      dateRange: { start: null, end: null },
+      startTime: "18:00",
+      endTime: "21:00",
       categories: [],
       promoters: [],
       artists: [],
       status: "published",
+      locationMode: "specific",
+      locationCity: "",
+      locationAddress: "",
+      locationName: "",
     },
     mode: "onBlur",
   });
@@ -190,11 +347,33 @@ export default function NewEventPage() {
   /* ---------- Lock organizationId from the URL -------------------- */
   useEffect(() => {
     if (orgIdFromRoute) {
-      setValue("organizationId", orgIdFromRoute, {
-        shouldDirty: true,
-      });
+      setValue("organizationId", orgIdFromRoute, { shouldDirty: true });
     }
   }, [orgIdFromRoute, setValue]);
+
+  /* ---------- Load organization info (for selected org display) ---- */
+  const [orgInfo, setOrgInfo] = useState<OrgInfo | null>(null);
+  const [orgLoading, setOrgLoading] = useState(false);
+
+  useEffect(() => {
+    if (!orgIdFromRoute) return;
+
+    const ac = new AbortController();
+    setOrgLoading(true);
+
+    fetch(`/api/organizations/${orgIdFromRoute}`, { signal: ac.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: OrgInfo) => {
+        setOrgInfo(data && typeof data === "object" ? data : null);
+      })
+      .catch(() => setOrgInfo(null))
+      .finally(() => setOrgLoading(false));
+
+    return () => ac.abort();
+  }, [orgIdFromRoute]);
+
+  const selectedOrgName =
+    orgInfo?.name || orgInfo?.title || orgInfo?.organizationName || "";
 
   /* ---------- Load organization members for promoters ------------- */
   const [members, setMembers] = useState<OrgMember[]>([]);
@@ -212,34 +391,88 @@ export default function NewEventPage() {
       .finally(() => setMembersLoading(false));
   }, [orgIdFromRoute]);
 
-  /* ---------- Field arrays (typed) – artists only ----------------- */
+  /* ---------- Field arrays (artists) ------------------------------ */
   const {
     fields: artistFields,
     append: addArtist,
     remove: removeArtist,
   } = useFieldArray<FormInput, "artists">({ control, name: "artists" });
 
-  /* ---------- Derived ISO for submit ------------------------------ */
-  const dateOnly = watch("dateOnly") ?? "";
-  const startTime = watch("startTime") ?? "";
-  const startISO = useMemo(
-    () => isoFromDateAndTime(dateOnly, startTime),
-    [dateOnly, startTime]
-  );
+  /* ---------- Derived ISO start/end ------------------------------- */
+  const dateRange = (watch("dateRange") ?? {
+    start: null,
+    end: null,
+  }) as DateRangeValue;
+  const startTime = watch("startTime") ?? "18:00";
+  const endTime = watch("endTime") ?? "21:00";
+
+  const { startISO, endISO } = useMemo(() => {
+    const sDay = dateRange.start ? clampToDay(dateRange.start) : null;
+    const eDay = dateRange.end ? clampToDay(dateRange.end) : sDay;
+
+    if (!sDay || !eDay) return { startISO: "", endISO: "" };
+
+    const sISO = isoFromDayAndTime(sDay, startTime);
+    let eISO = isoFromDayAndTime(eDay, endTime);
+
+    if (new Date(eISO).getTime() <= new Date(sISO).getTime()) {
+      eISO = isoFromDayAndTime(addDays(eDay, 1), endTime);
+    }
+
+    return { startISO: sISO, endISO: eISO };
+  }, [dateRange.start, dateRange.end, startTime, endTime]);
+
   useEffect(() => {
     setValue("date", startISO, { shouldDirty: true });
-  }, [startISO, setValue]);
+    setValue("endDate", endISO, { shouldDirty: true });
+  }, [startISO, endISO, setValue]);
 
-  const duration = watch("duration") ?? "";
+  /* ---------- Location derived for preview ------------------------ */
+  const locationMode = (watch("locationMode") ?? "specific") as LocationMode;
+  const locationCity = watch("locationCity") ?? "";
+  const locationAddress = watch("locationAddress") ?? "";
+  const locationName = watch("locationName") ?? "";
+
+  const derivedLocationLabel = useMemo(() => {
+    const v = {
+      locationMode,
+      locationCity,
+      locationAddress,
+      locationName,
+    } as FormValues;
+    return buildLocationString(v) || "Location TBA";
+  }, [locationMode, locationCity, locationAddress, locationName]);
 
   /* ---------- Submit ---------------------------------------------- */
   const submitImpl =
     (status: "published" | "draft"): SubmitHandler<FormValues> =>
     async (data) => {
-      const payload: FormValues = {
+      const sDay = data.dateRange.start
+        ? clampToDay(data.dateRange.start)
+        : null;
+      const eDay = data.dateRange.end ? clampToDay(data.dateRange.end) : sDay;
+
+      if (!sDay || !eDay) {
+        alert("Please select a date range.");
+        return;
+      }
+
+      const sISO = isoFromDayAndTime(sDay, data.startTime);
+      let eISO = isoFromDayAndTime(eDay, data.endTime);
+      if (new Date(eISO).getTime() <= new Date(sISO).getTime()) {
+        eISO = isoFromDayAndTime(addDays(eDay, 1), data.endTime);
+      }
+
+      const location = buildLocationString(data);
+
+      const payload = {
         ...data,
         status,
-        date: startISO,
+        date: sISO,
+        endDate: eISO,
+
+        // keep API/model unchanged
+        location,
       };
 
       const res = await fetch("/api/events", {
@@ -263,18 +496,18 @@ export default function NewEventPage() {
 
   /* ---------- Live preview ---------------------------------------- */
   const title = watch("title") ?? "";
-  const location = watch("location") ?? "";
   const image = watch("image") ?? "";
+
   const preview = useMemo(
     () => ({
       id: "preview",
       title: title || "Untitled Event",
-      dateLabel: formatDateLabel(startISO) || "Date TBA",
-      venue: location || "Location TBA",
+      dateLabel: startISO ? fmtDateTimeLabel(startISO, endISO) : "Date TBA",
+      venue: derivedLocationLabel || "Location TBA",
       img: image || "/dummy/event-1.png",
       category: "Shows",
     }),
-    [title, startISO, location, image]
+    [title, startISO, endISO, derivedLocationLabel, image]
   );
 
   /* ---------- Categories chips ------------------------------------ */
@@ -290,19 +523,26 @@ export default function NewEventPage() {
   const promoters = watchArr("promoters", [] as unknown as string[]);
   const togglePromoter = (email: string) => {
     const set = new Set(promoters as string[]);
-    if (set.has(email)) {
-      set.delete(email);
-    } else {
-      set.add(email);
-    }
+    if (set.has(email)) set.delete(email);
+    else set.add(email);
     setValue("promoters", Array.from(set), { shouldDirty: true });
   };
 
-  /* ---------------------------------------------------------------- */
   const hasErrors = Object.keys(errors).length > 0;
 
+  const locationTabs: Array<{ key: LocationMode; label: string }> = [
+    { key: "specific", label: "Specific location" },
+    { key: "city", label: "City" },
+    { key: "tbd", label: "TBD" },
+    { key: "tba", label: "TBA" },
+    { key: "secret", label: "It’s a secret" },
+  ];
+
+  const showCity = locationMode === "specific" || locationMode === "city";
+  const showSpecific = locationMode === "specific";
+
   return (
-    <main className="relative bg-neutral-950 text-neutral-0">
+    <main className="relative bg-neutral-950 text-neutral-0 ">
       <div className="relative isolate px-4 pt-8 md:py-10 mt-2">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
@@ -320,16 +560,29 @@ export default function NewEventPage() {
           </p>
         </div>
       </div>
+
       <form
         onSubmit={handleSubmit(submitImpl("published"))}
-        className="grid grid-cols-1 gap-6 pt-6 pb-14 md:grid-cols-12"
+        className="grid grid-cols-1 gap-6 pt-6 pb-14 md:grid-cols-12 max-w-7xl mx-auto"
         noValidate
       >
-        {/* hidden org id bound to URL */}
         <input type="hidden" {...register("organizationId")} />
 
         {/* ------------------------- Main form ----------------------- */}
         <div className="md:col-span-7 lg:col-span-8 space-y-6">
+          {/* Required fields note */}
+          <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-3">
+            <div className="flex items-center gap-3">
+              <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
+                <Info className="h-5 w-5 text-neutral-200" />
+              </div>
+              <p className="text-sm text-neutral-300 leading-relaxed">
+                Required fields are marked with an{" "}
+                <span className="font-semibold text-error-300">*</span>.
+              </p>
+            </div>
+          </div>
+
           {submitCount > 0 && hasErrors && (
             <div
               role="alert"
@@ -346,79 +599,115 @@ export default function NewEventPage() {
             desc="This is what attendees will see first — keep it clear and catchy."
             icon={<Sparkles className="h-5 w-5 text-primary-300" />}
           >
-            <div className="space-y-4">
-              <LabelledInput
-                label="Event Name"
-                placeholder="Enter name"
-                {...register("title")}
-                size="md"
-                variant="full"
-                className={errors.title && "border border-error-500"}
-              />
-
-              {/* Date + Start + Duration row */}
-              <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-7">
+              {/* Event Name (required) */}
+              <div className="space-y-2">
+                <FieldLabel required>Event Name</FieldLabel>
                 <LabelledInput
-                  label="Date"
-                  type="date"
-                  {...register("dateOnly")}
+                  noLabel
+                  aria-label="Event Name"
+                  placeholder="Enter name"
+                  {...register("title")}
                   size="md"
-                  variant="full"
-                  className={errors.dateOnly && "border border-error-500"}
+                  variant="transparent"
+                  className={clsx(errors.title && errorRing)}
                 />
-                <LabelledInput
-                  label="Start Time"
-                  type="time"
-                  {...register("startTime")}
-                  size="md"
-                  variant="full"
-                  className={errors.startTime && "border border-error-500"}
-                  endAdornment={<Clock className="h-4 w-4 opacity-60" />}
-                />
-                <LabelledInput
-                  label="Duration"
-                  placeholder="03:45"
-                  {...register("duration")}
-                  size="md"
-                  variant="full"
-                  className={errors.duration && "border border-error-500"}
-                />
+                {errors.title?.message ? (
+                  <p className="text-xs text-error-300">
+                    {String(errors.title.message)}
+                  </p>
+                ) : null}
               </div>
 
-              {/* Microcopy summary */}
-              <p className="text-sm text-neutral-300">
-                This event will take place on{" "}
-                <span className="font-medium">
-                  {startISO
-                    ? new Date(startISO).toLocaleDateString(undefined, {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })
-                    : "—"}
-                </span>{" "}
-                from{" "}
-                <span className="font-medium">
-                  {startISO
-                    ? new Date(startISO).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "--:--"}
-                </span>{" "}
-                until{" "}
-                <span className="font-medium">
-                  {startISO && duration
-                    ? endTimeFromStartAndDuration(startISO, duration)
-                    : "--:--"}
-                </span>
-              </p>
+              <div className="space-y-2">
+                {/* Date Range + Start/End Time */}
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <FieldLabel required>Date</FieldLabel>
+                    <Controller
+                      control={control}
+                      name="dateRange"
+                      render={({ field }) => (
+                        <DateRangePicker
+                          value={field.value as DateRangeValue}
+                          onChange={field.onChange}
+                          variant="field"
+                          align="left"
+                          error={!!errors.dateRange?.start}
+                        />
+                      )}
+                    />
+                    {errors.dateRange?.start?.message ? (
+                      <p className="text-xs text-error-300">
+                        {String(errors.dateRange.start.message)}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <FieldLabel required>Start Time</FieldLabel>
+                    <TimePicker
+                      label=""
+                      value={startTime}
+                      onChange={(v) =>
+                        setValue("startTime", v, { shouldDirty: true })
+                      }
+                      error={!!errors.startTime}
+                      minuteStep={5}
+                      placeholder="Select Time"
+                    />
+                    {errors.startTime?.message ? (
+                      <p className="text-xs text-error-300">
+                        {String(errors.startTime.message)}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <FieldLabel required>End Time</FieldLabel>
+                    <TimePicker
+                      label=""
+                      value={endTime}
+                      onChange={(v) =>
+                        setValue("endTime", v, { shouldDirty: true })
+                      }
+                      error={!!errors.endTime}
+                      minuteStep={5}
+                      placeholder="Select Time"
+                    />
+                    {errors.endTime?.message ? (
+                      <p className="text-xs text-error-300">
+                        {String(errors.endTime.message)}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Microcopy summary */}
+                <p className="text-sm text-neutral-300">
+                  This event will run on{" "}
+                  <span className="font-medium">
+                    {dateRange.start
+                      ? fmtDateRangeShort(
+                          dateRange.start,
+                          dateRange.end ?? dateRange.start
+                        )
+                      : "—"}
+                  </span>{" "}
+                  from{" "}
+                  <span className="font-medium">
+                    {startISO ? fmtTimeFromISO(startISO) : "--:--"}
+                  </span>{" "}
+                  until{" "}
+                  <span className="font-medium">
+                    {endISO ? fmtTimeFromISO(endISO) : "--:--"}
+                  </span>
+                </p>
+              </div>
 
               {/* Categories */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium">
-                  Choose Categories
-                </label>
+                <FieldLabel>Choose Categories</FieldLabel>
                 <div className="flex flex-wrap gap-3">
                   {CATS.map((c) => {
                     const active = (categories as string[]).includes(c);
@@ -441,7 +730,6 @@ export default function NewEventPage() {
                 </div>
               </div>
 
-              {/* Minimum age */}
               <LabelledInput
                 label="Minimum Age"
                 placeholder="Enter Minimum Age"
@@ -450,18 +738,156 @@ export default function NewEventPage() {
                 min="0"
                 {...register("minAge", { valueAsNumber: true })}
                 size="md"
-                variant="full"
+                variant="transparent"
               />
 
-              {/* Location */}
-              <LabelledInput
-                label="Location"
-                placeholder="Choose Location"
-                {...register("location")}
-                size="md"
-                variant="full"
-                className={errors.location && "border border-error-500"}
-              />
+              {/* -------- NEW LOCATION SECTION (selector + autocomplete) -------- */}
+              <div className="space-y-3">
+                <FieldLabel required>
+                  Where does the event take place?
+                </FieldLabel>
+
+                {/* pills */}
+                <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+                  {locationTabs.map((t) => {
+                    const active = locationMode === t.key;
+                    return (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => {
+                          setValue("locationMode", t.key, {
+                            shouldDirty: true,
+                          });
+
+                          // reset fields when changing modes (keeps UX clean)
+                          if (
+                            t.key === "tbd" ||
+                            t.key === "tba" ||
+                            t.key === "secret"
+                          ) {
+                            setValue("locationCity", "", { shouldDirty: true });
+                            setValue("locationAddress", "", {
+                              shouldDirty: true,
+                            });
+                            setValue("locationName", "", { shouldDirty: true });
+                          }
+
+                          if (t.key === "city") {
+                            setValue("locationAddress", "", {
+                              shouldDirty: true,
+                            });
+                            setValue("locationName", "", { shouldDirty: true });
+                          }
+                        }}
+                        className={clsx(
+                          "rounded-full px-4 py-2 text-sm transition",
+                          active
+                            ? "bg-primary-900/50 text-neutral-0 ring-1 ring-primary-500/70"
+                            : "text-neutral-300 hover:text-neutral-0"
+                        )}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Fields area */}
+                <div className="space-y-4 rounded-lg border border-white/10 bg-neutral-950/60 p-4">
+                  {showCity ? (
+                    <div className="space-y-2">
+                      <FieldLabel required>City</FieldLabel>
+                      <LabelledInput
+                        noLabel
+                        aria-label="City"
+                        placeholder="Enter city"
+                        {...register("locationCity")}
+                        size="md"
+                        variant="transparent"
+                        className={clsx(errors.locationCity && errorRing)}
+                      />
+                      {errors.locationCity?.message ? (
+                        <p className="text-xs text-error-300">
+                          {String(errors.locationCity.message)}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {showSpecific ? (
+                    <>
+                      <div className="space-y-2">
+                        <FieldLabel required>Address</FieldLabel>
+                        <Controller
+                          control={control}
+                          name="locationAddress"
+                          render={({ field }) => (
+                            <PlacesAddressInput
+                              value={field.value ?? ""}
+                              onChange={(v) => field.onChange(v)}
+                              placeholder="Type to search address"
+                              error={!!errors.locationAddress}
+                            />
+                          )}
+                        />
+                        {errors.locationAddress?.message ? (
+                          <p className="text-xs text-error-300">
+                            {String(errors.locationAddress.message)}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-2">
+                        <FieldLabel>Location Name</FieldLabel>
+                        <LabelledInput
+                          noLabel
+                          aria-label="Location Name"
+                          placeholder="Venue name (optional)"
+                          {...register("locationName")}
+                          size="md"
+                          variant="transparent"
+                        />
+                        <p className="text-xs text-neutral-400">
+                          Optional — helps attendees recognize the venue faster.
+                        </p>
+                      </div>
+                    </>
+                  ) : null}
+
+                  {!showCity && !showSpecific ? (
+                    <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-primary-900/40 ring-1 ring-primary-500/30">
+                        <MapPin className="h-4 w-4 text-primary-200" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-neutral-0">
+                          Location will be shown as:{" "}
+                          <span className="text-neutral-200">
+                            {locationMode === "tbd"
+                              ? "TBD"
+                              : locationMode === "tba"
+                                ? "TBA"
+                                : "It’s a secret"}
+                          </span>
+                        </p>
+                        <p className="mt-1 text-sm text-neutral-300">
+                          You can update this later before publishing (or
+                          anytime if you allow edits).
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* small helper preview */}
+                <p className="text-sm text-neutral-300">
+                  Preview:{" "}
+                  <span className="font-medium text-neutral-0">
+                    {derivedLocationLabel || "Location TBA"}
+                  </span>
+                </p>
+              </div>
             </div>
           </Section>
 
@@ -471,18 +897,46 @@ export default function NewEventPage() {
             icon={<UsersIcon className="h-5 w-5 text-primary-300" />}
           >
             <div className="space-y-4">
-              {/* Organization info (no chooser anymore) */}
-              <div className="space-y-1">
-                <label className="block text-sm font-medium">
-                  Organization
-                </label>
-                <p className="text-sm text-neutral-300">
-                  This event will be created under the currently open
-                  organization.
-                </p>
+              <div className="space-y-2">
+                <FieldLabel>Organization</FieldLabel>
+
+                {/* Selected organization card */}
+                <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
+                        <UsersIcon className="h-5 w-5 text-neutral-200" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-neutral-0">
+                          {orgLoading
+                            ? "Loading organization…"
+                            : selectedOrgName || "Selected organization"}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+                          <span className="truncate">ID: {orgIdFromRoute}</span>
+                          {orgInfo?.slug ? (
+                            <>
+                              <span className="opacity-30">•</span>
+                              <span className="truncate">{orgInfo.slug}</span>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-neutral-200">
+                      Selected
+                    </span>
+                  </div>
+
+                  <p className="mt-2 text-sm text-neutral-300">
+                    This event will be created under the selected organization.
+                  </p>
+                </div>
               </div>
 
-              {/* Artists */}
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <h3 className="text-sm font-semibold">Artists Attending</h3>
@@ -498,49 +952,67 @@ export default function NewEventPage() {
                 </div>
 
                 <div className="space-y-3 w-full">
-                  {artistFields.map((field, idx) => (
-                    <div
-                      key={field.id}
-                      className="flex items-end gap-3 rounded-lg border border-white/10 bg-neutral-950/60 p-4 w-full relative"
-                    >
-                      <div className="flex flex-col gap-2 w-full">
-                        <div className="max-w-sm">
-                          <Controller
-                            control={control}
-                            name={`artists.${idx}.image`}
-                            render={({ field }) => (
-                              <ImageUpload
-                                value={field.value}
-                                onChange={field.onChange}
-                                publicId={`temp/artists/${uuid()}`}
-                                sizing="avatar"
-                              />
-                            )}
-                          />
+                  {artistFields.map((field, idx) => {
+                    const artistNameErr = (
+                      errors.artists as unknown as Array<
+                        { name?: { message?: string } } | undefined
+                      >
+                    )?.[idx]?.name?.message;
+
+                    return (
+                      <div
+                        key={field.id}
+                        className="flex items-end gap-3 rounded-lg border border-white/10 bg-neutral-950/60 p-4 w-full relative"
+                      >
+                        <div className="flex flex-col gap-2 w-full">
+                          <div className="max-w-sm">
+                            <Controller
+                              control={control}
+                              name={`artists.${idx}.image`}
+                              render={({ field }) => (
+                                <ImageUpload
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  publicId={`temp/artists/${uuid()}`}
+                                  sizing="avatar"
+                                />
+                              )}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <LabelledInput
+                              noLabel
+                              aria-label="Artist name"
+                              placeholder="Artist"
+                              {...register(`artists.${idx}.name` as const)}
+                              size="md"
+                              variant="transparent"
+                              className={clsx(artistNameErr && errorRing)}
+                            />
+                            {artistNameErr ? (
+                              <p className="text-xs text-error-300">
+                                {String(artistNameErr)}
+                              </p>
+                            ) : null}
+                          </div>
                         </div>
-                        <div>
-                          <LabelledInput
-                            noLabel
-                            placeholder="Artist"
-                            {...register(`artists.${idx}.name` as const)}
-                            size="md"
-                            variant="transparent"
-                          />
+
+                        <div className="flex justify-end absolute top-2 right-2">
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Remove artist"
+                            onClick={() => removeArtist(idx)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex justify-end absolute top-2 right-2">
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          aria-label="Remove artist"
-                          onClick={() => removeArtist(idx)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+
                   {artistFields.length === 0 && (
                     <p className="text-sm text-neutral-400">
                       Optional — add performers to improve discovery.
@@ -551,63 +1023,6 @@ export default function NewEventPage() {
             </div>
           </Section>
 
-          {/* Promoters + Message */}
-          <Section
-            title="Promoters & Message"
-            desc="Optionally select organization members who will help promote this event and add a note."
-            icon={<MailPlus className="h-5 w-5 text-primary-300" />}
-          >
-            {/* Promoters – only show if org has members */}
-            {members.length > 0 && (
-              <div className="space-y-2 mb-6">
-                <label className="block text-sm font-medium">Promoters</label>
-                <p className="text-xs text-neutral-400">
-                  Select members who will help promote this event.
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {members.map((m) => {
-                    const selected = (promoters as string[]).includes(m.email);
-                    return (
-                      <button
-                        key={m._id}
-                        type="button"
-                        onClick={() => togglePromoter(m.email)}
-                        className={clsx(
-                          "rounded-full border px-3 py-1.5 text-xs md:text-sm transition-colors",
-                          selected
-                            ? "border-white/40 bg-white/10 text-neutral-0"
-                            : "border-white/10 text-neutral-300 hover:text-neutral-0"
-                        )}
-                      >
-                        {m.name || m.email}
-                      </button>
-                    );
-                  })}
-                </div>
-                {(promoters as string[]).length > 0 && (
-                  <p className="text-xs text-neutral-400">
-                    {(promoters as string[]).length} promoter
-                    {(promoters as string[]).length > 1 ? "s" : ""} selected.
-                  </p>
-                )}
-              </div>
-            )}
-            {/* You said: if org has no members, promoters selector should not be visible.
-                So we simply don't render anything when members.length === 0. */}
-
-            {/* Message */}
-            <div className="mt-2">
-              <label className="block text-sm font-medium mb-2">Message</label>
-              <TextArea
-                {...register("message")}
-                placeholder="Enter your message here..."
-                size="md"
-                variant="full"
-              />
-            </div>
-          </Section>
-
-          {/* Media / Poster */}
           <Section
             title="Event Poster"
             desc="Upload a featured image/poster. JPEG/PNG/MP4 up to 50MB."
@@ -627,18 +1042,26 @@ export default function NewEventPage() {
             />
           </Section>
 
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleSubmit(submitImpl("draft"))}
-            >
-              Send to Drafts
-            </Button>
-            <Button type="submit" variant="primary" loading={isSubmitting}>
-              Create Event
-            </Button>
+          <Section
+            title="Event Description"
+            desc="Help people understand what they’re signing up for — lineup, vibe, schedule, and any important notes."
+            icon={<FileText className="h-5 w-5 text-primary-300" />}
+          >
+            <div className="space-y-2">
+              <FieldLabel>Details</FieldLabel>
+              <TextArea
+                aria-label="Event description"
+                placeholder="Example: Doors at 7PM. Live set starts at 9PM. 18+ with ID. Dress code: smart casual..."
+                rows={6}
+                {...register("description")}
+              />
+              <p className="text-xs text-neutral-400">
+                Tip: Keep it scannable — short paragraphs and key info first.
+              </p>
+            </div>
+          </Section>
+
+          <div className="flex flex-wrap justify-between gap-3">
             <Button
               type="button"
               variant="ghost"
@@ -646,27 +1069,34 @@ export default function NewEventPage() {
             >
               Cancel
             </Button>
+            <div className="flex gap-3 flex-wrap">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSubmit(submitImpl("draft"))}
+              >
+                Send to Drafts
+              </Button>
+              <Button type="submit" variant="primary" loading={isSubmitting}>
+                Create Event
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* ------------------------- Sidebar -------------------------- */}
         <aside className="md:col-span-5 lg:col-span-4">
           <div className="md:sticky md:top-20 space-y-6">
-            {/* Live preview card */}
-            <div className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5">
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
               <h3 className="mb-3 text-sm font-semibold">Live Preview</h3>
               <EventCard {...preview} clickable={false} />
-              <div className="mt-3 flex items-center gap-2 text-xs text-neutral-300">
-                <CalendarClock className="h-4 w-4" />
-                {preview.dateLabel}
-                <span className="opacity-40">•</span>
+              <div className="mt-3 flex items-center justify-end gap-2 text-xs text-neutral-300">
                 <MapPin className="h-4 w-4" />
                 {preview.venue}
               </div>
             </div>
 
-            {/* Tips */}
-            <div className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5">
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
               <h3 className="mb-2 text-sm font-semibold">
                 Tips for higher sales
               </h3>

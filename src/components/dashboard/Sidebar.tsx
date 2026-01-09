@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   Sparkles,
   Type as TypeIcon,
+  MessageCircleMore,
 } from "lucide-react";
 
 /* ------------------------------- Icons ----------------------------- */
@@ -273,7 +274,7 @@ const DASH_ITEMS: DashNavItem[] = [
 
 const DASH_COMING_SOON: Array<{ label: string; icon: LucideIcon }> = [
   { label: "Tixsy AI (Coming Soon)", icon: Sparkles },
-  { label: "Text Blaster (Coming Soon)", icon: TypeIcon },
+  { label: "Text Blaster (Coming Soon)", icon: MessageCircleMore },
 ];
 
 const DASH_GROUPS: DashGroup[] = [
@@ -398,30 +399,11 @@ type MotionClasses = {
   chevron: string;
 };
 
-function SectionLabel({
-  children,
-  collapsed,
-}: {
-  children: string;
-  collapsed: boolean;
-}) {
-  return (
-    <div
-      className={clsx(
-        "px-2 pt-3 pb-1 text-[11px] font-semibold tracking-[0.16em] text-neutral-500",
-        collapsed && "sr-only"
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
 function Divider({ collapsed }: { collapsed: boolean }) {
   return (
     <div
       className={clsx(
-        "my-3 h-px w-full bg-neutral-800/70",
+        "my-3 h-px w-full bg-neutral-800/60",
         collapsed && "mx-auto w-10"
       )}
     />
@@ -438,7 +420,7 @@ function TooltipBubble({ label }: { label: string }) {
     <div
       className={clsx(
         "pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap",
-        "rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-[13px] font-semibold text-neutral-100",
+        "rounded-md border border-neutral-800/70 bg-neutral-948 px-3 py-2 text-[13px] font-semibold text-neutral-100",
         "shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
         "opacity-0 -translate-x-1 transition-all duration-150",
         "group-hover:opacity-100 group-hover:translate-x-0"
@@ -475,14 +457,18 @@ function NavRow({
       ? clsx(
           "mx-auto h-11 w-11 justify-center rounded-lg",
           active
-            ? "bg-neutral-800/90"
-            : "bg-transparent hover:bg-neutral-800/60"
+            ? "bg-neutral-800/60"
+            : "bg-transparent hover:bg-neutral-800/35"
         )
       : clsx(
           "h-11 justify-start rounded-lg px-3",
-          active ? "bg-neutral-800/90" : "hover:bg-neutral-800/60"
+          active ? "bg-neutral-800/60" : "hover:bg-neutral-800/35"
         ),
-    disabled ? "cursor-not-allowed text-neutral-500" : "text-neutral-200"
+    disabled
+      ? "cursor-not-allowed text-neutral-600"
+      : active
+        ? "text-primary-300"
+        : "text-neutral-200"
   );
 
   const iconCls = clsx(
@@ -491,8 +477,8 @@ function NavRow({
     disabled
       ? "text-neutral-600"
       : active
-        ? "text-white"
-        : "text-neutral-500 group-hover:text-white"
+        ? "text-primary-300"
+        : "text-neutral-500 group-hover:text-neutral-200"
   );
 
   const labelCls = clsx(
@@ -547,9 +533,9 @@ function CollapsedGroupPopover({
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       className={clsx(
-        "absolute left-full top-1/2 z-[99999999] ml-2 -translate-y-1/2",
-        "w-[248px] overflow-hidden rounded-xl",
-        "border border-white/10 bg-neutral-900/90 backdrop-blur-xl",
+        "absolute left-full top-1/2 z-[10] ml-2 -translate-y-1/2",
+        "w-[198px] overflow-hidden rounded-xl",
+        "border border-neutral-800/70 bg-neutral-948/95 backdrop-blur-xl",
         "shadow-[0_22px_70px_rgba(0,0,0,0.65)]"
       )}
     >
@@ -557,10 +543,10 @@ function CollapsedGroupPopover({
       <div className="absolute -left-10 top-0 h-full w-10" />
 
       {/* subtle inner glow */}
-      <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-white/5" />
+      <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-neutral-800/30" />
 
       <div className="px-3 pb-2 pt-2.5">
-        <div className="text-[11px] font-semibold tracking-wide text-neutral-400">
+        <div className="text-xs font-semibold tracking-wide text-neutral-400">
           {title}
         </div>
       </div>
@@ -578,12 +564,12 @@ function CollapsedGroupPopover({
                 key={sub.href}
                 href={sub.href}
                 className={clsx(
-                  "group relative flex items-center gap-2.5 rounded-lg px-3 py-2",
+                  "group relative flex items-center gap-2 rounded-lg px-2 py-2.5",
                   "transition-[background-color] duration-200",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50",
                   isActive
-                    ? "bg-neutral-800/85 text-white"
-                    : "text-neutral-200 hover:bg-neutral-800/55"
+                    ? "bg-neutral-800/70 text-primary-300"
+                    : "text-neutral-200 hover:bg-neutral-800/40"
                 )}
               >
                 <span
@@ -597,8 +583,8 @@ function CollapsedGroupPopover({
                   className={clsx(
                     "h-4 w-4 shrink-0 transition-colors",
                     isActive
-                      ? "text-white"
-                      : "text-neutral-500 group-hover:text-white"
+                      ? "text-primary-300"
+                      : "text-neutral-500 group-hover:text-neutral-200"
                   )}
                 />
 
@@ -664,20 +650,22 @@ function GroupRow({
             ? clsx(
                 "mx-auto h-11 w-11 justify-center rounded-lg",
                 active
-                  ? "bg-neutral-800/90"
-                  : "bg-transparent hover:bg-neutral-800/60"
+                  ? "bg-neutral-800/60"
+                  : "bg-transparent hover:bg-neutral-800/35"
               )
             : clsx(
                 "h-11 w-full justify-start rounded-lg px-3",
-                active ? "bg-neutral-800/90" : "hover:bg-neutral-800/60"
+                active ? "bg-neutral-800/60" : "hover:bg-neutral-800/35"
               ),
-          "text-neutral-200"
+          active ? "text-primary-300" : "text-neutral-200"
         )}
       >
         <IconComp
           className={clsx(
             "h-5 w-5 shrink-0 transition-colors",
-            active ? "text-white" : "text-neutral-500 group-hover:text-white"
+            active
+              ? "text-primary-300"
+              : "text-neutral-500 group-hover:text-neutral-200"
           )}
         />
 
@@ -700,7 +688,7 @@ function GroupRow({
           <ChevronDown
             className={clsx(
               "ml-auto h-5 w-5 shrink-0",
-              "text-neutral-500 group-hover:text-neutral-300",
+              "text-neutral-500 group-hover:text-neutral-200",
               "transition-transform",
               motion.chevron,
               EASE_OUT,
@@ -725,7 +713,7 @@ function GroupRow({
           )}
         >
           <div className="mt-2 pb-1">
-            <div className="rounded-lg bg-neutral-900/20 px-2">
+            <div className="rounded-lg bg-neutral-950/20 px-2">
               {/* REAL TREE: left column is the tree, right column is the rows */}
               <ul
                 role="tree"
@@ -739,7 +727,7 @@ function GroupRow({
                     "pointer-events-none absolute",
                     "left-[16px] top-[18px] bottom-[18px]",
                     "w-[2px] -translate-x-1/2 rounded-full",
-                    "bg-neutral-700/40"
+                    "bg-neutral-800/55"
                   )}
                 />
 
@@ -769,7 +757,7 @@ function GroupRow({
                               "left-[16px] top-1/2 bottom-0",
                               "w-[10px] -translate-x-1/2",
                               // match container bg to “erase” the spine under the last node
-                              "bg-neutral-900/20"
+                              "bg-neutral-950/20"
                             )}
                           />
                         )}
@@ -780,7 +768,7 @@ function GroupRow({
                           className={clsx(
                             "pointer-events-none absolute left-[16px] top-1/2",
                             "h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full",
-                            isActive ? "bg-primary-500" : "bg-neutral-700/60"
+                            isActive ? "bg-primary-500" : "bg-neutral-600/70"
                           )}
                         />
 
@@ -790,7 +778,7 @@ function GroupRow({
                           className={clsx(
                             "pointer-events-none absolute left-[25px] top-1/2",
                             "h-[2px] w-[14px] -translate-y-1/2 rounded-full",
-                            isActive ? "bg-neutral-500/70" : "bg-neutral-700/40"
+                            isActive ? "bg-neutral-400/60" : "bg-neutral-800/50"
                           )}
                         />
                       </div>
@@ -804,16 +792,16 @@ function GroupRow({
                           "transition-[background-color,color] duration-200",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
                           isActive
-                            ? "bg-neutral-800/70 text-white"
-                            : "bg-transparent text-neutral-200 hover:bg-neutral-800/45 hover:text-white"
+                            ? "bg-neutral-800/60 text-primary-300"
+                            : "bg-transparent text-neutral-200 hover:bg-neutral-800/35 hover:text-neutral-0"
                         )}
                       >
                         <SubIcon
                           className={clsx(
                             "h-5 w-5 shrink-0 transition-colors",
                             isActive
-                              ? "text-neutral-200"
-                              : "text-neutral-500 group-hover:text-neutral-200"
+                              ? "text-primary-300"
+                              : "text-neutral-500 group-hover:text-neutral-100"
                           )}
                         />
 
@@ -951,7 +939,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
 
   // media queries
   useEffect(() => {
-    const mq1400 = window.matchMedia("(max-width: 1399px)");
+    const mq1400 = window.matchMedia("(max-width: 3000px)");
     const mqMd = window.matchMedia("(min-width: 768px)");
 
     const apply = () => {
@@ -1082,7 +1070,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
       >
         <nav
           className={clsx(
-            "flex h-full flex-col rounded-none border border-neutral-800/60 bg-neutral-900",
+            "flex h-full flex-col rounded-none border border-neutral-800/70 bg-neutral-948",
             "shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
             collapsed ? "px-2 py-4" : "px-3 py-4"
           )}
@@ -1119,11 +1107,11 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
               className={clsx(
                 "absolute -right-4 top-1/2 z-20 -translate-y-1/2 translate-x-1/2",
                 "grid h-7 w-7 place-items-center rounded-lg",
-                "border border-neutral-800/80 bg-neutral-900",
+                "border border-neutral-800/80 bg-neutral-948",
                 "text-neutral-200 shadow-[0_18px_60px_rgba(0,0,0,0.6)]",
                 "transition-[transform,background-color,color] duration-300",
                 EASE_OUT,
-                "hover:bg-neutral-800/50 hover:text-white",
+                "hover:bg-neutral-800/35 hover:text-neutral-0",
                 "active:scale-[0.98]"
               )}
             >
@@ -1140,149 +1128,69 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
 
           <Divider collapsed={collapsed} />
 
-          {/* Create event button for organization sidebar */}
-          {isOrg && (
-            <div className={clsx("px-2", collapsed && "px-0")}>
-              {collapsed ? (
-                <div className="relative">
-                  <Link
-                    href={
-                      orgBase ? `${orgBase}/events/create` : "/dashboard/events"
-                    }
-                    className={clsx(
-                      "group relative mx-auto flex h-11 w-11 items-center justify-center rounded-2xl",
-                      "bg-neutral-0 text-neutral-950 transition hover:bg-primary-500"
-                    )}
-                  >
-                    <span className="text-lg font-black leading-none">+</span>
-                    <TooltipBubble label="Create event" />
-                  </Link>
-                </div>
-              ) : (
-                <Link
-                  href={
-                    orgBase ? `${orgBase}/events/create` : "/dashboard/events"
-                  }
-                  className={clsx(
-                    "flex h-11 w-full items-center justify-center rounded-full bg-neutral-0",
-                    "font-semibold text-neutral-950 transition hover:bg-primary-500"
-                  )}
-                >
-                  Create event
-                  <span className="ml-2 text-lg leading-none">+</span>
-                </Link>
-              )}
-            </div>
-          )}
-
           {/* Dashboard sidebar */}
-          {isDashboard && (
-            <div className={clsx("space-y-2")}>
-              {DASH_ITEMS.map((item) => (
-                <NavRow
-                  key={item.href}
-                  href={item.href}
-                  label={item.label}
-                  Icon={item.icon}
-                  active={item.match(pathname)}
-                  collapsed={collapsed}
-                  motion={motion}
-                />
-              ))}
-
-              {DASH_COMING_SOON.map((x) => (
-                <NavRow
-                  key={x.label}
-                  label={x.label}
-                  Icon={x.icon}
-                  collapsed={collapsed}
-                  disabled
-                  motion={motion}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Organization sidebar */}
-          {isOrg && (
-            <div className={clsx("space-y-2", collapsed ? "px-0" : "px-2")}>
-              {orgItems.map(({ href, label, icon: Icon, match }) => {
-                const computedHref = orgBase
-                  ? href === "." || href === ""
-                    ? orgBase
-                    : href.startsWith("/")
-                      ? href
-                      : `${orgBase}/${href}`
-                  : href;
-
-                const active = match
-                  ? match(pathname)
-                  : pathname === computedHref;
-
-                return (
-                  <NavRow
-                    key={`${variant}-${label}`}
-                    href={computedHref}
-                    label={label}
-                    Icon={Icon}
-                    active={active}
-                    collapsed={collapsed}
-                    motion={motion}
-                  />
-                );
-              })}
-            </div>
-          )}
+          <div className={clsx("space-y-2")}>
+            {DASH_ITEMS.map((item) => (
+              <NavRow
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                Icon={item.icon}
+                active={item.match(pathname)}
+                collapsed={collapsed}
+                motion={motion}
+              />
+            ))}
+            <GroupRow
+              group={DASH_GROUPS[0]}
+              pathname={pathname}
+              open={connectionsOpen}
+              setOpen={setConnectionsOpen}
+              collapsed={collapsed}
+              isPopoverOpen={collapsed && hoveredGroup === "connections"}
+              openPopover={() => openHover("connections")}
+              scheduleClosePopover={scheduleCloseHover}
+              motion={motion}
+            />
+            <GroupRow
+              group={DASH_GROUPS[1]}
+              pathname={pathname}
+              open={financesOpen}
+              setOpen={setFinancesOpen}
+              collapsed={collapsed}
+              isPopoverOpen={collapsed && hoveredGroup === "finances"}
+              openPopover={() => openHover("finances")}
+              scheduleClosePopover={scheduleCloseHover}
+              motion={motion}
+            />
+            <NavRow
+              href={DASH_FOOTER.href}
+              label={DASH_FOOTER.label}
+              Icon={DASH_FOOTER.icon}
+              active={DASH_FOOTER.match(pathname)}
+              collapsed={collapsed}
+              motion={motion}
+            />
+          </div>
 
           <Divider collapsed={collapsed} />
 
-          {/* Groups (dashboard only) */}
-          {isDashboard && (
-            <>
-              <div className={clsx("space-y-2", collapsed ? "px-0" : "px-2")}>
-                <GroupRow
-                  group={DASH_GROUPS[0]}
-                  pathname={pathname}
-                  open={connectionsOpen}
-                  setOpen={setConnectionsOpen}
-                  collapsed={collapsed}
-                  isPopoverOpen={collapsed && hoveredGroup === "connections"}
-                  openPopover={() => openHover("connections")}
-                  scheduleClosePopover={scheduleCloseHover}
-                  motion={motion}
-                />
-                <GroupRow
-                  group={DASH_GROUPS[1]}
-                  pathname={pathname}
-                  open={financesOpen}
-                  setOpen={setFinancesOpen}
-                  collapsed={collapsed}
-                  isPopoverOpen={collapsed && hoveredGroup === "finances"}
-                  openPopover={() => openHover("finances")}
-                  scheduleClosePopover={scheduleCloseHover}
-                  motion={motion}
-                />
-              </div>
-
-              <Divider collapsed={collapsed} />
-
-              <div className={clsx("space-y-2", collapsed ? "px-0" : "px-2")}>
-                <NavRow
-                  href={DASH_FOOTER.href}
-                  label={DASH_FOOTER.label}
-                  Icon={DASH_FOOTER.icon}
-                  active={DASH_FOOTER.match(pathname)}
-                  collapsed={collapsed}
-                  motion={motion}
-                />
-              </div>
-            </>
-          )}
+          <div className={clsx("space-y-2")}>
+            {DASH_COMING_SOON.map((x) => (
+              <NavRow
+                key={x.label}
+                label={x.label}
+                Icon={x.icon}
+                collapsed={collapsed}
+                disabled
+                motion={motion}
+              />
+            ))}
+          </div>
+          <Divider collapsed={collapsed} />
 
           {/* Bottom Settings link */}
           <div className={clsx("mt-auto pb-1", collapsed ? "px-0" : "px-2")}>
-            <SectionLabel collapsed={collapsed}>SETTINGS</SectionLabel>
-
             <NavRow
               href={
                 isOrg && orgBase ? `${orgBase}/settings` : "/dashboard/settings"

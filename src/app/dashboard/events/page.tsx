@@ -242,9 +242,8 @@ function OrgPickerModal({
 
       <div
         className={clsx(
-          "relative z-10 w-full max-w-xl rounded-3xl border border-white/12",
-          "bg-neutral-950/95 px-5 pb-5 pt-4 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
-          "md:px-7 md:pb-6 md:pt-5"
+          "relative z-10 w-full max-w-xl rounded-2xl border border-white/12",
+          "bg-neutral-950/95 p-4 shadow-[0_28px_80px_rgba(0,0,0,0.85)]"
         )}
         onClick={handlePanelClick}
       >
@@ -261,7 +260,7 @@ function OrgPickerModal({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:bg-white/10 hover:text-neutral-0"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:border-primary-500 hover:text-neutral-0"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -357,23 +356,15 @@ function OrgPickerModal({
             </div>
           )}
 
-          <div className="mt-2 flex flex-col-reverse gap-3 pt-3 sm:flex-row sm:items-center sm:justify-between sm:pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-1 inline-flex items-center justify-center rounded-full border border-white/14 bg-white/5 px-4 py-2 text-xs font-medium text-neutral-200 transition hover:bg-white/10 hover:text-neutral-0 sm:mt-0"
-            >
-              Cancel
-            </button>
+          <div className="mt-2 flex justify-end pt-4">
             <Button
               type="button"
               variant="primary"
-              size="sm"
               disabled={!canConfirm}
               onClick={onConfirm}
             >
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              Continue to event setup
+              <CalendarPlus className="h-4 w-4" />
+              Continue
             </Button>
           </div>
         </div>

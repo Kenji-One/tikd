@@ -47,13 +47,13 @@ export interface ButtonProps
 /* ─────────── style maps ─────────── */
 
 const base =
-  "inline-flex items-center justify-center gap-2 text-sm leading-[90%] font-medium tracking-[-0.28px] rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
+  "inline-flex items-center justify-center gap-1 text-sm leading-[90%] font-medium tracking-[-0.28px] rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
 
 const variants: Record<
   Exclude<NonNullable<ButtonProps["variant"]>, "electric">,
   string
 > = {
-  primary: "bg-white text-black hover:bg-neutral-100",
+  primary: "bg-primary-500 text-white hover:bg-primary-600",
   secondary:
     "border border-white/10 text-white bg-transparent hover:bg-white/5",
   ghost: "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffffc]",
@@ -65,7 +65,7 @@ const variants: Record<
 
 const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
   sm: "py-2 px-4",
-  md: "py-3 px-6",
+  md: "py-3 px-4",
   lg: "py-4 px-8",
   xs: "py-[13px] px-4",
   icon: "p-2 w-9 h-9",

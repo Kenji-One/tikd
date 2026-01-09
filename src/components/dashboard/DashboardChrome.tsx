@@ -50,7 +50,7 @@ export default function DashboardChrome({ children }: Props) {
           </aside>
         )}
 
-        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 !pt-0 max-w-[1400px] mx-auto">
+        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 !pt-0">
           <Topbar hideLogo={isOrgSubpage} />
           {children}
         </main>

@@ -9,6 +9,19 @@ import clsx from "clsx";
 import usePlacesAutocomplete from "use-places-autocomplete";
 import { Loader2, MapPin, Search } from "lucide-react";
 
+/** Minimal typing for the only thing we need: google.maps.places existing */
+type GoogleMapsNamespace = {
+  maps?: {
+    places?: unknown;
+  };
+};
+
+declare global {
+  interface Window {
+    google?: GoogleMapsNamespace;
+  }
+}
+
 type Props = {
   value: string;
   onChange: (v: string) => void;
@@ -26,9 +39,8 @@ type Props = {
 
 const SCRIPT_ID = "google-maps-places-script";
 
-function hasPlacesLib() {
-  const g = (window as any).google;
-  return !!(g?.maps?.places);
+function hasPlacesLib(): boolean {
+  return Boolean(window.google?.maps?.places);
 }
 
 function loadGooglePlacesScript(apiKey: string): Promise<void> {
@@ -37,14 +49,17 @@ function loadGooglePlacesScript(apiKey: string): Promise<void> {
   // If already loaded with Places library, done.
   if (hasPlacesLib()) return Promise.resolve();
 
-  const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
+  const existing = document.getElementById(
+    SCRIPT_ID
+  ) as HTMLScriptElement | null;
 
   // If script tag exists, wait for it.
   if (existing) {
     return new Promise((resolve, reject) => {
       existing.addEventListener("load", () => {
         if (hasPlacesLib()) resolve();
-        else reject(new Error("Google Maps loaded, but Places library missing."));
+        else
+          reject(new Error("Google Maps loaded, but Places library missing."));
       });
       existing.addEventListener("error", () =>
         reject(new Error("Failed to load Google Maps script"))
@@ -244,7 +259,6 @@ export default function PlacesAddressInput({
   country,
   className,
 }: Props) {
-  // ✅ Your env var name here must match what you set in .env.local
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
 
   const [scriptReady, setScriptReady] = useState(false);
@@ -268,7 +282,9 @@ export default function PlacesAddressInput({
       .catch((e) => {
         if (!alive) return;
         setScriptReady(false);
-        setScriptError(e instanceof Error ? e.message : "Failed to load Places");
+        setScriptError(
+          e instanceof Error ? e.message : "Failed to load Places"
+        );
       });
 
     return () => {

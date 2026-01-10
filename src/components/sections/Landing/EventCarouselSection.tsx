@@ -1,4 +1,3 @@
-// src/components/sections/Landing/EventCarouselSection.tsx
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -30,6 +29,11 @@ const RESPONSIVE_CAROUSEL_BREAKPOINT = 1024; // < lg => carousel when isCarousel
 const SHADOW_W = 64; // px
 const TRANSITION_MS = 300;
 
+/** Desktop grid rules (your “max 6 columns, wrap when hit min width”) */
+const GRID_MIN_CARD_W = 220; // must match minmax(220px, 1fr)
+const GRID_GAP_PX = 16; // gap-4 = 16px
+const GRID_MAX_COLS = 6;
+
 const getSidePadding = (winW: number) => {
   // Must match container paddings used in this component:
   // px-4 (16) | sm:px-6 (24) | lg:px-[120px]
@@ -48,6 +52,20 @@ const calcLayout = (winW: number) => {
   }
 
   return { cardW: CARD_WIDTHS.at(-1)!, visible: 1 };
+};
+
+/** Desktop grid columns: clamp to max 6, drop rows when cards would go < 220px */
+const calcGridCols = (winW: number) => {
+  const side = getSidePadding(winW);
+  const safe = Math.max(0, winW - side * 2);
+
+  // how many columns can fit at the MIN card width (including gaps)
+  const colsAtMin = Math.floor(
+    (safe + GRID_GAP_PX) / (GRID_MIN_CARD_W + GRID_GAP_PX)
+  );
+
+  // clamp: 1..6
+  return Math.min(GRID_MAX_COLS, Math.max(1, colsAtMin));
 };
 
 /* -------------------------------------------------- */
@@ -117,6 +135,15 @@ export default function EventCarouselSection({
 
   const STEP = cardW + GAP_PX;
   const viewportW = visible * cardW + (visible - 1) * GAP_PX;
+
+  /* desktop grid template (fixed columns, max 6) */
+  const gridTemplateColumns = useMemo(() => {
+    const cols = calcGridCols(winW);
+    // ✅ fixed track count => never “more than 6 columns”
+    // ✅ empty tracks stay => fewer than 6 items won't stretch larger
+    // ✅ wraps naturally as cols drops (5/4/3/2/1)
+    return `repeat(${cols}, minmax(${GRID_MIN_CARD_W}px, 1fr))`;
+  }, [winW]);
 
   /* carousel state */
   const [idx, setIdx] = useState(0);
@@ -209,15 +236,11 @@ export default function EventCarouselSection({
 
       {/* content */}
       <div className="relative px-4 sm:px-6 lg:px-[120px]">
-        {/* ≥1024 and isCarousel={false}: DESKTOP grid list (auto-fits; will show 6 on big screens) */}
+        {/* ≥1024 and isCarousel={false}: DESKTOP grid list (max 6 cols, wraps when hit min width) */}
         {!effectiveCarousel ? (
           <div
             className="grid w-full gap-4 group/row transition-all duration-300"
-            style={{
-              // auto-fit = makes as many columns as can fit,
-              // but collapses empty columns so 6 items => max 6 visible columns
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            }}
+            style={{ gridTemplateColumns }}
           >
             {shownEvents.map((ev) => (
               <div

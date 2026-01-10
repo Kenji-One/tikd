@@ -55,8 +55,9 @@ const variants: Record<
 > = {
   primary: "bg-primary-500 text-white hover:bg-primary-600",
   secondary:
-    "border border-white/10 text-white bg-transparent hover:bg-white/5",
-  ghost: "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffffc]",
+    "border border-white/10 text-white bg-transparent hover:bg-white/5 hover:border-primary-500",
+  ghost:
+    "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffffc] border border-transparent hover:border-primary-500",
   destructive: "bg-error-600 text-white hover:bg-error-700",
   brand: "bg-primary-500 text-white hover:bg-primary-700",
   social: "bg-[#ffffff12] text-white hover:bg-white/20",
@@ -64,7 +65,7 @@ const variants: Record<
 };
 
 const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
-  sm: "py-2 px-4",
+  sm: "py-2.5 px-3.5",
   md: "py-3 px-4",
   lg: "py-4 px-8",
   xs: "py-[13px] px-4",

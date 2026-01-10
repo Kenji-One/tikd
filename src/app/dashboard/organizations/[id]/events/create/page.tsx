@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   useForm,
   useFieldArray,
@@ -374,6 +375,7 @@ export default function NewEventPage() {
 
   const selectedOrgName =
     orgInfo?.name || orgInfo?.title || orgInfo?.organizationName || "";
+  const selectedOrgImage = (orgInfo?.logo || orgInfo?.image || "").trim();
 
   /* ---------- Load organization members for promoters ------------- */
   const [members, setMembers] = useState<OrgMember[]>([]);
@@ -719,8 +721,8 @@ export default function NewEventPage() {
                         className={clsx(
                           "rounded-full border px-4 py-2 text-sm transition-colors",
                           active
-                            ? "border-white/20 bg-white/10 text-neutral-0"
-                            : "border-white/10 text-neutral-300 hover:text-neutral-0"
+                            ? "border-white/20 bg-primary-900/50 text-neutral-0"
+                            : "border-white/10 text-neutral-300 hover:text-neutral-0 hover:border-primary-500"
                         )}
                       >
                         {c}
@@ -729,17 +731,19 @@ export default function NewEventPage() {
                   })}
                 </div>
               </div>
-
-              <LabelledInput
-                label="Minimum Age"
-                placeholder="Enter Minimum Age"
-                type="number"
-                inputMode="numeric"
-                min="0"
-                {...register("minAge", { valueAsNumber: true })}
-                size="md"
-                variant="transparent"
-              />
+              <div className="space-y-2">
+                <FieldLabel required>Minimum Age</FieldLabel>
+                <LabelledInput
+                  noLabel
+                  placeholder="Enter Minimum Age"
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  {...register("minAge", { valueAsNumber: true })}
+                  size="md"
+                  variant="transparent"
+                />
+              </div>
 
               {/* -------- NEW LOCATION SECTION (selector + autocomplete) -------- */}
               <div className="space-y-3">
@@ -781,7 +785,7 @@ export default function NewEventPage() {
                           }
                         }}
                         className={clsx(
-                          "rounded-full px-4 py-2 text-sm transition",
+                          "rounded-full px-3.5 py-1.5 text-sm transition",
                           active
                             ? "bg-primary-900/50 text-neutral-0 ring-1 ring-primary-500/70"
                             : "text-neutral-300 hover:text-neutral-0"
@@ -857,8 +861,8 @@ export default function NewEventPage() {
 
                   {!showCity && !showSpecific ? (
                     <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
-                      <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-primary-900/40 ring-1 ring-primary-500/30">
-                        <MapPin className="h-4 w-4 text-primary-200" />
+                      <div className="mt-[2px] grid h-7 w-7 place-items-center rounded-md bg-primary-900/50 ring-1 ring-primary-500">
+                        <MapPin className="h-4 w-4 text-primary-300" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-neutral-0">
@@ -896,7 +900,7 @@ export default function NewEventPage() {
             desc="Event is tied to the organization you’re currently managing. You can optionally showcase who’s performing."
             icon={<UsersIcon className="h-5 w-5 text-primary-300" />}
           >
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="space-y-2">
                 <FieldLabel>Organization</FieldLabel>
 
@@ -904,8 +908,23 @@ export default function NewEventPage() {
                 <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
-                        <UsersIcon className="h-5 w-5 text-neutral-200" />
+                      <div className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10">
+                        {selectedOrgImage ? (
+                          <Image
+                            src={selectedOrgImage}
+                            alt={
+                              selectedOrgName
+                                ? `${selectedOrgName} logo`
+                                : "Organization logo"
+                            }
+                            fill
+                            sizes="40px"
+                            className="object-cover"
+                            priority={false}
+                          />
+                        ) : (
+                          <UsersIcon className="h-5 w-5 text-neutral-200" />
+                        )}
                       </div>
 
                       <div className="min-w-0">
@@ -926,7 +945,7 @@ export default function NewEventPage() {
                       </div>
                     </div>
 
-                    <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-neutral-200">
+                    <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-primary-300 font-medium">
                       Selected
                     </span>
                   </div>
@@ -939,14 +958,14 @@ export default function NewEventPage() {
 
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Artists Attending</h3>
+                  <h3 className="text-base font-semibold">Artists Attending</h3>
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
+                    variant="secondary"
                     onClick={() => addArtist({ name: "" })}
                   >
-                    <Plus className="mr-1 h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                     Add artist
                   </Button>
                 </div>
@@ -964,7 +983,7 @@ export default function NewEventPage() {
                         key={field.id}
                         className="flex items-end gap-3 rounded-lg border border-white/10 bg-neutral-950/60 p-4 w-full relative"
                       >
-                        <div className="flex flex-col gap-2 w-full">
+                        <div className="flex items-center gap-2 w-full">
                           <div className="max-w-sm">
                             <Controller
                               control={control}
@@ -974,13 +993,13 @@ export default function NewEventPage() {
                                   value={field.value}
                                   onChange={field.onChange}
                                   publicId={`temp/artists/${uuid()}`}
-                                  sizing="avatar"
+                                  sizing="small"
                                 />
                               )}
                             />
                           </div>
 
-                          <div className="space-y-1">
+                          <div className="space-y-1 w-full">
                             <LabelledInput
                               noLabel
                               aria-label="Artist name"
@@ -996,18 +1015,18 @@ export default function NewEventPage() {
                               </p>
                             ) : null}
                           </div>
-                        </div>
 
-                        <div className="flex justify-end absolute top-2 right-2">
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            aria-label="Remove artist"
-                            onClick={() => removeArtist(idx)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Remove artist"
+                              onClick={() => removeArtist(idx)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     );

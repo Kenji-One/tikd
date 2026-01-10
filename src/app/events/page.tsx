@@ -57,30 +57,6 @@ const events: Event[] = [
     img: "/dummy/event-5.png",
     category: "Shows",
   },
-  {
-    id: "138909",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Shows",
-  },
-  {
-    id: "1",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Shows",
-  },
-  {
-    id: "17",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Shows",
-  },
 
   {
     id: "24",
@@ -284,8 +260,10 @@ const events: Event[] = [
   },
 ];
 
-/* optional: map a bespoke icon per category */
-const categoryIcon: Record<string, ReactNode> = {
+/* optional: map a bespoke icon per category */ const categoryIcon: Record<
+  string,
+  ReactNode
+> = {
   Shows: (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -403,8 +381,8 @@ const toCarouselEvent = (e: BackendEvent): Event => ({
   category: "Live",
 });
 
-const GRID_MIN_CARD_W = 220; // must match minmax(220px, ...)
-const GRID_GAP_PX = 16; // gap-4 = 16px
+const GRID_MIN_CARD_W = 220;
+const GRID_GAP_PX = 16; // gap-4
 const GRID_MAX_COLS = 6;
 
 const getSidePadding = (winW: number) => {
@@ -412,6 +390,19 @@ const getSidePadding = (winW: number) => {
   if (winW >= 1024) return 120;
   if (winW >= 640) return 24;
   return 16;
+};
+
+const calcGridCols = (winW: number) => {
+  const side = getSidePadding(winW);
+  const safe = Math.max(0, winW - side * 2);
+
+  // how many columns can fit at the MIN card width (including gaps)
+  const colsAtMin = Math.floor(
+    (safe + GRID_GAP_PX) / (GRID_MIN_CARD_W + GRID_GAP_PX)
+  );
+
+  // clamp: 1..6
+  return Math.min(GRID_MAX_COLS, Math.max(1, colsAtMin));
 };
 
 export default function EventsPage() {
@@ -427,17 +418,11 @@ export default function EventsPage() {
   }, []);
 
   const gridTemplateColumns = useMemo(() => {
-    const side = getSidePadding(winW);
-    const safe = Math.max(0, winW - side * 2);
+    const cols = calcGridCols(winW);
 
-    const canFit7 =
-      safe >=
-      (GRID_MAX_COLS + 1) * GRID_MIN_CARD_W + GRID_MAX_COLS * GRID_GAP_PX;
-
-    // If 7 would fit, cap at 6. Otherwise keep auto-fit responsiveness.
-    return canFit7
-      ? `repeat(${GRID_MAX_COLS}, minmax(${GRID_MIN_CARD_W}px, 1fr))`
-      : `repeat(auto-fit, minmax(${GRID_MIN_CARD_W}px, 1fr))`;
+    // ✅ Fixed column count (<=6), so cards never stretch when there are fewer items.
+    // ✅ Uses minmax(220px, 1fr), so when cols drops (5/4/3...), it wraps naturally.
+    return `repeat(${cols}, minmax(${GRID_MIN_CARD_W}px, 1fr))`;
   }, [winW]);
 
   // 1️⃣ live events from API (auth required; hide if 401/no data)
@@ -446,7 +431,7 @@ export default function EventsPage() {
     queryFn: async (): Promise<Event[]> => {
       const res = await fetch("/api/events", { method: "GET" });
       if (!res.ok) {
-        if (res.status === 401) return []; // not signed in → silently hide
+        if (res.status === 401) return [];
         throw new Error(await res.text());
       }
       const json = (await res.json()) as BackendEvent[];
@@ -506,7 +491,7 @@ export default function EventsPage() {
 
       {/* carousels */}
       <main className="w-full py-12">
-        {/* ─── New: Live Events (real data) – shown when available ───────── */}
+        {/* ─── Live Events (real data) – shown when available ───────── */}
         {liveEvents.length > 0 && (
           <EventCarouselSection
             title="Live Events"
@@ -518,7 +503,6 @@ export default function EventsPage() {
         )}
 
         {selectedCategory === "All" ? (
-          // ─── All: render one section per category (dummy) ───────────────
           Object.entries(eventsByCategory).map(([cat, list]) => (
             <EventCarouselSection
               key={cat}
@@ -530,7 +514,6 @@ export default function EventsPage() {
             />
           ))
         ) : (
-          // ─── Single category: match EventCarouselSection grid container ──
           <section className="mb-16 px-4 sm:px-6 lg:px-[120px]">
             <div className="mb-6 flex items-center gap-3">
               <span className="inline-flex items-center justify-center text-white [&_svg]:h-7 [&_svg]:w-7">

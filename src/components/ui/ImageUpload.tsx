@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 
-type Sizing = "avatar" | "normal" | "big";
+type Sizing = "small" | "avatar" | "normal" | "big";
 
 type Props = {
   /** Current image URL coming from the form */
@@ -92,6 +92,15 @@ export default function ImageUpload({
   /* -------------------------------- Variants -------------------------------- */
   const variant = (() => {
     switch (sizing) {
+      case "small":
+        return {
+          label: "text-[10px] text-white/80",
+          box: "relative h-10 w-10 rounded-full overflow-hidden border border-white/10 ",
+          img: "object-cover rounded-full",
+          button:
+            "h-14 w-14 rounded-full border border-dashed border-white/30 hover:border-primary-500 text-white/80 hover:bg-white/10",
+          wrapper: "inline-flex flex-col gap-2",
+        };
       case "avatar":
         return {
           label: "text-xs text-white/80",

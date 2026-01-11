@@ -9,10 +9,11 @@ import clsx from "clsx";
 import usePlacesAutocomplete from "use-places-autocomplete";
 import { Loader2, MapPin, Search } from "lucide-react";
 
-/** Minimal typing for the only thing we need: google.maps.places existing */
+/** Minimal typing for what we need from google.maps */
 type GoogleMapsNamespace = {
   maps?: {
     places?: unknown;
+    importLibrary?: (name: string) => Promise<unknown>;
   };
 };
 
@@ -43,27 +44,54 @@ function hasPlacesLib(): boolean {
   return Boolean(window.google?.maps?.places);
 }
 
+/**
+ * Ensures Places library exists.
+ * - If script was loaded without libraries=places, this still works (importLibrary loads it).
+ * - If the key is restricted / billing missing / API disabled, this will throw (good: actionable error).
+ */
+async function ensurePlacesLibrary(): Promise<void> {
+  const importer = window.google?.maps?.importLibrary;
+  if (typeof importer === "function") {
+    await importer("places");
+  }
+  if (!hasPlacesLib()) {
+    throw new Error("Google Maps loaded, but Places library missing.");
+  }
+}
+
 function loadGooglePlacesScript(apiKey: string): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
 
-  // If already loaded with Places library, done.
+  // If already available, done.
   if (hasPlacesLib()) return Promise.resolve();
 
   const existing = document.getElementById(
     SCRIPT_ID
   ) as HTMLScriptElement | null;
 
-  // If script tag exists, wait for it.
+  // If script exists, wait for it then ensure Places.
   if (existing) {
     return new Promise((resolve, reject) => {
-      existing.addEventListener("load", () => {
-        if (hasPlacesLib()) resolve();
-        else
-          reject(new Error("Google Maps loaded, but Places library missing."));
-      });
-      existing.addEventListener("error", () =>
-        reject(new Error("Failed to load Google Maps script"))
-      );
+      const onLoad = async () => {
+        try {
+          await ensurePlacesLibrary();
+          resolve();
+        } catch (e) {
+          reject(e);
+        } finally {
+          existing.removeEventListener("load", onLoad);
+          existing.removeEventListener("error", onError);
+        }
+      };
+
+      const onError = () => {
+        reject(new Error("Failed to load Google Maps script"));
+        existing.removeEventListener("load", onLoad);
+        existing.removeEventListener("error", onError);
+      };
+
+      existing.addEventListener("load", onLoad);
+      existing.addEventListener("error", onError);
     });
   }
 
@@ -74,14 +102,19 @@ function loadGooglePlacesScript(apiKey: string): Promise<void> {
     s.async = true;
     s.defer = true;
 
-    // `loading=async` removes the yellow warning in Chrome devtools
+    // Keep libraries=places AND also importLibrary("places") after load.
+    // This combo is the most robust across environments.
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       apiKey
-    )}&libraries=places&v=weekly&loading=async`;
+    )}&v=weekly&libraries=places&loading=async`;
 
-    s.onload = () => {
-      if (hasPlacesLib()) resolve();
-      else reject(new Error("Google Maps loaded, but Places library missing."));
+    s.onload = async () => {
+      try {
+        await ensurePlacesLibrary();
+        resolve();
+      } catch (e) {
+        reject(e);
+      }
     };
 
     s.onerror = () => reject(new Error("Failed to load Google Maps script"));
@@ -138,7 +171,7 @@ function LoadedPlacesCombobox({
 }: Props) {
   const requestOptions = useMemo(() => {
     const base: Record<string, unknown> = {
-      // Good default: address suggestions (street addresses)
+      // addresses only
       types: ["address"],
     };
 
@@ -161,7 +194,6 @@ function LoadedPlacesCombobox({
     cache: 24 * 60 * 60,
   });
 
-  // Keep hook input in sync with parent value.
   useEffect(() => {
     setValue(value ?? "", false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,6 +282,18 @@ function LoadedPlacesCombobox({
   );
 }
 
+function buildHelpfulMapsErrorMessage(raw: string): string {
+  // Keep it short but actually useful.
+  return [
+    raw,
+    "Make sure these are true:",
+    "• Maps JavaScript API is enabled",
+    "• Places API is enabled",
+    "• Billing is enabled on the Google Cloud project",
+    "• Your API key’s HTTP referrer restrictions include this domain (tikd.vercel.app) and localhost (for dev)",
+  ].join(" ");
+}
+
 export default function PlacesAddressInput({
   value,
   onChange,
@@ -282,9 +326,10 @@ export default function PlacesAddressInput({
       .catch((e) => {
         if (!alive) return;
         setScriptReady(false);
-        setScriptError(
-          e instanceof Error ? e.message : "Failed to load Places"
-        );
+
+        const msg =
+          e instanceof Error ? e.message : "Failed to load Google Places";
+        setScriptError(buildHelpfulMapsErrorMessage(msg));
       });
 
     return () => {
@@ -313,10 +358,7 @@ export default function PlacesAddressInput({
       )}
 
       {scriptError ? (
-        <p className="mt-2 text-xs text-error-300">
-          {scriptError}. Add <code>NEXT_PUBLIC_GOOGLE_MAPS_KEY</code> to{" "}
-          <code>.env.local</code> and restart the dev server.
-        </p>
+        <p className="mt-2 text-xs text-error-300">{scriptError}</p>
       ) : null}
     </div>
   );

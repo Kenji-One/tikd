@@ -10,18 +10,15 @@ import usePlacesAutocomplete from "use-places-autocomplete";
 import { Loader2, MapPin, Search } from "lucide-react";
 
 /** Minimal typing for what we need from google.maps */
-type GoogleMapsNamespace = {
+type GoogleMapsLike = {
   maps?: {
     places?: unknown;
-    importLibrary?: (name: string) => Promise<unknown>;
   };
 };
 
-declare global {
-  interface Window {
-    google?: GoogleMapsNamespace;
-  }
-}
+type WindowWithGoogle = Window & {
+  google?: GoogleMapsLike;
+};
 
 type Props = {
   value: string;
@@ -40,52 +37,61 @@ type Props = {
 
 const SCRIPT_ID = "google-maps-places-script";
 
-function hasPlacesLib(): boolean {
-  return Boolean(window.google?.maps?.places);
+function getGoogle(): GoogleMapsLike | undefined {
+  return (window as unknown as WindowWithGoogle).google;
+}
+
+function hasMapsLoaded(): boolean {
+  return Boolean(getGoogle()?.maps);
+}
+
+function hasPlacesLoaded(): boolean {
+  return Boolean(getGoogle()?.maps?.places);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 /**
- * Ensures Places library exists.
- * - If script was loaded without libraries=places, this still works (importLibrary loads it).
- * - If the key is restricted / billing missing / API disabled, this will throw (good: actionable error).
+ * Load Google Maps JS (with libraries=places).
+ *
+ * IMPORTANT:
+ * - Resolve when Maps is loaded (window.google.maps exists)
+ * - Do NOT fail just because places namespace isn't immediately visible on onload.
+ *   We'll verify Places separately with a short poll after load.
  */
-async function ensurePlacesLibrary(): Promise<void> {
-  const importer = window.google?.maps?.importLibrary;
-  if (typeof importer === "function") {
-    await importer("places");
-  }
-  if (!hasPlacesLib()) {
-    throw new Error("Google Maps loaded, but Places library missing.");
-  }
-}
-
-function loadGooglePlacesScript(apiKey: string): Promise<void> {
+function loadGoogleMapsScript(apiKey: string): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
 
-  // If already available, done.
-  if (hasPlacesLib()) return Promise.resolve();
+  // If Maps already present, we're done.
+  if (hasMapsLoaded()) return Promise.resolve();
 
   const existing = document.getElementById(
     SCRIPT_ID
   ) as HTMLScriptElement | null;
 
-  // If script exists, wait for it then ensure Places.
+  // If script tag exists, either it's already loaded or we need to wait for it.
   if (existing) {
+    // If for any reason it already loaded before we attached listeners
+    if (hasMapsLoaded()) return Promise.resolve();
+
     return new Promise((resolve, reject) => {
-      const onLoad = async () => {
-        try {
-          await ensurePlacesLibrary();
-          resolve();
-        } catch (e) {
-          reject(e);
-        } finally {
-          existing.removeEventListener("load", onLoad);
-          existing.removeEventListener("error", onError);
-        }
+      const onLoad = () => {
+        cleanup();
+        if (hasMapsLoaded()) resolve();
+        else
+          reject(
+            new Error("Google Maps script loaded, but maps namespace missing.")
+          );
       };
 
       const onError = () => {
+        cleanup();
         reject(new Error("Failed to load Google Maps script"));
+      };
+
+      const cleanup = () => {
         existing.removeEventListener("load", onLoad);
         existing.removeEventListener("error", onError);
       };
@@ -102,19 +108,18 @@ function loadGooglePlacesScript(apiKey: string): Promise<void> {
     s.async = true;
     s.defer = true;
 
-    // Keep libraries=places AND also importLibrary("places") after load.
-    // This combo is the most robust across environments.
+    // `loading=async` helps avoid the Chrome warning.
+    // `libraries=places` is required for use-places-autocomplete.
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       apiKey
     )}&v=weekly&libraries=places&loading=async`;
 
-    s.onload = async () => {
-      try {
-        await ensurePlacesLibrary();
-        resolve();
-      } catch (e) {
-        reject(e);
-      }
+    s.onload = () => {
+      if (hasMapsLoaded()) resolve();
+      else
+        reject(
+          new Error("Google Maps script loaded, but maps namespace missing.")
+        );
     };
 
     s.onerror = () => reject(new Error("Failed to load Google Maps script"));
@@ -282,15 +287,14 @@ function LoadedPlacesCombobox({
   );
 }
 
-function buildHelpfulMapsErrorMessage(raw: string): string {
-  // Keep it short but actually useful.
+function buildHelpfulPlacesMissingMessage(): string {
   return [
-    raw,
+    "Google Maps loaded, but Places library missing.",
     "Make sure these are true:",
     "• Maps JavaScript API is enabled",
     "• Places API is enabled",
     "• Billing is enabled on the Google Cloud project",
-    "• Your API key’s HTTP referrer restrictions include this domain (tikd.vercel.app) and localhost (for dev)",
+    "• If your key is restricted: add HTTP referrers for tikd.vercel.app and localhost",
   ].join(" ");
 }
 
@@ -317,20 +321,38 @@ export default function PlacesAddressInput({
 
     let alive = true;
 
-    loadGooglePlacesScript(apiKey)
-      .then(() => {
+    (async () => {
+      try {
+        await loadGoogleMapsScript(apiKey);
+
         if (!alive) return;
         setScriptReady(true);
         setScriptError(null);
-      })
-      .catch((e) => {
-        if (!alive) return;
-        setScriptReady(false);
 
+        // Places namespace can appear a moment after script onload.
+        // Poll briefly before declaring it "missing".
+        const started = Date.now();
+        const timeoutMs = 4000;
+
+        while (alive && Date.now() - started < timeoutMs) {
+          if (hasPlacesLoaded()) return;
+          await sleep(150);
+        }
+
+        if (!alive) return;
+
+        // Only show warning if it truly never appeared.
+        if (!hasPlacesLoaded()) {
+          setScriptError(buildHelpfulPlacesMissingMessage());
+        }
+      } catch (e) {
+        if (!alive) return;
         const msg =
-          e instanceof Error ? e.message : "Failed to load Google Places";
-        setScriptError(buildHelpfulMapsErrorMessage(msg));
-      });
+          e instanceof Error ? e.message : "Failed to load Google Maps";
+        setScriptReady(false);
+        setScriptError(msg);
+      }
+    })();
 
     return () => {
       alive = false;

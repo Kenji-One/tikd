@@ -19,11 +19,14 @@ type GoogleMapsLike = {
 declare global {
   interface Window {
     google?: GoogleMapsLike;
+    // internal flag we set when Google callback fires
+    __tikdPlacesReady?: boolean;
   }
 }
 
 type Props = {
-  value: string;
+  /** Can be null/undefined from RHF defaultValues/reset/db — we normalize internally */
+  value: string | null | undefined;
   onChange: (v: string) => void;
 
   placeholder?: string;
@@ -46,70 +49,167 @@ const SCRIPT_ID = "google-maps-places-script";
  */
 const CALLBACK_NAME = "__tikdMapsPlacesInit";
 
+const INIT_TIMEOUT_MS = 12000;
+
+// shared listeners (handles multiple mounts / fast refresh gracefully)
+let initListeners: Array<() => void> = [];
+
 function hasPlacesLoaded(): boolean {
   return Boolean(window.google?.maps?.places);
 }
 
-function loadGoogleMapsPlacesScript(apiKey: string): Promise<void> {
+/**
+ * Define the global callback function BEFORE loading the script.
+ * If it doesn't exist, Google will throw: "callback is not a function"
+ */
+function ensureGlobalCallback(): void {
+  if (typeof window === "undefined") return;
+
+  const w = window as unknown as Record<string, unknown>;
+  if (typeof w[CALLBACK_NAME] !== "function") {
+    w[CALLBACK_NAME] = () => {
+      window.__tikdPlacesReady = true;
+
+      const listeners = initListeners;
+      initListeners = [];
+      listeners.forEach((fn) => fn());
+    };
+  }
+}
+
+function waitForInit(timeoutMs: number): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
+  if (hasPlacesLoaded() || window.__tikdPlacesReady) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(() => {
+      if (hasPlacesLoaded()) resolve();
+      else
+        reject(
+          new Error(
+            "Google Maps initialized, but Places library is still missing."
+          )
+        );
+    }, timeoutMs);
+
+    initListeners.push(() => {
+      window.clearTimeout(t);
+      resolve();
+    });
+  });
+}
+
+async function loadGoogleMapsPlacesScript(apiKey: string): Promise<void> {
+  if (typeof window === "undefined") return;
 
   // If Places already available, we're done.
-  if (hasPlacesLoaded()) return Promise.resolve();
+  if (hasPlacesLoaded()) return;
+
+  ensureGlobalCallback();
 
   const existing = document.getElementById(
     SCRIPT_ID
   ) as HTMLScriptElement | null;
 
-  // If a script exists but is missing required params, replace it.
+  // If a script exists but is missing required params, remove it.
   if (existing) {
     const src = existing.src || "";
-    const needsReplace =
-      !src.includes("libraries=places") ||
-      !src.includes(`callback=${CALLBACK_NAME}`);
+    const isCorrect =
+      src.includes("libraries=places") &&
+      src.includes(`callback=${CALLBACK_NAME}`);
 
-    if (needsReplace) {
+    if (!isCorrect) {
       existing.remove();
     } else {
-      // Correct script exists; wait for it.
-      return new Promise((resolve, reject) => {
-        const onLoad = () => {
-          cleanup();
-          resolve();
-        };
-        const onError = () => {
-          cleanup();
-          reject(new Error("Failed to load Google Maps script"));
-        };
-        const cleanup = () => {
-          existing.removeEventListener("load", onLoad);
-          existing.removeEventListener("error", onError);
-        };
+      // Correct script exists — wait briefly.
+      try {
+        await waitForInit(2000);
+        if (hasPlacesLoaded() || window.__tikdPlacesReady) return;
+      } catch {
+        // ignore, we'll force reload below
+      }
 
-        existing.addEventListener("load", onLoad);
-        existing.addEventListener("error", onError);
-      });
+      // If we're here, script is "stuck" (common after callback error / hot reload).
+      // Nuke and reload cleanly.
+      existing.remove();
+      window.__tikdPlacesReady = false;
     }
   }
 
-  // Create script tag
-  return new Promise((resolve, reject) => {
+  // Create script tag (callback must already be defined!)
+  await new Promise<void>((resolve, reject) => {
     const s = document.createElement("script");
     s.id = SCRIPT_ID;
     s.async = true;
     s.defer = true;
 
-    // `libraries=places` is required by use-places-autocomplete
-    // `callback=` is required to avoid the init race condition
-    // `loading=async` avoids the Chrome warning
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       apiKey
     )}&v=weekly&libraries=places&callback=${CALLBACK_NAME}&loading=async`;
 
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Failed to load Google Maps script"));
+    const onError = () => {
+      cleanup();
+      reject(new Error("Failed to load Google Maps script"));
+    };
+
+    const cleanup = () => {
+      s.removeEventListener("error", onError);
+    };
+
+    s.addEventListener("error", onError);
 
     document.head.appendChild(s);
+
+    // Resolve when callback fires (not onload).
+    waitForInit(INIT_TIMEOUT_MS)
+      .then(() => {
+        cleanup();
+        resolve();
+      })
+      .catch((e) => {
+        cleanup();
+        reject(
+          e instanceof Error ? e : new Error("Failed to initialize Google Maps")
+        );
+      });
   });
+}
+
+function LoadingInput({
+  placeholder,
+  error,
+  disabled,
+}: {
+  placeholder: string;
+  error?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+      </div>
+
+      <input
+        disabled
+        className={clsx(
+          "w-full rounded-lg border px-10 py-3 text-sm transition",
+          "bg-white/5 text-neutral-0 placeholder:text-neutral-500",
+          "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
+          "opacity-60 cursor-not-allowed",
+          error && "ring-1 ring-inset ring-error-500 border-transparent",
+          disabled && "opacity-60 cursor-not-allowed"
+        )}
+        placeholder={placeholder}
+        value=""
+        readOnly
+      />
+
+      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500">
+        <MapPin className="h-4 w-4" />
+      </div>
+    </div>
+  );
 }
 
 function LoadedPlacesCombobox({
@@ -123,20 +223,14 @@ function LoadedPlacesCombobox({
   scriptOk,
 }: Props & { scriptOk: boolean }) {
   const requestOptions = useMemo(() => {
-    const base: Record<string, unknown> = {
-      types: ["address"],
-    };
-
-    if (country) {
-      base.componentRestrictions = { country };
-    }
-
+    const base: Record<string, unknown> = { types: ["address"] };
+    if (country) base.componentRestrictions = { country };
     return base;
   }, [country]);
 
   const {
     ready,
-    value: inputValue,
+    value: inputValueRaw,
     setValue,
     suggestions: { status, data },
     clearSuggestions,
@@ -144,14 +238,20 @@ function LoadedPlacesCombobox({
     requestOptions: requestOptions as never,
     debounce: 250,
     cache: 24 * 60 * 60,
-    callbackName: CALLBACK_NAME, // ✅ key fix
+    callbackName: CALLBACK_NAME, // must match script callback=
   });
+
+  // Normalize incoming prop to a safe string (prevents null warnings)
+  const safePropValue = typeof value === "string" ? value : "";
+
+  // Normalize hook value too
+  const inputValue = typeof inputValueRaw === "string" ? inputValueRaw : "";
 
   // Keep hook input in sync with parent value.
   useEffect(() => {
-    setValue(value ?? "", false);
+    setValue(safePropValue, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }, [safePropValue]);
 
   const enabled = scriptOk && ready && !disabled;
   const options = enabled && status === "OK" ? data : [];
@@ -161,9 +261,10 @@ function LoadedPlacesCombobox({
     <div className={clsx("relative", className)}>
       <Combobox
         value={inputValue}
-        onChange={(selected: string) => {
-          setValue(selected, false);
-          onChange(selected);
+        onChange={(selected: string | null) => {
+          const next = selected ?? "";
+          setValue(next, false);
+          onChange(next);
           clearSuggestions();
         }}
         disabled={!enabled}
@@ -187,9 +288,9 @@ function LoadedPlacesCombobox({
               error && "ring-1 ring-inset ring-error-500 border-transparent"
             )}
             placeholder={placeholder}
-            value={inputValue}
+            value={inputValue} // never null/undefined
             onChange={(e) => {
-              const v = e.target.value;
+              const v = e.target.value ?? "";
               setValue(v, true);
               onChange(v);
             }}
@@ -280,16 +381,24 @@ export default function PlacesAddressInput({
 
   return (
     <div className={clsx("relative", className)}>
-      <LoadedPlacesCombobox
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        error={error}
-        disabled={disabled}
-        country={country}
-        className={className}
-        scriptOk={scriptOk}
-      />
+      {!scriptOk ? (
+        <LoadingInput
+          placeholder={placeholder}
+          error={error}
+          disabled={disabled}
+        />
+      ) : (
+        <LoadedPlacesCombobox
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          error={error}
+          disabled={disabled}
+          country={country}
+          className={className}
+          scriptOk={scriptOk}
+        />
+      )}
 
       {scriptError ? (
         <p className="mt-2 text-xs text-error-300">{scriptError}</p>

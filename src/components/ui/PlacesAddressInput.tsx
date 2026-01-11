@@ -16,9 +16,11 @@ type GoogleMapsLike = {
   };
 };
 
-type WindowWithGoogle = Window & {
-  google?: GoogleMapsLike;
-};
+declare global {
+  interface Window {
+    google?: GoogleMapsLike;
+  }
+}
 
 type Props = {
   value: string;
@@ -37,68 +39,56 @@ type Props = {
 
 const SCRIPT_ID = "google-maps-places-script";
 
-function getGoogle(): GoogleMapsLike | undefined {
-  return (window as unknown as WindowWithGoogle).google;
-}
-
-function hasMapsLoaded(): boolean {
-  return Boolean(getGoogle()?.maps);
-}
+/**
+ * IMPORTANT:
+ * This must match `callbackName` passed to usePlacesAutocomplete.
+ * Google Maps JS will call this function when fully ready.
+ */
+const CALLBACK_NAME = "__tikdMapsPlacesInit";
 
 function hasPlacesLoaded(): boolean {
-  return Boolean(getGoogle()?.maps?.places);
+  return Boolean(window.google?.maps?.places);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-/**
- * Load Google Maps JS (with libraries=places).
- *
- * IMPORTANT:
- * - Resolve when Maps is loaded (window.google.maps exists)
- * - Do NOT fail just because places namespace isn't immediately visible on onload.
- *   We'll verify Places separately with a short poll after load.
- */
-function loadGoogleMapsScript(apiKey: string): Promise<void> {
+function loadGoogleMapsPlacesScript(apiKey: string): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
 
-  // If Maps already present, we're done.
-  if (hasMapsLoaded()) return Promise.resolve();
+  // If Places already available, we're done.
+  if (hasPlacesLoaded()) return Promise.resolve();
 
   const existing = document.getElementById(
     SCRIPT_ID
   ) as HTMLScriptElement | null;
 
-  // If script tag exists, either it's already loaded or we need to wait for it.
+  // If a script exists but is missing required params, replace it.
   if (existing) {
-    // If for any reason it already loaded before we attached listeners
-    if (hasMapsLoaded()) return Promise.resolve();
+    const src = existing.src || "";
+    const needsReplace =
+      !src.includes("libraries=places") ||
+      !src.includes(`callback=${CALLBACK_NAME}`);
 
-    return new Promise((resolve, reject) => {
-      const onLoad = () => {
-        cleanup();
-        if (hasMapsLoaded()) resolve();
-        else
-          reject(
-            new Error("Google Maps script loaded, but maps namespace missing.")
-          );
-      };
+    if (needsReplace) {
+      existing.remove();
+    } else {
+      // Correct script exists; wait for it.
+      return new Promise((resolve, reject) => {
+        const onLoad = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = () => {
+          cleanup();
+          reject(new Error("Failed to load Google Maps script"));
+        };
+        const cleanup = () => {
+          existing.removeEventListener("load", onLoad);
+          existing.removeEventListener("error", onError);
+        };
 
-      const onError = () => {
-        cleanup();
-        reject(new Error("Failed to load Google Maps script"));
-      };
-
-      const cleanup = () => {
-        existing.removeEventListener("load", onLoad);
-        existing.removeEventListener("error", onError);
-      };
-
-      existing.addEventListener("load", onLoad);
-      existing.addEventListener("error", onError);
-    });
+        existing.addEventListener("load", onLoad);
+        existing.addEventListener("error", onError);
+      });
+    }
   }
 
   // Create script tag
@@ -108,61 +98,18 @@ function loadGoogleMapsScript(apiKey: string): Promise<void> {
     s.async = true;
     s.defer = true;
 
-    // `loading=async` helps avoid the Chrome warning.
-    // `libraries=places` is required for use-places-autocomplete.
+    // `libraries=places` is required by use-places-autocomplete
+    // `callback=` is required to avoid the init race condition
+    // `loading=async` avoids the Chrome warning
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       apiKey
-    )}&v=weekly&libraries=places&loading=async`;
+    )}&v=weekly&libraries=places&callback=${CALLBACK_NAME}&loading=async`;
 
-    s.onload = () => {
-      if (hasMapsLoaded()) resolve();
-      else
-        reject(
-          new Error("Google Maps script loaded, but maps namespace missing.")
-        );
-    };
-
+    s.onload = () => resolve();
     s.onerror = () => reject(new Error("Failed to load Google Maps script"));
 
     document.head.appendChild(s);
   });
-}
-
-function LoadingInput({
-  placeholder,
-  error,
-  disabled,
-}: {
-  placeholder: string;
-  error?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="relative">
-      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
-        <Loader2 className="h-4 w-4 animate-spin" />
-      </div>
-
-      <input
-        disabled
-        className={clsx(
-          "w-full rounded-lg border px-10 py-3 text-sm transition",
-          "bg-white/5 text-neutral-0 placeholder:text-neutral-500",
-          "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
-          "opacity-60 cursor-not-allowed",
-          error && "ring-1 ring-inset ring-error-500 border-transparent",
-          disabled && "opacity-60 cursor-not-allowed"
-        )}
-        placeholder={placeholder}
-        value=""
-        readOnly
-      />
-
-      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500">
-        <MapPin className="h-4 w-4" />
-      </div>
-    </div>
-  );
 }
 
 function LoadedPlacesCombobox({
@@ -173,10 +120,10 @@ function LoadedPlacesCombobox({
   disabled,
   country,
   className,
-}: Props) {
+  scriptOk,
+}: Props & { scriptOk: boolean }) {
   const requestOptions = useMemo(() => {
     const base: Record<string, unknown> = {
-      // addresses only
       types: ["address"],
     };
 
@@ -197,15 +144,17 @@ function LoadedPlacesCombobox({
     requestOptions: requestOptions as never,
     debounce: 250,
     cache: 24 * 60 * 60,
+    callbackName: CALLBACK_NAME, // ✅ key fix
   });
 
+  // Keep hook input in sync with parent value.
   useEffect(() => {
     setValue(value ?? "", false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
-  const enabled = ready && !disabled;
-  const options = status === "OK" ? data : [];
+  const enabled = scriptOk && ready && !disabled;
+  const options = enabled && status === "OK" ? data : [];
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
@@ -253,7 +202,7 @@ function LoadedPlacesCombobox({
           </div>
         </div>
 
-        {enabled && options.length > 0 && (
+        {options.length > 0 && (
           <Combobox.Options
             static
             className={clsx(
@@ -287,17 +236,6 @@ function LoadedPlacesCombobox({
   );
 }
 
-function buildHelpfulPlacesMissingMessage(): string {
-  return [
-    "Google Maps loaded, but Places library missing.",
-    "Make sure these are true:",
-    "• Maps JavaScript API is enabled",
-    "• Places API is enabled",
-    "• Billing is enabled on the Google Cloud project",
-    "• If your key is restricted: add HTTP referrers for tikd.vercel.app and localhost",
-  ].join(" ");
-}
-
 export default function PlacesAddressInput({
   value,
   onChange,
@@ -309,50 +247,31 @@ export default function PlacesAddressInput({
 }: Props) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
 
-  const [scriptReady, setScriptReady] = useState(false);
+  const [scriptOk, setScriptOk] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!apiKey) {
       setScriptError("Missing NEXT_PUBLIC_GOOGLE_MAPS_KEY");
-      setScriptReady(false);
+      setScriptOk(false);
       return;
     }
 
     let alive = true;
 
-    (async () => {
-      try {
-        await loadGoogleMapsScript(apiKey);
-
+    loadGoogleMapsPlacesScript(apiKey)
+      .then(() => {
         if (!alive) return;
-        setScriptReady(true);
+        setScriptOk(true);
         setScriptError(null);
-
-        // Places namespace can appear a moment after script onload.
-        // Poll briefly before declaring it "missing".
-        const started = Date.now();
-        const timeoutMs = 4000;
-
-        while (alive && Date.now() - started < timeoutMs) {
-          if (hasPlacesLoaded()) return;
-          await sleep(150);
-        }
-
+      })
+      .catch((e) => {
         if (!alive) return;
-
-        // Only show warning if it truly never appeared.
-        if (!hasPlacesLoaded()) {
-          setScriptError(buildHelpfulPlacesMissingMessage());
-        }
-      } catch (e) {
-        if (!alive) return;
-        const msg =
-          e instanceof Error ? e.message : "Failed to load Google Maps";
-        setScriptReady(false);
-        setScriptError(msg);
-      }
-    })();
+        setScriptOk(false);
+        setScriptError(
+          e instanceof Error ? e.message : "Failed to load Google Maps"
+        );
+      });
 
     return () => {
       alive = false;
@@ -361,23 +280,16 @@ export default function PlacesAddressInput({
 
   return (
     <div className={clsx("relative", className)}>
-      {!scriptReady ? (
-        <LoadingInput
-          placeholder={placeholder}
-          error={error}
-          disabled={disabled}
-        />
-      ) : (
-        <LoadedPlacesCombobox
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          error={error}
-          disabled={disabled}
-          country={country}
-          className={className}
-        />
-      )}
+      <LoadedPlacesCombobox
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        error={error}
+        disabled={disabled}
+        country={country}
+        className={className}
+        scriptOk={scriptOk}
+      />
 
       {scriptError ? (
         <p className="mt-2 text-xs text-error-300">{scriptError}</p>

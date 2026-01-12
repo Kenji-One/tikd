@@ -514,26 +514,6 @@ export default function TrackingLinksTable() {
         <h3 className="text-base font-bold uppercase text-neutral-400">
           Tracking Links
         </h3>
-
-        <button
-          type="button"
-          onClick={() =>
-            setSortBy((prev) =>
-              prev === "views"
-                ? "created"
-                : prev === "created"
-                  ? "status"
-                  : prev === "status"
-                    ? "name"
-                    : "views"
-            )
-          }
-          title="Change sort column"
-          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-[6.8px] text-xs text-white/80 outline-none hover:border-primary-500 hover:text-white cursor-pointer"
-        >
-          {headerSortLabel}
-          <ChevronDown size={14} className="opacity-70" />
-        </button>
       </div>
 
       {/* Table */}

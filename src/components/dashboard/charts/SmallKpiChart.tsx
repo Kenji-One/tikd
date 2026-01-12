@@ -203,11 +203,14 @@ function SmallKpiChart({
 
   // ✅ Smaller footprint tooltip (still same “family” as RevenueChart)
   const tipWrapper =
-    "pointer-events-none inline-block max-w-[170px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md shadow-[0_10px_26px_rgba(0,0,0,0.50)] px-2.5 py-2 text-white";
-  const tipValue = "text-[14px] font-extrabold leading-none tabular-nums";
-  const tipLabel = "mt-0.5 text-[11px] font-medium text-white/80 leading-tight";
+    "pointer-events-none inline-block max-w-[120px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md shadow-[0_10px_26px_rgba(0,0,0,0.50)] px-2.5 py-2 text-white";
+  const tipValue =
+    "text-[16px] font-extrabold leading-none tabular-nums text-center";
+  const tipLabel =
+    "mt-0.5 text-[14px] font-medium text-white/80 leading-tight text-center";
   const tipDivider = "my-1.5 h-px w-full bg-white/10";
-  const tipBottomRow = "flex items-center gap-1.5 text-[10px] font-medium";
+  const tipBottomRow =
+    "flex items-center flex-wrap gap-1.5 text-[11px] font-medium";
   const tipVs = "text-white/60 leading-tight";
 
   const labelForPoint = (row: Row) => {

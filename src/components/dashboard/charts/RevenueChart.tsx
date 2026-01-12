@@ -84,11 +84,32 @@ function isChartRow(x: unknown): x is ChartRow {
 }
 
 /* ------------------------------ Utils ------------------------------ */
+/**
+ * For axis ticks we want stable, clean labels.
+ * - >= 1000 => "240K"
+ * - <  1000 => "240" (no decimals)
+ */
 const fmtAxisK = (v: number) =>
-  Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}K` : `${v}`;
+  Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}K` : `${Math.round(v)}`;
 
+/**
+ * Tooltip value formatting should NEVER show long floating decimals.
+ * - >= 1000 => scale to "K" units with 1 decimal max (trim trailing .0)
+ * - <  1000 => also round to 1 decimal max (trim trailing .0)
+ *
+ * This fixes the client bug where filtered ranges produced values like:
+ * 233.58387845753128K
+ */
 const fmtTooltipK = (v: number) => {
-  if (Math.abs(v) < 1000) return `${v}`;
+  if (!Number.isFinite(v)) return "0";
+
+  // < 1000 => keep unit (we still append suffix outside), but round nicely
+  if (Math.abs(v) < 1000) {
+    const s = v.toFixed(1);
+    return s.endsWith(".0") ? s.slice(0, -2) : s;
+  }
+
+  // >= 1000 => convert to K units
   const n = v / 1000;
   const s = n.toFixed(1);
   return s.endsWith(".0") ? s.slice(0, -2) : s;

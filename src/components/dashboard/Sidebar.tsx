@@ -939,7 +939,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
 
   // media queries
   useEffect(() => {
-    const mq1400 = window.matchMedia("(max-width: 3000px)");
+    const mq1400 = window.matchMedia("(max-width: 1400px)");
     const mqMd = window.matchMedia("(min-width: 768px)");
 
     const apply = () => {

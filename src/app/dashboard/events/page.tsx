@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  src/app/dashboard/connections/events/page.tsx                      */
+/*  src/app/dashboard/events/page.tsx                                  */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -140,7 +140,7 @@ function MiniSelect<T extends string>({
         onClick={() => setOpen((v) => !v)}
         className={clsx(
           "inline-flex items-center gap-2 rounded-full border border-white/10",
-          "bg-neutral-900 px-3 py-3 font-medium text-neutral-200",
+          "bg-neutral-900 px-3 py-2 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
           "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer",
           btnClassName
@@ -385,7 +385,6 @@ function UpcomingEventsGridPanel({
   emptyTitle: string;
   emptySub: string;
 }) {
-  // keep a sensible order (soonest first)
   const sorted = useMemo(() => {
     const arr = [...list];
     return arr.sort(
@@ -393,7 +392,6 @@ function UpcomingEventsGridPanel({
     );
   }, [list]);
 
-  // Auto columns with a fixed card width (no phantom empty columns)
   const gridCols =
     "grid-cols-[repeat(auto-fill,minmax(170px,170px))] " +
     "sm:grid-cols-[repeat(auto-fill,minmax(190px,190px))] " +
@@ -562,13 +560,32 @@ function EventsStatsListPanel({
                   key={ev._id}
                   href={`/dashboard/events/${ev._id}`}
                   className={clsx(
-                    "group relative block overflow-hidden rounded-lg border",
+                    "group relative block rounded-lg border transition-colors duration-200 ease-out",
                     activeRow
                       ? "border-white/10 bg-neutral-948/10"
                       : "border-transparent bg-transparent hover:bg-white/4"
                   )}
                 >
-                  <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
+                  {/* Smooth hover highlight */}
+                  <span
+                    className={clsx(
+                      "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                      "opacity-0 transition-opacity duration-250 ease-out",
+                      "group-hover:opacity-100",
+                      "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]"
+                    )}
+                  />
+                  {/* Smooth hover border glow (opacity-based, no ring toggling) */}
+                  <span
+                    className={clsx(
+                      "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                      "opacity-0 transition-opacity duration-250 ease-out",
+                      "group-hover:opacity-100",
+                      "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]"
+                    )}
+                  />
+
+                  <div className="relative z-10 flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -622,7 +639,7 @@ function EventsStatsListPanel({
   );
 }
 
-/* -------------------- Drafts list panel (same design, no stats) ----- */
+/* -------------------- Drafts list panel (same styling as Past) ------ */
 function DraftsListPanel({
   list,
   eventsLoading,
@@ -666,7 +683,7 @@ function DraftsListPanel({
   return (
     <section
       className={clsx(
-        "mt-4 overflow-hidden rounded-2xl border border-white/10",
+        "mt-4 rounded-2xl border border-white/10",
         "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
       )}
     >
@@ -722,13 +739,32 @@ function DraftsListPanel({
                   key={ev._id}
                   href={`/dashboard/events/${ev._id}`}
                   className={clsx(
-                    "group relative block overflow-hidden rounded-2xl border",
+                    "group relative block rounded-lg border transition-colors duration-200 ease-out",
                     activeRow
-                      ? "border-white/10 bg-[#2a2a45]/90"
+                      ? "border-white/10 bg-neutral-948/10"
                       : "border-transparent bg-transparent hover:bg-white/4"
                   )}
                 >
-                  <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
+                  {/* Smooth hover highlight */}
+                  <span
+                    className={clsx(
+                      "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                      "opacity-0 transition-opacity duration-250 ease-out",
+                      "group-hover:opacity-100",
+                      "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]"
+                    )}
+                  />
+                  {/* Smooth hover border glow */}
+                  <span
+                    className={clsx(
+                      "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                      "opacity-0 transition-opacity duration-250 ease-out",
+                      "group-hover:opacity-100",
+                      "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]"
+                    )}
+                  />
+
+                  <div className="relative z-10 flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
                     <div className="flex min-w-0 items-center gap-3">
                       <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -749,6 +785,7 @@ function DraftsListPanel({
                       </div>
                     </div>
 
+                    {/* ✅ Keep Draft content (Status) like before */}
                     <div className="flex flex-1 items-center justify-start sm:justify-end">
                       <div className="text-left sm:text-center">
                         <p className="text-sm font-semibold text-neutral-0">
@@ -758,8 +795,6 @@ function DraftsListPanel({
                       </div>
                     </div>
                   </div>
-
-                  <span className="pointer-events-none absolute inset-0 rounded-2xl ring-0 transition group-hover:ring-1 group-hover:ring-primary-700/25" />
                 </Link>
               );
             })

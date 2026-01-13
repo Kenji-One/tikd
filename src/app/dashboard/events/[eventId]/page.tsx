@@ -5,6 +5,11 @@ type RouteParams = {
   eventId: string;
 };
 
-export default function EventRootPage({ params }: { params: RouteParams }) {
-  redirect(`/dashboard/events/${params.eventId}/summary`);
+export default async function EventRootPage({
+  params,
+}: {
+  params: Promise<RouteParams>;
+}) {
+  const { eventId } = await params;
+  redirect(`/dashboard/events/${eventId}/summary`);
 }

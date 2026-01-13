@@ -53,6 +53,16 @@ type HoverTooltipProps = {
   payload?: Array<{ payload?: unknown }>;
 };
 
+/**
+ * Minimal subset of what Recharts passes into a custom `dot` renderer.
+ * Recharts will pass extra fields — TS allows that (structural typing).
+ */
+type PinnedDotProps = {
+  cx?: number;
+  cy?: number;
+  index?: number;
+};
+
 function isRow(x: unknown): x is Row {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
@@ -267,9 +277,9 @@ function SmallKpiChart({
       ? Math.min(Math.max(pinnedIndex, 0), maxX)
       : null;
 
-  // ✅ IMPORTANT: Recharts TS types don't allow `null` here.
-  // We always return an element. When not pinned => "no-op" circle with r=0.
-  const pinnedDot = (p: any) => {
+  // ✅ IMPORTANT: no `any` — keep it a minimal structural type
+  // Recharts calls this with extra props; TS allows that.
+  const pinnedDot = (p: PinnedDotProps): JSX.Element => {
     const isPinned = clampedPin != null && p?.index === clampedPin;
 
     const cx = p?.cx ?? 0;

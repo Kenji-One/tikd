@@ -277,9 +277,8 @@ function SmallKpiChart({
       ? Math.min(Math.max(pinnedIndex, 0), maxX)
       : null;
 
-  // ✅ IMPORTANT: no `any` — keep it a minimal structural type
-  // Recharts calls this with extra props; TS allows that.
-  const pinnedDot = (p: PinnedDotProps): JSX.Element => {
+  // ✅ No JSX.Element return annotation — avoids "Cannot find namespace 'JSX'"
+  const pinnedDot = (p: PinnedDotProps) => {
     const isPinned = clampedPin != null && p?.index === clampedPin;
 
     const cx = p?.cx ?? 0;
@@ -289,7 +288,6 @@ function SmallKpiChart({
       return <circle cx={cx} cy={cy} r={0} fill="transparent" />;
     }
 
-    // Match Revenue dot style
     return (
       <circle
         cx={cx}

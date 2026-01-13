@@ -781,7 +781,7 @@ export default function TrackingLinksTable() {
       <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
         <Link
           href="/dashboard/tracking"
-          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700/50 px-3 py-2 font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
           View All
         </Link>

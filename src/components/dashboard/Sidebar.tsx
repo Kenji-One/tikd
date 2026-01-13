@@ -270,6 +270,12 @@ const DASH_ITEMS: DashNavItem[] = [
     icon: TicketIcon,
     match: (p) => p.startsWith("/dashboard/events"),
   },
+  {
+    href: "/dashboard/connections",
+    label: "Connections",
+    icon: ConnectionIcon,
+    match: (p) => p.startsWith("/dashboard/connections"),
+  },
 ];
 
 const DASH_COMING_SOON: Array<{ label: string; icon: LucideIcon }> = [
@@ -1141,7 +1147,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
                 motion={motion}
               />
             ))}
-            <GroupRow
+            {/* <GroupRow
               group={DASH_GROUPS[0]}
               pathname={pathname}
               open={connectionsOpen}
@@ -1151,7 +1157,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
               openPopover={() => openHover("connections")}
               scheduleClosePopover={scheduleCloseHover}
               motion={motion}
-            />
+            /> */}
             <GroupRow
               group={DASH_GROUPS[1]}
               pathname={pathname}

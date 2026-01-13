@@ -19,7 +19,7 @@ export type RevenueTooltip = {
   /** index to pin the marker + callout */
   index: number;
   valueLabel: string; // e.g. "$240,8K"
-  subLabel?: string; // e.g. "June 21, 2025"
+  subLabel?: string; // e.g. "June 2025" or "June 21, 2025"
   deltaText?: string; // e.g. "+24.6%"
   deltaPositive?: boolean;
 };
@@ -46,6 +46,9 @@ type Props = {
   valuePrefix?: string; // default "$"
   valueSuffix?: string; // default "K"
   showDateInTooltip?: boolean;
+
+  // ✅ controls hover tooltip date formatting
+  tooltipDateMode?: "full" | "monthYear";
 
   tooltipVariant?: "primary" | "light" | "dark";
   gradientId?: string;
@@ -84,32 +87,17 @@ function isChartRow(x: unknown): x is ChartRow {
 }
 
 /* ------------------------------ Utils ------------------------------ */
-/**
- * For axis ticks we want stable, clean labels.
- * - >= 1000 => "240K"
- * - <  1000 => "240" (no decimals)
- */
 const fmtAxisK = (v: number) =>
   Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}K` : `${Math.round(v)}`;
 
-/**
- * Tooltip value formatting should NEVER show long floating decimals.
- * - >= 1000 => scale to "K" units with 1 decimal max (trim trailing .0)
- * - <  1000 => also round to 1 decimal max (trim trailing .0)
- *
- * This fixes the client bug where filtered ranges produced values like:
- * 233.58387845753128K
- */
 const fmtTooltipK = (v: number) => {
   if (!Number.isFinite(v)) return "0";
 
-  // < 1000 => keep unit (we still append suffix outside), but round nicely
   if (Math.abs(v) < 1000) {
     const s = v.toFixed(1);
     return s.endsWith(".0") ? s.slice(0, -2) : s;
   }
 
-  // >= 1000 => convert to K units
   const n = v / 1000;
   const s = n.toFixed(1);
   return s.endsWith(".0") ? s.slice(0, -2) : s;
@@ -132,15 +120,18 @@ const fmtFullDate = (d?: Date) =>
       })
     : "";
 
+const fmtMonthYearLong = (d?: Date) =>
+  d
+    ? d.toLocaleDateString(undefined, {
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+
 function stripSign(s?: string) {
   return (s ?? "").trim().replace(/^[-+]\s*/, "");
 }
 
-/**
- * Piecewise mapping so ticks are equally spaced visually.
- * breakpoints: [0, 25k, 50k, 100k, ...]
- * returns scaled y in [0..(n-1)] with interpolation between breakpoints.
- */
 function makePiecewiseScaler(breakpoints: number[]) {
   const b = [...breakpoints].filter(Number.isFinite).sort((a, c) => a - c);
   const uniq: number[] = [];
@@ -153,17 +144,14 @@ function makePiecewiseScaler(breakpoints: number[]) {
   const toScaled = (value: number) => {
     if (uniq.length <= 1) return 0;
 
-    // clamp below
     if (value <= uniq[0]) return 0;
 
-    // clamp / extrapolate above
     if (value >= uniq[maxIdx]) {
       const prev = uniq[maxIdx - 1] ?? uniq[maxIdx];
       const denom = uniq[maxIdx] - prev || 1;
       return maxIdx + (value - uniq[maxIdx]) / denom;
     }
 
-    // find segment
     for (let i = 0; i < maxIdx; i++) {
       const a = uniq[i];
       const c = uniq[i + 1];
@@ -219,7 +207,6 @@ function calcDeltaFromPrev(rows: ChartRow[], idx: number) {
   return { text, positive };
 }
 
-/** ✅ EXACT same delta pill design as KpiCard */
 function DeltaPill({ text, positive }: { text: string; positive: boolean }) {
   const isNegative = !positive;
 
@@ -298,11 +285,11 @@ function RevenueChart({
   valuePrefix = "$",
   valueSuffix = "K",
   showDateInTooltip = true,
+  tooltipDateMode = "full",
   tooltipVariant = "primary",
   gradientId,
 }: Props) {
   const scaler = useMemo(() => {
-    // Ensure 0 + domain max exist in breakpoints so our axis is stable
     const base = Array.from(new Set([0, ...yTicks, domain[1]])).sort(
       (a, b) => a - b
     );
@@ -329,7 +316,6 @@ function RevenueChart({
 
   const fixedDelta = fixedDeltaFromTooltip(tooltip);
 
-  // ✅ New “glass purple” tooltip style (matches new reference)
   const tipWrapper =
     "pointer-events-none rounded-xl border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md px-4 py-3 text-white";
   const tipValue = "text-[22px] font-extrabold leading-none text-center";
@@ -359,7 +345,6 @@ function RevenueChart({
               />
             </linearGradient>
 
-            {/* ✅ Soft shadow for pinned SVG tooltip */}
             <filter id={shadowId} x="-50%" y="-50%" width="200%" height="200%">
               <feDropShadow
                 dx="0"
@@ -371,7 +356,6 @@ function RevenueChart({
             </filter>
           </defs>
 
-          {/* ✅ Equal-spaced Y ticks (Figma-like) */}
           <YAxis
             dataKey="y"
             type="number"
@@ -405,7 +389,6 @@ function RevenueChart({
             isAnimationActive={false}
           />
 
-          {/* Main stroke line (with hover dot) */}
           <Area
             type="monotone"
             dataKey="y"
@@ -424,7 +407,6 @@ function RevenueChart({
             }}
           />
 
-          {/* Pinned dot + pinned callout */}
           {pinnedRow && tooltip ? (
             <ReferenceDot
               x={pinnedRow.name}
@@ -439,7 +421,6 @@ function RevenueChart({
                 if (typeof x !== "number" || typeof y !== "number")
                   return <g />;
 
-                // ✅ New layout matches reference (value, date, divider, delta + vs text)
                 const w = 220;
                 const h = 86;
 
@@ -478,7 +459,6 @@ function RevenueChart({
                       filter={`url(#${shadowId})`}
                     />
 
-                    {/* pointer */}
                     <path
                       d={`M${w / 2 - 8} ${h} L${w / 2} ${h + 9} L${
                         w / 2 + 8
@@ -487,7 +467,6 @@ function RevenueChart({
                       stroke={panelStroke}
                     />
 
-                    {/* Value */}
                     <text
                       x="16"
                       y="30"
@@ -499,7 +478,6 @@ function RevenueChart({
                       {tooltip.valueLabel}
                     </text>
 
-                    {/* Date */}
                     {tooltip.subLabel ? (
                       <text
                         x="16"
@@ -513,7 +491,6 @@ function RevenueChart({
                       </text>
                     ) : null}
 
-                    {/* Divider */}
                     <line
                       x1="16"
                       y1="64"
@@ -523,7 +500,6 @@ function RevenueChart({
                       strokeWidth="1"
                     />
 
-                    {/* Bottom row: delta + vs previous month */}
                     {deltaTxt ? (
                       <>
                         <g transform={`translate(16, 70)`}>
@@ -574,7 +550,6 @@ function RevenueChart({
             />
           ) : null}
 
-          {/* Hover tooltip (NEW glass purple + delta + “vs previous month.”) */}
           <Tooltip
             cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1 }}
             isAnimationActive={false}
@@ -592,6 +567,11 @@ function RevenueChart({
               const delta =
                 fixedDelta ?? calcDeltaFromPrev(rows, row.i) ?? null;
 
+              const dateLabel =
+                tooltipDateMode === "monthYear"
+                  ? fmtMonthYearLong(row.date)
+                  : fmtFullDate(row.date);
+
               return (
                 <div className={tipWrapper}>
                   <div className={tipValue}>
@@ -601,7 +581,7 @@ function RevenueChart({
                   </div>
 
                   {showDateInTooltip ? (
-                    <div className={tipDate}>{fmtFullDate(row.date)}</div>
+                    <div className={tipDate}>{dateLabel}</div>
                   ) : null}
 
                   {delta?.text ? (

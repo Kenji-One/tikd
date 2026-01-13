@@ -13,11 +13,28 @@ import {
   YAxis,
 } from "recharts";
 import { memo, useMemo } from "react";
+import { Eye, Ticket } from "lucide-react";
+
+type TooltipDateMode = "monthYear" | "full";
+type TooltipIcon = "eye" | "ticket";
 
 type Props = {
   data: number[];
   domain?: [number, number];
   xLabels?: string[];
+
+  /** Real dates for each point (lets tooltip show “January 2026”, etc.) */
+  dates?: Date[];
+
+  /** Always-visible pinned dot index (matches Revenue behavior) */
+  pinnedIndex?: number;
+
+  /** Icon shown in tooltip next to main number */
+  tooltipIcon?: TooltipIcon;
+
+  /** Tooltip date formatting mode (match RevenueChart) */
+  tooltipDateMode?: TooltipDateMode;
+
   /**
    * These are the Y labels you want.
    * We will render them with EQUAL spacing (Figma behavior).
@@ -61,6 +78,18 @@ const AXIS_TICK_STYLE = {
 
 function stripSign(s?: string) {
   return (s ?? "").trim().replace(/^[-+]\s*/, "");
+}
+
+function fmtMonthYearLong(d: Date) {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function fmtFullDate(d: Date) {
+  return d.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function makePiecewiseScaler(breakpoints: number[]) {
@@ -170,6 +199,10 @@ function SmallKpiChart({
   data,
   domain = [0, Math.max(500, Math.max(...data))],
   xLabels = ["12AM", "8AM", "4PM", "11PM"],
+  dates,
+  pinnedIndex,
+  tooltipIcon,
+  tooltipDateMode = "monthYear",
   yTicks = [0, 100, 250, 500],
   stroke = "#9A46FF",
   deltaText,
@@ -201,22 +234,62 @@ function SmallKpiChart({
   const inferredPositive = rawDelta ? !rawDelta.startsWith("-") : true;
   const fixedIsPositive = deltaPositive ?? inferredPositive;
 
-  // ✅ Smaller footprint tooltip (still same “family” as RevenueChart)
+  // ✅ Tooltip sizing updated so bottom row doesn't stack
   const tipWrapper =
-    "pointer-events-none inline-block max-w-[120px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md shadow-[0_10px_26px_rgba(0,0,0,0.50)] px-2.5 py-2 text-white";
+    "pointer-events-none inline-block min-w-[150px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md shadow-[0_10px_26px_rgba(0,0,0,0.50)] px-2.5 py-2 text-white";
+  const tipValueRow = "flex items-center justify-center gap-1";
   const tipValue =
     "text-[16px] font-extrabold leading-none tabular-nums text-center";
   const tipLabel =
     "mt-0.5 text-[14px] font-medium text-white/80 leading-tight text-center";
   const tipDivider = "my-1.5 h-px w-full bg-white/10";
   const tipBottomRow =
-    "flex items-center flex-wrap gap-1.5 text-[11px] font-medium";
-  const tipVs = "text-white/60 leading-tight";
+    "flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap";
+  const tipVs = "text-white/60 leading-tight whitespace-nowrap";
+
+  const IconComp =
+    tooltipIcon === "ticket" ? Ticket : tooltipIcon === "eye" ? Eye : null;
 
   const labelForPoint = (row: Row) => {
     const idx = Math.round(row.x);
+
+    const d = dates?.[idx];
+    if (d) {
+      return tooltipDateMode === "full" ? fmtFullDate(d) : fmtMonthYearLong(d);
+    }
+
     if (xLabels[idx]) return xLabels[idx];
     return `#${idx + 1}`;
+  };
+
+  const clampedPin =
+    typeof pinnedIndex === "number"
+      ? Math.min(Math.max(pinnedIndex, 0), maxX)
+      : null;
+
+  // ✅ IMPORTANT: Recharts TS types don't allow `null` here.
+  // We always return an element. When not pinned => "no-op" circle with r=0.
+  const pinnedDot = (p: any) => {
+    const isPinned = clampedPin != null && p?.index === clampedPin;
+
+    const cx = p?.cx ?? 0;
+    const cy = p?.cy ?? 0;
+
+    if (!isPinned) {
+      return <circle cx={cx} cy={cy} r={0} fill="transparent" />;
+    }
+
+    // Match Revenue dot style
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={4.5}
+        fill="#FFFFFF"
+        stroke="#BD99FF"
+        strokeWidth={2}
+      />
+    );
   };
 
   return (
@@ -272,12 +345,12 @@ function SmallKpiChart({
             isAnimationActive={false}
           />
 
-          {/* main line + hover dot */}
+          {/* main line + pinned dot + hover dot */}
           <Line
             dataKey="y"
             stroke={stroke}
             strokeWidth={2}
-            dot={false}
+            dot={clampedPin == null ? false : pinnedDot}
             isAnimationActive={false}
             activeDot={{
               r: 4.5,
@@ -303,7 +376,16 @@ function SmallKpiChart({
 
               return (
                 <div className={tipWrapper}>
-                  <div className={tipValue}>{row.value}</div>
+                  <div className={tipValueRow}>
+                    {IconComp ? (
+                      <IconComp
+                        className="h-4 w-4 text-white/90"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <div className={tipValue}>{row.value}</div>
+                  </div>
+
                   <div className={tipLabel}>{label}</div>
 
                   {fixedDeltaTxt ? (

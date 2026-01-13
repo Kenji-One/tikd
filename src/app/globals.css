@@ -217,3 +217,12 @@ select {
 .recharts-surface:focus-visible {
   outline: none !important;
 }
+
+/* Hide scrollbars but keep scroll (for horizontal tab bars) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

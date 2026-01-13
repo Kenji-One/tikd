@@ -10,6 +10,10 @@ import clsx from "clsx";
 type Props = PropsWithChildren<{
   title: string;
   value: string;
+
+  /** Optional icon shown next to the main value */
+  valueIcon?: ReactNode;
+
   /** e.g. "+24.6%" or "-24.6%" */
   delta?: string;
   /** gradient classes for the background glow */
@@ -30,6 +34,7 @@ type Props = PropsWithChildren<{
 export default function KpiCard({
   title,
   value,
+  valueIcon,
   delta,
   accent = "from-[#7C3AED] to-[#9333EA]",
   className,
@@ -119,11 +124,21 @@ export default function KpiCard({
       <div className="mb-3 flex items-center justify-between">
         <div className="space-y-2 w-full">
           <div className="font-bold uppercase text-neutral-400">{title}</div>
+
           <div className="flex items-center gap-3 justify-between w-full">
             <div className="flex items-center gap-1.5">
-              <div className="text-[24px] font-extrabold tracking-[-0.48px] leading-[100%] text-white">
-                {value}
+              <div className="flex items-center gap-1.5">
+                {valueIcon ? (
+                  <span className="inline-flex items-center justify-center">
+                    {valueIcon}
+                  </span>
+                ) : null}
+
+                <div className="text-[24px] font-extrabold tracking-[-0.48px] leading-[100%] text-white">
+                  {value}
+                </div>
               </div>
+
               <div className="flex items-center gap-0.5">
                 {delta ? (
                   <span
@@ -142,6 +157,7 @@ export default function KpiCard({
                 ) : null}
               </div>
             </div>
+
             {toolbar}
           </div>
         </div>

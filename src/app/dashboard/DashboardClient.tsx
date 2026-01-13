@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, Ticket } from "lucide-react";
 
 import KpiCard from "@/components/dashboard/cards/KpiCard";
 import RevenueChart from "@/components/dashboard/charts/RevenueChart";
@@ -68,6 +69,7 @@ function monthLabels(start: Date, end: Date) {
 function monthDates(start: Date, end: Date) {
   const out: Date[] = [];
   const d = new Date(start);
+  // keep a stable mid-month day for “monthly points”
   d.setDate(21);
   while (d <= end) {
     out.push(new Date(d));
@@ -172,12 +174,25 @@ function niceTicks(maxValue: number, targetCount = 6) {
   return uniq;
 }
 
-// “All-time” for the demo = the full available dataset range
-const ALL_TIME_START = new Date(2024, 0, 1);
-const ALL_TIME_END = new Date(2024, 11, 31);
+function fmtMonthYearLong(d: Date) {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
 
 export default function DashboardClient() {
   const router = useRouter();
+
+  const today = useMemo(() => clampToDay(new Date()), []);
+  const currentYear = useMemo(() => today.getFullYear(), [today]);
+
+  // ✅ “No filter applied” should represent the CURRENT YEAR (so tooltip shows 2026 now)
+  const ALL_TIME_START = useMemo(
+    () => new Date(currentYear, 0, 1),
+    [currentYear]
+  );
+  const ALL_TIME_END = useMemo(
+    () => new Date(currentYear, 11, 31),
+    [currentYear]
+  );
 
   const [dateRange, setDateRange] = useState<DateRangeValue>({
     start: null,
@@ -188,12 +203,12 @@ export default function DashboardClient() {
 
   const effectiveStart = useMemo(
     () => (hasChosenRange ? (dateRange.start as Date) : ALL_TIME_START),
-    [hasChosenRange, dateRange.start]
+    [hasChosenRange, dateRange.start, ALL_TIME_START]
   );
 
   const effectiveEnd = useMemo(
     () => (hasChosenRange ? (dateRange.end as Date) : ALL_TIME_END),
-    [hasChosenRange, dateRange.end]
+    [hasChosenRange, dateRange.end, ALL_TIME_END]
   );
 
   const rangeDays = useMemo(
@@ -259,6 +274,33 @@ export default function DashboardClient() {
   );
   const tsTicks = useMemo(() => niceTicks(tsDomain[1], 4), [tsDomain]);
 
+  // ✅ Pin the “active” dot to:
+  // - current month if NO date filter (monthly mode)
+  // - otherwise the last point in the selected range
+  const pinnedIndex = useMemo(() => {
+    const len = revenueData.length;
+    if (len <= 0) return 0;
+
+    if (!hasChosenRange && !dailyMode) {
+      return Math.min(Math.max(today.getMonth(), 0), len - 1);
+    }
+
+    return len - 1;
+  }, [revenueData.length, hasChosenRange, dailyMode, today]);
+
+  const pinnedSubLabel = useMemo(() => {
+    const d = dates[pinnedIndex];
+    if (!d) return "";
+    // monthly => Month Year (no day)
+    if (!dailyMode) return fmtMonthYearLong(d);
+    // daily => full date handled in chart hover; pinned label can stay full-ish if needed
+    return d.toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, [dates, pinnedIndex, dailyMode]);
+
   return (
     <div className="space-y-5">
       <section className="grid grid-cols-[3.10fr_1.51fr] gap-5">
@@ -272,7 +314,6 @@ export default function DashboardClient() {
             stretchChart
             detailsHref="/dashboard/finances/revenue"
             toolbar={
-              // ✅ smaller so picker never “dominates” the card
               <div className="max-w-[210px]">
                 <DateRangePicker value={dateRange} onChange={setDateRange} />
               </div>
@@ -285,12 +326,14 @@ export default function DashboardClient() {
               yTicks={revenueTicks}
               xLabels={labels}
               tooltip={{
-                index: Math.min(6, Math.max(0, revenueData.length - 1)),
+                index: pinnedIndex,
                 valueLabel: "$240,8K",
-                subLabel: "June 21, 2025",
+                subLabel: pinnedSubLabel,
                 deltaText: "+24.6%",
                 deltaPositive: true,
               }}
+              // ✅ monthly hover should show Month Year (no day)
+              tooltipDateMode={dailyMode ? "full" : "monthYear"}
               stroke="#9A46FF"
               fillTop="#9A46FF"
             />
@@ -300,6 +343,9 @@ export default function DashboardClient() {
             <KpiCard
               title="Total Page Views"
               value="400"
+              valueIcon={
+                <Eye className="h-5 w-5 shrink-0 text-white/90" aria-hidden />
+              }
               delta="+24.6%"
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="p-5 border-b border-neutral-700"
@@ -307,6 +353,10 @@ export default function DashboardClient() {
             >
               <SmallKpiChart
                 data={pageViewsData}
+                dates={dates}
+                pinnedIndex={pinnedIndex}
+                tooltipIcon="eye"
+                tooltipDateMode={dailyMode ? "full" : "monthYear"}
                 domain={pvDomain}
                 yTicks={pvTicks}
                 xLabels={labels}
@@ -319,6 +369,12 @@ export default function DashboardClient() {
             <KpiCard
               title="Total Tickets Sold"
               value="400"
+              valueIcon={
+                <Ticket
+                  className="h-5 w-5 shrink-0 text-white/90"
+                  aria-hidden
+                />
+              }
               delta="-24.6%"
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="p-5"
@@ -326,6 +382,10 @@ export default function DashboardClient() {
             >
               <SmallKpiChart
                 data={ticketsSoldData}
+                dates={dates}
+                pinnedIndex={pinnedIndex}
+                tooltipIcon="ticket"
+                tooltipDateMode={dailyMode ? "full" : "monthYear"}
                 domain={tsDomain}
                 yTicks={tsTicks}
                 xLabels={labels}

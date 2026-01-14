@@ -1,4 +1,4 @@
-// src/app/dashboard/organizations/[id]/event/new/page.tsx
+// src/app/dashboard/events/create/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -58,9 +58,10 @@ type LocationMode = "specific" | "city" | "tbd" | "tba" | "secret";
 
 /* ----------------------------- Schema ----------------------------- */
 
-const timeHHMM = z
-  .string()
-  .regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "Use HH:MM (e.g. 18:10)");
+const timeHHMMOrEmpty = z.union([
+  z.literal(""),
+  z.string().regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "Use HH:MM (e.g. 18:10)"),
+]);
 
 const FormSchema = z
   .object({
@@ -78,8 +79,8 @@ const FormSchema = z
         path: ["start"],
       }),
 
-    startTime: timeHHMM,
-    endTime: timeHHMM,
+    startTime: timeHHMMOrEmpty,
+    endTime: timeHHMMOrEmpty,
 
     /** Derived ISO (sent to API) */
     date: z.string().optional(),
@@ -121,8 +122,24 @@ const FormSchema = z
     status: z.enum(["published", "draft"]).default("published"),
   })
   .superRefine((v, ctx) => {
-    const cityNeeded =
-      v.locationMode === "specific" || v.locationMode === "city";
+    // ✅ Require times (but still allow empty initial UI state)
+    if (!v.startTime) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["startTime"],
+        message: "Start time is required",
+      });
+    }
+    if (!v.endTime) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["endTime"],
+        message: "End time is required",
+      });
+    }
+
+    // (your existing location validation stays below)
+    const cityNeeded = v.locationMode === "city";
     const addressNeeded = v.locationMode === "specific";
 
     if (cityNeeded) {
@@ -325,8 +342,8 @@ export default function NewEventPage() {
     resolver: zodResolver(FormSchema),
     defaultValues: {
       dateRange: { start: null, end: null },
-      startTime: "18:00",
-      endTime: "21:00",
+      startTime: "",
+      endTime: "",
       categories: [],
       promoters: [],
       artists: [],
@@ -405,14 +422,15 @@ export default function NewEventPage() {
     start: null,
     end: null,
   }) as DateRangeValue;
-  const startTime = watch("startTime") ?? "18:00";
-  const endTime = watch("endTime") ?? "21:00";
+  const startTime = watch("startTime") ?? "";
+  const endTime = watch("endTime") ?? "";
 
   const { startISO, endISO } = useMemo(() => {
     const sDay = dateRange.start ? clampToDay(dateRange.start) : null;
     const eDay = dateRange.end ? clampToDay(dateRange.end) : sDay;
 
     if (!sDay || !eDay) return { startISO: "", endISO: "" };
+    if (!startTime || !endTime) return { startISO: "", endISO: "" };
 
     const sISO = isoFromDayAndTime(sDay, startTime);
     let eISO = isoFromDayAndTime(eDay, endTime);
@@ -540,7 +558,7 @@ export default function NewEventPage() {
     { key: "secret", label: "It’s a secret" },
   ];
 
-  const showCity = locationMode === "specific" || locationMode === "city";
+  const showCity = locationMode === "city";
   const showSpecific = locationMode === "specific";
 
   return (
@@ -656,7 +674,7 @@ export default function NewEventPage() {
                       }
                       error={!!errors.startTime}
                       minuteStep={5}
-                      placeholder="Select Time"
+                      placeholder="Select Start Time"
                     />
                     {errors.startTime?.message ? (
                       <p className="text-xs text-error-300">
@@ -675,7 +693,7 @@ export default function NewEventPage() {
                       }
                       error={!!errors.endTime}
                       minuteStep={5}
-                      placeholder="Select Time"
+                      placeholder="Select End Time"
                     />
                     {errors.endTime?.message ? (
                       <p className="text-xs text-error-300">

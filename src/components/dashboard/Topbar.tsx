@@ -8,7 +8,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Compass } from "lucide-react";
 import {
   Search as SearchIcon,
   Settings as SettingsIcon,
@@ -325,6 +325,36 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                     </div>
 
                     <div className="p-1.5">
+                      <Link
+                        href="/"
+                        role="menuitem"
+                        onClick={() => setAvatarOpen(false)}
+                        className="flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-sm text-white/90 hover:bg-white/5 focus:bg-white/5 focus:outline-none"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                          className="w-4 h-4 opacity-80"
+                        >
+                          <g transform="translate(-5.1429 -5.1429) scale(1.4286)">
+                            <path d="M5 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V7z" />
+                            <path d="M9 7.5v9" stroke-dasharray="1 2" />
+                            <path d="M11 9h7" />
+                            <path d="M14.5 9v8" />
+                          </g>
+                        </svg>
+                        {/* <Compass className="h-4 w-4 opacity-80" /> */}
+
+                        <span>Explore Tixsy</span>
+                      </Link>
                       <Link
                         href="/dashboard/settings"
                         role="menuitem"

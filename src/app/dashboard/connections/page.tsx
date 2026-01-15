@@ -1,9 +1,6 @@
-/* ------------------------------------------------------------------ */
-/*  src/app/dashboard/connections/page.tsx                            */
-/* ------------------------------------------------------------------ */
-
-import ConnectionsHubClient from "./ConnectionsHubClient";
+// src/app/dashboard/connections/page.tsx
+import { redirect } from "next/navigation";
 
 export default function ConnectionsPage() {
-  return <ConnectionsHubClient />;
+  redirect("/dashboard/organizations");
 }

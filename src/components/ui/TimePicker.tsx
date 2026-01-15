@@ -47,6 +47,19 @@ function fmtDisplay(hh24: number, mm: number) {
   return `${h12} : ${pad2(mm)} ${am ? "AM" : "PM"}`;
 }
 
+function mod(n: number, m: number) {
+  return ((n % m) + m) % m;
+}
+
+/**
+ * Behavior:
+ * 1) When value is empty and user opens picker, show 00:00 *inside dropdown* as placeholder.
+ * 2) On FIRST interaction (any arrow or AM/PM):
+ *    - treat current as 00:00 baseline (not the old default 6pm)
+ *    - commit a valid time
+ *    - permanently ban 00:00 for this component instance
+ * 3) After lock: 00:00 can never be committed or displayed again in that session.
+ */
 export default function TimePicker({
   label,
   value,
@@ -61,9 +74,18 @@ export default function TimePicker({
 
   const parsed = useMemo(() => parseHHMM(value), [value]);
 
+  // Once true, 00:00 is forbidden forever for this component instance.
+  const [zeroLocked, setZeroLocked] = useState(false);
+
+  // If external value ever becomes "00:00", consider it locked (so it won’t reappear).
+  useEffect(() => {
+    if (parsed && parsed.hh === 0 && parsed.mm === 0) setZeroLocked(true);
+  }, [parsed]);
+
+  // Keep your original “idle” internal defaults, but they MUST NOT affect the placeholder UX.
   const init = useMemo(() => {
     if (parsed) return parsed;
-    return { hh: 18, mm: 0 };
+    return { hh: 18, mm: 0 }; // internal default (only used once we have a real selection)
   }, [parsed]);
 
   const [h12, setH12] = useState(() => to12h(init.hh).h12);
@@ -99,34 +121,75 @@ export default function TimePicker({
     };
   }, [open]);
 
-  function commit(nextH12: number, nextMM: number, nextAM: boolean) {
-    const step = Math.max(1, Math.floor(minuteStep));
-    const snapped = Math.round(nextMM / step) * step;
-    const mm2 = clamp(snapped === 60 ? 0 : snapped, 0, 59);
+  // Placeholder state is ONLY for dropdown display, not for the input itself.
+  const showZeroPlaceholderInPicker = open && !parsed && !zeroLocked;
 
-    const hh24 = to24h(clamp(nextH12, 1, 12), nextAM);
-    const next = `${pad2(hh24)}:${pad2(mm2)}`;
+  function ensureNotMidnight(hh24: number, mm2: number, locked: boolean) {
+    if (!locked) return { hh24, mm: mm2 };
 
-    setH12(clamp(nextH12, 1, 12));
-    setMM(mm2);
-    setAM(nextAM);
+    // After lock: never allow 00:00.
+    if (hh24 === 0 && mm2 === 0) {
+      const step = Math.max(1, Math.floor(minuteStep));
+      return { hh24: 0, mm: clamp(step, 0, 59) };
+    }
 
-    onChange(next);
+    return { hh24, mm: mm2 };
+  }
+
+  function commit24(hh24: number, mm2: number, lockNow: boolean) {
+    const locked = zeroLocked || lockNow;
+
+    const safe = ensureNotMidnight(
+      clamp(hh24, 0, 23),
+      clamp(mm2, 0, 59),
+      locked
+    );
+
+    if (lockNow && !zeroLocked) setZeroLocked(true);
+
+    const t = to12h(safe.hh24);
+    setH12(t.h12);
+    setAM(t.am);
+    setMM(safe.mm);
+
+    onChange(`${pad2(safe.hh24)}:${pad2(safe.mm)}`);
+  }
+
+  // Use 00:00 as the baseline ONLY when the picker is showing the placeholder.
+  function getCurrent24() {
+    if (showZeroPlaceholderInPicker) return { hh24: 0, mm: 0 };
+    return { hh24: to24h(h12, am), mm };
   }
 
   function incHour(delta: number) {
-    let nh = h12 + delta;
-    if (nh < 1) nh = 12;
-    if (nh > 12) nh = 1;
-    commit(nh, mm, am);
+    const cur = getCurrent24();
+    const nextHH = mod(cur.hh24 + delta, 24);
+    commit24(nextHH, cur.mm, true);
   }
 
   function incMinute(delta: number) {
     const step = Math.max(1, Math.floor(minuteStep));
-    let n = mm + delta * step;
-    while (n < 0) n += 60;
-    while (n >= 60) n -= 60;
-    commit(h12, n, am);
+    const cur = getCurrent24();
+
+    const total = cur.hh24 * 60 + cur.mm;
+    const nextTotal = mod(total + delta * step, 24 * 60);
+    const nextHH = Math.floor(nextTotal / 60);
+    const nextMM = nextTotal % 60;
+
+    commit24(nextHH, nextMM, true);
+  }
+
+  function setAMPM(nextAM: boolean) {
+    // If placeholder showing 00:00, AM means 00:00 (but will be nudged away after lock),
+    // PM means 12:00.
+    if (showZeroPlaceholderInPicker) {
+      const baseHH = nextAM ? 0 : 12;
+      commit24(baseHH, 0, true);
+      return;
+    }
+
+    const hh24 = to24h(h12, nextAM);
+    commit24(hh24, mm, true);
   }
 
   const display = parsed ? fmtDisplay(parsed.hh, parsed.mm) : null;
@@ -145,6 +208,13 @@ export default function TimePicker({
     " hover:text-white",
     "focus:outline-none"
   );
+
+  // Picker face
+  const pickerHourText = showZeroPlaceholderInPicker ? "00" : String(h12);
+  const pickerMinuteText = showZeroPlaceholderInPicker ? "00" : pad2(mm);
+
+  const pickerAMActive = showZeroPlaceholderInPicker ? false : am;
+  const pickerPMActive = showZeroPlaceholderInPicker ? false : !am;
 
   return (
     <div ref={rootRef} className={clsx("relative", className)}>
@@ -196,13 +266,11 @@ export default function TimePicker({
           aria-label="Select time"
           className={clsx(
             "absolute left-0 z-40 mt-2",
-            // compact like your 2nd image
             "w-[164px] max-w-[calc(100vw-2rem)]",
             "rounded-xl border border-white/10 bg-neutral-950/92 backdrop-blur-md",
             "p-3"
           )}
         >
-          {/* tight body */}
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
             {/* Hours */}
             <div className="flex flex-col items-center">
@@ -216,7 +284,7 @@ export default function TimePicker({
               </button>
 
               <div className="mt-2 text-lg font-medium text-white/90 tabular-nums leading-none">
-                {h12}
+                {pickerHourText}
               </div>
 
               <button
@@ -245,7 +313,7 @@ export default function TimePicker({
               </button>
 
               <div className="mt-2 text-lg font-medium text-white/90 tabular-nums leading-none">
-                {pad2(mm)}
+                {pickerMinuteText}
               </div>
 
               <button
@@ -259,34 +327,34 @@ export default function TimePicker({
             </div>
           </div>
 
-          {/* AM/PM segmented (compact like your 2nd image) */}
+          {/* AM/PM segmented */}
           <div className="mt-4 rounded-md border border-primary-400/35 bg-neutral-950/35 p-1">
             <div className="grid grid-cols-2 gap-1">
               <button
                 type="button"
-                onClick={() => commit(h12, mm, true)}
+                onClick={() => setAMPM(true)}
                 className={clsx(
                   "rounded-sm py-1 text-base font-semibold transition",
                   "focus:outline-none focus:ring-2 focus:ring-primary-500/15",
-                  am
+                  pickerAMActive
                     ? "bg-primary-500/20 text-primary-200"
                     : "text-white/65 hover:text-white"
                 )}
-                aria-pressed={am}
+                aria-pressed={pickerAMActive}
               >
                 AM
               </button>
               <button
                 type="button"
-                onClick={() => commit(h12, mm, false)}
+                onClick={() => setAMPM(false)}
                 className={clsx(
                   "rounded-sm py-1 text-base font-semibold transition",
                   "focus:outline-none focus:ring-2 focus:ring-primary-500/15",
-                  !am
+                  pickerPMActive
                     ? "bg-primary-500/20 text-primary-200"
                     : "text-white/65 hover:text-white"
                 )}
-                aria-pressed={!am}
+                aria-pressed={pickerPMActive}
               >
                 PM
               </button>

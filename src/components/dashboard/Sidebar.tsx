@@ -23,7 +23,9 @@ import {
   Sparkles,
   Type as TypeIcon,
   MessageCircleMore,
+  ContactRound,
 } from "lucide-react";
+import build from "next/dist/build";
 
 /* ------------------------------- Icons ----------------------------- */
 /**
@@ -238,7 +240,7 @@ type OrgNavItem = {
 type DashNavItem = {
   href: string;
   label: string;
-  icon: OrgIconLike;
+  icon: IconLike;
   match: (pathname: string) => boolean;
 };
 
@@ -271,10 +273,28 @@ const DASH_ITEMS: DashNavItem[] = [
     match: (p) => p.startsWith("/dashboard/events"),
   },
   {
-    href: "/dashboard/connections",
-    label: "Connections",
-    icon: ConnectionIcon,
-    match: (p) => p.startsWith("/dashboard/connections"),
+    href: "/dashboard/organizations",
+    label: "Organizations",
+    icon: Building2,
+    match: (p) => p.startsWith("/dashboard/organizations"),
+  },
+  {
+    href: "/dashboard/teams",
+    label: "Teams",
+    icon: Users,
+    match: (p) => p.startsWith("/dashboard/teams"),
+  },
+  {
+    href: "/dashboard/friends",
+    label: "Friends",
+    icon: ContactRound,
+    match: (p) => p.startsWith("/dashboard/friends"),
+  },
+  {
+    href: "/dashboard/finances",
+    label: "Finances",
+    icon: FinancesIcon,
+    match: (p) => p.startsWith("/dashboard/finances"),
   },
 ];
 
@@ -1147,28 +1167,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
                 motion={motion}
               />
             ))}
-            {/* <GroupRow
-              group={DASH_GROUPS[0]}
-              pathname={pathname}
-              open={connectionsOpen}
-              setOpen={setConnectionsOpen}
-              collapsed={collapsed}
-              isPopoverOpen={collapsed && hoveredGroup === "connections"}
-              openPopover={() => openHover("connections")}
-              scheduleClosePopover={scheduleCloseHover}
-              motion={motion}
-            /> */}
-            <GroupRow
-              group={DASH_GROUPS[1]}
-              pathname={pathname}
-              open={financesOpen}
-              setOpen={setFinancesOpen}
-              collapsed={collapsed}
-              isPopoverOpen={collapsed && hoveredGroup === "finances"}
-              openPopover={() => openHover("finances")}
-              scheduleClosePopover={scheduleCloseHover}
-              motion={motion}
-            />
             <NavRow
               href={DASH_FOOTER.href}
               label={DASH_FOOTER.label}

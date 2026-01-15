@@ -27,7 +27,11 @@ export default function DashboardChrome({ children }: Props) {
     pathname === "/dashboard" ||
     pathname.startsWith("/dashboard/finances") ||
     pathname.startsWith("/dashboard/connections") ||
-    pathname.startsWith("/dashboard/events");
+    pathname.startsWith("/dashboard/events") ||
+    pathname.startsWith("/dashboard/settings") ||
+    pathname.startsWith("/dashboard/organizations") ||
+    pathname.startsWith("/dashboard/teams") ||
+    pathname.startsWith("/dashboard/friends");
 
   const hasSidebar = isOrgSubpage || isDashboardHome;
 

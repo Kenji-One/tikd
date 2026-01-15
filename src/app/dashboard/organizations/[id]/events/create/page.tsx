@@ -54,7 +54,7 @@ type OrgInfo = {
   logo?: string;
 };
 
-type LocationMode = "specific" | "city" | "tbd" | "tba" | "secret";
+type LocationMode = "specific" | "city" | "tbd" | "tba" | "secret" | "other";
 
 /* ----------------------------- Schema ----------------------------- */
 
@@ -92,11 +92,12 @@ const FormSchema = z
 
     /** Location (new UI fields) */
     locationMode: z
-      .enum(["specific", "city", "tbd", "tba", "secret"])
+      .enum(["specific", "city", "tbd", "tba", "secret", "other"])
       .default("specific"),
     locationCity: z.string().trim().optional(),
     locationAddress: z.string().trim().optional(),
     locationName: z.string().trim().optional(),
+    locationOther: z.string().trim().optional(),
 
     /** Org is taken from URL */
     organizationId: z.string().min(1, "Organization is required"),
@@ -138,9 +139,10 @@ const FormSchema = z
       });
     }
 
-    // (your existing location validation stays below)
+    // Location validation
     const cityNeeded = v.locationMode === "city";
     const addressNeeded = v.locationMode === "specific";
+    const otherNeeded = v.locationMode === "other";
 
     if (cityNeeded) {
       if (!v.locationCity || v.locationCity.trim().length < 2) {
@@ -158,6 +160,16 @@ const FormSchema = z
           code: "custom",
           path: ["locationAddress"],
           message: "Address is required",
+        });
+      }
+    }
+
+    if (otherNeeded) {
+      if (!v.locationOther || v.locationOther.trim().length < 2) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["locationOther"],
+          message: "Please enter a location",
         });
       }
     }
@@ -301,18 +313,16 @@ function buildLocationString(v: FormValues) {
       return "It’s a secret";
     case "city":
       return (v.locationCity || "").trim();
+    case "other":
+      return (v.locationOther || "").trim();
     case "specific": {
       const name = (v.locationName || "").trim();
       const addr = (v.locationAddress || "").trim();
       const city = (v.locationCity || "").trim();
 
-      // Clean, readable, and still one string for the current DB model/API.
-      // Example: "Madison Square Garden · 4 Pennsylvania Plaza, New York, NY 10001, USA"
-      // If you want city appended even when Google already includes it, uncomment the city logic.
       const parts = [name, addr].filter(Boolean);
       let out = parts.join(" · ");
 
-      // If address is missing (shouldn’t pass validation), fall back to city.
       if (!out) out = city;
 
       return out;
@@ -352,6 +362,7 @@ export default function NewEventPage() {
       locationCity: "",
       locationAddress: "",
       locationName: "",
+      locationOther: "",
     },
     mode: "onBlur",
   });
@@ -452,6 +463,7 @@ export default function NewEventPage() {
   const locationCity = watch("locationCity") ?? "";
   const locationAddress = watch("locationAddress") ?? "";
   const locationName = watch("locationName") ?? "";
+  const locationOther = watch("locationOther") ?? "";
 
   const derivedLocationLabel = useMemo(() => {
     const v = {
@@ -459,9 +471,16 @@ export default function NewEventPage() {
       locationCity,
       locationAddress,
       locationName,
+      locationOther,
     } as FormValues;
     return buildLocationString(v) || "Location TBA";
-  }, [locationMode, locationCity, locationAddress, locationName]);
+  }, [
+    locationMode,
+    locationCity,
+    locationAddress,
+    locationName,
+    locationOther,
+  ]);
 
   /* ---------- Submit ---------------------------------------------- */
   const submitImpl =
@@ -556,10 +575,12 @@ export default function NewEventPage() {
     { key: "tbd", label: "TBD" },
     { key: "tba", label: "TBA" },
     { key: "secret", label: "It’s a secret" },
+    { key: "other", label: "Other" },
   ];
 
   const showCity = locationMode === "city";
   const showSpecific = locationMode === "specific";
+  const showOther = locationMode === "other";
 
   return (
     <main className="relative bg-neutral-950 text-neutral-0 ">
@@ -749,6 +770,7 @@ export default function NewEventPage() {
                   })}
                 </div>
               </div>
+
               <div className="space-y-2">
                 <FieldLabel required>Minimum Age</FieldLabel>
                 <LabelledInput
@@ -763,7 +785,7 @@ export default function NewEventPage() {
                 />
               </div>
 
-              {/* -------- NEW LOCATION SECTION (selector + autocomplete) -------- */}
+              {/* -------- LOCATION SECTION (selector + inputs) -------- */}
               <div className="space-y-3">
                 <FieldLabel required>
                   Where does the event take place?
@@ -793,9 +815,29 @@ export default function NewEventPage() {
                               shouldDirty: true,
                             });
                             setValue("locationName", "", { shouldDirty: true });
+                            setValue("locationOther", "", {
+                              shouldDirty: true,
+                            });
                           }
 
                           if (t.key === "city") {
+                            setValue("locationAddress", "", {
+                              shouldDirty: true,
+                            });
+                            setValue("locationName", "", { shouldDirty: true });
+                            setValue("locationOther", "", {
+                              shouldDirty: true,
+                            });
+                          }
+
+                          if (t.key === "specific") {
+                            setValue("locationOther", "", {
+                              shouldDirty: true,
+                            });
+                          }
+
+                          if (t.key === "other") {
+                            setValue("locationCity", "", { shouldDirty: true });
                             setValue("locationAddress", "", {
                               shouldDirty: true,
                             });
@@ -877,7 +919,30 @@ export default function NewEventPage() {
                     </>
                   ) : null}
 
-                  {!showCity && !showSpecific ? (
+                  {showOther ? (
+                    <div className="space-y-2">
+                      <FieldLabel required>Location</FieldLabel>
+                      <LabelledInput
+                        noLabel
+                        aria-label="Other location"
+                        placeholder="Type any location (e.g. Online, Your house, Secret rooftop...)"
+                        {...register("locationOther")}
+                        size="md"
+                        variant="transparent"
+                        className={clsx(errors.locationOther && errorRing)}
+                      />
+                      {errors.locationOther?.message ? (
+                        <p className="text-xs text-error-300">
+                          {String(errors.locationOther.message)}
+                        </p>
+                      ) : null}
+                      <p className="text-xs text-neutral-400">
+                        This will be shown exactly as typed.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {!showCity && !showSpecific && !showOther ? (
                     <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
                       <div className="mt-[2px] grid h-7 w-7 place-items-center rounded-md bg-primary-900/50 ring-1 ring-primary-500">
                         <MapPin className="h-4 w-4 text-primary-300" />

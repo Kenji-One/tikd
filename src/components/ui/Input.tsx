@@ -75,7 +75,7 @@ const paddingMap: Record<
     iconLeft: "py-3 pl-10 pr-4",
   },
   lg: {
-    base: "py-4 px-6 text-lg",
+    base: "py-4 px-4 text-lg",
     iconLeft: "py-4 pl-12 pr-5",
   },
 };

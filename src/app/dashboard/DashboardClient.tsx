@@ -307,7 +307,7 @@ export default function DashboardClient() {
         <div className="grid grid-cols-[3.15fr_1.74fr] rounded-lg border border-neutral-700 bg-neutral-900 pl-4">
           <KpiCard
             title="Total Revenue"
-            value="$240,8K"
+            value="$240.8K"
             delta="+24.6%"
             accent="from-[#7C3AED] to-[#9333EA]"
             className="pr-6 py-5 border-r border-neutral-700"
@@ -327,7 +327,7 @@ export default function DashboardClient() {
               xLabels={labels}
               tooltip={{
                 index: pinnedIndex,
-                valueLabel: "$240,8K",
+                valueLabel: "$240.8K",
                 subLabel: pinnedSubLabel,
                 deltaText: "+24.6%",
                 deltaPositive: true,

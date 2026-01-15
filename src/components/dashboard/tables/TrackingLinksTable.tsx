@@ -6,9 +6,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Check, Plus, Pencil, X, Trash2 } from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
 import CopyButton from "@/components/ui/CopyButton";
+import LabelledInput from "@/components/ui/LabelledInput";
+import { Button } from "@/components/ui/Button";
 
 /* ------------------------------- Types ------------------------------ */
 type Status = "Active" | "Paused" | "Disabled";
@@ -26,7 +28,7 @@ type Row = {
 };
 
 /* ----------------------------- Mock Data --------------------------- */
-const rows: Row[] = new Array(7).fill(0).map((_, i) => ({
+const INITIAL_ROWS: Row[] = new Array(7).fill(0).map((_, i) => ({
   id: `row-${i}`,
   name: "Tracking Link Name",
   url: `/Tweets/${(Math.random() + 1).toString(36).slice(2, 8)}/`,
@@ -42,6 +44,42 @@ type SortKey = "views" | "created" | "name" | "status";
 type SortDir = "asc" | "desc";
 
 const parseDate = (d: string) => Date.parse(d) || 0;
+
+function formatCreated(d: Date) {
+  // "Sep 19, 2025" style
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+function makeId(prefix = "row") {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now()
+    .toString(36)
+    .slice(2, 8)}`;
+}
+
+function normalizePathInput(inputRaw: string) {
+  const input = String(inputRaw || "").trim();
+  if (!input) return "";
+
+  // If they paste a full URL, try to extract pathname
+  if (/^https?:\/\//i.test(input)) {
+    try {
+      const u = new URL(input);
+      const p = u.pathname || "/";
+      const withSlash = p.startsWith("/") ? p : `/${p}`;
+      return withSlash.endsWith("/") ? withSlash : `${withSlash}/`;
+    } catch {
+      // fallthrough
+    }
+  }
+
+  // treat as path
+  const withLeading = input.startsWith("/") ? input : `/${input}`;
+  return withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
+}
 
 /* Tiny Twitter glyph matching table size */
 function TwitterIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
@@ -398,8 +436,487 @@ function QrDialog({
   );
 }
 
+type TrackingLinkDraft = {
+  name: string;
+  url: string;
+  type: LinkType;
+  status: Status;
+};
+
+function TrackingLinkDialog({
+  open,
+  mode,
+  initial,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  mode: "create" | "edit";
+  initial?: Row | null;
+  onClose: () => void;
+  onSave: (draft: TrackingLinkDraft) => void;
+}) {
+  useEscapeToClose(open, onClose);
+
+  const [draft, setDraft] = useState<TrackingLinkDraft>({
+    name: "",
+    url: "",
+    type: "Event",
+    status: "Active",
+  });
+
+  const [touched, setTouched] = useState(false);
+
+  // Custom selects open state
+  const [typeOpen, setTypeOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const typeWrapRef = useRef<HTMLDivElement | null>(null);
+  const statusWrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setTouched(false);
+    setTypeOpen(false);
+    setStatusOpen(false);
+
+    if (mode === "edit" && initial) {
+      setDraft({
+        name: initial.name || "",
+        url: initial.url || "",
+        type: initial.type,
+        status: initial.status,
+      });
+    } else {
+      setDraft({
+        name: "Tracking Link Name",
+        url: "/Tweets/",
+        type: "Event",
+        status: "Active",
+      });
+    }
+
+    // focus next tick (LabelledInput doesn't forward refs, so focus by id)
+    const t = window.setTimeout(() => {
+      const el = document.getElementById("tracking-link-name");
+      if (el && "focus" in el) (el as HTMLInputElement).focus();
+    }, 0);
+
+    return () => window.clearTimeout(t);
+  }, [open, mode, initial]);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    if (!open) return;
+
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+
+      const inType = !!typeWrapRef.current?.contains(target);
+      const inStatus = !!statusWrapRef.current?.contains(target);
+
+      if (!inType) setTypeOpen(false);
+      if (!inStatus) setStatusOpen(false);
+    };
+
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  const title =
+    mode === "create" ? "Create Tracking Link" : "Edit Tracking Link";
+
+  const normalizedUrl = normalizePathInput(draft.url);
+  const nameOk = draft.name.trim().length >= 2;
+  const urlOk = normalizedUrl.startsWith("/") && normalizedUrl.length >= 2;
+
+  const canSave = nameOk && urlOk;
+
+  const errName = !nameOk && touched;
+  const errUrl = !urlOk && touched;
+
+  const typeOptions: { value: LinkType; label: string; desc?: string }[] = [
+    {
+      value: "Event",
+      label: "Event",
+      desc: "Tracking link for a specific event",
+    },
+    {
+      value: "Promo",
+      label: "Promo",
+      desc: "Used for promotions and campaigns",
+    },
+    { value: "Other", label: "Other", desc: "Anything else" },
+  ];
+
+  const statusOptions: { value: Status; label: string; desc?: string }[] = [
+    { value: "Active", label: "Active", desc: "Enabled and collecting views" },
+    { value: "Paused", label: "Paused", desc: "Temporarily disabled" },
+    { value: "Disabled", label: "Disabled", desc: "Fully disabled" },
+  ];
+
+  const selectBtnCls = clsx(
+    "mt-2 w-full rounded-lg border bg-neutral-900 px-4 py-3 text-base text-neutral-0 outline-none",
+    "border-white/10",
+    "hover:border-white/20",
+    "focus:border-primary-500",
+    "transition cursor-pointer",
+    "flex items-center justify-between gap-3"
+  );
+
+  const dropdownPanelCls = clsx(
+    "absolute left-0 right-0 z-[90] mt-2 overflow-hidden rounded-lg",
+    "border border-white/10 bg-neutral-900"
+  );
+
+  const optionBtnBase = clsx(
+    "w-full text-left px-4 py-3 transition flex items-start justify-between gap-3",
+    "hover:bg-white/5 focus:bg-white/5 focus:outline-none"
+  );
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-md"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={clsx(
+          "relative mx-4 w-full max-w-[720px] rounded-xl",
+          "border border-white/10 bg-neutral-900"
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 md:px-8">
+          <div className="min-w-0">
+            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.48px] text-neutral-0">
+              {title}
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-white/10 p-2 text-white/70 hover:text-white hover:border-white/20 cursor-pointer"
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-6 md:px-8">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {/* Name */}
+            <div className="md:col-span-2">
+              <LabelledInput
+                id="tracking-link-name"
+                label="Tracking Link Name"
+                value={draft.name}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, name: e.target.value }))
+                }
+                onBlur={() => setTouched(true)}
+                placeholder="e.g. Twitter Campaign A"
+                size="lg"
+                variant="full"
+                error={
+                  errName
+                    ? "Please enter a name (at least 2 characters)."
+                    : null
+                }
+                className={clsx(
+                  "bg-neutral-900 border-white/10",
+                  errName
+                    ? "border-error-500 focus:border-error-400"
+                    : "focus:border-primary-600/50"
+                )}
+              />
+            </div>
+
+            {/* Path */}
+            <div className="md:col-span-2">
+              <p className="text-sm text-neutral-500">
+                This is the path users will see in the table (you can paste a
+                full URL; we’ll keep the pathname).
+              </p>
+
+              <div className="mt-2">
+                <LabelledInput
+                  id="tracking-link-path"
+                  label="Link Path"
+                  value={draft.url}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, url: e.target.value }))
+                  }
+                  onBlur={() => setTouched(true)}
+                  placeholder="/Tweets/abc123/"
+                  size="lg"
+                  variant="full"
+                  error={
+                    errUrl
+                      ? "Please enter a valid path (must start with “/”)."
+                      : null
+                  }
+                  className={clsx(
+                    "bg-neutral-900 border-white/10",
+                    errUrl
+                      ? "border-error-500 focus:border-error-400"
+                      : "focus:border-primary-600/50"
+                  )}
+                />
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-neutral-400">
+                <span className="rounded-md border border-white/10 bg-neutral-800 px-2.5 py-1">
+                  Preview
+                </span>
+                <span className="text-neutral-300">{normalizedUrl || "—"}</span>
+                {normalizedUrl ? (
+                  <span className="text-neutral-500">
+                    ({fullTrackingUrl(normalizedUrl)})
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Type (custom select) */}
+            <div ref={typeWrapRef} className="relative">
+              <label className="block leading-[90%] font-normal text-white mb-2">
+                Link Type
+              </label>
+
+              <button
+                type="button"
+                className={selectBtnCls}
+                aria-haspopup="listbox"
+                aria-expanded={typeOpen}
+                onClick={() => {
+                  setStatusOpen(false);
+                  setTypeOpen((v) => !v);
+                }}
+              >
+                <span className="truncate">
+                  {typeOptions.find((o) => o.value === draft.type)?.label ??
+                    draft.type}
+                </span>
+                <ChevronDown
+                  size={16}
+                  className={clsx(
+                    "text-neutral-400 transition",
+                    typeOpen && "rotate-180 text-neutral-200"
+                  )}
+                />
+              </button>
+
+              {typeOpen ? (
+                <div className={dropdownPanelCls} role="listbox">
+                  <div className="max-h-64 overflow-auto">
+                    {typeOptions.map((opt) => {
+                      const selected = opt.value === draft.type;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className={clsx(
+                            optionBtnBase,
+                            selected && "bg-primary-500/10"
+                          )}
+                          onClick={() => {
+                            setDraft((d) => ({ ...d, type: opt.value }));
+                            setTypeOpen(false);
+                          }}
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-neutral-0">
+                              {opt.label}
+                            </span>
+                            {opt.desc ? (
+                              <span className="mt-1 block text-xs text-neutral-400">
+                                {opt.desc}
+                              </span>
+                            ) : null}
+                          </span>
+
+                          {selected ? (
+                            <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-primary-500/30 bg-primary-500/15 text-primary-200">
+                              <Check size={16} />
+                            </span>
+                          ) : (
+                            <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-transparent">
+                              <Check size={16} />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Status (custom select) */}
+            <div ref={statusWrapRef} className="relative">
+              <label className="block leading-[90%] font-normal text-white mb-2">
+                Status
+              </label>
+
+              <button
+                type="button"
+                className={selectBtnCls}
+                aria-haspopup="listbox"
+                aria-expanded={statusOpen}
+                onClick={() => {
+                  setTypeOpen(false);
+                  setStatusOpen((v) => !v);
+                }}
+              >
+                <span className="truncate">
+                  {statusOptions.find((o) => o.value === draft.status)?.label ??
+                    draft.status}
+                </span>
+                <ChevronDown
+                  size={16}
+                  className={clsx(
+                    "text-neutral-400 transition",
+                    statusOpen && "rotate-180 text-neutral-200"
+                  )}
+                />
+              </button>
+
+              {statusOpen ? (
+                <div className={dropdownPanelCls} role="listbox">
+                  <div className="max-h-64 overflow-auto">
+                    {statusOptions.map((opt) => {
+                      const selected = opt.value === draft.status;
+
+                      // subtle status tint
+                      const tint =
+                        opt.value === "Active"
+                          ? "bg-success-500/10 border-success-500/25"
+                          : opt.value === "Paused"
+                            ? "bg-warning-500/10 border-warning-500/25"
+                            : "bg-white/5 border-white/10";
+
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className={clsx(
+                            optionBtnBase,
+                            selected && "bg-primary-500/10"
+                          )}
+                          onClick={() => {
+                            setDraft((d) => ({ ...d, status: opt.value }));
+                            setStatusOpen(false);
+                          }}
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-neutral-0">
+                              {opt.label}
+                            </span>
+                            {opt.desc ? (
+                              <span className="mt-1 block text-xs text-neutral-400">
+                                {opt.desc}
+                              </span>
+                            ) : null}
+                          </span>
+
+                          <span
+                            className={clsx(
+                              "mt-0.5 inline-flex h-7 min-w-[64px] items-center justify-center rounded-md border px-2 text-xs font-semibold",
+                              selected
+                                ? "border-primary-500/35 bg-primary-500/15 text-primary-200"
+                                : tint,
+                              selected ? "" : "text-neutral-300"
+                            )}
+                          >
+                            {selected ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Check size={14} />
+                                Selected
+                              </span>
+                            ) : (
+                              "Choose"
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-8 flex flex-col items-center justify-end gap-3 sm:flex-row">
+            <Button
+              type="button"
+              variant="secondary"
+              size="md"
+              onClick={onClose}
+              className={clsx(
+                "py-3 px-6 text-base font-medium leading-[100%]",
+                "border-white/40 hover:border-white/60 hover:bg-transparent"
+              )}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              disabled={!canSave}
+              icon={
+                mode === "create" ? <Plus size={16} /> : <Pencil size={16} />
+              }
+              onClick={() => {
+                setTouched(true);
+                if (!canSave) return;
+
+                onSave({
+                  name: draft.name.trim(),
+                  url: normalizePathInput(draft.url),
+                  type: draft.type,
+                  status: draft.status,
+                });
+              }}
+              className={clsx(
+                "py-3 px-6 text-base font-semibold leading-[100%]",
+                !canSave && "bg-white/10 hover:bg-white/10"
+              )}
+            >
+              {mode === "create" ? "Create" : "Save Changes"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ----------------------------- Component --------------------------- */
 export default function TrackingLinksTable() {
+  const [data, setData] = useState<Row[]>(INITIAL_ROWS);
+
   const [sortBy, setSortBy] = useState<SortKey>("views");
   const [dir, setDir] = useState<SortDir>("desc");
 
@@ -407,17 +924,11 @@ export default function TrackingLinksTable() {
   const [qrOpen, setQrOpen] = useState(false);
   const [activeRow, setActiveRow] = useState<Row | null>(null);
 
-  const headerSortLabel =
-    sortBy === "views"
-      ? "Views"
-      : sortBy === "created"
-        ? "Date"
-        : sortBy === "status"
-          ? "Status"
-          : "Name";
+  const [editOpen, setEditOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const sorted = useMemo(() => {
-    const arr = [...rows];
+    const arr = [...data];
     arr.sort((a, b) => {
       let A: number | string;
       let B: number | string;
@@ -444,7 +955,7 @@ export default function TrackingLinksTable() {
         : String(B).localeCompare(String(A));
     });
     return arr;
-  }, [sortBy, dir]);
+  }, [data, sortBy, dir]);
 
   const toggleSort = (key: SortKey) => {
     if (key === sortBy) setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -500,6 +1011,77 @@ export default function TrackingLinksTable() {
     setActiveRow(null);
   };
 
+  const openEdit = (row: Row) => {
+    setActiveRow(row);
+    setEditOpen(true);
+  };
+
+  const closeEdit = () => {
+    setEditOpen(false);
+    // keep activeRow for table selection? we clear to be consistent
+    setActiveRow(null);
+  };
+
+  const openCreate = () => {
+    setCreateOpen(true);
+  };
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+  };
+
+  const handleCreate = (draft: {
+    name: string;
+    url: string;
+    type: LinkType;
+    status: Status;
+  }) => {
+    const now = new Date();
+    const newRow: Row = {
+      id: makeId("row"),
+      name: draft.name,
+      url: draft.url,
+      type: draft.type,
+      status: draft.status,
+      created: formatCreated(now),
+      views: 0,
+      revenue: 0,
+    };
+
+    // Add to top (feels right for dashboards)
+    setData((prev) => [newRow, ...prev]);
+    setCreateOpen(false);
+
+    // Optional: if you want to highlight it later
+    // setActiveRow(newRow);
+  };
+
+  const handleEdit = (draft: {
+    name: string;
+    url: string;
+    type: LinkType;
+    status: Status;
+  }) => {
+    if (!activeRow) return;
+
+    setData((prev) =>
+      prev.map((r) =>
+        r.id === activeRow.id
+          ? {
+              ...r,
+              name: draft.name,
+              url: draft.url,
+              type: draft.type,
+              status: draft.status,
+            }
+          : r
+      )
+    );
+
+    setEditOpen(false);
+    setActiveRow(null);
+  };
+
   const thRow = "[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-4";
   const thBase =
     "text-base text-left font-semibold cursor-pointer select-none hover:text-white/80";
@@ -514,6 +1096,24 @@ export default function TrackingLinksTable() {
         <h3 className="text-base font-bold uppercase text-neutral-400">
           Tracking Links
         </h3>
+
+        {/* + Create (top-right) */}
+        <button
+          type="button"
+          onClick={openCreate}
+          className={clsx(
+            "inline-flex items-center justify-center",
+            "h-8 w-8 rounded-md",
+            "border border-neutral-500 bg-neutral-700 text-white",
+            "hover:text-white hover:border-white",
+            "focus:outline-none",
+            "cursor-pointer"
+          )}
+          title="Create Tracking Link"
+          aria-label="Create Tracking Link"
+        >
+          <Plus size={16} />
+        </button>
       </div>
 
       {/* Table */}
@@ -744,7 +1344,8 @@ export default function TrackingLinksTable() {
                     <div className="inline-flex items-center gap-1.5">
                       <button
                         type="button"
-                        className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20"
+                        onClick={() => openEdit(r)}
+                        className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20 cursor-pointer"
                         title="Edit"
                       >
                         <Pencil size={14} />
@@ -752,7 +1353,7 @@ export default function TrackingLinksTable() {
                       <button
                         type="button"
                         onClick={() => openArchive(r)}
-                        className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20"
+                        className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20 cursor-pointer"
                         title="Delete"
                       >
                         <Trash2 size={14} />
@@ -794,6 +1395,23 @@ export default function TrackingLinksTable() {
         onConfirm={confirmArchive}
       />
       <QrDialog open={qrOpen} row={activeRow} onClose={closeQr} />
+
+      {/* Create */}
+      <TrackingLinkDialog
+        open={createOpen}
+        mode="create"
+        onClose={closeCreate}
+        onSave={handleCreate}
+      />
+
+      {/* Edit */}
+      <TrackingLinkDialog
+        open={editOpen}
+        mode="edit"
+        initial={activeRow}
+        onClose={closeEdit}
+        onSave={handleEdit}
+      />
     </div>
   );
 }

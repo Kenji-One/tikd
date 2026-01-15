@@ -194,6 +194,7 @@ export default function OrganizationsClient() {
                     ) : orgRows.length ? (
                       orgRows.map((item) => (
                         <ConnectionProfileCard
+                          key={item.id}
                           href={item.href}
                           kind={item.kind}
                           title={item.title}

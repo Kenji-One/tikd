@@ -1,4 +1,3 @@
-// src/app/dashboard/organizations/[id]/events/[eventId]/promo-codes/page.tsx
 "use client";
 
 import { useMemo, useState, type SVGProps, type ComponentType } from "react";
@@ -17,11 +16,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import clsx from "clsx";
-
-type RouteParams = {
-  id: string;
-  eventId: string;
-};
+import { Button } from "@/components/ui/Button";
+import { RowCard, RowCardStat } from "@/components/ui/RowCard";
 
 /* ---------------------------- API shapes ---------------------------- */
 
@@ -234,6 +230,7 @@ function PromoCodeWizard({
         currency: t.currency,
       }));
     },
+    staleTime: 60_000,
   });
 
   const toggleTicket = (id: string) => {
@@ -524,7 +521,7 @@ function PromoCodeWizard({
                     step={discountMode === "amount" ? 0.5 : 1}
                     min={0}
                     {...register("discountValue", {
-                      valueAsNumber: true,
+                      setValueAs: (v) => (v === "" ? null : Number(v)),
                     })}
                     className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                     placeholder={discountMode === "percentage" ? "20" : "5"}
@@ -564,7 +561,9 @@ function PromoCodeWizard({
                 <input
                   type="number"
                   min={1}
-                  {...register("overallItems", { valueAsNumber: true })}
+                  {...register("overallItems", {
+                    setValueAs: (v) => (v === "" ? null : Number(v)),
+                  })}
                   placeholder="e.g. 2"
                   className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
@@ -582,7 +581,9 @@ function PromoCodeWizard({
               <input
                 type="number"
                 min={1}
-                {...register("maxUses", { valueAsNumber: true })}
+                {...register("maxUses", {
+                  setValueAs: (v) => (v === "" ? null : Number(v)),
+                })}
                 placeholder="Unlimited"
                 className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               />
@@ -740,8 +741,7 @@ function PromoCodeWizard({
 /* ========================== Page component ========================= */
 
 export default function PromoCodesPage() {
-  const params = useParams<RouteParams>();
-  const eventId = params?.eventId;
+  const { eventId } = useParams() as { eventId?: string };
 
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"list" | "create">("list");
@@ -751,17 +751,18 @@ export default function PromoCodesPage() {
     isLoading,
     isError,
     refetch,
-  } = useQuery({
+  } = useQuery<PromoCodeApi[], Error, PromoCodeRow[]>({
     queryKey: ["promo-codes", eventId],
     enabled: Boolean(eventId),
-    queryFn: async (): Promise<PromoCodeRow[]> => {
+    queryFn: async (): Promise<PromoCodeApi[]> => {
       const res = await fetch(`/api/events/${eventId}/promo-codes`);
       if (!res.ok) {
         throw new Error("Failed to load promo codes");
       }
-      const json = (await res.json()) as PromoCodeApi[];
-      return json.map(mapApiToRow);
+      return (await res.json()) as PromoCodeApi[];
     },
+    select: (list) => list.map(mapApiToRow),
+    staleTime: 60_000,
   });
 
   const filtered = useMemo(() => {
@@ -782,19 +783,21 @@ export default function PromoCodesPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold text-neutral-0">Promo codes</h2>
+          <h2 className="text-xl font-semibold text-neutral-0">Promo codes</h2>
           <p className="mt-1 text-neutral-500">
             Create discount and access codes for early birds, partners and VIPs.
           </p>
         </div>
-        <button
+
+        <Button
           type="button"
+          aria-label="Create promo code"
           onClick={() => setMode("create")}
-          className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-4 py-2  font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.10)] hover:bg-primary-500"
+          animation={true}
         >
           <Plus className="h-4 w-4" />
-          <span>New promo code</span>
-        </button>
+          New promo code
+        </Button>
       </header>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -807,11 +810,11 @@ export default function PromoCodesPage() {
             placeholder="Search promo codes…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-full border border-white/10 bg-neutral-950 px-9 py-2  text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            className="w-full rounded-full border border-white/10 bg-neutral-950 px-9 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
 
-        <p className="text-[11px] text-neutral-400">
+        <p className="text-[12px] text-neutral-400">
           {filtered?.length ?? 0} promo code
           {filtered && filtered.length === 1 ? "" : "s"}
         </p>
@@ -845,57 +848,35 @@ export default function PromoCodesPage() {
       {!isLoading && !isError && filtered && filtered.length > 0 && (
         <div className="space-y-3">
           {filtered.map((p) => (
-            <div
+            <RowCard
               key={p.id}
-              className="flex items-center justify-between gap-4 rounded-card border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-900/70 text-primary-200">
-                  <Ticket className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-neutral-0">
-                    {p.title}
-                  </p>
-                  <p className="mt-0.5 truncate text-[11px] text-neutral-400">
-                    {p.description}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-6  text-neutral-200">
-                <div className="text-right">
-                  <p className="text-[11px] text-neutral-500">Code</p>
-                  <p className="font-medium">{p.code}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-neutral-500">
-                    Discount / type
-                  </p>
-                  <p className="font-medium">{p.discount}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-neutral-500">Uses</p>
-                  <p className="font-medium">
-                    {p.uses}
-                    {p.maxUses != null ? ` / ${p.maxUses}` : ""}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-neutral-500">Status</p>
-                  <span
-                    className={clsx(
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
-                      p.active
-                        ? "border border-success-700/40 bg-success-900/40 text-success-300"
-                        : "border border-white/10 bg-neutral-900 text-neutral-200"
-                    )}
-                  >
-                    {p.active ? "Active" : "Inactive"}
-                  </span>
-                </div>
-              </div>
-            </div>
+              icon={<Ticket className="h-5 w-5" />}
+              title={p.title}
+              description={p.description}
+              meta={
+                <>
+                  <RowCardStat label="Code" value={p.code} />
+                  <RowCardStat label="Discount / type" value={p.discount} />
+                  <RowCardStat
+                    label="Uses"
+                    value={`${p.uses}${p.maxUses != null ? ` / ${p.maxUses}` : ""}`}
+                  />
+                  <div className="min-w-[110px] text-right">
+                    <div className="text-[11px] text-neutral-500">Status</div>
+                    <span
+                      className={clsx(
+                        "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+                        p.active
+                          ? "border border-success-700/40 bg-success-900/40 text-success-300"
+                          : "border border-white/10 bg-neutral-900 text-neutral-200"
+                      )}
+                    >
+                      {p.active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                </>
+              }
+            />
           ))}
         </div>
       )}

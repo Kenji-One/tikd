@@ -1,3 +1,4 @@
+// src/components/ui/Button.tsx
 "use client";
 
 import { forwardRef, ReactNode } from "react";
@@ -30,6 +31,12 @@ export interface ButtonProps
   asChild?: boolean;
   /** optional leading icon (renders before children) */
   icon?: ReactNode;
+
+  /**
+   * Enables the "shine sweep" hover animation (per-variant).
+   * When false/omitted, hover behavior stays exactly as it is now.
+   */
+  animation?: boolean;
 
   /** ElectricBorder options (only used when variant="electric") */
   electricColor?: string; // default: "#9a51ff"
@@ -79,6 +86,77 @@ const electricDefaultInner =
   // subtle inset highlight so the neon border feels integrated
   "shadow-[inset_0_0_0_1px_rgba(154,81,255,0.25),0_0_18px_rgba(154,81,255,0.18)]";
 
+/* ─────────── animation helpers ─────────── */
+
+type NonElectricVariant = Exclude<
+  NonNullable<ButtonProps["variant"]>,
+  "electric"
+>;
+
+function sweepBase(duration: string) {
+  // Important: Tailwind needs content set for pseudo elements to render.
+  return clsx(
+    "relative overflow-hidden",
+    "before:pointer-events-none before:absolute before:inset-0 before:content-['']",
+    "before:-translate-x-[120%] before:transition-transform",
+    duration,
+    "hover:before:translate-x-[120%]"
+  );
+}
+
+const variantSweep: Record<NonElectricVariant, string> = {
+  // Keep these subtle; each one is distinct (tint/duration) but still on-brand.
+  primary: clsx(
+    sweepBase("before:duration-700"),
+    "before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent"
+  ),
+  brand: clsx(
+    sweepBase("before:duration-800"),
+    "before:bg-gradient-to-r before:from-transparent before:via-white/24 before:to-transparent"
+  ),
+  destructive: clsx(
+    sweepBase("before:duration-750"),
+    "before:bg-gradient-to-r before:from-transparent before:via-error-200/22 before:to-transparent"
+  ),
+  secondary: clsx(
+    // slightly quicker, more “premium”
+    sweepBase("before:duration-700"),
+    // thinner, crisper shine + a faint glow edge so it feels alive on transparent bg
+    "before:bg-gradient-to-r before:from-transparent before:via-white/22 before:to-transparent " +
+      "before:opacity-0 before:transition-opacity hover:before:opacity-100 " +
+      "before:blur-[0.5px]"
+  ),
+  ghost: clsx(
+    sweepBase("before:duration-900"),
+    "before:bg-gradient-to-r before:from-transparent before:via-primary-300/18 before:to-transparent"
+  ),
+  social: clsx(
+    sweepBase("before:duration-850"),
+    "before:bg-gradient-to-r before:from-transparent before:via-white/16 before:to-transparent"
+  ),
+  default: clsx(
+    sweepBase("before:duration-850"),
+    "before:bg-gradient-to-r before:from-transparent before:via-primary-500/16 before:to-transparent"
+  ),
+};
+
+function getSweepClasses(
+  variant: NonNullable<ButtonProps["variant"]>,
+  electricInner?: InnerVariants
+) {
+  if (variant === "electric") {
+    // If electric reuses an inner variant, match that animation.
+    if (electricInner) return variantSweep[electricInner];
+    // Otherwise, give electric its own slightly “neon” sweep.
+    return clsx(
+      sweepBase("before:duration-900"),
+      "before:bg-gradient-to-r before:from-transparent before:via-primary-952/22 before:to-transparent"
+    );
+  }
+
+  return variantSweep[variant];
+}
+
 /* ─────────── component ─────────── */
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -91,6 +169,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       children,
       asChild = false,
       icon,
+      animation = false,
       /* electric-only props with defaults */
       electricColor = "#9a51ff",
       electricSpeed = 1,
@@ -137,10 +216,26 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           : electricDefaultInner
         : variants[variant];
 
-    const combined = clsx(base, innerClasses, sizes[size], className);
+    const animateClasses = animation
+      ? getSweepClasses(variant, electricInner)
+      : "";
+
+    const combined = clsx(
+      base,
+      innerClasses,
+      sizes[size],
+      animateClasses,
+      className
+    );
 
     const buttonEl = (
-      <Comp ref={ref} className={combined} data-variant={variant} {...props}>
+      <Comp
+        ref={ref}
+        className={combined}
+        data-variant={variant}
+        data-animate={animation ? "true" : "false"}
+        {...props}
+      >
         <span className="inline-flex items-center gap-2">
           {loading && Spinner}
           {icon}

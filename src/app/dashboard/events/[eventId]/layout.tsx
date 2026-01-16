@@ -1,26 +1,28 @@
 "use client";
 
 import type { ReactNode, ComponentType, SVGProps } from "react";
-import { useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  ArrowLeft,
   CalendarDays,
-  ExternalLink,
-  Users,
+  Check,
   Copy,
+  Eye,
   LayoutDashboard,
-  Ticket,
+  PencilLine,
   Percent,
-  UserPlus,
-  Edit3,
   Settings,
+  Ticket,
+  UserRoundCog,
+  Users,
+  UsersRound,
 } from "lucide-react";
 
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
+import { Button } from "@/components/ui/Button";
 
 type EventLayoutProps = {
   children: ReactNode;
@@ -47,9 +49,9 @@ const EVENT_TABS: EventTab[] = [
   { id: "summary", label: "Summary", Icon: LayoutDashboard },
   { id: "ticket-types", label: "Ticket Types", Icon: Ticket },
   { id: "promo-codes", label: "Promo Codes", Icon: Percent },
-  { id: "guests", label: "Guests", Icon: Users },
-  { id: "team", label: "Team", Icon: UserPlus },
-  { id: "edit", label: "Edit", Icon: Edit3 },
+  { id: "guests", label: "Guests", Icon: UsersRound },
+  { id: "team", label: "Team", Icon: UserRoundCog },
+  { id: "edit", label: "Edit", Icon: PencilLine },
   { id: "settings", label: "Settings", Icon: Settings },
 ];
 
@@ -57,6 +59,7 @@ function formatDateTime(value?: string) {
   if (!value) return "Date not set";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "Date not set";
+
   return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -66,10 +69,36 @@ function formatDateTime(value?: string) {
   });
 }
 
+/**
+ * Prefetch helpers — IMPORTANT:
+ * We prefetch RAW API arrays, and the pages use `select` to map into rows.
+ * That way, cache data type is consistent across layout + page.
+ */
+async function fetchTicketTypesApi(eventId: string) {
+  const res = await fetch(`/api/events/${eventId}/ticket-types`);
+  if (!res.ok) throw new Error("Failed to load ticket types");
+  return res.json();
+}
+
+async function fetchPromoCodesApi(eventId: string) {
+  const res = await fetch(`/api/events/${eventId}/promo-codes`);
+  if (!res.ok) throw new Error("Failed to load promo codes");
+  return res.json();
+}
+
 export default function EventDashboardLayout({ children }: EventLayoutProps) {
   const { eventId } = useParams() as { eventId?: string };
   const pathname = usePathname();
+  const qc = useQueryClient();
+
   const [copied, setCopied] = useState(false);
+
+  // For nicer “page-change” feel when clicking tabs
+  const [isPending, startTransition] = useTransition();
+  const [pendingTab, setPendingTab] = useState<EventTabId | null>(null);
+
+  // Sticky styling when user scrolls
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const basePath = eventId ? `/dashboard/events/${eventId}` : "";
 
@@ -77,23 +106,88 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     queryKey: ["event", eventId],
     queryFn: () => fetchEventById(eventId!),
     enabled: !!eventId,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
-  let activeTab: EventTabId = "summary";
-  if (basePath && pathname.startsWith(basePath)) {
-    const rest = pathname.slice(basePath.length);
-    const segment = rest.split("/").filter(Boolean)[0];
-    if (segment && EVENT_TABS.some((t) => t.id === segment)) {
-      activeTab = segment as EventTabId;
+  const activeTab: EventTabId = useMemo(() => {
+    let tab: EventTabId = "summary";
+    if (basePath && pathname.startsWith(basePath)) {
+      const rest = pathname.slice(basePath.length);
+      const segment = rest.split("/").filter(Boolean)[0];
+      if (segment && EVENT_TABS.some((t) => t.id === segment)) {
+        tab = segment as EventTabId;
+      }
     }
-  }
+    return tab;
+  }, [basePath, pathname]);
+
+  const isSummaryPage = useMemo(() => {
+    if (!basePath) return false;
+    return pathname === `${basePath}/summary` || activeTab === "summary";
+  }, [activeTab, basePath, pathname]);
+
+  // Prefetch the “heavy tabs” once we know the eventId.
+  useEffect(() => {
+    if (!eventId) return;
+
+    qc.prefetchQuery({
+      queryKey: ["event", eventId],
+      queryFn: () => fetchEventById(eventId),
+      staleTime: 5 * 60_000,
+    });
+
+    qc.prefetchQuery({
+      queryKey: ["ticket-types", eventId],
+      queryFn: () => fetchTicketTypesApi(eventId),
+      staleTime: 60_000,
+    });
+
+    qc.prefetchQuery({
+      queryKey: ["promo-codes", eventId],
+      queryFn: () => fetchPromoCodesApi(eventId),
+      staleTime: 60_000,
+    });
+  }, [eventId, qc]);
+
+  // Clear pending state after route actually changes
+  useEffect(() => {
+    setPendingTab(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Track scroll to style the sticky header background when it becomes "stuck"
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const threshold = 8;
+    let raf: number | null = null;
+
+    const onScroll = () => {
+      if (raf != null) return;
+      raf = window.requestAnimationFrame(() => {
+        const y = window.scrollY || 0;
+        setIsScrolled(y > threshold);
+        raf = null;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (raf != null) window.cancelAnimationFrame(raf);
+    };
+  }, []);
 
   const status = event?.status;
   const statusLabel = status === "draft" ? "Draft" : "Published";
-  const statusClasses =
+
+  const statusChipClasses =
     status === "draft"
-      ? "bg-neutral-900 text-neutral-200 border border-white/10"
-      : "bg-success-900/40 text-success-300 border border-success-700/40";
+      ? "tikd-chip tikd-chip-muted"
+      : "tikd-chip tikd-chip-success";
 
   async function handleCopyPublicLink() {
     if (!eventId || typeof navigator === "undefined") return;
@@ -101,125 +195,216 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => setCopied(false), 1400);
     } catch {
       // ignore
     }
   }
 
+  function onTabClick(tabId: EventTabId) {
+    startTransition(() => {
+      setPendingTab(tabId);
+    });
+  }
+
+  function prefetchForTab(tabId: EventTabId) {
+    if (!eventId) return;
+
+    if (tabId === "ticket-types") {
+      qc.prefetchQuery({
+        queryKey: ["ticket-types", eventId],
+        queryFn: () => fetchTicketTypesApi(eventId),
+        staleTime: 60_000,
+      });
+      return;
+    }
+
+    if (tabId === "promo-codes") {
+      qc.prefetchQuery({
+        queryKey: ["promo-codes", eventId],
+        queryFn: () => fetchPromoCodesApi(eventId),
+        staleTime: 60_000,
+      });
+      return;
+    }
+
+    if (tabId === "team") {
+      qc.prefetchQuery({
+        queryKey: ["event", eventId],
+        queryFn: () => fetchEventById(eventId),
+        staleTime: 5 * 60_000,
+      });
+    }
+  }
+
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
-      <section className="pb-16 pt-6">
-        {/* Top header */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-neutral-400">
-              <Link
-                href="/dashboard/events"
-                prefetch
-                className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-neutral-950/80 px-3 py-1.5 text-neutral-300 hover:border-primary-500 hover:text-primary-200"
-              >
-                <ArrowLeft className="h-3 w-3" />
-                <span>Back to events</span>
-              </Link>
+      <section className="tikd-event-hero pb-14">
+        {/* Neutral hero wash behind header */}
+        {/* <div aria-hidden="true" className="tikd-event-hero-bg" /> */}
 
-              {event?.organization?.name && (
-                <span className="text-neutral-500">
-                  {event.organization.name}
-                </span>
-              )}
-            </div>
+        {/* Sticky TOP HEADER ONLY (tabs NOT included) */}
+        <div className="tikd-event-header-sticky">
+          <header
+            className={clsx(
+              "tikd-event-header-surface",
+              isScrolled && "tikd-event-header-surface-scrolled"
+            )}
+          >
+            {/* Full-width header always */}
+            <div className="p-4 md:p-6 lg:p-8 z-2">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h1 className="tikd-event-title z-2">
+                    {isLoading ? "Loading event…" : (event?.title ?? "Event")}
+                  </h1>
 
-            <div className="mt-8 space-y-2">
-              <h1 className="text-2xl font-semibold tracking-tight text-neutral-0">
-                {isLoading ? "Loading event…" : (event?.title ?? "Event")}
-              </h1>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="tikd-chip">
+                      <CalendarDays className="h-3.5 w-3.5 text-neutral-500" />
+                      <span className="text-neutral-300">
+                        {event?.date ? formatDateTime(event.date) : "Date TBA"}
+                      </span>
+                    </span>
 
-              <div className="flex flex-wrap items-center gap-2 text-neutral-400">
-                <div className="inline-flex items-center gap-1">
-                  <CalendarDays className="h-3.5 w-3.5 text-neutral-500" />
-                  <span>
-                    {event?.date ? formatDateTime(event.date) : "Date TBA"}
-                  </span>
+                    <span className={statusChipClasses}>
+                      <span
+                        className={clsx(
+                          "tikd-chip-dot",
+                          status === "draft"
+                            ? "bg-neutral-300"
+                            : "bg-success-500"
+                        )}
+                      />
+                      <span>{statusLabel}</span>
+                    </span>
+
+                    <span className="tikd-chip">
+                      <Users className="h-3.5 w-3.5 text-neutral-500" />
+                      <span className="text-neutral-300">
+                        {(event?.attendingCount ?? 0).toLocaleString()}{" "}
+                        {(event?.attendingCount ?? 0) === 1
+                          ? "attendee"
+                          : "attendees"}
+                      </span>
+                    </span>
+                  </div>
                 </div>
 
-                <span
-                  className={clsx(
-                    "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
-                    statusClasses
-                  )}
-                >
-                  <span className="mr-1 h-1.5 w-1.5 rounded-full bg-current" />
-                  {statusLabel}
-                </span>
+                {/* Actions */}
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCopyPublicLink}
+                    className={clsx(
+                      "tikd-action-icon",
+                      copied && "tikd-action-icon-success"
+                    )}
+                    title={copied ? "Link copied" : "Copy public link"}
+                    aria-label={copied ? "Link copied" : "Copy public link"}
+                    icon={
+                      copied ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )
+                    }
+                  />
 
-                <span className="inline-flex items-center gap-1 rounded-full bg-neutral-900 px-2 py-0.5 text-neutral-300">
-                  <Users className="h-3 w-3" />
-                  <span>
-                    {(event?.attendingCount ?? 0).toLocaleString()}{" "}
-                    {(event?.attendingCount ?? 0) === 1
-                      ? "attendee"
-                      : "attendees"}
-                  </span>
-                </span>
+                  {eventId && (
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="md"
+                      className="tikd-action-pill"
+                      title="View public page"
+                      icon={<Eye className="h-4 w-4" />}
+                    >
+                      <Link
+                        href={`/events/${eventId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View
+                      </Link>
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          </header>
+        </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleCopyPublicLink}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950/80 px-4 py-2 font-medium text-neutral-200 hover:border-primary-500 hover:text-primary-200"
-            >
-              <Copy className="h-3.5 w-3.5" />
-              <span>{copied ? "Link copied" : "Copy public link"}</span>
-            </button>
-
-            {eventId && (
-              <Link
-                href={`/events/${eventId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-600 px-4 py-2 font-medium text-white shadow-[0_0_0_1px_rgba(255,255,255,0.10)] hover:bg-primary-500"
+        {/* Tabs (NOT sticky) */}
+        <div className="mt-5 px-4">
+          <div className="no-scrollbar overflow-x-auto overflow-y-visible">
+            {/* ✅ Center tabs on wide screens, still scrollable on small screens */}
+            <div className="flex w-full justify-center">
+              <nav
+                aria-label="Event dashboard tabs"
+                role="tablist"
+                aria-busy={isPending ? "true" : "false"}
+                className={clsx(
+                  "tikd-tabs-shell relative inline-flex min-w-max items-center gap-2",
+                  isPending && "tikd-tabs-pending"
+                )}
               >
-                <ExternalLink className="h-3.5 w-3.5" />
-                <span>View public page</span>
-              </Link>
-            )}
+                {EVENT_TABS.map((tab) => {
+                  const href =
+                    basePath && eventId ? `${basePath}/${tab.id}` : "#";
+
+                  const isActive = activeTab === tab.id;
+
+                  // While route is changing: make clicked tab look “selected/loading”
+                  const isVisuallyActive =
+                    isActive || (isPending && pendingTab === tab.id);
+
+                  const Icon = tab.Icon;
+
+                  return (
+                    <Link
+                      key={tab.id}
+                      href={href}
+                      prefetch
+                      scroll={false}
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-current={isActive ? "page" : undefined}
+                      title={!isActive ? tab.label : undefined}
+                      onClick={() => onTabClick(tab.id)}
+                      onMouseEnter={() => prefetchForTab(tab.id)}
+                      className={clsx(
+                        "relative z-10 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
+                        isVisuallyActive ? "tikd-tab-active" : "tikd-tab-icon",
+                        isPending && pendingTab === tab.id && "tikd-tab-clicked"
+                      )}
+                    >
+                      <Icon className={clsx("shrink-0", "h-5 w-5")} />
+
+                      {isVisuallyActive ? (
+                        <span className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.2px]">
+                          {tab.label}
+                        </span>
+                      ) : (
+                        <span className="sr-only">{tab.label}</span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
         </div>
 
-        {/* Tab bar */}
-        <div className="mb-8 mt-12 overflow-x-auto">
-          <div className="inline-flex min-w-max gap-2 rounded-full border border-white/10 bg-neutral-950/70 p-1">
-            {EVENT_TABS.map((tab) => {
-              const href = basePath && eventId ? `${basePath}/${tab.id}` : "#";
-              const isActive = activeTab === tab.id;
-              const Icon = tab.Icon;
-
-              return (
-                <Link
-                  key={tab.id}
-                  href={href}
-                  prefetch
-                  scroll={false}
-                  className={clsx(
-                    "relative flex items-center gap-3 rounded-full px-6 py-3 text-sm outline-none transition-colors",
-                    isActive
-                      ? "bg-primary-951/16 text-neutral-0"
-                      : "text-neutral-300 hover:bg-neutral-900/80 hover:text-neutral-0"
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span>{tab.label}</span>
-                </Link>
-              );
-            })}
-          </div>
+        <div className="mt-8">
+          {isSummaryPage ? (
+            <div>{children}</div>
+          ) : (
+            <div className="mx-auto max-w-6xl px-4 pb-8">{children}</div>
+          )}
         </div>
-
-        {children}
       </section>
     </main>
   );

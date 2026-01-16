@@ -21,6 +21,12 @@ export default function DashboardChrome({ children }: Props) {
     pathname.startsWith("/dashboard/organizations/") &&
     pathname.split("/").length >= 4; // /dashboard/organizations/[id](/*)
 
+  // Event dashboard pages (inside a specific event)
+  // e.g. /dashboard/events/[eventId]/summary, /ticket-types, /promo-codes, etc.
+  const isEventDashboard =
+    pathname.startsWith("/dashboard/events/") &&
+    pathname.split("/").length >= 4;
+
   // Dashboard default page: replace internal tabs with a sidebar
   // ✅ include ALL finances subroutes
   const isDashboardHome =
@@ -44,7 +50,7 @@ export default function DashboardChrome({ children }: Props) {
     <div className="min-h-dvh w-full bg-neutral-950 text-white">
       <div
         className={clsx(
-          "tikd-dashboard-shell",
+          "tikd-dashboard-shell relative",
           // When a sidebar is present, the layout must be flush-left (no mx-auto centering)
           hasSidebar ? "flex w-full" : "mx-auto max-w-[1600px]"
         )}
@@ -55,7 +61,13 @@ export default function DashboardChrome({ children }: Props) {
           </aside>
         )}
 
-        <main className="flex-1 min-w-0 p-4 md:p-6 lg:p-8 !pt-0">
+        <main
+          className={clsx(
+            "flex-1 min-w-0 !pt-0",
+            // ✅ remove paddings for event dashboard
+            isEventDashboard ? "p-0" : "p-4 md:p-6 lg:p-8"
+          )}
+        >
           <Topbar hideLogo={isOrgSubpage} />
           {children}
         </main>

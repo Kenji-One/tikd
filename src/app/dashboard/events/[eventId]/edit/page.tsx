@@ -1,3 +1,4 @@
+// src\app\dashboard\events\[eventId]\edit\page.tsx
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";

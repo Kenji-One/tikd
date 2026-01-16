@@ -1,4 +1,4 @@
-// src/app/dashboard/organizations/[id]/events/[eventId]/settings/page.tsx
+// src/app/dashboard/events/[eventId]/settings/page.tsx
 
 import {
   Globe,

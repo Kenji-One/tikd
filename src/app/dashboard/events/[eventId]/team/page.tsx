@@ -23,13 +23,15 @@ import {
   Users as UsersIcon,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import ShineCard from "@/components/bits/ShineCard";
 import InviteTeamModal, {
   InvitePayload,
   Role as InviteRole,
 } from "@/components/bits/InviteTeamModal";
+import { Button } from "@/components/ui/Button";
+
+import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 
 /* ----------------------------- Types ----------------------------- */
 type Role = InviteRole;
@@ -204,7 +206,7 @@ function RoleSelect({
 
 /* ------------------------------ Page ------------------------------ */
 export default function EventTeamPage() {
-  const { id } = useParams<{ id: string; eventId: string }>();
+  const { eventId } = useParams() as { eventId?: string };
   const qc = useQueryClient();
 
   const [tab, setTab] = useState<"active" | "temporary">("active");
@@ -215,6 +217,17 @@ export default function EventTeamPage() {
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   useFluidTabIndicator(tabBarRef, indicatorRef, tab);
 
+  // 1) Get event -> organizationId (because team is managed at org level in your API)
+  const { data: event } = useQuery<EventWithMeta>({
+    queryKey: ["event", eventId],
+    queryFn: () => fetchEventById(eventId!),
+    enabled: !!eventId,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+  });
+
+  const organizationId = event?.organization?._id;
+
   /* --------------------------- Data --------------------------- */
   const {
     data: members,
@@ -222,38 +235,51 @@ export default function EventTeamPage() {
     isFetching,
     refetch,
   } = useQuery<TeamMember[]>({
-    queryKey: ["org-team", id],
-    queryFn: () => json<TeamMember[]>(`/api/organizations/${id}/team`),
+    queryKey: ["org-team", organizationId],
+    enabled: !!organizationId,
+    queryFn: () =>
+      json<TeamMember[]>(`/api/organizations/${organizationId}/team`),
     staleTime: 30_000,
   });
 
   const inviteMutation = useMutation({
     mutationFn: (payload: InvitePayload) =>
-      json<{ member: TeamMember }>(`/api/organizations/${id}/team`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }),
+      json<{ member: TeamMember }>(
+        `/api/organizations/${organizationId}/team`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }
+      ),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["org-team", id] });
+      qc.invalidateQueries({ queryKey: ["org-team", organizationId] });
       setModalOpen(false);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: (args: { memberId: string; body: UpdateBody }) =>
-      json<TeamMember>(`/api/organizations/${id}/team/${args.memberId}`, {
-        method: "PATCH",
-        body: JSON.stringify(args.body),
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-team", id] }),
+      json<TeamMember>(
+        `/api/organizations/${organizationId}/team/${args.memberId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(args.body),
+        }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["org-team", organizationId] }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (memberId: string) =>
-      json<{ ok: boolean }>(`/api/organizations/${id}/team/${memberId}`, {
-        method: "DELETE",
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-team", id] }),
+      json<{ ok: boolean }>(
+        `/api/organizations/${organizationId}/team/${memberId}`,
+        {
+          method: "DELETE",
+        }
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["org-team", organizationId] }),
   });
 
   const [active, temporary] = useMemo(() => {
@@ -276,14 +302,30 @@ export default function EventTeamPage() {
     );
   }, [tab, active, temporary, query]);
 
+  if (!eventId) {
+    return (
+      <div className="text-error-400">Missing event id in route params.</div>
+    );
+  }
+
+  if (!organizationId) {
+    return (
+      <div className="">
+        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-6 py-8 text-center text-neutral-300">
+          Loading event team…
+        </div>
+      </div>
+    );
+  }
+
   /* ----------------------------- UI ---------------------------- */
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-8">
-      {/* Header (within event layout section) */}
+    <div className="">
+      {/* Header */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex-1">
-          <h2 className="text-sm font-semibold text-neutral-0">Event Team</h2>
-          <p className="mt-1 text-xs text-neutral-300">
+          <h2 className="text-xl font-semibold text-neutral-0">Event Team</h2>
+          <p className="mt-1 text-neutral-300">
             Invite admins, promoters, scanners, or collaborators who can help
             run this event. Access is managed at the organization level.
           </p>
@@ -301,19 +343,31 @@ export default function EventTeamPage() {
               <button
                 className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full px-2 py-1 text-xs text-neutral-400 hover:text-neutral-0"
                 onClick={() => setQuery("")}
+                type="button"
               >
                 Clear
               </button>
             )}
           </div>
 
-          <button
+          {/* <button
             onClick={() => setModalOpen(true)}
             className="relative inline-flex items-center justify-center overflow-hidden rounded-full bg-primary-700 px-4 py-2 text-sm font-medium text-white ring-1 ring-primary-600/60 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:transition-transform before:duration-700 hover:before:translate-x-full"
+            type="button"
           >
             <Plus className="mr-2 h-4 w-4" />
             Add member
-          </button>
+          </button> */}
+
+          <Button
+            type="button"
+            aria-label="Add member"
+            onClick={() => setModalOpen(true)}
+            animation={true}
+          >
+            <Plus className="h-4 w-4" />
+            Add member
+          </Button>
         </div>
       </div>
 
@@ -331,6 +385,7 @@ export default function EventTeamPage() {
               : "text-neutral-300 hover:text-neutral-0"
           )}
           onClick={() => setTab("active")}
+          type="button"
         >
           Active Members
         </button>
@@ -343,6 +398,7 @@ export default function EventTeamPage() {
               : "text-neutral-300 hover:text-neutral-0"
           )}
           onClick={() => setTab("temporary")}
+          type="button"
         >
           Temporary access
         </button>
@@ -364,6 +420,7 @@ export default function EventTeamPage() {
               onClick={() => refetch()}
               className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-neutral-300 hover:text-neutral-0"
               title="Refresh"
+              type="button"
             >
               <RefreshCw
                 className={clsx("h-4 w-4", isFetching && "animate-spin")}
@@ -438,6 +495,7 @@ export default function EventTeamPage() {
                           })
                         }
                         title="Resend invitation"
+                        type="button"
                       >
                         Resend
                       </button>
@@ -446,6 +504,7 @@ export default function EventTeamPage() {
                       className="rounded-full bg-error-600/90 p-2 text-neutral-0 ring-1 ring-inset ring-error-700/40 hover:bg-error-600"
                       onClick={() => deleteMutation.mutate(m._id)}
                       title="Remove"
+                      type="button"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -467,6 +526,7 @@ export default function EventTeamPage() {
       <button
         onClick={() => setModalOpen(true)}
         className="fixed bottom-6 right-6 sm:hidden relative inline-flex items-center justify-center overflow-hidden rounded-full bg-primary-700 px-4 py-2 text-sm font-medium text-white ring-1 ring-primary-600/60 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:transition-transform before:duration-700 hover:before:translate-x-full"
+        type="button"
       >
         <Plus className="mr-2 h-4 w-4" />
         Add

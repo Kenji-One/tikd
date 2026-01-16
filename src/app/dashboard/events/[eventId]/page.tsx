@@ -1,4 +1,3 @@
-// src/app/dashboard/events/[eventId]/page.tsx
 import { redirect } from "next/navigation";
 
 type RouteParams = {
@@ -8,8 +7,7 @@ type RouteParams = {
 export default async function EventRootPage({
   params,
 }: {
-  params: Promise<RouteParams>;
+  params: RouteParams;
 }) {
-  const { eventId } = await params;
-  redirect(`/dashboard/events/${eventId}/summary`);
+  redirect(`/dashboard/events/${params.eventId}/summary`);
 }

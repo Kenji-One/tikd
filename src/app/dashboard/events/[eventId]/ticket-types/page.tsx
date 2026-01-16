@@ -1,3 +1,4 @@
+// src/app/dashboard/events/[eventId]/ticket-types/page.tsx
 "use client";
 
 import { useMemo, useState, type SVGProps, type ComponentType } from "react";
@@ -19,9 +20,10 @@ import TicketTypeAvailabilityStep from "./TicketTypeAvailabilityStep";
 import TicketTypeCheckoutStep from "./TicketTypeCheckoutStep";
 import TicketTypeDesignStep from "./TicketTypeDesignStep";
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
+import { Button } from "@/components/ui/Button";
+import { RowCard, RowCardStat } from "@/components/ui/RowCard";
 
 type RouteParams = {
-  id: string;
   eventId: string;
 };
 
@@ -36,8 +38,15 @@ function mapApiToRow(api: TicketTypeApi): TicketTypeRow {
     currency: api.currency,
     sold: api.soldCount ?? 0,
     capacity: api.totalQuantity,
-    status: api.availabilityStatus,
+    // Guard against undefined/null status coming from API
+    status: (api.availabilityStatus ?? "on_sale") as TicketAvailabilityStatus,
   };
+}
+
+function humanizeStatus(value?: string) {
+  if (!value) return "Unknown";
+  // Replace ALL underscores, not just the first one
+  return value.replaceAll("_", " ");
 }
 
 /* ========================= TicketTypeWizard ======================== */
@@ -534,6 +543,7 @@ export default function TicketTypesPage() {
   } = useQuery({
     queryKey: ["ticket-types", eventId],
     enabled: Boolean(eventId),
+    staleTime: 30_000,
     queryFn: async (): Promise<TicketTypeRow[]> => {
       const res = await fetch(`/api/events/${eventId}/ticket-types`);
       if (!res.ok) {
@@ -549,6 +559,7 @@ export default function TicketTypesPage() {
     queryKey: ["event", eventId],
     queryFn: () => fetchEventById(eventId!),
     enabled: !!eventId,
+    staleTime: 30_000,
   });
 
   const filtered = useMemo(() => {
@@ -569,21 +580,21 @@ export default function TicketTypesPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold text-neutral-0">
-            Ticket types
-          </h2>
+          <h2 className="text-xl font-semibold text-neutral-0">Ticket types</h2>
           <p className="mt-1  text-neutral-500">
             Configure pricing, capacity and status for each ticket.
           </p>
         </div>
-        <button
+
+        <Button
           type="button"
+          aria-label="Create ticket type"
           onClick={() => setMode("create")}
-          className="inline-flex items-center gap-2 rounded-full bg-neutral-0 px-4 py-2 font-medium text-neutral-950 hover:bg-primary-400"
+          animation={true}
         >
           <Plus className="h-4 w-4" />
-          <span>New ticket type</span>
-        </button>
+          New ticket type
+        </Button>
       </header>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -625,65 +636,60 @@ export default function TicketTypesPage() {
 
       {!isLoading && !isError && filtered && filtered.length > 0 && (
         <div className="space-y-3">
-          {filtered.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-center justify-between gap-4 rounded-lg border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#9A51FF29] text-primary-999">
-                  <Ticket className="h-5 w-5" />
-                </span>
-                <div className="min-w-0 space-y-1.5">
-                  <p className="truncate font-medium text-neutral-0">
-                    {t.name}
-                  </p>
-                  <p className="mt-0.5 truncate  text-neutral-400">
-                    {t.description}
-                  </p>
-                </div>
-              </div>
+          {filtered.map((t) => {
+            const rawStatus = (t?.status as unknown as string) ?? "";
+            const safeStatus = rawStatus || "unknown";
 
-              <div className="flex flex-wrap items-center gap-6  text-neutral-200">
-                <div className="text-right">
-                  <p className=" text-neutral-500">Price</p>
-                  <p className="font-medium">
-                    {t.price === 0
-                      ? "Free"
-                      : `$${t.price.toFixed(2)} ${t.currency}`}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className=" text-neutral-500">Sold</p>
-                  <p className="font-medium">
-                    {t.sold}
-                    {t.capacity != null ? `/${t.capacity}` : ""}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className=" text-neutral-500">Status</p>
-                  <span
-                    className={clsx(
-                      "inline-flex items-center rounded-full px-2 py-0.5  font-medium capitalize",
-                      t.status === "on_sale"
-                        ? "border border-success-700/40 bg-success-900/40 text-success-300"
-                        : t.status === "sale_ended"
-                          ? "border border-white/10 bg-neutral-900 text-neutral-200"
-                          : "border border-warning-700/40 bg-warning-900/40 text-warning-200"
-                    )}
+            return (
+              <RowCard
+                key={t.id}
+                icon={<Ticket className="h-5 w-5" />}
+                title={t.name}
+                description={t.description}
+                meta={
+                  <>
+                    <RowCardStat
+                      label="Price"
+                      value={
+                        t.price === 0
+                          ? "Free"
+                          : `$${t.price.toFixed(2)} ${t.currency}`
+                      }
+                    />
+                    <RowCardStat
+                      label="Sold"
+                      value={`${t.sold}${t.capacity != null ? `/${t.capacity}` : ""}`}
+                    />
+                    <div className="min-w-[110px] text-right">
+                      <div className="text-[11px] text-neutral-500">Status</div>
+                      <span
+                        className={clsx(
+                          "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
+                          safeStatus === "on_sale"
+                            ? "border border-success-700/40 bg-success-900/40 text-success-300"
+                            : safeStatus === "sale_ended"
+                              ? "border border-white/10 bg-neutral-900 text-neutral-200"
+                              : safeStatus === "scheduled"
+                                ? "border border-warning-700/40 bg-warning-900/40 text-warning-200"
+                                : "border border-white/10 bg-neutral-900 text-neutral-200"
+                        )}
+                      >
+                        {humanizeStatus(safeStatus)}
+                      </span>
+                    </div>
+                  </>
+                }
+                actions={
+                  <button
+                    type="button"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
                   >
-                    {t.status.replace("_", " ")}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 hover:border-primary-500 hover:text-primary-200"
-                >
-                  <EllipsisVertical className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+                    <EllipsisVertical className="h-4 w-4" />
+                  </button>
+                }
+              />
+            );
+          })}
         </div>
       )}
 

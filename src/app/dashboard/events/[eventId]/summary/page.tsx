@@ -1,251 +1,531 @@
-// src/app/dashboard/organizations/[id]/events/[eventId]/summary/page.tsx
+// src/app/dashboard/events/[eventId]/summary/page.tsx
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  QrCode,
-  Link2,
-  BarChart3,
-  Ticket,
-  Eye,
-  DollarSign,
-} from "lucide-react";
+import { Eye, Ticket } from "lucide-react";
 
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 
-type SummaryMetrics = {
-  tickets: number;
+import KpiCard from "@/components/dashboard/cards/KpiCard";
+import RevenueChart from "@/components/dashboard/charts/RevenueChart";
+import SmallKpiChart from "@/components/dashboard/charts/SmallKpiChart";
+import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
+import TrackingLinksTable from "@/components/dashboard/tables/TrackingLinksTable";
+import MyTeamTable, {
+  DEMO_MY_TEAM,
+} from "@/components/dashboard/tables/MyTeamTable";
+import BreakdownCard from "@/components/dashboard/cards/BreakdownCard";
+import DateRangePicker, {
+  type DateRangeValue,
+} from "@/components/ui/DateRangePicker";
+
+/* ----------------------------- Date helpers (same logic style as main dashboard) ----------------------------- */
+function clampToDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function daysInMonth(year: number, month0: number) {
+  return new Date(year, month0 + 1, 0).getDate();
+}
+
+function addDays(d: Date, delta: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + delta);
+  return x;
+}
+
+function diffDaysInclusive(a: Date, b: Date) {
+  const A = clampToDay(a).getTime();
+  const B = clampToDay(b).getTime();
+  const ms = Math.abs(B - A);
+  return Math.floor(ms / (24 * 60 * 60 * 1000)) + 1;
+}
+
+function dateIsSameMonth(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
+function monthLabels(start: Date, end: Date) {
+  const labels: string[] = [];
+  const d = new Date(start);
+  d.setDate(1);
+  while (d <= end) {
+    labels.push(d.toLocaleDateString(undefined, { month: "short" }));
+    d.setMonth(d.getMonth() + 1);
+  }
+  return labels;
+}
+
+function monthDates(start: Date, end: Date) {
+  const out: Date[] = [];
+  const d = new Date(start);
+  d.setDate(21);
+  while (d <= end) {
+    out.push(new Date(d));
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+}
+
+function mapSeriesToCount(vals: number[], count: number) {
+  if (count === vals.length) return vals;
+  const a = [...vals];
+  while (a.length < count) a.push(a[a.length % vals.length]);
+  return a.slice(0, count);
+}
+
+function buildDailyDates(start: Date, end: Date) {
+  const out: Date[] = [];
+  const s = clampToDay(start);
+  const e = clampToDay(end);
+  const forward = s.getTime() <= e.getTime();
+  const a = forward ? s : e;
+  const b = forward ? e : s;
+
+  let cur = a;
+  while (cur <= b) {
+    out.push(new Date(cur));
+    cur = addDays(cur, 1);
+  }
+  return forward ? out : out.reverse();
+}
+
+function buildDailyLabels(dates: Date[]) {
+  const n = dates.length;
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const sameMonth = first && last ? dateIsSameMonth(first, last) : false;
+
+  if (n <= 7) {
+    return dates.map((d) =>
+      d.toLocaleDateString(undefined, { weekday: "short" })
+    );
+  }
+
+  if (sameMonth) {
+    return dates.map((d) => `${d.getDate()}`);
+  }
+
+  return dates.map((d) =>
+    d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+  );
+}
+
+function dailyizeFromMonthly(monthly: number[], dates: Date[]) {
+  return dates.map((d, i) => {
+    const m = d.getMonth();
+    const y = d.getFullYear();
+    const dim = daysInMonth(y, m) || 30;
+
+    const monthTotal = monthly[m % monthly.length] ?? monthly[0] ?? 0;
+    const base = monthTotal / dim;
+
+    const wiggle =
+      1 +
+      0.22 * Math.sin(i * 0.85) +
+      0.1 * Math.cos(i * 0.33) +
+      0.06 * Math.sin(i * 0.17);
+
+    return Math.max(0, base * wiggle);
+  });
+}
+
+function niceTicks(maxValue: number, targetCount = 6) {
+  const max = Math.max(1, maxValue);
+  const pow = Math.pow(10, Math.floor(Math.log10(max)));
+  const norm = max / pow;
+
+  let stepNorm = 1;
+  if (norm <= 1.2) stepNorm = 0.2;
+  else if (norm <= 2.5) stepNorm = 0.5;
+  else if (norm <= 6) stepNorm = 1;
+  else stepNorm = 2;
+
+  const step = stepNorm * pow;
+  const top = Math.ceil(max / step) * step;
+
+  const ticks: number[] = [];
+  const count = Math.max(2, Math.min(8, targetCount));
+  const actualStep = top / (count - 1);
+
+  for (let i = 0; i < count; i++) ticks.push(Math.round(i * actualStep));
+
+  ticks[0] = 0;
+  ticks[ticks.length - 1] = top;
+
+  const uniq: number[] = [];
+  for (const t of ticks) {
+    if (uniq.length === 0 || uniq[uniq.length - 1] !== t) uniq.push(t);
+  }
+  return uniq;
+}
+
+function fmtMonthYearLong(d: Date) {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+/* ----------------------------- Event-metrics + breakdown demo ----------------------------- */
+type EventMetrics = {
+  ticketsSold: number;
   pageViews: number;
   revenue: number;
-  balance: number;
 };
 
-function deriveMetrics(event?: EventWithMeta): SummaryMetrics {
-  const tickets = event?.attendingCount ?? 0;
-  const pageViews = tickets > 0 ? Math.max(tickets * 3, tickets + 10) : 0; // simple heuristic
-  const revenue = 0; // hook this up to real Stripe data later
-  const balance = revenue;
-  return { tickets, pageViews, revenue, balance };
+function deriveEventMetrics(event?: EventWithMeta): EventMetrics {
+  const ticketsSold = event?.attendingCount ?? 0;
+
+  // Heuristics until real analytics + Stripe numbers are wired in:
+  const pageViews =
+    ticketsSold > 0 ? Math.max(ticketsSold * 3, ticketsSold + 10) : 0;
+
+  // If you later have ticketTypes/prices, replace this with real sums.
+  const assumedAvgTicket = 25; // USD demo
+  const revenue = ticketsSold * assumedAvgTicket;
+
+  return { ticketsSold, pageViews, revenue };
+}
+
+function splitByPercent(total: number, percents: number[]) {
+  const safeTotal = Math.max(0, total);
+  if (safeTotal === 0) return percents.map(() => 0);
+  const raw = percents.map((p) => (safeTotal * p) / 100);
+  const floors = raw.map((x) => Math.floor(x));
+  let remainder = safeTotal - floors.reduce((a, b) => a + b, 0);
+
+  const fracIdx = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac)
+    .map((x) => x.i);
+
+  const out = [...floors];
+  let k = 0;
+  while (remainder > 0 && fracIdx.length > 0) {
+    out[fracIdx[k % fracIdx.length]] += 1;
+    remainder -= 1;
+    k += 1;
+  }
+  return out;
 }
 
 export default function EventSummaryPage() {
   const { eventId } = useParams() as { eventId?: string };
 
-  const { data: event, isLoading } = useQuery<EventWithMeta>({
+  const { data: event } = useQuery<EventWithMeta>({
     queryKey: ["event", eventId],
     queryFn: () => fetchEventById(eventId!),
     enabled: !!eventId,
   });
 
-  const metrics = useMemo(() => deriveMetrics(event), [event]);
+  const metrics = useMemo(() => deriveEventMetrics(event), [event]);
 
-  const shortSlug =
-    event?._id?.slice(-6).toUpperCase() ??
-    (eventId ? eventId.slice(-6).toUpperCase() : "EVENT");
+  /* ---------- Use same dashboard layout + date range picker UX ---------- */
+  const today = useMemo(() => clampToDay(new Date()), []);
+  const currentYear = useMemo(() => today.getFullYear(), [today]);
+
+  const ALL_TIME_START = useMemo(
+    () => new Date(currentYear, 0, 1),
+    [currentYear]
+  );
+  const ALL_TIME_END = useMemo(
+    () => new Date(currentYear, 11, 31),
+    [currentYear]
+  );
+
+  const [dateRange, setDateRange] = useState<DateRangeValue>({
+    start: null,
+    end: null,
+  });
+  const hasChosenRange = !!dateRange.start && !!dateRange.end;
+
+  const effectiveStart = useMemo(
+    () => (hasChosenRange ? (dateRange.start as Date) : ALL_TIME_START),
+    [hasChosenRange, dateRange.start, ALL_TIME_START]
+  );
+
+  const effectiveEnd = useMemo(
+    () => (hasChosenRange ? (dateRange.end as Date) : ALL_TIME_END),
+    [hasChosenRange, dateRange.end, ALL_TIME_END]
+  );
+
+  const rangeDays = useMemo(
+    () => diffDaysInclusive(effectiveStart, effectiveEnd),
+    [effectiveStart, effectiveEnd]
+  );
+
+  const dailyMode = useMemo(() => {
+    if (!hasChosenRange) return false;
+    return rangeDays <= 31;
+  }, [hasChosenRange, rangeDays]);
+
+  const labels = useMemo(() => {
+    if (!dailyMode) return monthLabels(effectiveStart, effectiveEnd);
+    const ds = buildDailyDates(effectiveStart, effectiveEnd);
+    return buildDailyLabels(ds);
+  }, [dailyMode, effectiveStart, effectiveEnd]);
+
+  const dates = useMemo(() => {
+    if (!dailyMode) return monthDates(effectiveStart, effectiveEnd);
+    return buildDailyDates(effectiveStart, effectiveEnd);
+  }, [dailyMode, effectiveStart, effectiveEnd]);
+
+  // Base series (monthly). We scale it by event “size” so the charts feel event-scoped.
+  const scale = useMemo(() => {
+    const t = metrics.ticketsSold;
+    if (t <= 0) return 0.15;
+    if (t <= 25) return 0.35;
+    if (t <= 150) return 0.75;
+    return Math.min(2.2, 0.6 + t / 250);
+  }, [metrics.ticketsSold]);
+
+  const sparkRevenueMonthly = useMemo(
+    () =>
+      [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map((v) =>
+        Math.round(v * 1000 * scale)
+      ),
+    [scale]
+  );
+
+  const sparkPageViewsMonthly = useMemo(
+    () =>
+      [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120].map((v) =>
+        Math.max(1, Math.round(v * scale))
+      ),
+    [scale]
+  );
+
+  const sparkTicketsMonthly = useMemo(
+    () =>
+      [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480].map((v) =>
+        Math.max(1, Math.round(v * scale))
+      ),
+    [scale]
+  );
+
+  const revenueData = useMemo(() => {
+    if (!dailyMode) return mapSeriesToCount(sparkRevenueMonthly, labels.length);
+    return dailyizeFromMonthly(sparkRevenueMonthly, dates);
+  }, [dailyMode, labels.length, dates, sparkRevenueMonthly]);
+
+  const pageViewsData = useMemo(() => {
+    if (!dailyMode)
+      return mapSeriesToCount(sparkPageViewsMonthly, labels.length);
+    return dailyizeFromMonthly(sparkPageViewsMonthly, dates).map((v) =>
+      Math.round(v)
+    );
+  }, [dailyMode, labels.length, dates, sparkPageViewsMonthly]);
+
+  const ticketsSoldData = useMemo(() => {
+    if (!dailyMode) return mapSeriesToCount(sparkTicketsMonthly, labels.length);
+    return dailyizeFromMonthly(sparkTicketsMonthly, dates).map((v) =>
+      Math.round(v)
+    );
+  }, [dailyMode, labels.length, dates, sparkTicketsMonthly]);
+
+  const revenueMax = useMemo(() => Math.max(0, ...revenueData), [revenueData]);
+  const revenueDomain = useMemo<[number, number]>(
+    () => [0, Math.max(1, revenueMax)],
+    [revenueMax]
+  );
+  const revenueTicks = useMemo(
+    () => niceTicks(revenueDomain[1], 6),
+    [revenueDomain]
+  );
+
+  const pvMax = useMemo(() => Math.max(0, ...pageViewsData), [pageViewsData]);
+  const pvDomain = useMemo<[number, number]>(
+    () => [0, Math.max(1, pvMax)],
+    [pvMax]
+  );
+  const pvTicks = useMemo(() => niceTicks(pvDomain[1], 4), [pvDomain]);
+
+  const tsMax = useMemo(
+    () => Math.max(0, ...ticketsSoldData),
+    [ticketsSoldData]
+  );
+  const tsDomain = useMemo<[number, number]>(
+    () => [0, Math.max(1, tsMax)],
+    [tsMax]
+  );
+  const tsTicks = useMemo(() => niceTicks(tsDomain[1], 4), [tsDomain]);
+
+  const pinnedIndex = useMemo(() => {
+    const len = revenueData.length;
+    if (len <= 0) return 0;
+
+    if (!hasChosenRange && !dailyMode) {
+      return Math.min(Math.max(today.getMonth(), 0), len - 1);
+    }
+
+    return len - 1;
+  }, [revenueData.length, hasChosenRange, dailyMode, today]);
+
+  const pinnedSubLabel = useMemo(() => {
+    const d = dates[pinnedIndex];
+    if (!d) return "";
+    if (!dailyMode) return fmtMonthYearLong(d);
+    return d.toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }, [dates, pinnedIndex, dailyMode]);
+
+  /* ---------- Age + Gender breakdown (demo until real attendee data exists) ---------- */
+  const ageSegments = useMemo(() => {
+    const total = metrics.ticketsSold;
+    const [a, b, c, d] = splitByPercent(total, [34, 38, 18, 10]);
+    return [
+      { label: "18–24", value: a, color: "#9A46FF" },
+      { label: "25–34", value: b, color: "#7C3AED" },
+      { label: "35–44", value: c, color: "#C7A0FF" },
+      { label: "45+", value: d, color: "#45FF79" },
+    ];
+  }, [metrics.ticketsSold]);
+
+  const genderSegments = useMemo(() => {
+    const total = metrics.ticketsSold;
+    const [m, f, o] = splitByPercent(total, [52, 46, 2]);
+    return [
+      { label: "Male", value: m, color: "#9A46FF" },
+      { label: "Female", value: f, color: "#C7A0FF" },
+      { label: "Other", value: o, color: "#FF7B45" },
+    ];
+  }, [metrics.ticketsSold]);
+
+  const kpiRevenueValue = useMemo(() => {
+    const v = metrics.revenue;
+    if (!Number.isFinite(v)) return "$0";
+    if (v >= 1000) return `$${(v / 1000).toFixed(1)}K`;
+    return `$${v.toFixed(0)}`;
+  }, [metrics.revenue]);
 
   return (
-    <div className="space-y-6">
-      {/* Top metric cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {/* Share */}
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary-900/70 text-primary-200">
-                <QrCode className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-neutral-0">Share</p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
-                  Share your event link or use a QR code at the door.
-                </p>
+    <div className="space-y-5 px-4 md:px-6 lg:px-8">
+      {/* Top section: same layout as Main Dashboard (KPI cluster + right table) */}
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
+        <div className="grid grid-cols-1 rounded-lg border border-neutral-700 bg-neutral-900 pl-4 lg:grid-cols-[3.15fr_1.74fr]">
+          <KpiCard
+            title="Total Revenue"
+            value={kpiRevenueValue}
+            delta="+24.6%"
+            accent="from-[#7C3AED] to-[#9333EA]"
+            className="border-neutral-700 pr-6 py-5 lg:border-r"
+            stretchChart
+            detailsHref={`/dashboard/events/${eventId ?? ""}/summary`}
+            toolbar={
+              <div className="max-w-[210px]">
+                <DateRangePicker value={dateRange} onChange={setDateRange} />
               </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-dashed border-white/12 bg-neutral-950/60 text-neutral-500">
-              <QrCode className="h-8 w-8" />
-            </div>
-            <div className="flex-1 space-y-2">
-              <div className="rounded-full bg-neutral-950/80 px-3 py-2 text-[11px] text-neutral-300">
-                tikd.app/e/{shortSlug}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="inline-flex flex-1 items-center justify-center rounded-full bg-primary-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-primary-500"
-                >
-                  <Link2 className="mr-1.5 h-3.5 w-3.5" />
-                  Copy link
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex flex-1 items-center justify-center rounded-full border border-white/10 bg-neutral-950 px-3 py-1.5 text-[11px] font-medium text-neutral-200 hover:border-primary-500 hover:text-primary-200"
-                >
-                  Download QR
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Overview */}
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary-900/70 text-primary-200">
-                <BarChart3 className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-neutral-0">Overview</p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
-                  High-level performance for this event.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-3xl font-semibold text-neutral-0">
-                {isLoading ? "–" : metrics.tickets.toLocaleString()}
-              </p>
-              <p className="text-xs text-neutral-400">Tickets</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-semibold text-neutral-0">
-                {isLoading ? "–" : metrics.pageViews.toLocaleString()}
-              </p>
-              <p className="text-xs text-neutral-400">Page views</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Revenue */}
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary-900/70 text-primary-200">
-                <DollarSign className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-neutral-0">Revenue</p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
-                  Stripe payouts and on-site sales.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-3xl font-semibold text-neutral-0">
-              {isLoading ? "–" : `$${metrics.revenue.toFixed(2)}`}
-            </p>
-            <p className="mt-1 text-xs text-neutral-400">
-              Hook this up to event payouts once Stripe is wired in.
-            </p>
-          </div>
-        </div>
-
-        {/* Balance */}
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary-900/70 text-primary-200">
-                <Ticket className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-neutral-0">Balance</p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
-                  What&apos;s available vs pending for this event.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-neutral-400">Total</span>
-              <span className="font-medium text-neutral-0">
-                {isLoading ? "–" : `$${metrics.balance.toFixed(2)}`}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tickets chart */}
-      <div className="rounded-card border border-white/8 bg-neutral-948/90 px-5 py-4 shadow-[0_18px_45px_rgba(0,0,0,0.7)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-primary-900/70 text-primary-200">
-                <Ticket className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-neutral-0">Tickets</p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
-                  A quick visual of ticket sales over time.
-                </p>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-950 px-4 py-2 text-xs font-medium text-neutral-200 hover:border-primary-500 hover:text-primary-200"
+            }
           >
-            <Eye className="h-3.5 w-3.5" />
-            <span>View performance</span>
-          </button>
-        </div>
+            <RevenueChart
+              data={revenueData}
+              dates={dates}
+              domain={revenueDomain}
+              yTicks={revenueTicks}
+              xLabels={labels}
+              tooltip={{
+                index: pinnedIndex,
+                valueLabel: kpiRevenueValue,
+                subLabel: pinnedSubLabel,
+                deltaText: "+24.6%",
+                deltaPositive: true,
+              }}
+              tooltipDateMode={dailyMode ? "full" : "monthYear"}
+              stroke="#9A46FF"
+              fillTop="#9A46FF"
+            />
+          </KpiCard>
 
-        <div className="mt-4 h-56 rounded-[1.25rem] bg-gradient-to-t from-primary-950 via-primary-900 to-primary-800">
-          <div className="relative h-full w-full overflow-hidden">
-            {/* soft grid */}
-            <div className="absolute inset-4">
-              <div className="absolute inset-0 border-b border-white/10" />
-              <div className="absolute inset-0 border-t border-white/5" />
-              <div className="absolute inset-0 border-l border-white/5" />
-              <div className="absolute inset-0 border-r border-white/5" />
-              <div className="absolute inset-0 grid grid-cols-12 gap-1">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="border-l border-white/5 last:border-r"
-                  />
-                ))}
-              </div>
-            </div>
+          <div>
+            <KpiCard
+              title="Total Page Views"
+              value={metrics.pageViews.toLocaleString()}
+              valueIcon={
+                <Eye className="h-5 w-5 shrink-0 text-white/90" aria-hidden />
+              }
+              delta="+24.6%"
+              accent="from-[#7C3AED] to-[#9A46FF]"
+              className="border-neutral-700 p-5 lg:border-b"
+              detailsHref={`/dashboard/events/${eventId ?? ""}/summary`}
+            >
+              <SmallKpiChart
+                data={pageViewsData}
+                dates={dates}
+                pinnedIndex={pinnedIndex}
+                tooltipIcon="eye"
+                tooltipDateMode={dailyMode ? "full" : "monthYear"}
+                domain={pvDomain}
+                yTicks={pvTicks}
+                xLabels={labels}
+                stroke="#9A46FF"
+                deltaText="+24.6%"
+                deltaPositive
+              />
+            </KpiCard>
 
-            {/* bars */}
-            <div className="absolute inset-x-5 bottom-6 flex items-end gap-2">
-              {Array.from({ length: 12 }).map((_, i) => {
-                const base = 25;
-                const height = base + ((i * 17) % 40); // pseudo-random curve
-                return (
-                  <div key={i} className="flex-1">
-                    <div
-                      className="w-full rounded-t-full bg-primary-600/70"
-                      style={{ height: `${height}%` }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* x-axis labels */}
-            <div className="absolute inset-x-5 bottom-2 flex justify-between text-[10px] text-neutral-200/80">
-              <span>Launch</span>
-              <span>1 week</span>
-              <span>2 weeks</span>
-              <span>Event</span>
-            </div>
+            <KpiCard
+              title="Total Tickets Sold"
+              value={metrics.ticketsSold.toLocaleString()}
+              valueIcon={
+                <Ticket
+                  className="h-5 w-5 shrink-0 text-white/90"
+                  aria-hidden
+                />
+              }
+              delta="-24.6%"
+              accent="from-[#7C3AED] to-[#9A46FF]"
+              className="p-5"
+              detailsHref={`/dashboard/events/${eventId ?? ""}/summary`}
+            >
+              <SmallKpiChart
+                data={ticketsSoldData}
+                dates={dates}
+                pinnedIndex={pinnedIndex}
+                tooltipIcon="ticket"
+                tooltipDateMode={dailyMode ? "full" : "monthYear"}
+                domain={tsDomain}
+                yTicks={tsTicks}
+                xLabels={labels}
+                stroke="#9A46FF"
+                deltaText="-24.6%"
+                deltaPositive={false}
+              />
+            </KpiCard>
           </div>
         </div>
-      </div>
+
+        <RecentSalesTable />
+      </section>
+
+      {/* Replace “Upcoming Events” area with Age + Gender breakdown */}
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <BreakdownCard
+            title="Age Breakdown"
+            segments={ageSegments}
+            donutProps={{ height: 180, thickness: 22 }}
+          />
+          <BreakdownCard
+            title="Gender Breakdown"
+            segments={genderSegments}
+            donutProps={{ height: 180, thickness: 22 }}
+          />
+        </div>
+
+        <MyTeamTable
+          members={DEMO_MY_TEAM}
+          onDetailedView={() => {
+            console.log("Detailed View clicked");
+          }}
+        />
+      </section>
+
+      <TrackingLinksTable />
     </div>
   );
 }

@@ -78,7 +78,7 @@ export default function DataFolderCard({
     <Link
       href={href}
       className={clsx(
-        "group relative overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 p-4",
+        "min-w-[232px] w-full group relative overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 p-4",
         "transition-[transform,filter,box-shadow,border-color] duration-200",
         "hover:brightness-[1.04] hover:border-primary-500",
         "shadow-[0_18px_56px_rgba(0,0,0,0.50),inset_0_1px_0_rgba(255,255,255,0.05)]",

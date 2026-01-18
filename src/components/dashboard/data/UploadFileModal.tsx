@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { X, Plus, Upload as UploadIcon, File as FileIcon } from "lucide-react";
+import { X, File as FileIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import LabelledInput from "@/components/ui/LabelledInput";
 
@@ -35,6 +35,12 @@ function formatBytes(bytes: number) {
   if (mb >= 1) return `${mb.toFixed(1)} MB`;
   const kb = bytes / 1024;
   return `${kb.toFixed(0)} KB`;
+}
+
+function errorMessage(e: unknown, fallback: string) {
+  if (e instanceof Error) return e.message || fallback;
+  if (typeof e === "string") return e || fallback;
+  return fallback;
 }
 
 export default function UploadFileModal({
@@ -70,7 +76,6 @@ export default function UploadFileModal({
 
   useEffect(() => {
     if (!open) resetState();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   function close() {
@@ -118,8 +123,8 @@ export default function UploadFileModal({
       setSubmitting(true);
       await onUpload?.({ name: name.trim(), file });
       onOpenChange(false);
-    } catch (e: any) {
-      setError(e?.message || "Upload failed. Please try again.");
+    } catch (e: unknown) {
+      setError(errorMessage(e, "Upload failed. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -133,7 +138,6 @@ export default function UploadFileModal({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   if (!open) return null;

@@ -3,7 +3,8 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import {
   ChevronLeft,
@@ -99,6 +100,12 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function errorMessage(e: unknown, fallback: string) {
+  if (e instanceof Error) return e.message || fallback;
+  if (typeof e === "string") return e || fallback;
+  return fallback;
+}
+
 /* ------------------------------ UI ------------------------------ */
 function KindGlyph({ kind }: { kind: FileKind }) {
   const c = "h-9 w-9 text-neutral-200/85";
@@ -130,7 +137,7 @@ function KindPill({ kind }: { kind: FileKind }) {
 /**
  * Card preview area:
  * - PDF: embedded iframe (tiny preview)
- * - Image: <img>
+ * - Image: next/image
  * - Others: fallback icon/pill
  */
 function FilePreview({ item }: { item: Item }) {
@@ -165,15 +172,25 @@ function FilePreview({ item }: { item: Item }) {
   }
 
   if (img && (item.thumbUrl || item.fileUrl)) {
+    const src = item.thumbUrl || item.fileUrl;
+
     return (
       <>
         {fallback}
-        <img
-          src={item.thumbUrl || item.fileUrl}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+        <div
+          className="absolute inset-0"
           style={{ pointerEvents: "none" }}
-        />
+          aria-hidden="true"
+        >
+          <Image
+            src={src}
+            alt=""
+            fill
+            sizes="240px"
+            className="object-cover"
+            unoptimized
+          />
+        </div>
       </>
     );
   }
@@ -229,6 +246,15 @@ function parseCsv(text: string) {
 }
 
 /* ------------------------------ Modal Preview ------------------------------ */
+type DocxPreviewModule = {
+  renderAsync: (
+    data: ArrayBuffer,
+    container: HTMLElement,
+    styleContainer?: HTMLElement,
+    options?: Record<string, unknown>,
+  ) => Promise<unknown>;
+};
+
 function PreviewModal({
   open,
   item,
@@ -290,8 +316,8 @@ function PreviewModal({
             .map((r) => r.slice(0, maxCols));
 
           setCsvRows(trimmed);
-        } catch (e: any) {
-          setCsvError(e?.message || "Failed to load CSV");
+        } catch (e: unknown) {
+          setCsvError(errorMessage(e, "Failed to load CSV"));
         }
       })();
       return;
@@ -315,10 +341,10 @@ function PreviewModal({
           const buf = await res.arrayBuffer();
 
           // dynamic import so SSR doesn't choke
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const mod: any = await import("docx-preview");
+          const mod = (await import(
+            "docx-preview"
+          )) as unknown as DocxPreviewModule;
 
-          // docx-preview API: renderAsync(buffer, container, styleContainer?, options?)
           await mod.renderAsync(buf, host, undefined, {
             inWrapper: false,
             ignoreWidth: false,
@@ -327,11 +353,13 @@ function PreviewModal({
           });
 
           setDocxLoading(false);
-        } catch (e: any) {
+        } catch (e: unknown) {
           setDocxLoading(false);
           setDocxError(
-            e?.message ||
+            errorMessage(
+              e,
               "DOCX preview failed. Make sure `docx-preview` is installed.",
+            ),
           );
         }
       })();
@@ -422,11 +450,16 @@ function PreviewModal({
 
           {isImg && (
             <div className="overflow-hidden rounded-lg border border-neutral-700 bg-neutral-950/30">
-              <img
-                src={item.thumbUrl || item.fileUrl}
-                alt={item.title}
-                className="h-[68vh] w-full object-contain"
-              />
+              <div className="relative h-[68vh] w-full">
+                <Image
+                  src={item.thumbUrl || item.fileUrl}
+                  alt={item.title}
+                  fill
+                  sizes="(max-width: 980px) 100vw, 980px"
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
             </div>
           )}
 

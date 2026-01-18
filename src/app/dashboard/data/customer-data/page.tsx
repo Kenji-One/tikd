@@ -4,7 +4,6 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
@@ -23,9 +22,6 @@ type Row = {
   dateCreated: string;
   avatarBg?: string;
 };
-
-type SortKey = "id" | "name" | "email" | "orders" | "spent" | "dateCreated";
-type SortDir = "asc" | "desc";
 
 const ROWS: Row[] = Array.from({ length: 10 }).map((_, i) => ({
   id: `#CUS-${2935 + i}`,
@@ -61,34 +57,6 @@ function dateToMs(label: string) {
 }
 
 export default function DataCustomerDataPage() {
-  const [sortBy, setSortBy] = useState<SortKey>("dateCreated");
-  const [dir, setDir] = useState<SortDir>("desc");
-
-  const sorted = useMemo(() => {
-    const arr = [...ROWS];
-    arr.sort((a, b) => {
-      const A = a[sortBy] as any;
-      const B = b[sortBy] as any;
-
-      if (sortBy === "orders" || sortBy === "spent") {
-        return dir === "asc" ? Number(A) - Number(B) : Number(B) - Number(A);
-      }
-
-      if (sortBy === "dateCreated") {
-        const ams = dateToMs(a.dateCreated);
-        const bms = dateToMs(b.dateCreated);
-        return dir === "asc" ? ams - bms : bms - ams;
-      }
-
-      const aStr = String(A);
-      const bStr = String(B);
-      return dir === "asc"
-        ? aStr.localeCompare(bStr)
-        : bStr.localeCompare(aStr);
-    });
-    return arr;
-  }, [sortBy, dir]);
-
   const columns: DashboardTableColumn<Row>[] = [
     {
       key: "id",
@@ -164,7 +132,7 @@ export default function DataCustomerDataPage() {
       <DashboardDataTable
         title="Customer Data"
         subtitle="Customer records, orders, and spend history."
-        rows={sorted}
+        rows={ROWS}
         columns={columns}
         getRowKey={(r, i) => `${r.id}-${i}`}
         initialSort={{ key: "dateCreated", dir: "desc" }}

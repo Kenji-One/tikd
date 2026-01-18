@@ -86,6 +86,21 @@ function cellAlignCls(a?: "left" | "right" | "center") {
       : "text-left";
 }
 
+/** Safe default sort accessor (no `any`) */
+function defaultSortValue<T>(row: T, key: string): string | number {
+  // Works for objects; falls back for primitives.
+  const rec =
+    row !== null && typeof row === "object"
+      ? (row as Record<string, unknown>)
+      : null;
+
+  const v = rec ? rec[key] : undefined;
+
+  if (typeof v === "number") return v;
+  if (typeof v === "string") return v;
+  return String(v ?? "");
+}
+
 /** Reusable avatar for ANY table (26x26, radius 4px) */
 export function TableAvatar({
   src,
@@ -185,13 +200,8 @@ export default function DashboardDataTable<T>({
     const col = columns.find((c) => c.key === sortBy);
     if (!col) return rows;
 
-    const getVal =
-      col.sortValue ??
-      ((r: any) => {
-        const v = r?.[sortBy];
-        if (typeof v === "number") return v;
-        return String(v ?? "");
-      });
+    const getVal: (r: T) => string | number =
+      col.sortValue ?? ((r) => defaultSortValue(r, sortBy));
 
     const arr = [...rows];
     arr.sort((a, b) => {
@@ -223,14 +233,12 @@ export default function DashboardDataTable<T>({
         <div className="mb-2 flex items-start justify-between gap-4 border-b border-neutral-700 px-4 pb-2">
           <div className="min-w-0">
             {title ? (
-              <h3 className="text-xl font-semibold uppercase text-neutral-400">
+              <h3 className="text-lg font-semibold uppercase text-neutral-400">
                 {title}
               </h3>
             ) : null}
             {subtitle ? (
-              <div className="mt-1 text-[13px] text-neutral-500">
-                {subtitle}
-              </div>
+              <div className="text-neutral-400">{subtitle}</div>
             ) : null}
           </div>
 

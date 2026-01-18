@@ -3,10 +3,10 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
-import DownloadCsvModal from "@/components/dashboard/data/DownloadCsvModal";
 
 import DashboardDataTable, {
   type DashboardTableColumn,
@@ -23,17 +23,6 @@ type Row = {
   djSongs: number;
   avatarBg?: string;
 };
-
-type SortKey =
-  | "id"
-  | "name"
-  | "income"
-  | "views"
-  | "ticketsSold"
-  | "dateCreated"
-  | "djSongs";
-
-type SortDir = "asc" | "desc";
 
 const ROWS: Row[] = Array.from({ length: 10 }).map((_, i) => ({
   id: "#2935",
@@ -64,50 +53,6 @@ function dateToMs(label: string) {
 }
 
 export default function DataEventsPage() {
-  const [sortBy, setSortBy] = useState<SortKey>("dateCreated");
-  const [dir, setDir] = useState<SortDir>("desc");
-
-  const [csvOpen, setCsvOpen] = useState(false);
-  const [csvEventName, setCsvEventName] = useState<string>("");
-
-  const toggleSort = (key: SortKey) => {
-    if (key === sortBy) setDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortBy(key);
-      setDir("desc");
-    }
-  };
-
-  const sorted = useMemo(() => {
-    const arr = [...ROWS];
-    arr.sort((a, b) => {
-      const A = a[sortBy] as any;
-      const B = b[sortBy] as any;
-
-      if (
-        sortBy === "income" ||
-        sortBy === "views" ||
-        sortBy === "ticketsSold" ||
-        sortBy === "djSongs"
-      ) {
-        return dir === "asc" ? Number(A) - Number(B) : Number(B) - Number(A);
-      }
-
-      if (sortBy === "dateCreated") {
-        const ams = dateToMs(a.dateCreated);
-        const bms = dateToMs(b.dateCreated);
-        return dir === "asc" ? ams - bms : bms - ams;
-      }
-
-      const aStr = String(A);
-      const bStr = String(B);
-      return dir === "asc"
-        ? aStr.localeCompare(bStr)
-        : bStr.localeCompare(aStr);
-    });
-    return arr;
-  }, [sortBy, dir]);
-
   const columns: DashboardTableColumn<Row>[] = [
     {
       key: "id",
@@ -176,56 +121,32 @@ export default function DataEventsPage() {
       sortValue: (r) => r.djSongs,
       cell: (r) => <span className="text-neutral-0">{r.djSongs}</span>,
     },
-    {
-      key: "actions",
-      header: "",
-      headerAlign: "right",
-      align: "right",
-      width: 170,
-      headerInteractive: true,
-      cell: (r) => (
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            variant="secondary"
-            size="xs"
-            onClick={() => {
-              setCsvEventName(r.name);
-              setCsvOpen(true);
-            }}
-          >
-            Download CSV
-          </Button>
-        </div>
-      ),
-    },
   ];
 
   return (
     <div>
+      <div className="mb-3 flex items-center justify-between">
+        <Button asChild variant="secondary" size="sm">
+          <Link href="/dashboard/data">
+            <span className="inline-flex items-center gap-2">
+              <ArrowLeft size={16} />
+              Back to Data
+            </span>
+          </Link>
+        </Button>
+      </div>
+
       <DashboardDataTable
-        title="All events"
-        rows={sorted}
-        columns={columns.map((c) =>
-          c.sortable
-            ? {
-                ...c,
-                cell: c.cell,
-              }
-            : c,
-        )}
+        title="Events"
+        subtitle="Event performance across income, views, and ticket sales."
+        rows={ROWS}
+        columns={columns}
         getRowKey={(r, i) => `${r.id}-${i}`}
         initialSort={{ key: "dateCreated", dir: "desc" }}
         showBottomFade={false}
         showRowSeparators={true}
         tableClassName="text-[13px]"
         className="pt-2"
-      />
-
-      <DownloadCsvModal
-        open={csvOpen}
-        onOpenChange={setCsvOpen}
-        eventName={csvEventName}
       />
     </div>
   );

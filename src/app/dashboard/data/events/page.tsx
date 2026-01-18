@@ -125,17 +125,6 @@ export default function DataEventsPage() {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <Button asChild variant="secondary" size="sm">
-          <Link href="/dashboard/data">
-            <span className="inline-flex items-center gap-2">
-              <ArrowLeft size={16} />
-              Back to Data
-            </span>
-          </Link>
-        </Button>
-      </div>
-
       <DashboardDataTable
         title="Events"
         subtitle="Event performance across income, views, and ticket sales."

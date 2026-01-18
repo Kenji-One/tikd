@@ -112,17 +112,6 @@ export default function DataTeamsPage() {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <Button asChild variant="secondary" size="sm">
-          <Link href="/dashboard/data">
-            <span className="inline-flex items-center gap-2">
-              <ArrowLeft size={16} />
-              Back to Data
-            </span>
-          </Link>
-        </Button>
-      </div>
-
       <DashboardDataTable
         title="Teams"
         subtitle="Team performance, member count, and visibility."

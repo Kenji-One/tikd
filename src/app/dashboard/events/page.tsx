@@ -143,14 +143,14 @@ function MiniSelect<T extends string>({
           "bg-neutral-900 px-3 py-2 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
           "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer",
-          btnClassName
+          btnClassName,
         )}
       >
         {label}
         <ChevronDown
           className={clsx(
             "h-4 w-4 transition-transform",
-            open ? "rotate-180 text-neutral-100" : "text-neutral-400"
+            open ? "rotate-180 text-neutral-100" : "text-neutral-400",
           )}
         />
       </button>
@@ -159,7 +159,7 @@ function MiniSelect<T extends string>({
         <div
           className={clsx(
             "absolute right-0 z-30 mt-2 w-full overflow-hidden rounded-2xl",
-            "border border-white/10 bg-neutral-950/95 shadow-xl backdrop-blur"
+            "border border-white/10 bg-neutral-950/95 shadow-xl backdrop-blur",
           )}
         >
           {options.map((opt) => {
@@ -176,7 +176,7 @@ function MiniSelect<T extends string>({
                   "flex w-full items-center justify-between px-3 py-2 text-left text-xs",
                   active
                     ? "bg-primary-700/20 text-neutral-0"
-                    : "text-neutral-200 hover:bg-white/5"
+                    : "text-neutral-200 hover:bg-white/5",
                 )}
               >
                 <span>{opt.label}</span>
@@ -243,7 +243,7 @@ function OrgPickerModal({
       <div
         className={clsx(
           "relative z-10 w-full max-w-xl rounded-2xl border border-white/12",
-          "bg-neutral-950/95 p-4 shadow-[0_28px_80px_rgba(0,0,0,0.85)]"
+          "bg-neutral-950/95 p-4 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
         )}
         onClick={handlePanelClick}
       >
@@ -285,7 +285,7 @@ function OrgPickerModal({
                       "group relative flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
                       "bg-neutral-948/90 border-white/10 hover:border-primary-500/70 hover:bg-neutral-900/90",
                       selected &&
-                        "border-primary-500 bg-neutral-948/95 shadow-[0_0_0_1px_rgba(154,70,255,0.55)]"
+                        "border-primary-500 bg-neutral-948/95 shadow-[0_0_0_1px_rgba(154,70,255,0.55)]",
                     )}
                     onClick={(e) => handleCardClick(e, org._id)}
                   >
@@ -293,7 +293,7 @@ function OrgPickerModal({
                       className={clsx(
                         "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md",
                         "bg-neutral-900 ring-1 ring-inset ring-white/10",
-                        selected && "ring-primary-500/80"
+                        selected && "ring-primary-500/80",
                       )}
                     >
                       {org.logo ? (
@@ -388,7 +388,7 @@ function UpcomingEventsGridPanel({
   const sorted = useMemo(() => {
     const arr = [...list];
     return arr.sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
     );
   }, [list]);
 
@@ -402,13 +402,13 @@ function UpcomingEventsGridPanel({
     <section
       className={clsx(
         "mt-4 overflow-hidden rounded-2xl border border-white/10",
-        "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+        "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
       )}
     >
       <div
         className={clsx(
           "relative p-4",
-          "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+          "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
         )}
       >
         <div className="flex items-center justify-between gap-3">
@@ -443,7 +443,7 @@ function UpcomingEventsGridPanel({
             className={clsx(
               "mt-4 grid gap-3",
               gridCols,
-              "justify-start content-start"
+              "justify-start content-start",
             )}
           >
             {sorted.map((ev) => (
@@ -502,11 +502,11 @@ function EventsStatsListPanel({
 
     if (dateSortMode === "soonest") {
       return arr.sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
       );
     }
     return arr.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
   }, [list, metric, dateSortMode]);
 
@@ -514,13 +514,13 @@ function EventsStatsListPanel({
     <section
       className={clsx(
         "mt-4 overflow-hidden rounded-2xl border border-white/10",
-        "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+        "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
       )}
     >
       <div
         className={clsx(
           "relative p-4",
-          "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+          "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
         )}
       >
         <div className="flex items-center justify-between gap-3">
@@ -563,7 +563,7 @@ function EventsStatsListPanel({
                     "group relative block rounded-lg border transition-colors duration-200 ease-out",
                     activeRow
                       ? "border-white/10 bg-neutral-948/10"
-                      : "border-transparent bg-transparent hover:bg-white/4"
+                      : "border-transparent bg-transparent hover:bg-white/4",
                   )}
                 >
                   {/* Smooth hover highlight */}
@@ -572,7 +572,7 @@ function EventsStatsListPanel({
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
                       "opacity-0 transition-opacity duration-250 ease-out",
                       "group-hover:opacity-100",
-                      "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]"
+                      "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]",
                     )}
                   />
                   {/* Smooth hover border glow (opacity-based, no ring toggling) */}
@@ -581,7 +581,7 @@ function EventsStatsListPanel({
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
                       "opacity-0 transition-opacity duration-250 ease-out",
                       "group-hover:opacity-100",
-                      "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]"
+                      "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]",
                     )}
                   />
 
@@ -665,11 +665,11 @@ function DraftsListPanel({
     switch (draftSort) {
       case "newest":
         return arr.sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
         );
       case "oldest":
         return arr.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
         );
       case "az":
         return arr.sort((a, b) => a.title.localeCompare(b.title));
@@ -684,13 +684,13 @@ function DraftsListPanel({
     <section
       className={clsx(
         "mt-4 rounded-2xl border border-white/10",
-        "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+        "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
       )}
     >
       <div
         className={clsx(
           "relative p-4",
-          "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+          "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
         )}
       >
         <div className="flex items-center justify-between gap-3">
@@ -742,7 +742,7 @@ function DraftsListPanel({
                     "group relative block rounded-lg border transition-colors duration-200 ease-out",
                     activeRow
                       ? "border-white/10 bg-neutral-948/10"
-                      : "border-transparent bg-transparent hover:bg-white/4"
+                      : "border-transparent bg-transparent hover:bg-white/4",
                   )}
                 >
                   {/* Smooth hover highlight */}
@@ -751,7 +751,7 @@ function DraftsListPanel({
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
                       "opacity-0 transition-opacity duration-250 ease-out",
                       "group-hover:opacity-100",
-                      "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]"
+                      "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]",
                     )}
                   />
                   {/* Smooth hover border glow */}
@@ -760,7 +760,7 @@ function DraftsListPanel({
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
                       "opacity-0 transition-opacity duration-250 ease-out",
                       "group-hover:opacity-100",
-                      "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]"
+                      "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]",
                     )}
                   />
 
@@ -835,20 +835,20 @@ export default function DashboardEventsPage() {
   const upcoming = useMemo(
     () =>
       events.filter(
-        (e) => new Date(e.date).getTime() >= now && e.status !== "draft"
+        (e) => new Date(e.date).getTime() >= now && e.status !== "draft",
       ),
-    [events, now]
+    [events, now],
   );
   const past = useMemo(
     () =>
       events.filter(
-        (e) => new Date(e.date).getTime() < now && e.status !== "draft"
+        (e) => new Date(e.date).getTime() < now && e.status !== "draft",
       ),
-    [events, now]
+    [events, now],
   );
   const drafts = useMemo(
     () => events.filter((e) => e.status === "draft"),
-    [events]
+    [events],
   );
 
   function openOrgPicker() {
@@ -885,15 +885,15 @@ export default function DashboardEventsPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <MiniSelect value={view} onChange={setView} options={viewOptions} />
-
-            <button
-              type="button"
+            <Button
               onClick={openOrgPicker}
-              className="inline-flex gap-1.5 items-center font-medium bg-primary-500 text-white hover:bg-primary-600 px-4 py-3 rounded-full transition cursor-pointer"
+              type="button"
+              variant="primary"
+              icon={<CalendarPlus className="h-4 w-4" />}
+              animation
             >
-              <CalendarPlus className="h-4 w-4" />
               Create Event
-            </button>
+            </Button>
           </div>
         </div>
 

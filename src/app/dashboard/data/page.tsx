@@ -1,8 +1,8 @@
 /* ------------------------------------------------------------------ */
-/*  src/app/dashboard/data/page.tsx                               */
+/*  src/app/dashboard/data/page.tsx                                   */
 /* ------------------------------------------------------------------ */
-import UnderConstruction from "@/components/ui/UnderConstruction";
+import { redirect } from "next/navigation";
 
-export default function DataPage() {
-  return <UnderConstruction title="Data page" />;
+export default function DataRootPage() {
+  redirect("/dashboard/data/basic");
 }

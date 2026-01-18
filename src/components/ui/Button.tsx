@@ -67,7 +67,8 @@ const variants: Record<
     "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffffc] border border-transparent hover:border-primary-500",
   destructive: "bg-error-600 text-white hover:bg-error-700",
   brand: "bg-primary-500 text-white hover:bg-primary-700",
-  social: "bg-[#ffffff12] text-white hover:bg-white/20",
+  social:
+    "bg-neutral-800 text-white border border-white/10 hover:border-primary-500 hover:bg-neutral-700/40",
   default: "bg-button-primary text-white ",
 };
 
@@ -100,7 +101,7 @@ function sweepBase(duration: string) {
     "before:pointer-events-none before:absolute before:inset-0 before:content-['']",
     "before:-translate-x-[120%] before:transition-transform",
     duration,
-    "hover:before:translate-x-[120%]"
+    "hover:before:translate-x-[120%]",
   );
 }
 
@@ -108,15 +109,15 @@ const variantSweep: Record<NonElectricVariant, string> = {
   // Keep these subtle; each one is distinct (tint/duration) but still on-brand.
   primary: clsx(
     sweepBase("before:duration-700"),
-    "before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent"
+    "before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent",
   ),
   brand: clsx(
     sweepBase("before:duration-800"),
-    "before:bg-gradient-to-r before:from-transparent before:via-white/24 before:to-transparent"
+    "before:bg-gradient-to-r before:from-transparent before:via-white/24 before:to-transparent",
   ),
   destructive: clsx(
     sweepBase("before:duration-750"),
-    "before:bg-gradient-to-r before:from-transparent before:via-error-200/22 before:to-transparent"
+    "before:bg-gradient-to-r before:from-transparent before:via-error-200/22 before:to-transparent",
   ),
   secondary: clsx(
     // slightly quicker, more “premium”
@@ -124,25 +125,25 @@ const variantSweep: Record<NonElectricVariant, string> = {
     // thinner, crisper shine + a faint glow edge so it feels alive on transparent bg
     "before:bg-gradient-to-r before:from-transparent before:via-white/22 before:to-transparent " +
       "before:opacity-0 before:transition-opacity hover:before:opacity-100 " +
-      "before:blur-[0.5px]"
+      "before:blur-[0.5px]",
   ),
   ghost: clsx(
     sweepBase("before:duration-900"),
-    "before:bg-gradient-to-r before:from-transparent before:via-primary-300/18 before:to-transparent"
+    "before:bg-gradient-to-r before:from-transparent before:via-primary-300/18 before:to-transparent",
   ),
   social: clsx(
     sweepBase("before:duration-850"),
-    "before:bg-gradient-to-r before:from-transparent before:via-white/16 before:to-transparent"
+    "before:bg-gradient-to-r before:from-transparent before:via-white/16 before:to-transparent",
   ),
   default: clsx(
     sweepBase("before:duration-850"),
-    "before:bg-gradient-to-r before:from-transparent before:via-primary-500/16 before:to-transparent"
+    "before:bg-gradient-to-r before:from-transparent before:via-primary-500/16 before:to-transparent",
   ),
 };
 
 function getSweepClasses(
   variant: NonNullable<ButtonProps["variant"]>,
-  electricInner?: InnerVariants
+  electricInner?: InnerVariants,
 ) {
   if (variant === "electric") {
     // If electric reuses an inner variant, match that animation.
@@ -150,7 +151,7 @@ function getSweepClasses(
     // Otherwise, give electric its own slightly “neon” sweep.
     return clsx(
       sweepBase("before:duration-900"),
-      "before:bg-gradient-to-r before:from-transparent before:via-primary-952/22 before:to-transparent"
+      "before:bg-gradient-to-r before:from-transparent before:via-primary-952/22 before:to-transparent",
     );
   }
 
@@ -179,7 +180,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       electricInner, // undefined -> use electricDefaultInner
       ...props
     },
-    ref
+    ref,
   ) => {
     const Comp = asChild ? Slot : "button";
 
@@ -225,7 +226,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       innerClasses,
       sizes[size],
       animateClasses,
-      className
+      className,
     );
 
     const buttonEl = (
@@ -258,7 +259,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {buttonEl}
       </ElectricBorder>
     );
-  }
+  },
 );
 
 Button.displayName = "Button";

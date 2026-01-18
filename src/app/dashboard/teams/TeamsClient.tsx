@@ -113,6 +113,7 @@ export default function TeamsClient() {
               type="button"
               variant="primary"
               icon={<Plus className="h-4 w-4" />}
+              animation
             >
               New team
             </Button>
@@ -125,13 +126,13 @@ export default function TeamsClient() {
         <section
           className={clsx(
             "rounded-2xl border border-white/10",
-            "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+            "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
           )}
         >
           <div
             className={clsx(
               "relative p-4 md:p-5",
-              "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+              "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
             {/* Rail container (no arrows) */}
@@ -141,7 +142,7 @@ export default function TeamsClient() {
                   ref={railRef}
                   className={clsx(
                     "no-scrollbar overflow-x-auto overflow-y-hidden",
-                    "scroll-smooth"
+                    "scroll-smooth",
                   )}
                 >
                   {/* IMPORTANT: transparent rail (no bg on items/grid wrapper) */}

@@ -115,7 +115,7 @@ function Chip({
     <span
       className={clsx(
         "rounded-md px-3 py-1.5 text-xs font-semibold leading-[100%] flex items-center justify-center",
-        cls
+        cls,
       )}
     >
       {children}
@@ -174,7 +174,7 @@ function ArchiveLinkDialog({
         aria-modal="true"
         className={clsx(
           "relative mx-4 w-full max-w-[700px] overflow-hidden rounded-xl",
-          "border border-white/10 bg-neutral-900"
+          "border border-white/10 bg-neutral-900",
         )}
         onClick={(e) => e.stopPropagation()}
       >
@@ -188,7 +188,7 @@ function ArchiveLinkDialog({
 
           <div
             className={clsx(
-              "mt-5 rounded-lg border border-error-500 bg-neutral-800 p-4"
+              "mt-5 rounded-lg border border-error-500 bg-neutral-800 p-4",
             )}
           >
             <div className="flex flex-col items-start gap-0.5">
@@ -237,7 +237,7 @@ function ArchiveLinkDialog({
               className={clsx(
                 "rounded-full",
                 "border border-white/40 bg-transparent py-3 px-6 text-base font-medium text-neutral-0 leading-[100%]",
-                "transition hover:border-white/60 cursor-pointer"
+                "transition hover:border-white/60 cursor-pointer",
               )}
             >
               Cancel
@@ -249,7 +249,7 @@ function ArchiveLinkDialog({
               className={clsx(
                 "rounded-full px-6 py-3",
                 "bg-error-500 text-base font-semibold text-white leading-[100%]",
-                "transition hover:bg-error-400 cursor-pointer"
+                "transition hover:bg-error-400 cursor-pointer",
               )}
             >
               <span className="inline-flex items-center justify-center gap-2">
@@ -294,7 +294,7 @@ function QrDialog({
   const qrValue = fullTrackingUrl(row.url) || row.url;
 
   const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(
-    qrValue
+    qrValue,
   )}`;
 
   const handleShare = async () => {
@@ -341,7 +341,7 @@ function QrDialog({
         aria-modal="true"
         className={clsx(
           "relative mx-4 w-full max-w-[487px] overflow-hidden rounded-xl",
-          "border border-white/10 bg-neutral-900 "
+          "border border-white/10 bg-neutral-900 ",
         )}
         onClick={(e) => e.stopPropagation()}
       >
@@ -349,7 +349,7 @@ function QrDialog({
           <div className="mx-auto flex w-full max-w-[360px] flex-col items-center">
             <div
               className={clsx(
-                "relative w-full max-w-[170px] overflow-hidden rounded-lg bg-white p-2"
+                "relative w-full max-w-[170px] overflow-hidden rounded-lg bg-white p-2",
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -371,7 +371,7 @@ function QrDialog({
                 className={clsx(
                   "rounded-full",
                   "border border-white/40 bg-transparent py-3 px-6 text-base font-medium text-neutral-0",
-                  "transition hover:border-white/60 cursor-pointer"
+                  "transition hover:border-white/60 cursor-pointer",
                 )}
               >
                 <span className="inline-flex items-center justify-center gap-2">
@@ -397,7 +397,7 @@ function QrDialog({
                 className={clsx(
                   "rounded-full px-6 py-3",
                   "bg-primary-500 text-base font-semibold text-white",
-                  "transition hover:bg-primary-400 cursor-pointer"
+                  "transition hover:bg-primary-400 cursor-pointer",
                 )}
               >
                 <span className="inline-flex items-center justify-center gap-2">
@@ -568,17 +568,17 @@ function TrackingLinkDialog({
     "hover:border-white/20",
     "focus:border-primary-500",
     "transition cursor-pointer",
-    "flex items-center justify-between gap-3"
+    "flex items-center justify-between gap-3",
   );
 
   const dropdownPanelCls = clsx(
     "absolute left-0 right-0 z-[90] mt-2 overflow-hidden rounded-lg",
-    "border border-white/10 bg-neutral-900"
+    "border border-white/10 bg-neutral-900",
   );
 
   const optionBtnBase = clsx(
     "w-full text-left px-4 py-3 transition flex items-start justify-between gap-3",
-    "hover:bg-white/5 focus:bg-white/5 focus:outline-none"
+    "hover:bg-white/5 focus:bg-white/5 focus:outline-none",
   );
 
   return (
@@ -594,7 +594,7 @@ function TrackingLinkDialog({
         aria-modal="true"
         className={clsx(
           "relative mx-4 w-full max-w-[720px] rounded-xl",
-          "border border-white/10 bg-neutral-900"
+          "border border-white/10 bg-neutral-900",
         )}
         onClick={(e) => e.stopPropagation()}
       >
@@ -641,7 +641,7 @@ function TrackingLinkDialog({
                   "bg-neutral-900 border-white/10",
                   errName
                     ? "border-error-500 focus:border-error-400"
-                    : "focus:border-primary-600/50"
+                    : "focus:border-primary-600/50",
                 )}
               />
             </div>
@@ -674,7 +674,7 @@ function TrackingLinkDialog({
                     "bg-neutral-900 border-white/10",
                     errUrl
                       ? "border-error-500 focus:border-error-400"
-                      : "focus:border-primary-600/50"
+                      : "focus:border-primary-600/50",
                   )}
                 />
               </div>
@@ -716,7 +716,7 @@ function TrackingLinkDialog({
                   size={16}
                   className={clsx(
                     "text-neutral-400 transition",
-                    typeOpen && "rotate-180 text-neutral-200"
+                    typeOpen && "rotate-180 text-neutral-200",
                   )}
                 />
               </button>
@@ -734,7 +734,7 @@ function TrackingLinkDialog({
                           aria-selected={selected}
                           className={clsx(
                             optionBtnBase,
-                            selected && "bg-primary-500/10"
+                            selected && "bg-primary-500/10",
                           )}
                           onClick={() => {
                             setDraft((d) => ({ ...d, type: opt.value }));
@@ -793,7 +793,7 @@ function TrackingLinkDialog({
                   size={16}
                   className={clsx(
                     "text-neutral-400 transition",
-                    statusOpen && "rotate-180 text-neutral-200"
+                    statusOpen && "rotate-180 text-neutral-200",
                   )}
                 />
               </button>
@@ -820,7 +820,7 @@ function TrackingLinkDialog({
                           aria-selected={selected}
                           className={clsx(
                             optionBtnBase,
-                            selected && "bg-primary-500/10"
+                            selected && "bg-primary-500/10",
                           )}
                           onClick={() => {
                             setDraft((d) => ({ ...d, status: opt.value }));
@@ -844,7 +844,7 @@ function TrackingLinkDialog({
                               selected
                                 ? "border-primary-500/35 bg-primary-500/15 text-primary-200"
                                 : tint,
-                              selected ? "" : "text-neutral-300"
+                              selected ? "" : "text-neutral-300",
                             )}
                           >
                             {selected ? (
@@ -874,7 +874,7 @@ function TrackingLinkDialog({
               onClick={onClose}
               className={clsx(
                 "py-3 px-6 text-base font-medium leading-[100%]",
-                "border-white/40 hover:border-white/60 hover:bg-transparent"
+                "border-white/40 hover:border-white/60 hover:bg-transparent",
               )}
             >
               Cancel
@@ -901,8 +901,9 @@ function TrackingLinkDialog({
               }}
               className={clsx(
                 "py-3 px-6 text-base font-semibold leading-[100%]",
-                !canSave && "bg-white/10 hover:bg-white/10"
+                !canSave && "bg-white/10 hover:bg-white/10",
               )}
+              animation
             >
               {mode === "create" ? "Create" : "Save Changes"}
             </Button>
@@ -1074,8 +1075,8 @@ export default function TrackingLinksTable() {
               type: draft.type,
               status: draft.status,
             }
-          : r
-      )
+          : r,
+      ),
     );
 
     setEditOpen(false);
@@ -1107,7 +1108,7 @@ export default function TrackingLinksTable() {
             "border border-neutral-500 bg-neutral-700 text-white",
             "hover:text-white hover:border-white",
             "focus:outline-none",
-            "cursor-pointer"
+            "cursor-pointer",
           )}
           title="Create Tracking Link"
           aria-label="Create Tracking Link"
@@ -1270,7 +1271,7 @@ export default function TrackingLinksTable() {
                       onClick={() => openQr(r)}
                       className={clsx(
                         "inline-flex items-center justify-center rounded-md p-1 ml-2.5",
-                        "hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer"
+                        "hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
                       )}
                       title="Open QR"
                     >

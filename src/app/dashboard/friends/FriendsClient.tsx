@@ -237,7 +237,7 @@ function FriendsCard({
       className={clsx(
         "group relative overflow-hidden rounded-[12px] border border-white/10 hover:border-primary-500",
         "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))]",
-        "transition-transform duration-200 "
+        "transition-transform duration-200 ",
       )}
     >
       <button
@@ -249,7 +249,7 @@ function FriendsCard({
           "bg-white/5 text-neutral-200 hover:bg-white/10",
           "border border-white/10",
           "opacity-90 hover:opacity-100",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
         )}
       >
         <MoreVertical className="h-4 w-4" />
@@ -262,7 +262,7 @@ function FriendsCard({
               className={clsx(
                 "relative overflow-hidden",
                 "h-[68px] w-[68px] rounded-lg",
-                "bg-white/5 ring-1 ring-white/10"
+                "bg-white/5 ring-1 ring-white/10",
               )}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -287,7 +287,7 @@ function FriendsCard({
                 "border border-white/10",
                 "bg-primary-500/90",
                 "shadow-[0_12px_30px_rgba(154,70,255,0.25)]",
-                "flex items-center justify-center"
+                "flex items-center justify-center",
               )}
             >
               <span className="text-[12px] font-extrabold tracking-[-0.2px] text-neutral-0">
@@ -320,7 +320,7 @@ function FriendsCard({
               className={clsx(
                 "inline-flex h-8 w-8 items-center justify-center rounded-md",
                 "bg-primary-500/15 text-primary-300",
-                "ring-1 ring-primary-500/20"
+                "ring-1 ring-primary-500/20",
               )}
             >
               <Phone className="h-4 w-4" />
@@ -335,7 +335,7 @@ function FriendsCard({
               className={clsx(
                 "inline-flex h-8 w-8 items-center justify-center rounded-md",
                 "bg-primary-500/15 text-primary-300",
-                "ring-1 ring-primary-500/20"
+                "ring-1 ring-primary-500/20",
               )}
             >
               <Mail className="h-4 w-4" />
@@ -357,7 +357,7 @@ function FriendsRow({ friend }: { friend: Friend }) {
       className={clsx(
         "flex items-center justify-between gap-4",
         "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
-        "hover:bg-white/7 transition-colors"
+        "hover:bg-white/7 transition-colors",
       )}
     >
       <div className="flex min-w-0 items-center gap-3">
@@ -417,7 +417,7 @@ function FriendsRow({ friend }: { friend: Friend }) {
           "inline-flex h-9 w-9 items-center justify-center rounded-full",
           "bg-white/5 text-neutral-200 hover:bg-white/10",
           "border border-white/10",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
         )}
       >
         <MoreVertical className="h-4 w-4" />
@@ -450,7 +450,7 @@ function Pagination({
           "inline-flex h-8 w-8 items-center justify-center rounded-md",
           "border border-white/10 bg-white/5 text-neutral-100",
           "hover:border-primary-500 disabled:opacity-40 disabled:hover:bg-white/5",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
         )}
         aria-label="Previous page"
       >
@@ -469,7 +469,7 @@ function Pagination({
               "transition-colors",
               active
                 ? "bg-primary-500 text-neutral-0"
-                : "bg-white/0 text-neutral-200 hover:bg-white/10 hover:border-white/20"
+                : "bg-white/0 text-neutral-200 hover:bg-white/10 hover:border-white/20",
             )}
             aria-current={active ? "page" : undefined}
           >
@@ -486,7 +486,7 @@ function Pagination({
           "inline-flex h-8 w-8 items-center justify-center rounded-md",
           "border border-white/10 bg-white/5 text-neutral-100",
           "hover:border-primary-500 disabled:opacity-40 disabled:hover:bg-white/5",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
         )}
         aria-label="Next page"
       >
@@ -517,7 +517,7 @@ export default function FriendsClient() {
   const friendsTotal = friendsFiltered.length;
   const friendsTotalPages = Math.max(
     1,
-    Math.ceil(friendsTotal / friendsPageSize)
+    Math.ceil(friendsTotal / friendsPageSize),
   );
 
   useEffect(() => {
@@ -544,13 +544,13 @@ export default function FriendsClient() {
         <section
           className={clsx(
             "mt-4 overflow-hidden rounded-2xl border border-white/10",
-            "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]"
+            "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
           )}
         >
           <div
             className={clsx(
               "relative p-4 md:p-5",
-              "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]"
+              "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
             {/* Friends Header (Kenji layout kept, title adjusted to FRIENDS) */}
@@ -568,7 +568,7 @@ export default function FriendsClient() {
                 <div
                   className={clsx(
                     "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 bg-white/5 h-10"
+                    "rounded-lg border border-white/10 bg-white/5 h-10",
                   )}
                 >
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
@@ -580,7 +580,7 @@ export default function FriendsClient() {
                       "h-10 w-full rounded-lg bg-transparent",
                       "pl-10 pr-4 text-[12px] text-neutral-100",
                       "placeholder:text-neutral-500",
-                      "outline-none border-none focus:ring-1 focus:ring-primary-500"
+                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
                     )}
                   />
                 </div>
@@ -596,7 +596,7 @@ export default function FriendsClient() {
                       friendsView === "list"
                         ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
                         : "bg-white/5 text-neutral-200 hover:bg-white/8",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                     )}
                   >
                     <List className="h-4 w-4" />
@@ -611,7 +611,7 @@ export default function FriendsClient() {
                       friendsView === "grid"
                         ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
                         : "bg-white/5 text-neutral-200 hover:bg-white/8",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                     )}
                   >
                     <LayoutGrid className="h-4 w-4" />
@@ -625,6 +625,7 @@ export default function FriendsClient() {
                   type="button"
                   variant="primary"
                   icon={<Users className="h-4 w-4" />}
+                  animation
                 >
                   Add Friend
                 </Button>
@@ -637,7 +638,7 @@ export default function FriendsClient() {
                 <div
                   className={clsx(
                     "grid gap-4",
-                    "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+                    "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
                   )}
                 >
                   {friendsSlice.map((f) => (

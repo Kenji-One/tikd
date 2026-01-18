@@ -451,7 +451,7 @@ export default function FinancesClient() {
   }, [tab, overview?.withdrawHistory, overview?.transfers, series]);
 
   return (
-    <div className="w-full px-4 py-4 sm:px-6 sm:py-6">
+    <div className="w-full py-4 sm:py-6">
       <div className="mx-auto w-full max-w-[1600px]">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between gap-3">

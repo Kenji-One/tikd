@@ -119,13 +119,13 @@ export default function DataCustomerDataPage() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <Button asChild variant="secondary" size="sm">
-          <Link href="/dashboard/data">
-            <span className="inline-flex items-center gap-2">
-              <ArrowLeft size={16} />
-              Back to Data
-            </span>
-          </Link>
+        <Button
+          asChild
+          variant="secondary"
+          size="sm"
+          icon={<ArrowLeft size={16} />}
+        >
+          <Link href="/dashboard/data">Back to Data</Link>
         </Button>
       </div>
 

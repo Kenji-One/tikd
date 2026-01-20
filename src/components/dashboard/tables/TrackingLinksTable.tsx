@@ -21,10 +21,11 @@ type Row = {
   name: string;
   url: string; // path-only label (e.g., "/Tweets/32u8cxjh/")
   views: number;
+  ticketsSold: number;
+  revenue: number; // USD number
   type: LinkType;
   status: Status;
   created: string; // "Sep 19, 2025"
-  revenue: number; // USD number (kept in data but not displayed)
 };
 
 /* ----------------------------- Mock Data --------------------------- */
@@ -33,14 +34,21 @@ const INITIAL_ROWS: Row[] = new Array(7).fill(0).map((_, i) => ({
   name: "Tracking Link Name",
   url: `/Tweets/${(Math.random() + 1).toString(36).slice(2, 8)}/`,
   views: 2384,
+  ticketsSold: 18 + i * 3,
+  revenue: 1000 + i * 37,
   type: "Event",
   status: i % 2 ? "Active" : "Paused",
   created: "Sep 19, 2025",
-  revenue: 1000 + i * 37,
 }));
 
 /* ----------------------------- Helpers ----------------------------- */
-type SortKey = "views" | "created" | "name" | "status";
+type SortKey =
+  | "views"
+  | "ticketsSold"
+  | "revenue"
+  | "created"
+  | "name"
+  | "status";
 type SortDir = "asc" | "desc";
 
 const parseDate = (d: string) => Date.parse(d) || 0;
@@ -128,6 +136,15 @@ function statusRank(s: Status) {
   if (s === "Active") return 1;
   if (s === "Paused") return 2;
   return 3;
+}
+
+function formatMoneyUSD(amount: number) {
+  const n = Number.isFinite(amount) ? amount : 0;
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 }
 
 function fullTrackingUrl(pathOnly: string) {
@@ -937,6 +954,12 @@ export default function TrackingLinksTable() {
       if (sortBy === "views") {
         A = a.views;
         B = b.views;
+      } else if (sortBy === "ticketsSold") {
+        A = a.ticketsSold;
+        B = b.ticketsSold;
+      } else if (sortBy === "revenue") {
+        A = a.revenue;
+        B = b.revenue;
       } else if (sortBy === "created") {
         A = parseDate(a.created);
         B = parseDate(b.created);
@@ -1019,7 +1042,6 @@ export default function TrackingLinksTable() {
 
   const closeEdit = () => {
     setEditOpen(false);
-    // keep activeRow for table selection? we clear to be consistent
     setActiveRow(null);
   };
 
@@ -1046,15 +1068,13 @@ export default function TrackingLinksTable() {
       status: draft.status,
       created: formatCreated(now),
       views: 0,
+      ticketsSold: 0,
       revenue: 0,
     };
 
     // Add to top (feels right for dashboards)
     setData((prev) => [newRow, ...prev]);
     setCreateOpen(false);
-
-    // Optional: if you want to highlight it later
-    // setActiveRow(newRow);
   };
 
   const handleEdit = (draft: {
@@ -1085,7 +1105,7 @@ export default function TrackingLinksTable() {
 
   const thRow = "[&>th]:pb-3 [&>th]:pt-1 [&>th]:px-4";
   const thBase =
-    "text-base text-left font-semibold cursor-pointer select-none hover:text-white/80";
+    "text-base font-semibold cursor-pointer select-none hover:text-white/80";
 
   const separatorLine =
     "bg-[linear-gradient(90deg,rgba(154,70,255,0)_0%,rgba(154,70,255,0.18)_30%,rgba(255,255,255,0.08)_50%,rgba(154,70,255,0.18)_70%,rgba(154,70,255,0)_100%)]";
@@ -1123,11 +1143,24 @@ export default function TrackingLinksTable() {
         className="relative overflow-hidden rounded-lg"
         style={{ height: isClamped ? `${MAX}px` : "auto" }}
       >
-        <table className="w-full border-collapse font-medium">
+        <table className="w-full table-fixed border-collapse font-medium">
+          {/* “Equally spaced” columns: explicit col widths */}
+          <colgroup>
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "8%" }} />
+          </colgroup>
+
           <thead className="text-neutral-400">
             <tr className={thRow}>
               <th
-                className={thBase}
+                className={clsx(thBase, "text-left")}
                 onClick={() => toggleSort("name")}
                 aria-sort={
                   sortBy === "name"
@@ -1149,7 +1182,7 @@ export default function TrackingLinksTable() {
               <th className="text-left text-base font-semibold">QR Code</th>
 
               <th
-                className={thBase}
+                className={clsx(thBase, "text-center")}
                 onClick={() => toggleSort("views")}
                 aria-sort={
                   sortBy === "views"
@@ -1168,10 +1201,50 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              <th className="text-left text-base font-semibold">Link Type</th>
+              <th
+                className={clsx(thBase, "text-center")}
+                onClick={() => toggleSort("ticketsSold")}
+                aria-sort={
+                  sortBy === "ticketsSold"
+                    ? dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <div className="inline-flex items-center">
+                  Tickets Sold
+                  <SortArrowsIcon
+                    direction={sortBy === "ticketsSold" ? dir : null}
+                    className="ml-2 -translate-y-[1px]"
+                  />
+                </div>
+              </th>
 
               <th
-                className={thBase}
+                className={clsx(thBase, "text-center")}
+                onClick={() => toggleSort("revenue")}
+                aria-sort={
+                  sortBy === "revenue"
+                    ? dir === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+              >
+                <div className="inline-flex items-center">
+                  Revenue
+                  <SortArrowsIcon
+                    direction={sortBy === "revenue" ? dir : null}
+                    className="ml-2 -translate-y-[1px]"
+                  />
+                </div>
+              </th>
+
+              <th className="text-center text-base font-semibold">Link Type</th>
+
+              <th
+                className={clsx(thBase, "text-center")}
                 onClick={() => toggleSort("status")}
                 aria-sort={
                   sortBy === "status"
@@ -1191,7 +1264,7 @@ export default function TrackingLinksTable() {
               </th>
 
               <th
-                className={thBase}
+                className={clsx(thBase, "text-center")}
                 onClick={() => toggleSort("created")}
                 aria-sort={
                   sortBy === "created"
@@ -1210,7 +1283,7 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              <th className="w-[64px] text-right font-semibold"> </th>
+              <th className="text-right font-semibold"> </th>
             </tr>
           </thead>
 
@@ -1221,23 +1294,24 @@ export default function TrackingLinksTable() {
 
               const dataRow = (
                 <tr key={r.id} className={clsx("transition-colors", rowBg)}>
-                  {/* Name & Link */}
+                  {/* Name & Link (URL moved under name + copy button to the right) */}
                   <td className="px-4 py-3">
-                    <div className="min-w-0 flex items-center gap-5">
-                      <p className="truncate font-medium text-neutral-200 flex items-center">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-neutral-200">
                         {r.name}
                       </p>
 
-                      <div className="flex min-w-0 items-center gap-2 text-white/70">
+                      <div className="mt-2 flex min-w-0 items-center gap-2 text-neutral-400">
                         <TwitterIcon className="h-5 w-5 opacity-70" />
-                        <span className="truncate">{r.url}</span>
+                        <span className="min-w-0 truncate text-neutral-300">
+                          {r.url}
+                        </span>
 
-                        {/* Refokus-style Copy */}
                         <CopyButton
-                          text={r.url}
-                          title="Copy link path"
-                          ariaLabel="Copy link path"
-                          className="ml-1 inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:text-white hover:border-white/20"
+                          text={fullTrackingUrl(r.url) || r.url}
+                          title="Copy tracking link"
+                          ariaLabel="Copy tracking link"
+                          className="inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:text-white hover:border-white/20 ml-1"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -1264,8 +1338,8 @@ export default function TrackingLinksTable() {
                     </div>
                   </td>
 
-                  {/* QR Code */}
-                  <td className="px-4 py-3">
+                  {/* QR Code (pulled closer by narrower column + centered) */}
+                  <td className="px-4 py-3 text-left">
                     <button
                       type="button"
                       onClick={() => openQr(r)}
@@ -1292,9 +1366,9 @@ export default function TrackingLinksTable() {
                   </td>
 
                   {/* Views */}
-                  <td className="px-4 py-3">
-                    <span className="tabular-nums flex items-center gap-1 ml-1">
-                      {r.views}{" "}
+                  <td className="px-4 py-3 text-center">
+                    <span className="tabular-nums inline-flex items-center justify-center gap-1">
+                      {r.views}
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         width="12"
@@ -1313,15 +1387,29 @@ export default function TrackingLinksTable() {
                     </span>
                   </td>
 
+                  {/* Tickets Sold */}
+                  <td className="px-4 py-3 text-center">
+                    <span className="tabular-nums text-neutral-200">
+                      {r.ticketsSold}
+                    </span>
+                  </td>
+
+                  {/* Revenue */}
+                  <td className="px-4 py-3 text-center">
+                    <span className="tabular-nums text-neutral-200">
+                      {formatMoneyUSD(r.revenue)}
+                    </span>
+                  </td>
+
                   {/* Link Type */}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-center">
                     <div className="inline-block">
                       <Chip color="primary">{r.type}</Chip>
                     </div>
                   </td>
 
                   {/* Status */}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-center">
                     <div className="inline-block">
                       {r.status === "Active" ? (
                         <Chip color="success">Active</Chip>
@@ -1336,8 +1424,8 @@ export default function TrackingLinksTable() {
                   </td>
 
                   {/* Date */}
-                  <td className="px-4 py-3">
-                    <span className="ml-4.5">{r.created}</span>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-neutral-200">{r.created}</span>
                   </td>
 
                   {/* Actions */}
@@ -1366,7 +1454,7 @@ export default function TrackingLinksTable() {
 
               const separatorRow = !isLast ? (
                 <tr key={`${r.id}-sep`} aria-hidden className="bg-neutral-900">
-                  <td colSpan={7} className="p-0">
+                  <td colSpan={9} className="p-0">
                     <div className={clsx("mx-4 h-px", separatorLine)} />
                   </td>
                 </tr>

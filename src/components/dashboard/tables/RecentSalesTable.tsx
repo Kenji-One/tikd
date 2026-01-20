@@ -141,7 +141,7 @@ const SALES: Sale[] = [
     avatarText: "JM",
   },
   {
-    id: "#2947",
+    id: "#2948",
     name: "John Y.",
     event: "Valentines Gala",
     date: "Dec 27, 2025",
@@ -150,7 +150,7 @@ const SALES: Sale[] = [
     avatarText: "JY",
   },
   {
-    id: "#2947",
+    id: "#2949",
     name: "John W.",
     event: "Valentines Gala",
     date: "Dec 27, 2025",
@@ -159,7 +159,7 @@ const SALES: Sale[] = [
     avatarText: "JW",
   },
   {
-    id: "#2947",
+    id: "#2950",
     name: "John B.",
     event: "Valentines Gala",
     date: "Dec 27, 2025",
@@ -188,7 +188,7 @@ function Avatar({ text, bg }: { text: string; bg?: string }) {
       aria-hidden
       className={clsx(
         "grid h-5 w-5 place-items-center rounded-sm text-[10px] font-semibold text-white/90",
-        bg ?? "bg-white/10"
+        bg ?? "bg-white/10",
       )}
     >
       {text}
@@ -270,6 +270,8 @@ export default function RecentSalesTable() {
     "text-left font-semibold cursor-pointer select-none hover:text-white/80";
   const thBaseRight =
     "text-right font-semibold cursor-pointer select-none hover:text-white/80";
+  const separatorLine =
+    "bg-[linear-gradient(90deg,rgba(154,70,255,0)_0%,rgba(154,70,255,0.18)_30%,rgba(255,255,255,0.08)_50%,rgba(154,70,255,0.18)_70%,rgba(154,70,255,0)_100%)]";
 
   return (
     <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-3 overflow-hidden">
@@ -390,42 +392,55 @@ export default function RecentSalesTable() {
           </thead>
 
           <tbody className="text-white">
-            {sorted.map((s, i) => (
-              <tr
-                key={`${s.id}-${i}`}
-                className={clsx(
-                  i % 2 === 0 ? "bg-neutral-800" : "bg-transparent"
-                )}
-              >
-                <td className="pl-4 py-2 align-middle text-neutral-200">
-                  {s.id}
-                </td>
+            {sorted.flatMap((s, i) => {
+              const isLast = i === sorted.length - 1;
+              const rowBg = i % 2 === 0 ? "bg-neutral-948" : "bg-neutral-900";
 
-                <td className="py-2">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <Avatar
-                      text={(s.avatarText ?? "NA").slice(0, 2)}
-                      bg={s.avatarBg}
-                    />
-                    <span className="truncate" title={s.name}>
-                      {firstWordEllip(s.name)}
+              const dataRow = (
+                <tr
+                  key={`${s.id}-${i}`}
+                  className={clsx("transition-colors", rowBg)}
+                >
+                  <td className="pl-4 py-2 align-middle text-neutral-200">
+                    {s.id}
+                  </td>
+
+                  <td className="py-2">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <Avatar
+                        text={(s.avatarText ?? "NA").slice(0, 2)}
+                        bg={s.avatarBg}
+                      />
+                      <span className="truncate" title={s.name}>
+                        {firstWordEllip(s.name)}
+                      </span>
+                    </div>
+                  </td>
+
+                  <td className="pr-2 py-2">
+                    <span className="block truncate" title={s.event}>
+                      {firstWordEllip(s.event)}
                     </span>
-                  </div>
-                </td>
+                  </td>
 
-                <td className="pr-2 py-2">
-                  <span className="block truncate" title={s.event}>
-                    {firstWordEllip(s.event)}
-                  </span>
-                </td>
+                  <td className="px-2 py-2">{s.date}</td>
 
-                <td className="px-2 py-2">{s.date}</td>
+                  <td className="px-2 py-2 text-right font-medium text-success-500">
+                    <span className="mr-3">{fmtUsd(s.total)}</span>
+                  </td>
+                </tr>
+              );
 
-                <td className="px-2 py-2 text-right font-medium text-success-500">
-                  <span className="mr-3">{fmtUsd(s.total)}</span>
-                </td>
-              </tr>
-            ))}
+              const separatorRow = !isLast ? (
+                <tr key={`${s.id}-sep`} aria-hidden className="bg-neutral-900">
+                  <td colSpan={7} className="p-0">
+                    <div className={clsx("mx-4 h-px", separatorLine)} />
+                  </td>
+                </tr>
+              ) : null;
+
+              return separatorRow ? [dataRow, separatorRow] : [dataRow];
+            })}
           </tbody>
         </table>
 

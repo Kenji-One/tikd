@@ -198,7 +198,7 @@ function Faq({ items }: { items: FaqItem[] }) {
                   "grid transition-[grid-template-rows,opacity] duration-300 ease-out",
                   isOpen
                     ? "grid-rows-[1fr] opacity-100"
-                    : "grid-rows-[0fr] opacity-0"
+                    : "grid-rows-[0fr] opacity-0",
                 )}
               >
                 <div className="overflow-hidden">
@@ -257,7 +257,7 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
         "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.00))] bg-neutral-948",
         "shadow-[0_30px_80px_-60px_rgba(0,0,0,.9)] min-h-[280px] sm:min-h-[321px]",
 
-        className
+        className,
       )}
     >
       {/* soft top glow */}
@@ -278,7 +278,7 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
             "mt-4 whitespace-pre-line font-black italic uppercase text-white leading-[90%]",
             size === "lg" || size === "md"
               ? "text-[32px] tracking-[-0.64px] "
-              : "text-[24px] tracking-[-0.48px]"
+              : "text-[24px] tracking-[-0.48px]",
           )}
         >
           {title}
@@ -427,7 +427,7 @@ function UnlockLabel({
       className={clsx(
         "font-black italic uppercase leading-[0.9] tracking-[-0.48px] text-[20px] sm:text-[24px]",
         emphasize ? "text-white" : "text-neutral-300",
-        className
+        className,
       )}
     >
       {children}
@@ -445,7 +445,7 @@ export default function LandingPage() {
       { k: "+150", label: "Events Hosted" },
       { k: "+10", label: "Tickets Sold" },
     ],
-    []
+    [],
   );
 
   return (
@@ -502,7 +502,7 @@ export default function LandingPage() {
               </p>
 
               <div className="flex flex-wrap items-center gap-3">
-                <Button asChild size="md" variant="primary">
+                <Button asChild size="md" variant="primary" animation>
                   <Link href="/events">Browse Events</Link>
                 </Button>
 
@@ -746,7 +746,7 @@ export default function LandingPage() {
               LET&apos;S GET TO PARTY!
             </h3>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <Button asChild size="md">
+              <Button asChild size="md" animation>
                 <Link href="/events">Browse Events</Link>
               </Button>
               <Button asChild size="md" variant="secondary">

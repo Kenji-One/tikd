@@ -14,7 +14,7 @@ export default function DataLayout({ children }: { children: ReactNode }) {
         <div className="absolute inset-x-0 top-0 h-[420px] bg-[linear-gradient(180deg,rgba(18,18,32,0.55)_0%,rgba(18,18,32,0.18)_55%,rgba(18,18,32,0)_100%)]" />
       </div>
 
-      <div className="mx-auto w-full max-w-[1400px] px-4 pb-10 pt-8">
+      <div className="mx-auto w-full max-w-[1600px] py-4 sm:py-6">
         <DataTopbar />
         <div className="mt-6">{children}</div>
       </div>

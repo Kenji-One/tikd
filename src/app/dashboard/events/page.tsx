@@ -10,8 +10,17 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { CalendarPlus, ChevronDown, X, CheckCircle2, Plus } from "lucide-react";
+import {
+  CalendarPlus,
+  ChevronDown,
+  X,
+  CheckCircle2,
+  Plus,
+  Menu,
+  Search,
+} from "lucide-react";
 
+import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { EventCard } from "@/components/ui/EventCard";
@@ -40,11 +49,21 @@ type MyEvent = {
   grossRevenue?: number;
   ticketsSold?: number;
   sold?: number;
+
+  // Optional: clients requested sort options
+  pageViews?: number;
+  views?: number;
 };
 
-type MetricKey = "revenue" | "tickets" | "date";
-type SortKey = "newest" | "oldest" | "az" | "za";
 type EventViewId = "upcoming" | "past" | "drafts";
+
+type SortField =
+  | "title"
+  | "pageViews"
+  | "ticketsSold"
+  | "revenue"
+  | "eventDate";
+type SortDir = "asc" | "desc";
 
 /* ---------------------------- Helpers ------------------------------ */
 async function fetchJSON<T>(url: string): Promise<T> {
@@ -104,6 +123,11 @@ function revenueOf(e: MyEvent) {
 
 function ticketsOf(e: MyEvent) {
   const raw = e.ticketsSold ?? e.sold ?? 0;
+  return typeof raw === "number" ? raw : 0;
+}
+
+function viewsOf(e: MyEvent) {
+  const raw = e.pageViews ?? e.views ?? 0;
   return typeof raw === "number" ? raw : 0;
 }
 
@@ -192,6 +216,201 @@ function MiniSelect<T extends string>({
   );
 }
 
+/* ---------------------- Sort Controls (NEW) ------------------------- */
+function SortControls({
+  options,
+  sortField,
+  sortDir,
+  setSortField,
+  setSortDir,
+  defaultDirFor,
+  dropdownWidthClass = "w-[144px]",
+}: {
+  options: { key: SortField; label: string }[];
+  sortField: SortField | null;
+  sortDir: SortDir;
+  setSortField: (v: SortField | null) => void;
+  setSortDir: (v: SortDir) => void;
+  defaultDirFor: (f: SortField) => SortDir;
+  dropdownWidthClass?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const sortLabel = useMemo(() => {
+    if (!sortField) return "";
+    return options.find((o) => o.key === sortField)?.label ?? "Sort";
+  }, [options, sortField]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  function apply(field: SortField) {
+    setSortField(field);
+    setSortDir(defaultDirFor(field));
+    setOpen(false);
+  }
+
+  function toggleDir() {
+    if (!sortField) return;
+    setSortDir(sortDir === "asc" ? "desc" : "asc");
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <div ref={ref} className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label={!sortField ? "Sort" : `Sort by ${sortLabel}`}
+          className={clsx(
+            "flex items-center justify-between gap-3",
+            "border border-white/10 outline-none",
+            "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
+            "cursor-pointer",
+            !sortField
+              ? "grid h-[30px] w-[38px] items-center justify-center rounded-md bg-neutral-700 text-white/80"
+              : [
+                  "h-[30px] rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90",
+                  "px-3 text-xs font-medium text-white/90",
+                ].join(" "),
+          )}
+        >
+          {!sortField ? (
+            <Menu className="h-4 w-4" />
+          ) : (
+            <>
+              <span className="whitespace-nowrap text-white/90">Sort</span>
+              <span aria-hidden="true" className="h-4 w-px bg-white/18" />
+              <span className="max-w-[120px] truncate text-white/95">
+                {sortLabel}
+              </span>
+              <ChevronDown
+                className={clsx(
+                  "h-4 w-4 opacity-80 transition-transform",
+                  open ? "rotate-180" : "",
+                )}
+              />
+            </>
+          )}
+        </button>
+
+        {open && (
+          <div className="absolute right-0 z-50 mt-2">
+            <div className="relative">
+              <span className="pointer-events-none absolute -top-1 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
+              <div
+                role="listbox"
+                aria-label="Sort"
+                className={clsx(
+                  "overflow-hidden rounded-2xl border border-white/10",
+                  "bg-[#121420] backdrop-blur",
+                  "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
+                  dropdownWidthClass,
+                )}
+              >
+                <div className="p-2">
+                  {options.map((opt) => {
+                    const active = opt.key === sortField;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        onClick={() => apply(opt.key)}
+                        className={clsx(
+                          "flex w-full items-center justify-between",
+                          "rounded-lg px-3 py-2.5",
+                          "text-left text-sm outline-none",
+                          "hover:bg-white/5 focus:bg-white/5",
+                          active ? "bg-white/5 text-white" : "text-white/90",
+                        )}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {active ? (
+                          <span className="text-xs font-semibold text-white/80">
+                            ✓
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={toggleDir}
+        disabled={!sortField}
+        aria-label={
+          !sortField
+            ? "Select a sort type first"
+            : sortDir === "asc"
+              ? "Sort direction ascending"
+              : "Sort direction descending"
+        }
+        className={clsx(
+          "grid h-[30px] w-[38px] place-items-center rounded-md",
+          "border border-white/10 bg-neutral-700",
+          "text-white/80 outline-none",
+          "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+          "cursor-pointer",
+        )}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+          className="opacity-90"
+        >
+          <path
+            d="M5 3v10"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+          <path
+            d="M3 5l2-2 2 2"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M11 13V3"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          />
+          <path
+            d="M13 11l-2 2-2-2"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 /* ---------------------- Org Picker Modal -------------------------- */
 type OrgPickerModalProps = {
   open: boolean;
@@ -212,10 +431,23 @@ function OrgPickerModal({
   onClose,
   onConfirm,
 }: OrgPickerModalProps) {
+  const [query, setQuery] = useState("");
+
+  const filteredOrgs = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return orgs;
+
+    return orgs.filter((o) => {
+      const name = (o.name ?? "").toLowerCase();
+      const site = domainFromUrl(o.website ?? "").toLowerCase();
+      return name.includes(q) || site.includes(q);
+    });
+  }, [orgs, query]);
+
   if (!open) return null;
 
-  const hasOrgs = orgs.length > 0;
-  const canConfirm = hasOrgs && !!selectedOrgId && !loading;
+  const hasOrgs = filteredOrgs.length > 0;
+  const canConfirm = orgs.length > 0 && !!selectedOrgId && !loading;
 
   const handleOverlayClick = () => onClose();
 
@@ -240,27 +472,54 @@ function OrgPickerModal({
         aria-hidden="true"
       />
 
+      {/* ✅ Bigger modal + vertical layout */}
       <div
         className={clsx(
-          "relative z-10 w-full max-w-xl rounded-2xl border border-white/12",
-          "bg-neutral-950/95 p-4 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
+          "relative z-10 w-full max-w-3xl rounded-2xl border border-white/12",
+          "bg-neutral-950/95 p-6 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
         )}
         onClick={handlePanelClick}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-base font-semibold text-neutral-0">
               Choose an organization
             </h2>
+
+            {/* ✅ Updated subtitle */}
             <p className="mt-1 text-xs text-neutral-300">
-              Events live under an organization. Pick where this new event
-              belongs, or create a new team first.
+              Events operate under an organization. Pick which one this new
+              event belongs to, or create a new organization first.
             </p>
+
+            <div className="mt-4">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search organizations..."
+                variant="full"
+                shape="pill"
+                size="md"
+                icon={<Search className="h-4 w-4 text-neutral-400" />}
+                aria-label="Search organizations"
+                className={clsx(
+                  // match modal surface
+                  // make it show a border (your full variant has border-transparent by default)
+                  // keep the purple focus behavior
+                  "focus-visible:!ring-primary-500",
+                  // text sizing + placeholder tone
+                  "!text-[13px] placeholder:!text-neutral-500",
+                  // make sure height feels like your earlier design (optional, but nice)
+                  "!min-h-[44px]",
+                )}
+              />
+            </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:border-primary-500 hover:text-neutral-0"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:border-primary-500 hover:text-neutral-0"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -269,74 +528,105 @@ function OrgPickerModal({
 
         <div className="space-y-4">
           {loading ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-20 rounded-2xl" />
+            // ✅ Loading now matches vertical list
+            <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-[74px] rounded-2xl" />
               ))}
             </div>
-          ) : hasOrgs ? (
-            <div className="grid max-h-64 grid-cols-1 gap-3 overflow-y-auto pr-1 md:grid-cols-2">
-              {orgs.map((org) => {
-                const selected = org._id === selectedOrgId;
-                return (
-                  <div
-                    key={org._id}
-                    className={clsx(
-                      "group relative flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
-                      "bg-neutral-948/90 border-white/10 hover:border-primary-500/70 hover:bg-neutral-900/90",
-                      selected &&
-                        "border-primary-500 bg-neutral-948/95 shadow-[0_0_0_1px_rgba(154,70,255,0.55)]",
-                    )}
-                    onClick={(e) => handleCardClick(e, org._id)}
-                  >
-                    <div
-                      className={clsx(
-                        "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md",
-                        "bg-neutral-900 ring-1 ring-inset ring-white/10",
-                        selected && "ring-primary-500/80",
-                      )}
-                    >
-                      {org.logo ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={org.logo}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-sm font-semibold text-neutral-0">
-                          {org.name?.[0]?.toUpperCase() ?? "O"}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-semibold text-neutral-0">
-                        {org.name}
-                      </p>
-                      {org.website && (
-                        <p className="mt-0.5 truncate text-[11px] text-neutral-400">
-                          {domainFromUrl(org.website)}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="ml-2 shrink-0">
-                      {selected ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90 px-2 py-0.5 text-[11px] font-medium text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Selected
-                        </span>
-                      ) : (
-                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-white/5 text-[10px] text-neutral-300 group-hover:border-primary-400/80 group-hover:text-primary-200">
-                          <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 group-hover:bg-primary-300" />
-                        </span>
-                      )}
-                    </div>
+          ) : orgs.length > 0 ? (
+            <>
+              {/* ✅ Vertical list (top-to-bottom) */}
+              <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+                {filteredOrgs.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/12 bg-neutral-948/90 px-4 py-4 text-sm text-neutral-200">
+                    <p className="font-medium text-neutral-0">
+                      No organizations match your search.
+                    </p>
+                    <p className="mt-1 text-xs text-neutral-400">
+                      Try a different keyword.
+                    </p>
                   </div>
-                );
-              })}
-            </div>
+                ) : (
+                  filteredOrgs.map((org) => {
+                    const selected = org._id === selectedOrgId;
+
+                    return (
+                      <div
+                        key={org._id}
+                        className={clsx(
+                          "group relative flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
+                          "bg-neutral-948/90 border-white/10 hover:border-primary-500/70 hover:bg-neutral-900/90",
+                          selected &&
+                            "border-primary-500 bg-neutral-948/95 shadow-[0_0_0_1px_rgba(154,70,255,0.55)]",
+                        )}
+                        onClick={(e) => handleCardClick(e, org._id)}
+                      >
+                        <div
+                          className={clsx(
+                            "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md",
+                            "bg-neutral-900 ring-1 ring-inset ring-white/10",
+                            selected && "ring-primary-500/80",
+                          )}
+                        >
+                          {org.logo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={org.logo}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-sm font-semibold text-neutral-0">
+                              {org.name?.[0]?.toUpperCase() ?? "O"}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-semibold text-neutral-0">
+                            {org.name}
+                          </p>
+                          {org.website && (
+                            <p className="mt-0.5 truncate text-[11px] text-neutral-400">
+                              {domainFromUrl(org.website)}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="ml-2 shrink-0">
+                          {selected ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90 px-2.5 py-1 text-[11px] font-medium text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Selected
+                            </span>
+                          ) : (
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-white/5 text-[10px] text-neutral-300 group-hover:border-primary-400/80 group-hover:text-primary-200">
+                              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 group-hover:bg-primary-300" />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* ✅ Continue button BELOW the list (not off to the side) */}
+              <div className="pt-4">
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={!canConfirm}
+                    onClick={onConfirm}
+                  >
+                    <CalendarPlus className="h-4 w-4" />
+                    Continue
+                  </Button>
+                </div>
+              </div>
+            </>
           ) : (
             <div className="rounded-2xl border border-dashed border-white/12 bg-neutral-948/90 px-4 py-4 text-sm text-neutral-200">
               <p className="font-medium text-neutral-0">
@@ -355,23 +645,20 @@ function OrgPickerModal({
               </Link>
             </div>
           )}
-
-          <div className="mt-2 flex justify-end pt-4">
-            <Button
-              type="button"
-              variant="primary"
-              disabled={!canConfirm}
-              onClick={onConfirm}
-            >
-              <CalendarPlus className="h-4 w-4" />
-              Continue
-            </Button>
-          </div>
         </div>
       </div>
     </div>
   );
 }
+
+/* -------------------- Shared sort fields --------------------------- */
+const SORT_FIELDS: { key: SortField; label: string }[] = [
+  { key: "title", label: "Title" },
+  { key: "pageViews", label: "Page Views" },
+  { key: "ticketsSold", label: "Tickets Sold" },
+  { key: "revenue", label: "Revenue" },
+  { key: "eventDate", label: "Event Date" },
+];
 
 /* -------------------- Upcoming (GRID) panel ------------------------- */
 function UpcomingEventsGridPanel({
@@ -385,12 +672,45 @@ function UpcomingEventsGridPanel({
   emptyTitle: string;
   emptySub: string;
 }) {
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function defaultDirFor(field: SortField): SortDir {
+    if (field === "title") return "asc";
+    if (field === "eventDate") return "asc"; // soonest
+    return "desc"; // numeric: high first
+  }
+
   const sorted = useMemo(() => {
     const arr = [...list];
-    return arr.sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
-  }, [list]);
+
+    // Default (no selection): soonest-first (upcoming)
+    if (!sortField) {
+      return arr.sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      );
+    }
+
+    const dirMul = sortDir === "asc" ? 1 : -1;
+
+    switch (sortField) {
+      case "title":
+        return arr.sort((a, b) => a.title.localeCompare(b.title) * dirMul);
+      case "pageViews":
+        return arr.sort((a, b) => (viewsOf(a) - viewsOf(b)) * dirMul);
+      case "ticketsSold":
+        return arr.sort((a, b) => (ticketsOf(a) - ticketsOf(b)) * dirMul);
+      case "revenue":
+        return arr.sort((a, b) => (revenueOf(a) - revenueOf(b)) * dirMul);
+      case "eventDate":
+        return arr.sort(
+          (a, b) =>
+            (new Date(a.date).getTime() - new Date(b.date).getTime()) * dirMul,
+        );
+      default:
+        return arr;
+    }
+  }, [list, sortField, sortDir]);
 
   const gridCols =
     "grid-cols-[repeat(auto-fill,minmax(170px,170px))] " +
@@ -416,9 +736,15 @@ function UpcomingEventsGridPanel({
             Upcoming Events
           </p>
 
-          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-neutral-200">
-            {eventsLoading ? "…" : sorted.length}
-          </span>
+          <SortControls
+            options={SORT_FIELDS}
+            sortField={sortField}
+            sortDir={sortDir}
+            setSortField={setSortField}
+            setSortDir={setSortDir}
+            defaultDirFor={defaultDirFor}
+            dropdownWidthClass="w-[144px]"
+          />
         </div>
 
         {eventsLoading ? (
@@ -466,54 +792,62 @@ function UpcomingEventsGridPanel({
   );
 }
 
-/* -------------------- Shared: Stats list panel (Figma design) ------- */
-function EventsStatsListPanel({
-  title,
+/* -------------------- Past Events list panel ------------------------ */
+function PastEventsListPanel({
   list,
   eventsLoading,
-  defaultMetric = "revenue",
-  dateSortMode,
   emptyTitle,
   emptySub,
 }: {
-  title: string;
   list: MyEvent[];
   eventsLoading: boolean;
-  defaultMetric?: MetricKey;
-  dateSortMode: "soonest" | "latest";
   emptyTitle: string;
   emptySub: string;
 }) {
-  const [metric, setMetric] = useState<MetricKey>(defaultMetric);
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const metricOptions: { key: MetricKey; label: string }[] = [
-    { key: "revenue", label: "Revenue" },
-    { key: "tickets", label: "Tickets Sold" },
-    { key: "date", label: "Event Date" },
-  ];
+  function defaultDirFor(field: SortField): SortDir {
+    if (field === "title") return "asc";
+    if (field === "eventDate") return "desc"; // latest first for Past
+    return "desc"; // numeric: high first
+  }
 
   const sorted = useMemo(() => {
     const arr = [...list];
 
-    if (metric === "revenue")
-      return arr.sort((a, b) => revenueOf(b) - revenueOf(a));
-    if (metric === "tickets")
-      return arr.sort((a, b) => ticketsOf(b) - ticketsOf(a));
-
-    if (dateSortMode === "soonest") {
+    // Default (no selection): latest-first (past)
+    if (!sortField) {
       return arr.sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
       );
     }
-    return arr.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    );
-  }, [list, metric, dateSortMode]);
+
+    const dirMul = sortDir === "asc" ? 1 : -1;
+
+    switch (sortField) {
+      case "title":
+        return arr.sort((a, b) => a.title.localeCompare(b.title) * dirMul);
+      case "pageViews":
+        return arr.sort((a, b) => (viewsOf(a) - viewsOf(b)) * dirMul);
+      case "ticketsSold":
+        return arr.sort((a, b) => (ticketsOf(a) - ticketsOf(b)) * dirMul);
+      case "revenue":
+        return arr.sort((a, b) => (revenueOf(a) - revenueOf(b)) * dirMul);
+      case "eventDate":
+        return arr.sort(
+          (a, b) =>
+            (new Date(a.date).getTime() - new Date(b.date).getTime()) * dirMul,
+        );
+      default:
+        return arr;
+    }
+  }, [list, sortField, sortDir]);
 
   return (
     <section
       className={clsx(
-        "mt-4 overflow-hidden rounded-2xl border border-white/10",
+        "mt-4 rounded-2xl border border-white/10",
         "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
       )}
     >
@@ -525,14 +859,18 @@ function EventsStatsListPanel({
       >
         <div className="flex items-center justify-between gap-3">
           <p className="font-semibold uppercase tracking-[0.18em] text-neutral-300">
-            {title}
+            Past Events
           </p>
 
-          <MiniSelect
-            value={metric}
-            onChange={setMetric}
-            options={metricOptions}
-            btnClassName="!py-2"
+          {/* ✅ replaced old metric dropdown with the NEW sort control */}
+          <SortControls
+            options={SORT_FIELDS}
+            sortField={sortField}
+            sortDir={sortDir}
+            setSortField={setSortField}
+            setSortDir={setSortDir}
+            defaultDirFor={defaultDirFor}
+            dropdownWidthClass="w-[144px]"
           />
         </div>
 
@@ -566,7 +904,6 @@ function EventsStatsListPanel({
                       : "border-transparent bg-transparent hover:bg-white/4",
                   )}
                 >
-                  {/* Smooth hover highlight */}
                   <span
                     className={clsx(
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
@@ -575,7 +912,6 @@ function EventsStatsListPanel({
                       "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]",
                     )}
                   />
-                  {/* Smooth hover border glow (opacity-based, no ring toggling) */}
                   <span
                     className={clsx(
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
@@ -639,46 +975,55 @@ function EventsStatsListPanel({
   );
 }
 
-/* -------------------- Drafts list panel (same styling as Past) ------ */
+/* -------------------- Drafts list panel ---------------------------- */
 function DraftsListPanel({
   list,
   eventsLoading,
-  draftSort,
-  setDraftSort,
   openOrgPicker,
 }: {
   list: MyEvent[];
   eventsLoading: boolean;
-  draftSort: SortKey;
-  setDraftSort: (k: SortKey) => void;
   openOrgPicker: () => void;
 }) {
-  const sortOptions: { key: SortKey; label: string }[] = [
-    { key: "newest", label: "Newest" },
-    { key: "oldest", label: "Oldest" },
-    { key: "az", label: "A–Z" },
-    { key: "za", label: "Z–A" },
-  ];
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  function defaultDirFor(field: SortField): SortDir {
+    if (field === "title") return "asc";
+    if (field === "eventDate") return "desc"; // newest first in Drafts
+    return "desc";
+  }
 
   const sorted = useMemo(() => {
     const arr = [...list];
-    switch (draftSort) {
-      case "newest":
+
+    // Default (no selection): newest-first
+    if (!sortField) {
+      return arr.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      );
+    }
+
+    const dirMul = sortDir === "asc" ? 1 : -1;
+
+    switch (sortField) {
+      case "title":
+        return arr.sort((a, b) => a.title.localeCompare(b.title) * dirMul);
+      case "pageViews":
+        return arr.sort((a, b) => (viewsOf(a) - viewsOf(b)) * dirMul);
+      case "ticketsSold":
+        return arr.sort((a, b) => (ticketsOf(a) - ticketsOf(b)) * dirMul);
+      case "revenue":
+        return arr.sort((a, b) => (revenueOf(a) - revenueOf(b)) * dirMul);
+      case "eventDate":
         return arr.sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+          (a, b) =>
+            (new Date(a.date).getTime() - new Date(b.date).getTime()) * dirMul,
         );
-      case "oldest":
-        return arr.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-        );
-      case "az":
-        return arr.sort((a, b) => a.title.localeCompare(b.title));
-      case "za":
-        return arr.sort((a, b) => b.title.localeCompare(a.title));
       default:
         return arr;
     }
-  }, [list, draftSort]);
+  }, [list, sortField, sortDir]);
 
   return (
     <section
@@ -698,10 +1043,15 @@ function DraftsListPanel({
             Drafts
           </p>
 
-          <MiniSelect
-            value={draftSort}
-            onChange={setDraftSort}
-            options={sortOptions}
+          {/* ✅ replaced old draft sort dropdown with the NEW sort control */}
+          <SortControls
+            options={SORT_FIELDS}
+            sortField={sortField}
+            sortDir={sortDir}
+            setSortField={setSortField}
+            setSortDir={setSortDir}
+            defaultDirFor={defaultDirFor}
+            dropdownWidthClass="w-[144px]"
           />
         </div>
 
@@ -724,7 +1074,7 @@ function DraftsListPanel({
               <button
                 type="button"
                 onClick={openOrgPicker}
-                className="mt-4 inline-flex gap-1.5 items-center text-xs font-medium bg-primary-500 text-white hover:bg-primary-600 px-4 py-3 rounded-full transition cursor-pointer"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-4 py-3 text-xs font-medium text-white transition hover:bg-primary-600 cursor-pointer"
               >
                 <CalendarPlus className="h-4 w-4" />
                 Create Event
@@ -745,7 +1095,6 @@ function DraftsListPanel({
                       : "border-transparent bg-transparent hover:bg-white/4",
                   )}
                 >
-                  {/* Smooth hover highlight */}
                   <span
                     className={clsx(
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
@@ -754,7 +1103,6 @@ function DraftsListPanel({
                       "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]",
                     )}
                   />
-                  {/* Smooth hover border glow */}
                   <span
                     className={clsx(
                       "pointer-events-none absolute inset-0 z-0 rounded-lg",
@@ -785,7 +1133,6 @@ function DraftsListPanel({
                       </div>
                     </div>
 
-                    {/* ✅ Keep Draft content (Status) like before */}
                     <div className="flex flex-1 items-center justify-start sm:justify-end">
                       <div className="text-left sm:text-center">
                         <p className="text-sm font-semibold text-neutral-0">
@@ -811,7 +1158,6 @@ export default function DashboardEventsPage() {
   const { data: session } = useSession();
 
   const [view, setView] = useState<EventViewId>("upcoming");
-  const [draftSort, setDraftSort] = useState<SortKey>("newest");
 
   const [showOrgPicker, setShowOrgPicker] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
@@ -832,6 +1178,7 @@ export default function DashboardEventsPage() {
   const events = useMemo<MyEvent[]>(() => allEvents ?? [], [allEvents]);
 
   const now = useMemo(() => Date.now(), []);
+
   const upcoming = useMemo(
     () =>
       events.filter(
@@ -870,15 +1217,14 @@ export default function DashboardEventsPage() {
   ];
 
   return (
-    <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
+    <div className="relative bg-neutral-950 text-neutral-0">
       <section className="pb-20">
-        {/* Header row */}
         <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-base font-semibold uppercase tracking-[0.18em] text-neutral-300">
+            <p className="text-3xl font-bold tracking-[-0.03em] text-neutral-50">
               Events
             </p>
-            <p className="mt-1 text-neutral-400">
+            <p className="mt-1 text-[13px] tracking-[-0.02em] text-neutral-400">
               Track performance, manage drafts, and jump into event setup.
             </p>
           </div>
@@ -897,7 +1243,6 @@ export default function DashboardEventsPage() {
           </div>
         </div>
 
-        {/* Active panel */}
         {view === "upcoming" ? (
           <UpcomingEventsGridPanel
             list={upcoming}
@@ -906,12 +1251,9 @@ export default function DashboardEventsPage() {
             emptySub="Create an event and it will appear here once scheduled."
           />
         ) : view === "past" ? (
-          <EventsStatsListPanel
-            title="Past Events"
+          <PastEventsListPanel
             list={past}
             eventsLoading={eventsLoading}
-            defaultMetric="revenue"
-            dateSortMode="latest"
             emptyTitle="No past events yet"
             emptySub="Once you’ve hosted events, they’ll show up here."
           />
@@ -919,14 +1261,11 @@ export default function DashboardEventsPage() {
           <DraftsListPanel
             list={drafts}
             eventsLoading={eventsLoading}
-            draftSort={draftSort}
-            setDraftSort={setDraftSort}
             openOrgPicker={openOrgPicker}
           />
         )}
       </section>
 
-      {/* Org picker modal */}
       <OrgPickerModal
         open={showOrgPicker}
         orgs={orgsList}

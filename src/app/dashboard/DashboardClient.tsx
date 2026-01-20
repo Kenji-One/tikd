@@ -23,7 +23,7 @@ import DateRangePicker, {
 
 /* Demo data (MONTHLY totals / points) */
 const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
-  (v) => v * 1000
+  (v) => v * 1000,
 );
 const sparkB = [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120];
 const sparkC = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
@@ -109,7 +109,7 @@ function buildDailyLabels(dates: Date[]) {
 
   if (n <= 7) {
     return dates.map((d) =>
-      d.toLocaleDateString(undefined, { weekday: "short" })
+      d.toLocaleDateString(undefined, { weekday: "short" }),
     );
   }
 
@@ -118,7 +118,7 @@ function buildDailyLabels(dates: Date[]) {
   }
 
   return dates.map((d) =>
-    d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
   );
 }
 
@@ -178,6 +178,86 @@ function fmtMonthYearLong(d: Date) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+/* --------------------------- NEW: Bucketing --------------------------- */
+/**
+ * Client requirement:
+ * - If selected range > 31 days, do NOT jump to months.
+ * - Group every 2–3 days into one point.
+ *
+ * We keep monthly ONLY for "no filter applied" (current year view).
+ */
+function bucketStepForRangeDays(rangeDays: number) {
+  if (rangeDays <= 31) return 1; // 1 point per day
+  if (rangeDays <= 62) return 2; // group 2 days
+  return 3; // group 3 days
+}
+
+function fmtBucketLabel(a: Date, b: Date) {
+  const sameDay =
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (sameDay) {
+    return a.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  const sameMonthYear =
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+
+  if (sameMonthYear) {
+    // Jan 1–3
+    const m = a.toLocaleDateString(undefined, { month: "short" });
+    return `${m} ${a.getDate()}–${b.getDate()}`;
+  }
+
+  // Jan 30 – Feb 2
+  const left = a.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  const right = b.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${left}–${right}`;
+}
+
+type Bucket = { start: Date; end: Date; label: string; repDate: Date };
+
+function makeBuckets(dates: Date[], step: number): Bucket[] {
+  if (step <= 1) {
+    return dates.map((d) => ({
+      start: d,
+      end: d,
+      label: d.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      }),
+      repDate: d,
+    }));
+  }
+
+  const out: Bucket[] = [];
+  for (let i = 0; i < dates.length; i += step) {
+    const start = dates[i];
+    const end = dates[Math.min(i + step - 1, dates.length - 1)];
+    out.push({
+      start,
+      end,
+      label: fmtBucketLabel(start, end),
+      repDate: end, // pin/hover uses the bucket end (common analytics behavior)
+    });
+  }
+  return out;
+}
+
+function sumBucket(values: number[], from: number, to: number) {
+  let s = 0;
+  for (let i = from; i <= to; i++) s += values[i] ?? 0;
+  return s;
+}
+
 export default function DashboardClient() {
   const router = useRouter();
 
@@ -187,11 +267,11 @@ export default function DashboardClient() {
   // ✅ “No filter applied” should represent the CURRENT YEAR (so tooltip shows 2026 now)
   const ALL_TIME_START = useMemo(
     () => new Date(currentYear, 0, 1),
-    [currentYear]
+    [currentYear],
   );
   const ALL_TIME_END = useMemo(
     () => new Date(currentYear, 11, 31),
-    [currentYear]
+    [currentYear],
   );
 
   const [dateRange, setDateRange] = useState<DateRangeValue>({
@@ -203,103 +283,164 @@ export default function DashboardClient() {
 
   const effectiveStart = useMemo(
     () => (hasChosenRange ? (dateRange.start as Date) : ALL_TIME_START),
-    [hasChosenRange, dateRange.start, ALL_TIME_START]
+    [hasChosenRange, dateRange.start, ALL_TIME_START],
   );
 
   const effectiveEnd = useMemo(
     () => (hasChosenRange ? (dateRange.end as Date) : ALL_TIME_END),
-    [hasChosenRange, dateRange.end, ALL_TIME_END]
+    [hasChosenRange, dateRange.end, ALL_TIME_END],
   );
 
   const rangeDays = useMemo(
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
-    [effectiveStart, effectiveEnd]
+    [effectiveStart, effectiveEnd],
   );
 
-  const dailyMode = useMemo(() => {
-    if (!hasChosenRange) return false;
-    return rangeDays <= 31;
+  // Monthly is ONLY for "no filter applied".
+  const monthlyMode = useMemo(() => !hasChosenRange, [hasChosenRange]);
+
+  // When user selects range: bucket days into 1 / 2 / 3 day points.
+  const dayStep = useMemo(() => {
+    if (!hasChosenRange) return 0;
+    return bucketStepForRangeDays(rangeDays);
   }, [hasChosenRange, rangeDays]);
 
   const labels = useMemo(() => {
-    if (!dailyMode) return monthLabels(effectiveStart, effectiveEnd);
-    const ds = buildDailyDates(effectiveStart, effectiveEnd);
-    return buildDailyLabels(ds);
-  }, [dailyMode, effectiveStart, effectiveEnd]);
+    if (monthlyMode) return monthLabels(effectiveStart, effectiveEnd);
+
+    const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
+
+    // step=1 → keep the existing “daily label” logic (weekday / day / month-day)
+    if (dayStep === 1) return buildDailyLabels(dailyDates);
+
+    // step=2/3 → show ranges like “Jan 1–3”
+    return makeBuckets(dailyDates, dayStep).map((b) => b.label);
+  }, [monthlyMode, effectiveStart, effectiveEnd, dayStep]);
 
   const dates = useMemo(() => {
-    if (!dailyMode) return monthDates(effectiveStart, effectiveEnd);
-    return buildDailyDates(effectiveStart, effectiveEnd);
-  }, [dailyMode, effectiveStart, effectiveEnd]);
+    if (monthlyMode) return monthDates(effectiveStart, effectiveEnd);
+
+    const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
+
+    if (dayStep === 1) return dailyDates;
+
+    // representative date per bucket (end-of-bucket)
+    return makeBuckets(dailyDates, dayStep).map((b) => b.repDate);
+  }, [monthlyMode, effectiveStart, effectiveEnd, dayStep]);
 
   const revenueData = useMemo(() => {
-    if (!dailyMode) return mapSeriesToCount(sparkA, labels.length);
-    return dailyizeFromMonthly(sparkA, dates);
-  }, [dailyMode, labels.length, dates]);
+    if (monthlyMode) return mapSeriesToCount(sparkA, labels.length);
+
+    const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
+    const dailyValues = dailyizeFromMonthly(sparkA, dailyDates);
+
+    if (dayStep === 1) return dailyValues;
+
+    const buckets = makeBuckets(dailyDates, dayStep);
+    return buckets.map((b) => {
+      const from = dailyDates.findIndex(
+        (d) => d.getTime() === b.start.getTime(),
+      );
+      const to = dailyDates.findIndex((d) => d.getTime() === b.end.getTime());
+      return sumBucket(dailyValues, from, to);
+    });
+  }, [monthlyMode, labels.length, effectiveStart, effectiveEnd, dayStep]);
 
   const pageViewsData = useMemo(() => {
-    if (!dailyMode) return mapSeriesToCount(sparkB, labels.length);
-    return dailyizeFromMonthly(sparkB, dates).map((v) => Math.round(v));
-  }, [dailyMode, labels.length, dates]);
+    if (monthlyMode) return mapSeriesToCount(sparkB, labels.length);
+
+    const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
+    const dailyValues = dailyizeFromMonthly(sparkB, dailyDates).map((v) =>
+      Math.round(v),
+    );
+
+    if (dayStep === 1) return dailyValues;
+
+    const buckets = makeBuckets(dailyDates, dayStep);
+    return buckets.map((b) => {
+      const from = dailyDates.findIndex(
+        (d) => d.getTime() === b.start.getTime(),
+      );
+      const to = dailyDates.findIndex((d) => d.getTime() === b.end.getTime());
+      return Math.round(sumBucket(dailyValues, from, to));
+    });
+  }, [monthlyMode, labels.length, effectiveStart, effectiveEnd, dayStep]);
 
   const ticketsSoldData = useMemo(() => {
-    if (!dailyMode) return mapSeriesToCount(sparkC, labels.length);
-    return dailyizeFromMonthly(sparkC, dates).map((v) => Math.round(v));
-  }, [dailyMode, labels.length, dates]);
+    if (monthlyMode) return mapSeriesToCount(sparkC, labels.length);
+
+    const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
+    const dailyValues = dailyizeFromMonthly(sparkC, dailyDates).map((v) =>
+      Math.round(v),
+    );
+
+    if (dayStep === 1) return dailyValues;
+
+    const buckets = makeBuckets(dailyDates, dayStep);
+    return buckets.map((b) => {
+      const from = dailyDates.findIndex(
+        (d) => d.getTime() === b.start.getTime(),
+      );
+      const to = dailyDates.findIndex((d) => d.getTime() === b.end.getTime());
+      return Math.round(sumBucket(dailyValues, from, to));
+    });
+  }, [monthlyMode, labels.length, effectiveStart, effectiveEnd, dayStep]);
 
   const revenueMax = useMemo(() => Math.max(0, ...revenueData), [revenueData]);
   const revenueDomain = useMemo<[number, number]>(
     () => [0, Math.max(1, revenueMax)],
-    [revenueMax]
+    [revenueMax],
   );
   const revenueTicks = useMemo(
     () => niceTicks(revenueDomain[1], 6),
-    [revenueDomain]
+    [revenueDomain],
   );
 
   const pvMax = useMemo(() => Math.max(0, ...pageViewsData), [pageViewsData]);
   const pvDomain = useMemo<[number, number]>(
     () => [0, Math.max(1, pvMax)],
-    [pvMax]
+    [pvMax],
   );
   const pvTicks = useMemo(() => niceTicks(pvDomain[1], 4), [pvDomain]);
 
   const tsMax = useMemo(
     () => Math.max(0, ...ticketsSoldData),
-    [ticketsSoldData]
+    [ticketsSoldData],
   );
   const tsDomain = useMemo<[number, number]>(
     () => [0, Math.max(1, tsMax)],
-    [tsMax]
+    [tsMax],
   );
   const tsTicks = useMemo(() => niceTicks(tsDomain[1], 4), [tsDomain]);
 
   // ✅ Pin the “active” dot to:
   // - current month if NO date filter (monthly mode)
-  // - otherwise the last point in the selected range
+  // - otherwise the last point in the selected range (daily or bucketed)
   const pinnedIndex = useMemo(() => {
     const len = revenueData.length;
     if (len <= 0) return 0;
 
-    if (!hasChosenRange && !dailyMode) {
+    if (!hasChosenRange && monthlyMode) {
       return Math.min(Math.max(today.getMonth(), 0), len - 1);
     }
 
     return len - 1;
-  }, [revenueData.length, hasChosenRange, dailyMode, today]);
+  }, [revenueData.length, hasChosenRange, monthlyMode, today]);
 
   const pinnedSubLabel = useMemo(() => {
     const d = dates[pinnedIndex];
     if (!d) return "";
+
     // monthly => Month Year (no day)
-    if (!dailyMode) return fmtMonthYearLong(d);
-    // daily => full date handled in chart hover; pinned label can stay full-ish if needed
+    if (monthlyMode) return fmtMonthYearLong(d);
+
+    // selected range => keep full date on pin (bucketed uses end-of-bucket date)
     return d.toLocaleDateString(undefined, {
       month: "long",
       day: "numeric",
       year: "numeric",
     });
-  }, [dates, pinnedIndex, dailyMode]);
+  }, [dates, pinnedIndex, monthlyMode]);
 
   return (
     <div className="space-y-5">
@@ -333,7 +474,7 @@ export default function DashboardClient() {
                 deltaPositive: true,
               }}
               // ✅ monthly hover should show Month Year (no day)
-              tooltipDateMode={dailyMode ? "full" : "monthYear"}
+              tooltipDateMode={monthlyMode ? "monthYear" : "full"}
               stroke="#9A46FF"
               fillTop="#9A46FF"
             />
@@ -356,7 +497,7 @@ export default function DashboardClient() {
                 dates={dates}
                 pinnedIndex={pinnedIndex}
                 tooltipIcon="eye"
-                tooltipDateMode={dailyMode ? "full" : "monthYear"}
+                tooltipDateMode={monthlyMode ? "monthYear" : "full"}
                 domain={pvDomain}
                 yTicks={pvTicks}
                 xLabels={labels}
@@ -385,7 +526,7 @@ export default function DashboardClient() {
                 dates={dates}
                 pinnedIndex={pinnedIndex}
                 tooltipIcon="ticket"
-                tooltipDateMode={dailyMode ? "full" : "monthYear"}
+                tooltipDateMode={monthlyMode ? "monthYear" : "full"}
                 domain={tsDomain}
                 yTicks={tsTicks}
                 xLabels={labels}

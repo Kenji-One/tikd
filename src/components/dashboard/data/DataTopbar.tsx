@@ -30,11 +30,16 @@ export default function DataTopbar() {
 
   return (
     <div>
-      <h1 className="text-3xl font-semibold tracking-[-0.6px] text-neutral-0">
-        Data
-      </h1>
+      <div>
+        <h1 className="text-3xl font-bold tracking-[-0.03em] text-neutral-50">
+          Data
+        </h1>
+        <p className="mt-1 text-[13px] tracking-[-0.02em] text-neutral-400">
+          Track withdrawals and transfers in one place.
+        </p>
+      </div>
 
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-5 pb-3">
+      <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-5 pb-3">
         {/* Tabs (back to old style, just better) */}
         <nav className="flex items-center gap-8 text-2xl font-medium tracking-[-0.35px]">
           {TABS.map((t) => {

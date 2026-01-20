@@ -91,10 +91,10 @@ export default function TeamsClient() {
       <section className="pt-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-base font-semibold tracking-[0.18em] text-neutral-300">
+            <div className="text-3xl font-bold tracking-[-0.03em] text-neutral-50">
               TEAMS
             </div>
-            <div className="mt-1 text-neutral-400">
+            <div className="mt-1 text-[13px] tracking-[-0.02em] text-neutral-400">
               Track performance, manage drafts, and jump into event setup.
             </div>
           </div>

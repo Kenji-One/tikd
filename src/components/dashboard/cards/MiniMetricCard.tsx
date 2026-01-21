@@ -204,10 +204,15 @@ export default function MiniMetricCard({
       if (e.key === "Escape") setResOpen(false);
     };
 
-    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+    // Use a single EventListener signature (no `any`, no union needed)
+    const onPointerDown: EventListener = (e) => {
       const el = resWrapRef.current;
       if (!el) return;
-      if (!el.contains(e.target as Node)) setResOpen(false);
+
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+
+      if (!el.contains(target)) setResOpen(false);
     };
 
     window.addEventListener("keydown", onKey);
@@ -217,7 +222,7 @@ export default function MiniMetricCard({
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("touchstart", onPointerDown as any);
+      window.removeEventListener("touchstart", onPointerDown);
     };
   }, [resOpen]);
 

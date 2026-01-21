@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type ComponentType,
 } from "react";
 import { MapContainer, GeoJSON, useMap } from "react-leaflet";
@@ -40,6 +41,9 @@ type Props = {
   showZoomControls?: boolean;
   seed?: number;
 };
+
+type GeoProps = Record<string, unknown>;
+type GeoFeature = Feature<Geometry, GeoProps>;
 
 /* --------------------------- Visual theme -------------------------- */
 /**
@@ -82,9 +86,27 @@ function rampColor(value01: number, ramp = DEFAULT_RAMP) {
   return ramp[idx];
 }
 
+function asRecord(x: unknown): Record<string, unknown> {
+  return x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+}
+
+function readString(obj: Record<string, unknown>, key: string): string {
+  const v = obj[key];
+  const s = typeof v === "string" || typeof v === "number" ? String(v) : "";
+  return s.trim();
+}
+
 /* ------------------------- TS compatibility ------------------------ */
-const RLMapContainer = MapContainer as unknown as ComponentType<any>;
-const RLGeoJSON = GeoJSON as unknown as ComponentType<any>;
+/**
+ * react-leaflet types + Next.js can sometimes fight each other in strict builds,
+ * so we keep a small compatibility cast — WITHOUT `any`.
+ */
+const RLMapContainer = MapContainer as unknown as ComponentType<
+  ComponentProps<typeof MapContainer>
+>;
+const RLGeoJSON = GeoJSON as unknown as ComponentType<
+  ComponentProps<typeof GeoJSON>
+>;
 
 function ConfigureMap({
   center,
@@ -99,9 +121,11 @@ function ConfigureMap({
 
   useEffect(() => {
     map.setView(center, zoom, { animate: false });
+
     if (!showZoomControls) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (map as any).zoomControl?.remove?.();
+      // Leaflet internally attaches zoomControl on map, but it's not part of TS type.
+      const m = map as L.Map & { zoomControl?: L.Control.Zoom };
+      m.zoomControl?.remove?.();
     }
   }, [map, center, zoom, showZoomControls]);
 
@@ -117,8 +141,7 @@ function BaseTiles() {
       /**
        * ✅ IMPORTANT
        * Use the "rastertiles" endpoint (not the legacy /dark_nolabels path).
-       * The rastertiles variant avoids the two big horizontal graticule/tropic lines
-       * that can appear on some CARTO dark styles at low zoom.
+       * This avoids the two big horizontal lines you saw on some dark styles at low zoom.
        */
       layerRef.current = L.tileLayer(
         "https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}{r}.png",
@@ -130,7 +153,6 @@ function BaseTiles() {
           keepBuffer: 4,
         },
       );
-
       layerRef.current.addTo(map);
     }
 
@@ -178,19 +200,22 @@ export default function LocationsChoroplethMap({
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       try {
         const res = await fetch(resolvedGeoUrl, { cache: "force-cache" });
-        if (!res.ok)
+        if (!res.ok) {
           throw new Error(`Failed to load geojson: ${resolvedGeoUrl}`);
+        }
         const json = (await res.json()) as FeatureCollection<Geometry>;
         if (!cancelled) setFc(json);
       } catch (e) {
         if (!cancelled) setFc(null);
-        // eslint-disable-next-line no-console
+        // keep console.error (your lint isn't blocking no-console)
         console.error(e);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -230,44 +255,46 @@ export default function LocationsChoroplethMap({
 
   const prefix = effectiveMode === "revenue" ? "$" : "";
 
-  function featureKeys(f: Feature<Geometry>): string[] {
-    const p: any = f.properties ?? {};
-
-    const add = (arr: string[], v: unknown) => {
-      const s = String(v ?? "").trim();
-      if (s) arr.push(s.toLowerCase());
-    };
+  function featureKeys(f: GeoFeature): string[] {
+    const props = asRecord(f.properties);
 
     const out: string[] = [];
 
-    add(out, (f as any).id);
-    add(out, p.id);
+    const add = (v: unknown) => {
+      const s =
+        typeof v === "string" || typeof v === "number" ? String(v).trim() : "";
+      if (s) out.push(s.toLowerCase());
+    };
+
+    // Feature.id is allowed by GeoJSON spec
+    add(f.id);
+    add(props["id"]);
 
     if (scope === "world") {
-      add(out, p["ISO3166-1-Alpha-2"]);
-      add(out, p["ISO3166-1-Alpha-3"]);
-      add(out, p.name);
+      add(props["ISO3166-1-Alpha-2"]);
+      add(props["ISO3166-1-Alpha-3"]);
+      add(props["name"]);
 
-      add(out, p.ADMIN);
-      add(out, p.NAME);
-      add(out, p.ISO_A2);
-      add(out, p.ISO_A3);
-      add(out, p.iso_a2);
-      add(out, p.iso_a3);
+      add(props["ADMIN"]);
+      add(props["NAME"]);
+      add(props["ISO_A2"]);
+      add(props["ISO_A3"]);
+      add(props["iso_a2"]);
+      add(props["iso_a3"]);
 
       return out.filter(Boolean);
     }
 
-    add(out, p.name);
-    add(out, p.NAME);
-    add(out, p.STATE_NAME);
-    add(out, p.postal);
-    add(out, p.STUSPS);
+    add(props["name"]);
+    add(props["NAME"]);
+    add(props["STATE_NAME"]);
+    add(props["postal"]);
+    add(props["STUSPS"]);
 
     return out.filter(Boolean);
   }
 
-  function getFeatureValue(f: Feature<Geometry>) {
+  function getFeatureValue(f: GeoFeature) {
     const keys = featureKeys(f);
     let datum: ChoroplethDatum | undefined;
 
@@ -298,11 +325,24 @@ export default function LocationsChoroplethMap({
     return clamp(t, 0, 1);
   }
 
-  function featureTitle(feature: any) {
-    const p: any = feature?.properties ?? {};
-    if (scope === "world")
-      return String(p.name ?? p.ADMIN ?? p.NAME ?? "Unknown");
-    return String(p.name ?? p.STATE_NAME ?? p.NAME ?? "Unknown");
+  function featureTitle(feature: GeoFeature) {
+    const props = asRecord(feature.properties);
+
+    if (scope === "world") {
+      return (
+        readString(props, "name") ||
+        readString(props, "ADMIN") ||
+        readString(props, "NAME") ||
+        "Unknown"
+      );
+    }
+
+    return (
+      readString(props, "name") ||
+      readString(props, "STATE_NAME") ||
+      readString(props, "NAME") ||
+      "Unknown"
+    );
   }
 
   return (
@@ -331,14 +371,14 @@ export default function LocationsChoroplethMap({
         {fc && (
           <RLGeoJSON
             data={fc}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            style={(feature: any) => {
-              const { value, found } = getFeatureValue(feature);
+            // Leaflet style callback expects a feature-like object; react-leaflet passes GeoJSON Feature.
+            style={(feature) => {
+              const f = feature as GeoFeature;
+              const { value, found } = getFeatureValue(f);
 
               const v01 = found
                 ? valueTo01(value)
-                : pseudo01(`missing:${featureKeys(feature).join("|")}`, seed) *
-                  0.06;
+                : pseudo01(`missing:${featureKeys(f).join("|")}`, seed) * 0.06;
 
               return {
                 // borders: softer, not harsh black
@@ -349,10 +389,10 @@ export default function LocationsChoroplethMap({
                 fillOpacity: found ? 0.82 : 0.16,
               };
             }}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onEachFeature={(feature: any, layer: any) => {
-              const regionName = featureTitle(feature);
-              const { value, found } = getFeatureValue(feature);
+            onEachFeature={(feature, layer) => {
+              const f = feature as GeoFeature;
+              const regionName = featureTitle(f);
+              const { value, found } = getFeatureValue(f);
 
               const valueLine = found
                 ? `<div class="tikd-map-tooltip__value">${formatCompact(value, prefix)}</div>`
@@ -366,7 +406,10 @@ export default function LocationsChoroplethMap({
                 </div>
               `;
 
-              layer.bindTooltip(tooltip, {
+              // We want setStyle + tooltip => Path is the correct Leaflet type.
+              const path = layer as L.Path;
+
+              path.bindTooltip(tooltip, {
                 sticky: true,
                 direction: "top",
                 opacity: 1,
@@ -374,16 +417,16 @@ export default function LocationsChoroplethMap({
                 className: "tikd-map-tooltip",
               });
 
-              layer.on("mouseover", () => {
-                layer.setStyle?.({
+              path.on("mouseover", () => {
+                path.setStyle({
                   weight: 1.5,
                   color: "rgba(154,70,255,0.42)",
                   fillOpacity: found ? 0.92 : 0.24,
                 });
               });
 
-              layer.on("mouseout", () => {
-                layer.setStyle?.({
+              path.on("mouseout", () => {
+                path.setStyle({
                   weight: 0.85,
                   color: "rgba(255,255,255,0.10)",
                   fillOpacity: found ? 0.82 : 0.16,

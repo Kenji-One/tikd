@@ -1,5 +1,6 @@
 import DetailedViewShell from "@/components/dashboard/finances/DetailedViewShell";
 import type { DonutSegment } from "@/components/dashboard/charts/DonutFull";
+import UnderConstruction from "@/components/ui/UnderConstruction";
 
 const kpiA = [60, 120, 90, 160, 180, 130, 200, 230, 180, 220, 260, 300];
 const kpiB = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
@@ -7,7 +8,7 @@ const kpiC = [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120];
 const kpiD = [80, 100, 160, 220, 260, 200, 220, 240, 210, 230, 250, 260];
 
 const totalSeries = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
-  (v) => v * 1000
+  (v) => v * 1000,
 );
 
 const PEAK_BARS = [22_000, 120_000, 65_000, 42_000, 220_000, 98_000, 55_000];
@@ -21,7 +22,8 @@ const TRAFFIC_SOURCE: DonutSegment[] = [
 
 export default function FinancesGenderBreakdownDetailedPage() {
   return (
-    <DetailedViewShell
+    <>
+      {/* <DetailedViewShell
       heading="Gender Breakdown Detailed View"
       miniCards={[
         { title: "Gender Ratio", value: "Male 3 : Female", series: kpiA },
@@ -70,6 +72,8 @@ export default function FinancesGenderBreakdownDetailedPage() {
       barsLabel="PEAK DAYS"
       barsHeading="SEPTEMBER 2025"
       barsData={PEAK_BARS}
-    />
+    /> */}
+      <UnderConstruction />
+    </>
   );
 }

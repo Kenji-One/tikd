@@ -44,6 +44,9 @@ type Props = {
 
   deltaText?: string;
   deltaPositive?: boolean;
+
+  /** ✅ NEW: chart height (defaults to 150) */
+  height?: number;
 };
 
 type Row = { x: number; value: number; y: number };
@@ -53,10 +56,6 @@ type HoverTooltipProps = {
   payload?: Array<{ payload?: unknown }>;
 };
 
-/**
- * Minimal subset of what Recharts passes into a custom `dot` renderer.
- * Recharts will pass extra fields — TS allows that (structural typing).
- */
 type PinnedDotProps = {
   cx?: number;
   cy?: number;
@@ -217,17 +216,18 @@ function SmallKpiChart({
   stroke = "#9A46FF",
   deltaText,
   deltaPositive,
+  height = 150,
 }: Props) {
   const scaler = useMemo(() => {
     const base = Array.from(new Set([0, ...yTicks, domain[1]])).sort(
-      (a, b) => a - b
+      (a, b) => a - b,
     );
     return makePiecewiseScaler(base);
   }, [yTicks, domain]);
 
   const rows = useMemo(
     () => data.map((v, i) => ({ x: i, value: v, y: scaler.toScaled(v) })),
-    [data, scaler]
+    [data, scaler],
   );
 
   const maxX = Math.max(0, rows.length - 1);
@@ -244,7 +244,6 @@ function SmallKpiChart({
   const inferredPositive = rawDelta ? !rawDelta.startsWith("-") : true;
   const fixedIsPositive = deltaPositive ?? inferredPositive;
 
-  // ✅ Tooltip sizing updated so bottom row doesn't stack
   const tipWrapper =
     "pointer-events-none inline-block min-w-[150px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md shadow-[0_10px_26px_rgba(0,0,0,0.50)] px-2.5 py-2 text-white";
   const tipValueRow = "flex items-center justify-center gap-1";
@@ -277,7 +276,6 @@ function SmallKpiChart({
       ? Math.min(Math.max(pinnedIndex, 0), maxX)
       : null;
 
-  // ✅ No JSX.Element return annotation — avoids "Cannot find namespace 'JSX'"
   const pinnedDot = (p: PinnedDotProps) => {
     const isPinned = clampedPin != null && p?.index === clampedPin;
 
@@ -302,7 +300,7 @@ function SmallKpiChart({
 
   return (
     <div className="w-full">
-      <ResponsiveContainer width="100%" height={150}>
+      <ResponsiveContainer width="100%" height={height}>
         <LineChart
           data={rows}
           margin={{ top: 12, right: 8, left: 0, bottom: 3 }}
@@ -342,7 +340,6 @@ function SmallKpiChart({
             allowDecimals={false}
           />
 
-          {/* soft glow line */}
           <Line
             dataKey="y"
             stroke={stroke}
@@ -353,7 +350,6 @@ function SmallKpiChart({
             isAnimationActive={false}
           />
 
-          {/* main line + pinned dot + hover dot */}
           <Line
             dataKey="y"
             stroke={stroke}

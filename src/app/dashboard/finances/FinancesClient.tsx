@@ -10,10 +10,10 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  Banknote,
-  Clock,
   ExternalLink,
   Wallet,
+  Clock,
+  CircleDollarSign,
 } from "lucide-react";
 import {
   Area,
@@ -29,7 +29,6 @@ import DateRangePicker, {
   type DateRangeValue,
 } from "@/components/ui/DateRangePicker";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
-import { tr } from "zod/v4/locales";
 
 /* ------------------------------ Types ------------------------------ */
 type FinanceTab = "withdrew" | "sent" | "received";
@@ -44,9 +43,12 @@ type WithdrawRow = {
 type TransferRow = {
   id: string;
   name: string; // person/org
+  avatarUrl?: string | null;
   type: "in" | "out"; // Sent In / Sent Out
   amount: number; // signed: in=positive, out=negative
   event: string;
+  eventThumbUrl?: string | null;
+  dateISO: string; // for sorting
 };
 
 type FinanceOverview = {
@@ -56,7 +58,7 @@ type FinanceOverview = {
   transfers: TransferRow[];
 };
 
-type SortKey = "name" | "type" | "amount" | "event";
+type SortKey = "event" | "name" | "type" | "amount" | "date";
 type SortDir = "asc" | "desc";
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -76,11 +78,6 @@ function formatUSDCompact(n: number) {
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
   return `${sign}$${abs.toFixed(0)}`;
-}
-
-function providerIcon(p: WithdrawRow["provider"]) {
-  if (p === "Bank") return <Banknote className="h-4 w-4" />;
-  return <Clock className="h-4 w-4" />;
 }
 
 function pillClasses(kind: "in" | "out") {
@@ -222,6 +219,11 @@ function sortTransfers(rows: TransferRow[], key: SortKey, dir: SortDir) {
     if (key === "amount") return (A.amount - B.amount) * mul;
     if (key === "type") return compareStrings(A.type, B.type) * mul;
     if (key === "event") return compareStrings(A.event, B.event) * mul;
+    if (key === "date") {
+      const a = new Date(A.dateISO).getTime();
+      const b = new Date(B.dateISO).getTime();
+      return (a - b) * mul;
+    }
     return compareStrings(A.name, B.name) * mul;
   });
 
@@ -233,6 +235,43 @@ function computeNiceTicks(max: number) {
   const steps = 4; // 5 labels total (top..0)
   const step = Math.ceil(safeMax / steps / 100) * 100;
   return Array.from({ length: steps + 1 }, (_, i) => step * (steps - i));
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] ?? "";
+  const b = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+  return (a + b).toUpperCase();
+}
+
+function fmtTableDate(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function providerIconSrc(p: WithdrawRow["provider"]) {
+  // Put these files in: /public/finance/providers/
+  // - paypal.svg
+  // - wise.svg
+  // - payoneer.svg
+  // - bank.svg
+  switch (p) {
+    case "PayPal":
+      return "/finance/providers/paypal.svg";
+    case "Wise":
+      return "/finance/providers/wise.svg";
+    case "Payoneer":
+      return "/finance/providers/payoneer.svg";
+    case "Bank":
+      return "/finance/providers/bank.svg";
+    default:
+      return "";
+  }
 }
 
 /* ------------------------------ Data ------------------------------ */
@@ -266,37 +305,52 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       {
         id: "t1",
         name: "Mahfuzul Nabil",
+        avatarUrl: null,
         type: "in",
         amount: 5850,
         event: "Summer Rooftop Party",
+        eventThumbUrl: null,
+        dateISO: "2026-10-31T23:00:00.000Z",
       },
       {
         id: "t2",
         name: "Adom Shafi",
+        avatarUrl: null,
         type: "out",
         amount: -2550,
         event: "Charity Night Run",
+        eventThumbUrl: null,
+        dateISO: "2026-10-05T17:20:00.000Z",
       },
       {
         id: "t3",
         name: "Sami Ahmed",
+        avatarUrl: null,
         type: "in",
         amount: 1100,
         event: "Indie Music Fest",
+        eventThumbUrl: null,
+        dateISO: "2026-09-21T12:10:00.000Z",
       },
       {
         id: "t4",
         name: "Sajib Rahman",
+        avatarUrl: null,
         type: "out",
         amount: -1550,
         event: "Tech Meetup Tbilisi",
+        eventThumbUrl: null,
+        dateISO: "2026-08-12T10:05:00.000Z",
       },
       {
         id: "t5",
         name: "Saiful Islam R.",
+        avatarUrl: null,
         type: "in",
         amount: 4250,
         event: "Food & Wine Expo",
+        eventThumbUrl: null,
+        dateISO: "2026-07-04T09:30:00.000Z",
       },
     ],
   };
@@ -305,10 +359,12 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
 /* ----------------------------- Component --------------------------- */
 export default function FinancesClient() {
   const router = useRouter();
-  const [tab, setTab] = useState<FinanceTab>("withdrew");
 
-  // ✅ sort state (exact RecentSalesTable behavior)
-  const [sortBy, setSortBy] = useState<SortKey>("amount");
+  // ✅ chart-only tab (DOES NOT affect Transfers table)
+  const [chartTab, setChartTab] = useState<FinanceTab>("withdrew");
+
+  // ✅ sort state (table only)
+  const [sortBy, setSortBy] = useState<SortKey>("date");
   const [dir, setDir] = useState<SortDir>("desc");
   const toggleSort = (key: SortKey) => {
     if (key === sortBy) setDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -388,16 +444,16 @@ export default function FinancesClient() {
 
   const series = useMemo(() => {
     const monthlyBase =
-      tab === "withdrew"
+      chartTab === "withdrew"
         ? monthlyWithdraw
-        : tab === "sent"
+        : chartTab === "sent"
           ? monthlySent
           : monthlyReceived;
 
     if (!dailyMode) return mapSeriesToCount(monthlyBase, labels.length);
     return dailyizeFromMonthly(monthlyBase, dates);
   }, [
-    tab,
+    chartTab,
     dailyMode,
     labels.length,
     dates,
@@ -415,21 +471,17 @@ export default function FinancesClient() {
     }));
   }, [labels, dates, series]);
 
-  const transfersFiltered = useMemo(() => {
-    if (!overview) return [];
-    if (tab === "sent")
-      return overview.transfers.filter((t) => t.type === "out");
-    if (tab === "received")
-      return overview.transfers.filter((t) => t.type === "in");
-    return overview.transfers;
-  }, [overview, tab]);
+  // ✅ Transfers table is ALWAYS all transfers (tab does NOT filter it)
+  const transfersAll = useMemo(() => {
+    return overview?.transfers ?? [];
+  }, [overview]);
 
   const transfersSorted = useMemo(() => {
-    return sortTransfers(transfersFiltered, sortBy, dir);
-  }, [transfersFiltered, sortBy, dir]);
+    return sortTransfers(transfersAll, sortBy, dir);
+  }, [transfersAll, sortBy, dir]);
 
   const chartTotalLabel = useMemo(() => {
-    if (tab === "withdrew") {
+    if (chartTab === "withdrew") {
       const w = (overview?.withdrawHistory ?? []).reduce(
         (acc, x) => acc + x.amount,
         0,
@@ -439,7 +491,7 @@ export default function FinancesClient() {
 
     const rows = overview?.transfers ?? [];
     const sum =
-      tab === "sent"
+      chartTab === "sent"
         ? rows
             .filter((t) => t.type === "out")
             .reduce((acc, x) => acc + x.amount, 0)
@@ -448,7 +500,7 @@ export default function FinancesClient() {
             .reduce((acc, x) => acc + x.amount, 0);
 
     return formatUSD(sum);
-  }, [tab, overview?.withdrawHistory, overview?.transfers, series]);
+  }, [chartTab, overview?.withdrawHistory, overview?.transfers, series]);
 
   return (
     <div className="w-full py-4 sm:py-6">
@@ -480,181 +532,176 @@ export default function FinancesClient() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr] lg:gap-5">
           {/* LEFT */}
           <div className="flex flex-col gap-4">
-            {/* Balance Card */}
-            <div className="rounded-xl border border-neutral-800/70 bg-neutral-948/70 p-4">
-              {/* Available (improved, cleaner + better gradient) */}
-              <div className="relative overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-950/28 p-4">
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-100"
-                  style={{
-                    background:
-                      "radial-gradient(840px 380px at 30% 0%, rgba(154,70,255,0.42), transparent 62%), radial-gradient(900px 520px at 110% 20%, rgba(154,70,255,0.14), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0))",
-                  }}
-                />
+            {/* ✅ Unified Balance + Activity module */}
+            <div className="relative overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70">
+              {/* Purple wash across the whole module (single grouped feel) */}
+              <div
+                className="pointer-events-none absolute inset-0 opacity-100"
+                style={{
+                  background:
+                    "radial-gradient(900px 520px at 40% 0%, rgba(154,70,255,0.30), transparent 60%), radial-gradient(820px 520px at 110% 30%, rgba(154,70,255,0.12), transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0))",
+                }}
+              />
+              {/* subtle inner vignette */}
+              <div
+                className="pointer-events-none absolute inset-0 opacity-60"
+                style={{
+                  background:
+                    "radial-gradient(800px 520px at 50% -10%, rgba(0,0,0,0.20), transparent 62%), radial-gradient(1000px 650px at 50% 120%, rgba(0,0,0,0.45), transparent 60%)",
+                }}
+              />
 
-                <div className="relative">
-                  <div className="flex items-center justify-between">
-                    <div className="inline-flex items-center gap-2">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-950/55 ring-1 ring-neutral-800/70">
-                        <Wallet className="h-4 w-4 text-primary-200" />
-                      </span>
-                      <span className="text-[12px] font-semibold tracking-[-0.02em] text-neutral-300">
-                        Available Balance
-                      </span>
+              <div className="relative p-4">
+                {/* Top (Available Balance) - centered like reference */}
+                <div className="rounded-xl pt-5 pb-2">
+                  <div className="flex min-h-[170px] flex-col items-center justify-center text-center">
+                    <div className="relative">
+                      {/* bigger icon in a soft orb */}
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/10 backdrop-blur-xl">
+                        <Wallet className="h-9 w-9 text-neutral-0" />
+                      </div>
                     </div>
 
-                    <span className="rounded-full border border-neutral-800/70 bg-neutral-950/35 px-2 py-1 text-[11px] font-semibold text-neutral-200">
-                      USD
-                    </span>
-                  </div>
-
-                  <div className="mt-3 text-[34px] font-extrabold leading-none tracking-[-0.06em] text-neutral-50">
-                    {overview ? formatUSD(overview.availableBalance) : "$—"}
-                  </div>
-
-                  <div className="mt-2 text-[12px] text-neutral-400">
-                    Ready to withdraw
-                  </div>
-                </div>
-              </div>
-
-              {/* Pending (keep style, simplify content) */}
-              <div className="mt-3 rounded-xl border border-neutral-800/70 bg-neutral-950/28 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950/55 ring-1 ring-neutral-800/70">
-                      <Clock className="h-4 w-4 text-primary-200" />
+                    <div className="mt-3 text-[12px] font-semibold tracking-[-0.02em] text-neutral-300">
+                      Available Balance
                     </div>
 
-                    <div className="leading-tight">
+                    <div className="mt-2 text-[34px] font-extrabold leading-none tracking-[-0.06em] text-neutral-0">
+                      {overview ? formatUSD(overview.availableBalance) : "$—"}
+                    </div>
+
+                    <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/7 px-2 py-1 text-[11px] font-semibold text-neutral-100 backdrop-blur-xl">
+                      <CircleDollarSign className="w-4 h-4" />
+
+                      <span className="tracking-[-0.02em]">USD</span>
+                    </div>
+
+                    <div className="mt-2 text-[12px] text-neutral-400">
+                      Ready to withdraw
+                    </div>
+                  </div>
+
+                  {/* Pending (no “solid black” block) */}
+                  <div className="mt-4 rounded-xl border border-white/10 bg-neutral-950/12 p-3">
+                    <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <div className="text-[12px] font-semibold text-neutral-100">
-                          Pending Balance
+                        <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/7 ring-1 ring-white/10">
+                          <Clock className="h-4 w-4" />
                         </div>
-                        <span className="rounded-full bg-primary-900/25 px-2 py-0.5 text-[10px] font-bold text-primary-200 ring-1 ring-primary-700/20">
-                          Processing
-                        </span>
+
+                        <div className="leading-tight">
+                          <div className="flex items-center gap-2">
+                            <div className="text-[11px] font-semibold text-neutral-0">
+                              Pending Balance
+                            </div>
+                            <span className="rounded-full bg-primary-900/20 px-2 py-0.5 text-[10px] font-bold text-primary-200 ring-1 ring-primary-700/20">
+                              Processing
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-[14px] font-extrabold tabular-nums text-neutral-0">
+                          {overview ? formatUSD(overview.pendingBalance) : "$—"}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="text-right">
-                    <div className="text-[14px] font-extrabold tabular-nums text-neutral-50">
-                      {overview ? formatUSD(overview.pendingBalance) : "$—"}
+                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/6">
+                      <div
+                        className="h-full w-[58%] rounded-full"
+                        style={{
+                          background:
+                            "linear-gradient(90deg, rgba(154,70,255,0.95), rgba(154,70,255,0.28))",
+                        }}
+                      />
                     </div>
                   </div>
+
+                  <div className="mt-4">
+                    <Button
+                      type="button"
+                      className={clsx(
+                        "h-10 w-full rounded-lg font-semibold tracking-[-0.02em]",
+                        "bg-primary-500 text-neutral-0 hover:bg-primary-400",
+                        "shadow-[0_14px_34px_rgba(154,70,255,0.20)]",
+                      )}
+                      onClick={() =>
+                        router.push("/dashboard/finances/withdraw")
+                      }
+                      animation={true}
+                    >
+                      <span className="mr-1 inline-flex items-center">
+                        <ArrowUpRight className="h-4.5 w-4.5" />
+                      </span>
+                      Withdraw
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-neutral-900/60">
-                  <div
-                    className="h-full w-[58%] rounded-full"
-                    style={{
-                      background:
-                        "linear-gradient(90deg, rgba(154,70,255,0.95), rgba(154,70,255,0.35))",
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="px-0.5">
-                <Button
-                  type="button"
-                  className={clsx(
-                    "mt-4 h-10 w-full rounded-lg font-semibold tracking-[-0.02em]",
-                    "bg-primary-500 text-neutral-0 hover:bg-primary-400",
-                    "shadow-[0_14px_34px_rgba(154,70,255,0.20)]",
-                  )}
-                  onClick={() => router.push("/dashboard/finances/withdraw")}
-                  animation={true}
-                >
-                  <span className="mr-1 inline-flex items-center">
-                    <ArrowUpRight className="h-4.5 w-4.5" />
-                  </span>
-                  Withdraw
-                </Button>
-              </div>
-            </div>
+                {/* Divider to make it feel ONE card, but still separated */}
+                <div className="my-4 h-px w-full bg-white/8" />
 
-            {/* Withdraw History */}
-            <div className="rounded-xl border border-neutral-800/70 bg-neutral-948/70 pt-5 pb-4">
-              <div className="mb-3 flex items-center justify-between px-5">
-                <h2 className="text-[14px] font-bold tracking-[-0.03em] text-neutral-50">
-                  Withdraw History
-                </h2>
-                <button
-                  type="button"
-                  className="text-[12px] font-semibold text-primary-400 hover:text-primary-300"
-                  onClick={() => router.push("/dashboard/finances/withdrawals")}
-                >
-                  View All
-                </button>
-              </div>
+                {/* Activity / Withdraw History (inside same container) */}
+                <div className="pb-1">
+                  <div className="mb-3 flex items-center justify-between px-1">
+                    <h2 className="text-[14px] font-bold tracking-[-0.03em] text-neutral-0">
+                      Activity
+                    </h2>
+                    <button
+                      type="button"
+                      className="text-[12px] font-semibold text-primary-300 hover:text-primary-200"
+                      onClick={() =>
+                        router.push("/dashboard/finances/withdrawals")
+                      }
+                    >
+                      View All
+                    </button>
+                  </div>
 
-              <div className="space-y-2 px-4">
-                {(overview?.withdrawHistory ?? []).map((w) => (
-                  <div
-                    key={w.id}
-                    className={clsx(
-                      "flex items-center justify-between gap-3 rounded-lg",
-                      "border border-neutral-800/60 bg-neutral-950/30 px-3 py-2.5",
+                  <div className="space-y-2">
+                    {(overview?.withdrawHistory ?? []).map((w) => (
+                      <div
+                        key={w.id}
+                        className={clsx(
+                          "flex items-center justify-between gap-3 rounded-xl",
+                          "border border-white/10 bg-neutral-950/12 px-3 py-2.5",
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <ProviderLogo provider={w.provider} />
+                          <div>
+                            <div className="text-[13px] font-semibold text-neutral-0">
+                              {w.provider} Withdraw
+                            </div>
+                            <div className="mt-1 text-[12px] text-neutral-400">
+                              {w.dateLabel}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <div className="text-[13px] font-bold text-error-400">
+                            {formatUSD(-Math.abs(w.amount))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {!overview?.withdrawHistory?.length && (
+                      <div className="rounded-xl border border-dashed border-white/12 bg-neutral-950/10 p-4 text-center text-[13px] text-neutral-400">
+                        No withdrawals yet.
+                      </div>
                     )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-900/55 ring-1 ring-neutral-800/70">
-                        {providerIcon(w.provider)}
-                      </div>
-                      <div>
-                        <div className="text-[13px] font-semibold text-neutral-100">
-                          {w.provider} Withdraw
-                        </div>
-                        <div className="mt-1 text-[12px] text-neutral-400">
-                          {w.dateLabel}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <div className="text-[13px] font-bold text-error-400">
-                        {formatUSD(-Math.abs(w.amount))}
-                      </div>
-                    </div>
                   </div>
-                ))}
-
-                {!overview?.withdrawHistory?.length && (
-                  <div className="rounded-lg border border-dashed border-neutral-800/60 bg-neutral-950/20 p-4 text-center text-[13px] text-neutral-400">
-                    No withdrawals yet.
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
 
           {/* RIGHT */}
           <div className="flex flex-col gap-4">
-            {/* Tabs */}
-            <div className="rounded-xl border border-neutral-800/70 bg-neutral-948/70 p-3 sm:p-4">
-              <div className="grid grid-cols-3 gap-2">
-                <FinanceTabButton
-                  label="Withdrew"
-                  icon={<ArrowUpRight className="h-4 w-4" />}
-                  active={tab === "withdrew"}
-                  onClick={() => setTab("withdrew")}
-                />
-                <FinanceTabButton
-                  label="Sent"
-                  icon={<ArrowUpRight className="h-4 w-4" />}
-                  active={tab === "sent"}
-                  onClick={() => setTab("sent")}
-                />
-                <FinanceTabButton
-                  label="Received"
-                  icon={<ArrowDownLeft className="h-4 w-4" />}
-                  active={tab === "received"}
-                  onClick={() => setTab("received")}
-                />
-              </div>
-            </div>
-
             {/* Chart */}
             <div className="relative overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70 p-4 sm:p-5">
               <div
@@ -666,13 +713,12 @@ export default function FinancesClient() {
               />
 
               <div className="relative">
-                {/* ✅ tighter header spacing/sizing + smaller datepicker */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-[12px] font-semibold text-neutral-300">
-                      {tab === "withdrew"
+                      {chartTab === "withdrew"
                         ? "Withdrawn"
-                        : tab === "sent"
+                        : chartTab === "sent"
                           ? "Sent Out"
                           : "Received"}
                     </div>
@@ -686,7 +732,28 @@ export default function FinancesClient() {
                     </div>
                   </div>
 
-                  <div className="w-[min(220px,100%)]">
+                  <div className="grid grid-cols-3 gap-2 flex-1 px-6">
+                    <FinanceTabButton
+                      label="Withdrawn"
+                      icon={<ArrowUpRight className="h-4 w-4" />}
+                      active={chartTab === "withdrew"}
+                      onClick={() => setChartTab("withdrew")}
+                    />
+                    <FinanceTabButton
+                      label="Sent"
+                      icon={<ArrowUpRight className="h-4 w-4" />}
+                      active={chartTab === "sent"}
+                      onClick={() => setChartTab("sent")}
+                    />
+                    <FinanceTabButton
+                      label="Received"
+                      icon={<ArrowDownLeft className="h-4 w-4" />}
+                      active={chartTab === "received"}
+                      onClick={() => setChartTab("received")}
+                    />
+                  </div>
+
+                  <div className="w-[min(144px,100%)]">
                     <DateRangePicker
                       value={dateRange}
                       onChange={setDateRange}
@@ -699,9 +766,9 @@ export default function FinancesClient() {
                     rows={chartRows}
                     dailyMode={dailyMode}
                     tint={
-                      tab === "withdrew"
+                      chartTab === "withdrew"
                         ? "error"
-                        : tab === "sent"
+                        : chartTab === "sent"
                           ? "primary"
                           : "success"
                     }
@@ -717,24 +784,23 @@ export default function FinancesClient() {
                   <div className="text-base font-bold tracking-[-0.03em] text-neutral-50">
                     Transfers
                   </div>
-                  {/* <div className="mt-1 text-[12px] text-neutral-400">
-                    Sent In / Sent Out only (no withdrawals).
-                  </div> */}
                 </div>
 
                 <div className="text-[13px] font-semibold text-neutral-400">
-                  {tab === "sent"
-                    ? "Showing: Sent Out"
-                    : tab === "received"
-                      ? "Showing: Sent In"
-                      : "Showing: All"}
+                  Showing: All
                 </div>
               </div>
 
-              <div className="w-full overflow-x-auto">
-                <table className="w-full min-w-[760px] border-collapse font-medium leading-tight">
+              <div className="relative w-full overflow-x-auto">
+                <table className="w-full min-w-[980px] border-collapse font-medium leading-tight">
                   <thead className="text-neutral-400">
                     <tr className="[&>th]:pb-3 [&>th]:pt-3 [&>th]:px-4">
+                      <ThSort
+                        label="Event"
+                        active={sortBy === "event"}
+                        dir={dir}
+                        onClick={() => toggleSort("event")}
+                      />
                       <ThSort
                         label="Name"
                         active={sortBy === "name"}
@@ -755,11 +821,11 @@ export default function FinancesClient() {
                         onClick={() => toggleSort("amount")}
                       />
                       <ThSort
-                        label="Event"
-                        active={sortBy === "event"}
+                        label="Date"
+                        active={sortBy === "date"}
                         dir={dir}
-                        onClick={() => toggleSort("event")}
                         right
+                        onClick={() => toggleSort("date")}
                       />
                     </tr>
                   </thead>
@@ -773,27 +839,34 @@ export default function FinancesClient() {
                           i % 2 === 0 ? "bg-neutral-950/10" : "bg-transparent",
                         )}
                       >
+                        {/* Event */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-900/55 ring-1 ring-neutral-800/70">
-                              {t.type === "in" ? (
-                                <ArrowDownLeft className="h-4 w-4 text-success-400" />
-                              ) : (
-                                <ArrowUpRight className="h-4 w-4 text-error-400" />
-                              )}
+                            <EventThumb title={t.event} url={t.eventThumbUrl} />
+                            <div className="text-[13px] font-semibold text-neutral-100">
+                              {t.event}
                             </div>
+                          </div>
+                        </td>
+
+                        {/* Name */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <UserAvatar name={t.name} url={t.avatarUrl} />
                             <div className="text-[13px] font-semibold text-neutral-100">
                               {t.name}
                             </div>
                           </div>
                         </td>
 
+                        {/* Type */}
                         <td className="px-4 py-3">
                           <span className={pillClasses(t.type)}>
                             {t.type === "in" ? "Sent In" : "Sent Out"}
                           </span>
                         </td>
 
+                        {/* Amount */}
                         <td className="px-4 py-3 text-right">
                           <div
                             className={clsx(
@@ -807,9 +880,10 @@ export default function FinancesClient() {
                           </div>
                         </td>
 
+                        {/* Date */}
                         <td className="px-4 py-3 text-right">
                           <div className="text-[13px] text-neutral-200">
-                            {t.event}
+                            {fmtTableDate(t.dateISO)}
                           </div>
                         </td>
                       </tr>
@@ -818,10 +892,10 @@ export default function FinancesClient() {
                     {!transfersSorted.length && (
                       <tr className="border-t border-neutral-800/60">
                         <td
-                          colSpan={4}
+                          colSpan={5}
                           className="px-4 py-8 text-center text-[13px] text-neutral-400"
                         >
-                          No transfers for this tab.
+                          No transfers yet.
                         </td>
                       </tr>
                     )}
@@ -839,6 +913,36 @@ export default function FinancesClient() {
 }
 
 /* -------------------------- Small Components ----------------------- */
+function ProviderLogo({ provider }: { provider: WithdrawRow["provider"] }) {
+  const [broken, setBroken] = useState(false);
+  const src = providerIconSrc(provider);
+  const showImg = !!src && !broken;
+
+  return (
+    <div className="relative h-10 w-10 overflow-hidden rounded-full bg-white/7 ring-1 ring-white/10 backdrop-blur-xl">
+      {/* fallback */}
+      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-neutral-0">
+        {provider === "PayPal"
+          ? "P"
+          : provider === "Wise"
+            ? "W"
+            : provider === "Payoneer"
+              ? "P"
+              : "B"}
+      </div>
+
+      {showImg && (
+        <img
+          src={src}
+          alt={`${provider} logo`}
+          className="absolute inset-0 h-full w-full object-contain p-2"
+          onError={() => setBroken(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 function FinanceTabButton({
   label,
   icon,
@@ -919,6 +1023,50 @@ function ThSort({
   );
 }
 
+function UserAvatar({ name, url }: { name: string; url?: string | null }) {
+  const [broken, setBroken] = useState(false);
+  const showImg = !!url && !broken;
+
+  return (
+    <div className="relative h-7 w-7 overflow-hidden rounded-full bg-neutral-900/55 ring-1 ring-neutral-800/70">
+      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-neutral-200">
+        {initials(name)}
+      </div>
+
+      {showImg && (
+        <img
+          src={url as string}
+          alt={`${name} avatar`}
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setBroken(true)}
+        />
+      )}
+    </div>
+  );
+}
+
+function EventThumb({ title, url }: { title: string; url?: string | null }) {
+  const [broken, setBroken] = useState(false);
+  const showImg = !!url && !broken;
+
+  return (
+    <div className="relative h-9 w-9 overflow-hidden rounded-lg bg-neutral-900/55 ring-1 ring-neutral-800/70">
+      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-neutral-300">
+        {title.trim().slice(0, 2).toUpperCase()}
+      </div>
+
+      {showImg && (
+        <img
+          src={url as string}
+          alt={`${title} poster`}
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setBroken(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 function FinanceAreaChart({
   rows,
   dailyMode,
@@ -947,7 +1095,6 @@ function FinanceAreaChart({
   const yMax = useMemo(() => Math.max(1, ...rows.map((r) => r.value)), [rows]);
   const yTicks = useMemo(() => computeNiceTicks(yMax), [yMax]);
 
-  // ✅ equal spacing, but keep "0" ON the baseline (not glued to the bottom)
   const yLabelStrings = useMemo(
     () => yTicks.map((v) => formatUSDCompact(v)),
     [yTicks],
@@ -956,7 +1103,6 @@ function FinanceAreaChart({
   return (
     <div className="h-full w-full">
       <div className="flex h-full w-full">
-        {/* Equal-spaced Y labels (baseline aligned) */}
         <div className="w-[48px] shrink-0 px-2 pt-[18px] pb-[44px] pr-3">
           <div className="flex h-full flex-col justify-between text-[10px] font-medium tracking-[-0.02em] text-neutral-500">
             {yLabelStrings.map((s, idx) => (

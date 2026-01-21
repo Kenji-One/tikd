@@ -1,7 +1,11 @@
+/* ------------------------------------------------------------------ */
+/*  src/app/dashboard/events/[eventId]/layout.tsx                      */
+/* ------------------------------------------------------------------ */
 "use client";
 
 import type { ReactNode, ComponentType, SVGProps } from "react";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -67,6 +71,12 @@ function formatDateTime(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function titleInitial(title?: string) {
+  const t = (title ?? "").trim();
+  if (!t) return "E";
+  return t[0]!.toUpperCase();
 }
 
 /**
@@ -237,6 +247,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     }
   }
 
+  const posterUrl = event?.image || "";
+
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
       <section className="tikd-event-hero pb-14">
@@ -248,46 +260,78 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           <header
             className={clsx(
               "tikd-event-header-surface",
-              isScrolled && "tikd-event-header-surface-scrolled"
+              isScrolled && "tikd-event-header-surface-scrolled",
             )}
           >
             {/* Full-width header always */}
             <div className="p-4 md:p-6 lg:p-8 z-2">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h1 className="tikd-event-title z-2">
-                    {isLoading ? "Loading event…" : (event?.title ?? "Event")}
-                  </h1>
+                  {/* Title row with poster thumbnail */}
+                  <div className="flex items-start gap-3">
+                    {/* Poster thumbnail */}
+                    <div className="mt-0.5 shrink-0">
+                      {isLoading ? (
+                        <div className="h-16 w-16 animate-pulse rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60" />
+                      ) : posterUrl ? (
+                        <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60">
+                          <Image
+                            src={posterUrl}
+                            alt={`${event?.title ?? "Event"} poster`}
+                            fill
+                            sizes="64px"
+                            className="object-cover"
+                            priority
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-neutral-900 ring-1 ring-neutral-800/60 text-[14px] font-semibold text-neutral-200">
+                          {titleInitial(event?.title)}
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="tikd-chip">
-                      <CalendarDays className="h-3.5 w-3.5 text-neutral-500" />
-                      <span className="text-neutral-300">
-                        {event?.date ? formatDateTime(event.date) : "Date TBA"}
-                      </span>
-                    </span>
+                    {/* Title + chips */}
+                    <div className="min-w-0">
+                      <h1 className="tikd-event-title z-2">
+                        {isLoading
+                          ? "Loading event…"
+                          : (event?.title ?? "Event")}
+                      </h1>
 
-                    <span className={statusChipClasses}>
-                      <span
-                        className={clsx(
-                          "tikd-chip-dot",
-                          status === "draft"
-                            ? "bg-neutral-300"
-                            : "bg-success-500"
-                        )}
-                      />
-                      <span>{statusLabel}</span>
-                    </span>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="tikd-chip">
+                          <CalendarDays className="h-3.5 w-3.5 text-neutral-500" />
+                          <span className="text-neutral-300">
+                            {event?.date
+                              ? formatDateTime(event.date)
+                              : "Date TBA"}
+                          </span>
+                        </span>
 
-                    <span className="tikd-chip">
-                      <Users className="h-3.5 w-3.5 text-neutral-500" />
-                      <span className="text-neutral-300">
-                        {(event?.attendingCount ?? 0).toLocaleString()}{" "}
-                        {(event?.attendingCount ?? 0) === 1
-                          ? "attendee"
-                          : "attendees"}
-                      </span>
-                    </span>
+                        <span className={statusChipClasses}>
+                          <span
+                            className={clsx(
+                              "tikd-chip-dot",
+                              status === "draft"
+                                ? "bg-neutral-300"
+                                : "bg-success-500",
+                            )}
+                          />
+                          <span>{statusLabel}</span>
+                        </span>
+
+                        <span className="tikd-chip">
+                          <Users className="h-3.5 w-3.5 text-neutral-500" />
+                          <span className="text-neutral-300">
+                            {(event?.attendingCount ?? 0).toLocaleString()}{" "}
+                            {(event?.attendingCount ?? 0) === 1
+                              ? "attendee"
+                              : "attendees"}
+                          </span>
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -300,7 +344,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                     onClick={handleCopyPublicLink}
                     className={clsx(
                       "tikd-action-icon",
-                      copied && "tikd-action-icon-success"
+                      copied && "tikd-action-icon-success",
                     )}
                     title={copied ? "Link copied" : "Copy public link"}
                     aria-label={copied ? "Link copied" : "Copy public link"}
@@ -337,7 +381,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           </header>
         </div>
 
-        {/* Tabs (NOT sticky) */}
+        {/* Tabs */}
         <div className="mt-5 px-4">
           <div className="no-scrollbar overflow-x-auto overflow-y-visible">
             {/* ✅ Center tabs on wide screens, still scrollable on small screens */}
@@ -347,14 +391,14 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                 role="tablist"
                 aria-busy={isPending ? "true" : "false"}
                 className={clsx(
-                  "tikd-tabs-shell relative inline-flex min-w-max items-center gap-2",
-                  isPending && "tikd-tabs-pending"
+                  // ⬆️ Bigger shell (height/padding/rounding) + a bit more spacing
+                  "tikd-tabs-shell relative inline-flex min-w-max items-center gap-3 px-2 py-2",
+                  isPending && "tikd-tabs-pending",
                 )}
               >
                 {EVENT_TABS.map((tab) => {
                   const href =
                     basePath && eventId ? `${basePath}/${tab.id}` : "#";
-
                   const isActive = activeTab === tab.id;
 
                   // While route is changing: make clicked tab look “selected/loading”
@@ -376,15 +420,20 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       onClick={() => onTabClick(tab.id)}
                       onMouseEnter={() => prefetchForTab(tab.id)}
                       className={clsx(
-                        "relative z-10 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
+                        // ⬆️ Bigger hit-area for each tab
+                        "relative z-10 min-h-[44px] px-3.5 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
                         isVisuallyActive ? "tikd-tab-active" : "tikd-tab-icon",
-                        isPending && pendingTab === tab.id && "tikd-tab-clicked"
+                        isPending &&
+                          pendingTab === tab.id &&
+                          "tikd-tab-clicked",
                       )}
                     >
-                      <Icon className={clsx("shrink-0", "h-5 w-5")} />
+                      {/* ⬆️ Slightly larger icon */}
+                      <Icon className={clsx("shrink-0", "h-5.5 w-5.5")} />
 
                       {isVisuallyActive ? (
-                        <span className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.2px]">
+                        // ⬆️ Slightly larger label
+                        <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.2px]">
                           {tab.label}
                         </span>
                       ) : (

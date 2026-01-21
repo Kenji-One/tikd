@@ -1,11 +1,25 @@
 // src/app/dashboard/events/[eventId]/ticket-types/page.tsx
 "use client";
 
-import { useMemo, useState, type SVGProps, type ComponentType } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SVGProps,
+  type ComponentType,
+} from "react";
 import { useParams } from "next/navigation";
-import { Search, Plus, Ticket, EllipsisVertical, X } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Ticket,
+  EllipsisVertical,
+  X,
+  GripVertical,
+} from "lucide-react";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import clsx from "clsx";
 
@@ -38,15 +52,61 @@ function mapApiToRow(api: TicketTypeApi): TicketTypeRow {
     currency: api.currency,
     sold: api.soldCount ?? 0,
     capacity: api.totalQuantity,
-    // Guard against undefined/null status coming from API
     status: (api.availabilityStatus ?? "on_sale") as TicketAvailabilityStatus,
   };
 }
 
 function humanizeStatus(value?: string) {
   if (!value) return "Unknown";
-  // Replace ALL underscores, not just the first one
   return value.replaceAll("_", " ");
+}
+
+/** Move one item inside a list */
+function arrayMove<T>(arr: T[], from: number, to: number): T[] {
+  if (from === to) return arr;
+  const next = arr.slice();
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+/**
+ * Reorder `full` list using a drag/drop that occurred inside `visible`.
+ * Keeps all "hidden" (non-visible) items in their original relative positions.
+ */
+function reorderFullByVisibleDrag<T extends { id: string }>(args: {
+  full: T[];
+  visible: T[];
+  activeId: string;
+  overId: string;
+  edge: "before" | "after";
+}): T[] {
+  const { full, visible, activeId, overId, edge } = args;
+
+  if (activeId === overId) return full;
+
+  const activeInVisible = visible.findIndex((x) => x.id === activeId);
+  const overInVisible = visible.findIndex((x) => x.id === overId);
+  if (activeInVisible === -1 || overInVisible === -1) return full;
+
+  const activeIndexInFull = full.findIndex((x) => x.id === activeId);
+  if (activeIndexInFull === -1) return full;
+
+  const activeItem = full[activeIndexInFull];
+
+  // remove active first
+  const withoutActive = full.filter((x) => x.id !== activeId);
+
+  const overIndex = withoutActive.findIndex((x) => x.id === overId);
+  if (overIndex === -1) return full;
+
+  let insertAt = edge === "after" ? overIndex + 1 : overIndex;
+  if (insertAt < 0) insertAt = 0;
+  if (insertAt > withoutActive.length) insertAt = withoutActive.length;
+
+  const next = withoutActive.slice();
+  next.splice(insertAt, 0, activeItem);
+  return next;
 }
 
 /* ========================= TicketTypeWizard ======================== */
@@ -92,7 +152,6 @@ function TicketTypeWizard({
       accessMode: "public",
       password: "",
 
-      // checkout defaults like in design
       requireFullName: true,
       requireEmail: true,
       requirePhone: false,
@@ -120,7 +179,6 @@ function TicketTypeWizard({
     },
   });
 
-  // Watches
   const price = watch("price");
   const isFree = watch("isFree");
   const brandColor = watch("brandColor");
@@ -149,7 +207,7 @@ function TicketTypeWizard({
   const subjectToApproval = watch("subjectToApproval");
   const addBuyerDetailsToOrder = watch("addBuyerDetailsToOrder");
   const addPurchasedTicketsToAttendeesCount = watch(
-    "addPurchasedTicketsToAttendeesCount"
+    "addPurchasedTicketsToAttendeesCount",
   );
   const enableEmailAttachments = watch("enableEmailAttachments");
   const watermarkEnabled = watch("watermarkEnabled");
@@ -165,8 +223,6 @@ function TicketTypeWizard({
     const current = Number.isFinite(price as number) ? Number(price) : 0;
     let next = current + delta;
     if (next < 0) next = 0;
-
-    // round to cents
     next = Math.round(next * 100) / 100;
 
     setValue("price", next, { shouldDirty: true });
@@ -387,7 +443,7 @@ function TicketTypeWizard({
                       ? "border-transparent bg-primary-600 shadow-[0_0_28px_rgba(133,0,255,0.65)]"
                       : isCompleted
                         ? "border-primary-600 bg-neutral-0"
-                        : "border-neutral-700 bg-neutral-0"
+                        : "border-neutral-700 bg-neutral-0",
                   )}
                 >
                   <Icon
@@ -397,7 +453,7 @@ function TicketTypeWizard({
                         ? "text-neutral-0"
                         : isCompleted
                           ? "text-primary-600"
-                          : "text-neutral-500"
+                          : "text-neutral-500",
                     )}
                   />
                 </div>
@@ -408,7 +464,7 @@ function TicketTypeWizard({
                       ? "text-neutral-0"
                       : isCompleted
                         ? "text-neutral-100"
-                        : "text-neutral-300"
+                        : "text-neutral-300",
                   )}
                 >
                   {step.label}
@@ -531,8 +587,20 @@ export default function TicketTypesPage() {
   const params = useParams<RouteParams>();
   const eventId = params?.eventId;
 
+  const queryClient = useQueryClient();
+
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"list" | "create">("list");
+
+  // local order state (this is what the user is reordering)
+  const [ordered, setOrdered] = useState<TicketTypeRow[]>([]);
+  const dragActiveIdRef = useRef<string | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropEdge, setDropEdge] = useState<"before" | "after">("before");
+  const dragGhostRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch ticket types
   const {
@@ -554,6 +622,12 @@ export default function TicketTypesPage() {
     },
   });
 
+  // Keep ordered list in sync with server data (but don't fight the user mid-drag)
+  useEffect(() => {
+    if (!ticketTypes) return;
+    setOrdered(ticketTypes);
+  }, [ticketTypes]);
+
   // Fetch event so design preview can use real event data
   const { data: event } = useQuery<EventWithMeta>({
     queryKey: ["event", eventId],
@@ -562,13 +636,111 @@ export default function TicketTypesPage() {
     staleTime: 30_000,
   });
 
-  const filtered = useMemo(() => {
-    const list = ticketTypes ?? [];
+  const visible = useMemo(() => {
+    const list = ordered ?? [];
     if (!query.trim()) return list;
     return list.filter((t) =>
-      t.name.toLowerCase().includes(query.toLowerCase())
+      t.name.toLowerCase().includes(query.toLowerCase()),
     );
-  }, [ticketTypes, query]);
+  }, [ordered, query]);
+
+  async function persistOrder(next: TicketTypeRow[], prev: TicketTypeRow[]) {
+    if (!eventId) return;
+
+    setIsSavingOrder(true);
+
+    // Optimistically update react-query cache too (so refetch/other components stay consistent)
+    queryClient.setQueryData(["ticket-types", eventId], next);
+
+    try {
+      const res = await fetch(`/api/events/${eventId}/ticket-types`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: next.map((x) => x.id) }),
+      });
+
+      if (!res.ok) {
+        // rollback
+        setOrdered(prev);
+        queryClient.setQueryData(["ticket-types", eventId], prev);
+      } else {
+        // optional: keep in sync by refetching server truth
+        // await refetch();
+      }
+    } finally {
+      setIsSavingOrder(false);
+    }
+  }
+
+  function handleDragStart(e: React.DragEvent, id: string) {
+    dragActiveIdRef.current = id;
+    setDraggingId(id);
+    setDragOverId(null);
+
+    // make it feel intentional
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+
+    // clean drag ghost instead of a random screenshot
+    if (dragGhostRef.current) {
+      e.dataTransfer.setDragImage(dragGhostRef.current, 16, 16);
+    }
+  }
+
+  function handleDragEnd() {
+    dragActiveIdRef.current = null;
+    setDraggingId(null);
+    setDragOverId(null);
+  }
+
+  function handleDragOver(e: React.DragEvent, overId: string) {
+    e.preventDefault(); // required to allow drop
+    if (!draggingId || draggingId === overId) return;
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const isAfter = e.clientY > rect.top + rect.height / 2;
+
+    setDragOverId(overId);
+    setDropEdge(isAfter ? "after" : "before");
+  }
+
+  function handleDragLeave(e: React.DragEvent, overId: string) {
+    // Only clear when actually leaving the row container (not moving between children)
+    const current = e.currentTarget as HTMLElement;
+    const related = e.relatedTarget as Node | null;
+    if (related && current.contains(related)) return;
+
+    if (dragOverId === overId) {
+      setDragOverId(null);
+    }
+  }
+
+  function handleDrop(overId: string) {
+    const activeId = dragActiveIdRef.current;
+    dragActiveIdRef.current = null;
+
+    if (!activeId || activeId === overId) {
+      setDraggingId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const prev = ordered;
+
+    const next = reorderFullByVisibleDrag({
+      full: ordered,
+      visible,
+      activeId,
+      overId,
+      edge: dropEdge,
+    });
+
+    setOrdered(next);
+    void persistOrder(next, prev);
+
+    setDraggingId(null);
+    setDragOverId(null);
+  }
 
   if (!eventId) {
     return (
@@ -578,6 +750,14 @@ export default function TicketTypesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Drag ghost (used by setDragImage) */}
+      <div
+        ref={dragGhostRef}
+        className="pointer-events-none fixed -left-[9999px] -top-[9999px] z-[9999] rounded-lg border border-white/10 bg-neutral-950 px-3 py-2 text-sm font-medium text-neutral-0 shadow-[0_14px_40px_rgba(0,0,0,0.55)]"
+      >
+        Moving ticket type…
+      </div>
+
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-neutral-0">Ticket types</h2>
@@ -610,10 +790,17 @@ export default function TicketTypesPage() {
             className="w-full rounded-full border border-white/10 bg-neutral-950 px-9 py-2  text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
         </div>
-        <p className=" text-neutral-400">
-          {filtered?.length ?? 0} ticket type
-          {filtered && filtered.length === 1 ? "" : "s"}
-        </p>
+
+        <div className="flex items-center gap-3">
+          {isSavingOrder ? (
+            <span className="text-[12px] text-neutral-400">Saving order…</span>
+          ) : null}
+
+          <p className=" text-neutral-400">
+            {visible?.length ?? 0} ticket type
+            {visible && visible.length === 1 ? "" : "s"}
+          </p>
+        </div>
       </div>
 
       {isLoading && (
@@ -628,66 +815,123 @@ export default function TicketTypesPage() {
         </div>
       )}
 
-      {!isLoading && !isError && (filtered?.length ?? 0) === 0 ? (
+      {!isLoading && !isError && (visible?.length ?? 0) === 0 ? (
         <div className="rounded-card border border-dashed border-white/10 bg-neutral-950/80 px-6 py-10 text-center text-neutral-300">
           No ticket types yet. Start by creating a ticket above.
         </div>
       ) : null}
 
-      {!isLoading && !isError && filtered && filtered.length > 0 && (
+      {!isLoading && !isError && visible && visible.length > 0 && (
         <div className="space-y-3">
-          {filtered.map((t) => {
+          {visible.map((t, idx) => {
             const rawStatus = (t?.status as unknown as string) ?? "";
             const safeStatus = rawStatus || "unknown";
+            const isDragging = draggingId === t.id;
+            const isOver =
+              !!draggingId && draggingId !== t.id && dragOverId === t.id;
+
+            // ✅ make key ALWAYS defined + unique (even if t.id is missing/duplicated)
+            const rowKey = `${t?.id ?? "no-id"}-${idx}`;
 
             return (
-              <RowCard
-                key={t.id}
-                icon={<Ticket className="h-5 w-5" />}
-                title={t.name}
-                description={t.description}
-                meta={
-                  <>
-                    <RowCardStat
-                      label="Price"
-                      value={
-                        t.price === 0
-                          ? "Free"
-                          : `$${t.price.toFixed(2)} ${t.currency}`
-                      }
+              <div
+                key={rowKey}
+                onDragOver={(e) => handleDragOver(e, t.id)}
+                onDragLeave={(e) => handleDragLeave(e, t.id)}
+                onDrop={() => handleDrop(t.id)}
+                className={clsx("relative rounded-lg", isOver && "z-[2]")}
+              >
+                {/* insertion indicator line */}
+                {isOver ? (
+                  <div className="pointer-events-none absolute inset-0">
+                    <div
+                      className={clsx(
+                        "absolute left-3 right-3 h-[2px] rounded-full",
+                        dropEdge === "before" ? "top-1.5" : "bottom-1.5",
+                      )}
+                      style={{
+                        background:
+                          "linear-gradient(90deg, rgba(154,70,255,0), rgba(154,70,255,0.75), rgba(154,70,255,0))",
+                        boxShadow: "0 0 18px rgba(154,70,255,0.35)",
+                      }}
                     />
-                    <RowCardStat
-                      label="Sold"
-                      value={`${t.sold}${t.capacity != null ? `/${t.capacity}` : ""}`}
-                    />
-                    <div className="min-w-[110px] text-right">
-                      <div className="text-[11px] text-neutral-500">Status</div>
-                      <span
-                        className={clsx(
-                          "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
-                          safeStatus === "on_sale"
-                            ? "border border-success-700/40 bg-success-900/40 text-success-300"
-                            : safeStatus === "sale_ended"
-                              ? "border border-white/10 bg-neutral-900 text-neutral-200"
-                              : safeStatus === "scheduled"
-                                ? "border border-warning-700/40 bg-warning-900/40 text-warning-200"
-                                : "border border-white/10 bg-neutral-900 text-neutral-200"
-                        )}
-                      >
-                        {humanizeStatus(safeStatus)}
-                      </span>
-                    </div>
-                  </>
-                }
-                actions={
-                  <button
-                    type="button"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
-                  >
-                    <EllipsisVertical className="h-4 w-4" />
-                  </button>
-                }
-              />
+                  </div>
+                ) : null}
+
+                <RowCard
+                  className={clsx(
+                    isOver && "ring-2 ring-primary-500/25 bg-primary-950/10",
+                    isDragging && "opacity-50",
+                  )}
+                  leading={
+                    <button
+                      type="button"
+                      draggable
+                      aria-label="Reorder ticket type"
+                      onDragStart={(e) => handleDragStart(e, t.id)}
+                      onDragEnd={handleDragEnd}
+                      className={clsx(
+                        "inline-flex h-10 w-7 items-center justify-center rounded-md",
+                        "text-neutral-500 hover:text-neutral-200",
+                        "border border-transparent hover:border-white/10",
+                        "bg-transparent hover:bg-neutral-900/30",
+                        isDragging ? "cursor-grabbing" : "cursor-grab",
+                      )}
+                      title="Drag to reorder"
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </button>
+                  }
+                  icon={<Ticket className="h-5 w-5" />}
+                  title={t.name}
+                  description={t.description}
+                  meta={
+                    <>
+                      <RowCardStat
+                        label="Price"
+                        value={
+                          t.price === 0
+                            ? "Free"
+                            : `$${t.price.toFixed(2)} ${t.currency}`
+                        }
+                      />
+
+                      <RowCardStat
+                        label="Sold"
+                        value={`${t.sold}${t.capacity != null ? `/${t.capacity}` : ""}`}
+                      />
+
+                      <div className="min-w-[110px] text-right">
+                        <div className="text-[11px] text-neutral-500">
+                          Status
+                        </div>
+                        <span
+                          className={clsx(
+                            "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
+                            safeStatus === "on_sale"
+                              ? "border border-success-700/40 bg-success-900/40 text-success-300"
+                              : safeStatus === "sale_ended"
+                                ? "border border-white/10 bg-neutral-900 text-neutral-200"
+                                : safeStatus === "scheduled"
+                                  ? "border border-warning-700/40 bg-warning-900/40 text-warning-200"
+                                  : "border border-white/10 bg-neutral-900 text-neutral-200",
+                          )}
+                        >
+                          {humanizeStatus(safeStatus)}
+                        </span>
+                      </div>
+                    </>
+                  }
+                  actions={
+                    <button
+                      type="button"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
+                    >
+                      <EllipsisVertical className="h-4 w-4" />
+                    </button>
+                  }
+                />
+              </div>
             );
           })}
         </div>

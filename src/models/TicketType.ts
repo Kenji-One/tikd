@@ -32,6 +32,9 @@ export interface ITicketType extends Document {
   eventId: Types.ObjectId;
   createdByUserId: Types.ObjectId;
 
+  /** Used for user-defined ordering in the Ticket Types list */
+  sortOrder: number;
+
   name: string;
   description?: string;
 
@@ -70,7 +73,7 @@ const CheckoutSchema = new Schema<ICheckoutRequirements>(
     addBuyerDetailsToOrder: { type: Boolean, default: true },
     addPurchasedTicketsToAttendeesCount: { type: Boolean, default: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const DesignSchema = new Schema<ITicketDesign>(
@@ -85,7 +88,7 @@ const DesignSchema = new Schema<ITicketDesign>(
     backgroundUrl: { type: String, default: "" },
     footerText: { type: String, default: "" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const TicketTypeSchema = new Schema<ITicketType>(
@@ -108,6 +111,9 @@ const TicketTypeSchema = new Schema<ITicketType>(
       required: true,
       index: true,
     },
+
+    /** User-defined ordering */
+    sortOrder: { type: Number, default: 0, index: true },
 
     name: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
@@ -146,7 +152,7 @@ const TicketTypeSchema = new Schema<ITicketType>(
     checkout: { type: CheckoutSchema, default: () => ({}) },
     design: { type: DesignSchema, default: () => ({}) },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const TicketType: Model<ITicketType> =

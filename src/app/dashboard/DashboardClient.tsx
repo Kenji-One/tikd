@@ -453,7 +453,7 @@ export default function DashboardClient() {
             accent="from-[#7C3AED] to-[#9333EA]"
             className="pr-6 py-5 border-r border-neutral-700"
             stretchChart
-            detailsHref="/dashboard/finances/revenue"
+            detailsHref="/dashboard/revenue"
             toolbar={
               <div className="max-w-[210px]">
                 <DateRangePicker value={dateRange} onChange={setDateRange} />
@@ -490,7 +490,7 @@ export default function DashboardClient() {
               delta="+24.6%"
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="p-5 border-b border-neutral-700"
-              detailsHref="/dashboard/finances/page-views"
+              detailsHref="/dashboard/page-views"
             >
               <SmallKpiChart
                 data={pageViewsData}
@@ -519,7 +519,7 @@ export default function DashboardClient() {
               delta="-24.6%"
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="p-5"
-              detailsHref="/dashboard/finances/tickets-sold"
+              detailsHref="/dashboard/tickets-sold"
             >
               <SmallKpiChart
                 data={ticketsSoldData}

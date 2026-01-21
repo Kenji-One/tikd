@@ -1,9 +1,16 @@
+// src/components/ui/RowCard.tsx
 "use client";
 
 import type { ReactNode } from "react";
 import clsx from "clsx";
 
 type RowCardProps = {
+  /**
+   * Optional element rendered BEFORE the icon bubble on the left
+   * (Perfect for drag handles / checkboxes / etc.)
+   */
+  leading?: ReactNode;
+
   icon?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
@@ -18,6 +25,7 @@ type RowCardProps = {
 };
 
 export function RowCard({
+  leading,
   icon,
   title,
   description,
@@ -33,13 +41,13 @@ export function RowCard({
         "transition-[border-color,background-color,box-shadow,transform] duration-200",
         "hover:border-white/14 hover:bg-neutral-948/85 hover:shadow-[0_14px_32px_rgba(0,0,0,0.42)]",
         "active:scale-[0.998]",
-        className
+        className,
       )}
     >
       {/* subtle ambient shine (not too loud) */}
       <div
         className={clsx(
-          "pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          "pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100",
         )}
         style={{
           background:
@@ -50,12 +58,14 @@ export function RowCard({
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         {/* Left */}
         <div className="flex min-w-0 items-center gap-3">
+          {leading ? <div className="shrink-0">{leading}</div> : null}
+
           {icon ? (
             <span
               className={clsx(
                 "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
                 "border border-white/10 bg-neutral-900/45 text-primary-200",
-                "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
               )}
             >
               {icon}
@@ -105,7 +115,7 @@ export function RowCardStat({
       className={clsx(
         "min-w-[84px]",
         align === "right" ? "text-right" : "text-left",
-        className
+        className,
       )}
     >
       <div className="text-[11px] text-neutral-500">{label}</div>

@@ -264,7 +264,11 @@ const DASH_ITEMS: DashNavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: DashboardIcon,
-    match: (p) => p === "/dashboard",
+    match: (p) =>
+      p === "/dashboard" ||
+      p === "/dashboard/page-views" ||
+      p === "/dashboard/revenue" ||
+      p === "/dashboard/tickets-sold",
   },
   {
     href: "/dashboard/events",
@@ -379,7 +383,7 @@ const orgItems: OrgNavItem[] = [
     match: (pathname) => {
       const sections = ["/events", "/edit", "/team", "/finance", "/settings"];
       return !sections.some(
-        (seg) => pathname.endsWith(seg) || pathname.includes(`${seg}/`)
+        (seg) => pathname.endsWith(seg) || pathname.includes(`${seg}/`),
       );
     },
   },
@@ -430,7 +434,7 @@ function Divider({ collapsed }: { collapsed: boolean }) {
     <div
       className={clsx(
         "my-3 h-px w-full bg-neutral-800/60",
-        collapsed && "mx-auto w-10"
+        collapsed && "mx-auto w-10",
       )}
     />
   );
@@ -449,7 +453,7 @@ function TooltipBubble({ label }: { label: string }) {
         "rounded-md border border-neutral-800/70 bg-neutral-948 px-3 py-2 text-[13px] font-semibold text-neutral-100",
         "shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
         "opacity-0 -translate-x-1 transition-all duration-150",
-        "group-hover:opacity-100 group-hover:translate-x-0"
+        "group-hover:opacity-100 group-hover:translate-x-0",
       )}
     >
       {label}
@@ -484,17 +488,17 @@ function NavRow({
           "mx-auto h-11 w-11 justify-center rounded-lg",
           active
             ? "bg-neutral-800/60"
-            : "bg-transparent hover:bg-neutral-800/35"
+            : "bg-transparent hover:bg-neutral-800/35",
         )
       : clsx(
           "h-11 justify-start rounded-lg px-3",
-          active ? "bg-neutral-800/60" : "hover:bg-neutral-800/35"
+          active ? "bg-neutral-800/60" : "hover:bg-neutral-800/35",
         ),
     disabled
       ? "cursor-not-allowed text-neutral-600"
       : active
         ? "text-primary-300"
-        : "text-neutral-200"
+        : "text-neutral-200",
   );
 
   const iconCls = clsx(
@@ -504,7 +508,7 @@ function NavRow({
       ? "text-neutral-600"
       : active
         ? "text-primary-300"
-        : "text-neutral-500 group-hover:text-neutral-200"
+        : "text-neutral-500 group-hover:text-neutral-200",
   );
 
   const labelCls = clsx(
@@ -515,7 +519,7 @@ function NavRow({
     EASE_OUT,
     collapsed
       ? "max-w-0 opacity-0 translate-x-1"
-      : "ml-3 max-w-[220px] opacity-100 translate-x-0"
+      : "ml-3 max-w-[220px] opacity-100 translate-x-0",
   );
 
   const content = (
@@ -562,7 +566,7 @@ function CollapsedGroupPopover({
         "absolute left-full top-1/2 z-[10] ml-2 -translate-y-1/2",
         "w-[198px] overflow-hidden rounded-xl",
         "border border-neutral-800/70 bg-neutral-948/95 backdrop-blur-xl",
-        "shadow-[0_22px_70px_rgba(0,0,0,0.65)]"
+        "shadow-[0_22px_70px_rgba(0,0,0,0.65)]",
       )}
     >
       {/* wider hover-bridge so you can move into the popover without it collapsing */}
@@ -595,13 +599,13 @@ function CollapsedGroupPopover({
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50",
                   isActive
                     ? "bg-neutral-800/70 text-primary-300"
-                    : "text-neutral-200 hover:bg-neutral-800/40"
+                    : "text-neutral-200 hover:bg-neutral-800/40",
                 )}
               >
                 <span
                   className={clsx(
                     "pointer-events-none absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full",
-                    isActive ? "bg-primary-500" : "bg-transparent"
+                    isActive ? "bg-primary-500" : "bg-transparent",
                   )}
                 />
 
@@ -610,7 +614,7 @@ function CollapsedGroupPopover({
                     "h-4 w-4 shrink-0 transition-colors",
                     isActive
                       ? "text-primary-300"
-                      : "text-neutral-500 group-hover:text-neutral-200"
+                      : "text-neutral-500 group-hover:text-neutral-200",
                   )}
                 />
 
@@ -677,13 +681,13 @@ function GroupRow({
                 "mx-auto h-11 w-11 justify-center rounded-lg",
                 active
                   ? "bg-neutral-800/60"
-                  : "bg-transparent hover:bg-neutral-800/35"
+                  : "bg-transparent hover:bg-neutral-800/35",
               )
             : clsx(
                 "h-11 w-full justify-start rounded-lg px-3",
-                active ? "bg-neutral-800/60" : "hover:bg-neutral-800/35"
+                active ? "bg-neutral-800/60" : "hover:bg-neutral-800/35",
               ),
-          active ? "text-primary-300" : "text-neutral-200"
+          active ? "text-primary-300" : "text-neutral-200",
         )}
       >
         <IconComp
@@ -691,7 +695,7 @@ function GroupRow({
             "h-5 w-5 shrink-0 transition-colors",
             active
               ? "text-primary-300"
-              : "text-neutral-500 group-hover:text-neutral-200"
+              : "text-neutral-500 group-hover:text-neutral-200",
           )}
         />
 
@@ -704,7 +708,7 @@ function GroupRow({
             EASE_OUT,
             collapsed
               ? "max-w-0 opacity-0 translate-x-1"
-              : "ml-3 max-w-[220px] opacity-100 translate-x-0"
+              : "ml-3 max-w-[220px] opacity-100 translate-x-0",
           )}
         >
           {group.label}
@@ -718,7 +722,7 @@ function GroupRow({
               "transition-transform",
               motion.chevron,
               EASE_OUT,
-              open && "rotate-180"
+              open && "rotate-180",
             )}
           />
         )}
@@ -735,7 +739,7 @@ function GroupRow({
             "overflow-hidden transition-[max-height,opacity]",
             motion.label,
             EASE_OUT,
-            open ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
+            open ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0",
           )}
         >
           <div className="mt-2 pb-1">
@@ -753,7 +757,7 @@ function GroupRow({
                     "pointer-events-none absolute",
                     "left-[16px] top-[18px] bottom-[18px]",
                     "w-[2px] -translate-x-1/2 rounded-full",
-                    "bg-neutral-800/55"
+                    "bg-neutral-800/55",
                   )}
                 />
 
@@ -783,7 +787,7 @@ function GroupRow({
                               "left-[16px] top-1/2 bottom-0",
                               "w-[10px] -translate-x-1/2",
                               // match container bg to “erase” the spine under the last node
-                              "bg-neutral-950/20"
+                              "bg-neutral-950/20",
                             )}
                           />
                         )}
@@ -794,7 +798,7 @@ function GroupRow({
                           className={clsx(
                             "pointer-events-none absolute left-[16px] top-1/2",
                             "h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full",
-                            isActive ? "bg-primary-500" : "bg-neutral-600/70"
+                            isActive ? "bg-primary-500" : "bg-neutral-600/70",
                           )}
                         />
 
@@ -804,7 +808,9 @@ function GroupRow({
                           className={clsx(
                             "pointer-events-none absolute left-[25px] top-1/2",
                             "h-[2px] w-[14px] -translate-y-1/2 rounded-full",
-                            isActive ? "bg-neutral-400/60" : "bg-neutral-800/50"
+                            isActive
+                              ? "bg-neutral-400/60"
+                              : "bg-neutral-800/50",
                           )}
                         />
                       </div>
@@ -819,7 +825,7 @@ function GroupRow({
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
                           isActive
                             ? "bg-neutral-800/60 text-primary-300"
-                            : "bg-transparent text-neutral-200 hover:bg-neutral-800/35 hover:text-neutral-0"
+                            : "bg-transparent text-neutral-200 hover:bg-neutral-800/35 hover:text-neutral-0",
                         )}
                       >
                         <SubIcon
@@ -827,7 +833,7 @@ function GroupRow({
                             "h-5 w-5 shrink-0 transition-colors",
                             isActive
                               ? "text-primary-300"
-                              : "text-neutral-500 group-hover:text-neutral-100"
+                              : "text-neutral-500 group-hover:text-neutral-100",
                           )}
                         />
 
@@ -887,21 +893,21 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
       connections: DASH_GROUPS[0].isActive(pathname),
       finances: DASH_GROUPS[1].isActive(pathname),
     }),
-    [pathname]
+    [pathname],
   );
 
   const [collapsed, setCollapsed] = useState(false);
 
   const [connectionsOpen, setConnectionsOpen] = useState<boolean>(
-    groupsActive.connections
+    groupsActive.connections,
   );
   const [financesOpen, setFinancesOpen] = useState<boolean>(
-    groupsActive.finances
+    groupsActive.finances,
   );
 
   // hover popover state (collapsed)
   const [hoveredGroup, setHoveredGroup] = useState<DashGroup["key"] | null>(
-    null
+    null,
   );
   const hoverCloseTimer = useRef<number | null>(null);
 
@@ -1028,7 +1034,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
         setMotionPhase(null);
         motionTimer.current = null;
       },
-      next ? 520 : 860
+      next ? 520 : 860,
     );
 
     // close any hover popovers immediately when toggling
@@ -1077,7 +1083,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
           onClick={toggleCollapsed}
           className={clsx(
             "fixed inset-0 z-40",
-            "bg-black/40 backdrop-blur-[1px]"
+            "bg-black/40 backdrop-blur-[1px]",
           )}
         />
       )}
@@ -1091,14 +1097,14 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
           motion.shellWidth,
           EASE_OUT,
           "motion-reduce:transition-none",
-          collapsed ? "w-[84px]" : "w-[256px]"
+          collapsed ? "w-[84px]" : "w-[256px]",
         )}
       >
         <nav
           className={clsx(
             "flex h-full flex-col rounded-none border border-neutral-800/70 bg-neutral-948",
             "shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
-            collapsed ? "px-2 py-4" : "px-3 py-4"
+            collapsed ? "px-2 py-4" : "px-3 py-4",
           )}
         >
           {/* Top / Logo */}
@@ -1112,7 +1118,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
                 className={clsx(
                   "origin-left transition",
                   motion.logo,
-                  EASE_OUT
+                  EASE_OUT,
                 )}
               >
                 <Image
@@ -1138,7 +1144,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
                 "transition-[transform,background-color,color] duration-300",
                 EASE_OUT,
                 "hover:bg-neutral-800/35 hover:text-neutral-0",
-                "active:scale-[0.98]"
+                "active:scale-[0.98]",
               )}
             >
               <ChevronLeft
@@ -1146,7 +1152,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
                   "h-4 w-4 transition-transform",
                   motion.chevron,
                   EASE_OUT,
-                  collapsed && "rotate-180"
+                  collapsed && "rotate-180",
                 )}
               />
             </button>

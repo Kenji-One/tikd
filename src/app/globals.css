@@ -5,14 +5,14 @@
 /* 1) Load Tailwind's layers */
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
-
-/* 2) Load legacy plugins (v4-compatible) */
 @plugin "@tailwindcss/forms";
+
 /* ------------------------------------------------------------------
-   Autofill override – keep dark theme even when browser fills fields
-   ------------------------------------------------------------------ */
+Autofill override – keep dark theme even when browser fills fields
+------------------------------------------------------------------ */
 
 /* 3) Font-face registrations (must be top-level; served from /public/fonts/...) */
 @font-face {
@@ -506,4 +506,118 @@ select {
       animation: none !important;
     }
   }
+}
+
+/* Tailwind preflight can break Leaflet tile sizing */
+.leaflet-container img.leaflet-tile {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* ------------------------------------------------------------------
+   Leaflet (Tikd) — Choropleth map theming
+   ------------------------------------------------------------------ */
+
+/* Make the map feel like a Tikd card */
+.tikd-leaflet-map {
+  background: var(--color-neutral-950);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+/* Slightly unify tiles + reduce any remaining “line” contrast */
+.tikd-leaflet-map .leaflet-tile {
+  filter: brightness(0.92) contrast(1.08) saturate(1.08);
+}
+
+/* Remove focus ring / outlines Leaflet may add */
+.tikd-leaflet-map:focus,
+.tikd-leaflet-map:focus-visible,
+.tikd-leaflet-map .leaflet-container:focus,
+.tikd-leaflet-map .leaflet-container:focus-visible {
+  outline: none !important;
+}
+
+/* Tooltip (Leaflet uses .leaflet-tooltip) */
+.leaflet-tooltip.tikd-map-tooltip {
+  border: 1px solid rgba(154, 70, 255, 0.26) !important;
+  background: rgba(8, 8, 15, 0.84) !important;
+  color: rgba(240, 240, 244, 0.95) !important;
+  border-radius: 14px !important;
+  padding: 10px 12px !important;
+
+  /* the “Tikd glass” look */
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Hide Leaflet tooltip arrow */
+.leaflet-tooltip.tikd-map-tooltip:before {
+  display: none !important;
+}
+
+/* Tooltip typography */
+.tikd-map-tooltip__wrap {
+  min-width: 140px;
+}
+
+.tikd-map-tooltip__title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.1;
+  letter-spacing: -0.2px;
+}
+
+.tikd-map-tooltip__meta {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.1;
+  color: rgba(194, 194, 209, 0.85);
+}
+
+.tikd-map-tooltip__value {
+  margin-top: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+
+  /* purple “premium” number */
+  background: linear-gradient(
+    90deg,
+    var(--color-primary-300) 0%,
+    var(--color-primary-999) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.tikd-map-tooltip__nodata {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(140, 140, 166, 0.9);
+}
+
+/* Attribution: make it subtle and on-brand */
+.tikd-leaflet-map .leaflet-control-attribution {
+  background: rgba(8, 8, 15, 0.55) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  padding: 6px 10px !important;
+  color: rgba(223, 223, 230, 0.78) !important;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.tikd-leaflet-map .leaflet-control-attribution a {
+  color: rgba(189, 153, 255, 0.92) !important; /* primary-300-ish */
+  text-decoration: none !important;
+}
+
+.tikd-leaflet-map .leaflet-control-attribution a:hover {
+  color: rgba(231, 222, 255, 1) !important; /* primary-100-ish */
+  text-decoration: underline !important;
 }

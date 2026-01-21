@@ -1,7 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  DonutFull – full circular donut with gaps + rounded caps          */
-/*  - Same API spirit as DonutHalf but renders a full ring            */
-/*  - Optional white value badges placed on each slice                */
+/*  src/components/dashboard/charts/DonutFull.tsx                      */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -24,7 +22,7 @@ type Props = {
   /** Thickness of the ring in px. */
   thickness?: number; // default 28
   /** Small gap between slices in degrees. */
-  padAngle?: number; // default 3
+  padAngle?: number; // default 0
   /** Guarantee min slice visibility in degrees. */
   minSliceAngle?: number; // default 4
   /** Track color behind segments. */
@@ -38,7 +36,7 @@ function DonutFull({
   segments,
   height = 260,
   thickness = 28,
-  padAngle = 3,
+  padAngle = 0, // ✅ default: no gaps
   minSliceAngle = 4,
   trackColor = "rgba(255,255,255,0.12)",
   showSliceBadges = true,
@@ -46,12 +44,11 @@ function DonutFull({
 }: Props) {
   const total = useMemo(
     () => segments.reduce((a, s) => a + s.value, 0),
-    [segments]
+    [segments],
   );
 
   const outerRadius = Math.max(4, height / 2 - 6);
   const innerRadius = Math.max(outerRadius - thickness, 0);
-  const cornerRadiusPx = Math.min(10, Math.floor(thickness * 0.35));
 
   return (
     <div className={clsx("relative w-full", className)} style={{ height }}>
@@ -83,11 +80,11 @@ function DonutFull({
             cy="50%"
             innerRadius={innerRadius}
             outerRadius={outerRadius}
-            cornerRadius={cornerRadiusPx}
             paddingAngle={padAngle}
             minAngle={minSliceAngle}
             isAnimationActive={false}
             stroke="none"
+            cornerRadius={2}
             labelLine={false}
             label={
               showSliceBadges
@@ -136,7 +133,12 @@ function DonutFull({
             }
           >
             {segments.map((s, i) => (
-              <Cell key={i} fill={s.color} />
+              <Cell
+                key={i}
+                fill={s.color}
+                stroke={s.color} // ✅ kills hairline seams between slices
+                strokeWidth={1}
+              />
             ))}
           </Pie>
         </PieChart>

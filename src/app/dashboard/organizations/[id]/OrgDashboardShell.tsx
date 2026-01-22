@@ -135,9 +135,27 @@ export default function OrgDashboardShell({
     return "#9A46FF";
   }, [organization.accentColor]);
 
+  const showOrgHero = useMemo(() => {
+    const p = pathname || "";
+
+    // org dashboard base path: /dashboard/organizations/:id
+    // event creation path:      /dashboard/organizations/:id/events/create
+    if (
+      basePath &&
+      (p === `${basePath}/events/create` ||
+        p.startsWith(`${basePath}/events/create/`))
+    ) {
+      return false;
+    }
+
+    return true;
+  }, [pathname, basePath]);
+
   // Optional: keep the hero feeling stable on scroll (tiny polish)
   const [isScrolled, setIsScrolled] = useState(false);
   useEffect(() => {
+    if (!showOrgHero) return;
+
     const threshold = 8;
     let raf: number | null = null;
 
@@ -155,182 +173,184 @@ export default function OrgDashboardShell({
       window.removeEventListener("scroll", onScroll);
       if (raf != null) window.cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [showOrgHero]);
 
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
       {/* ORG HERO */}
-      <section className="pb-8">
-        {/* Banner */}
-        <div className="px-4 pt-4">
-          {/* ✅ wrapper prevents clipping of the overlapping logo */}
-          <div className="relative">
-            <div
-              className={clsx(
-                "relative overflow-hidden rounded-card border border-white/5 shadow-xl shadow-black/45",
-                "h-[200px] sm:h-[240px] lg:h-[260px]",
-                isScrolled && "will-change-transform",
-              )}
-              style={{
-                background: bannerUrl
-                  ? undefined
-                  : `radial-gradient(900px 320px at 16% 20%, ${accent}22, transparent 62%),
-                     radial-gradient(780px 320px at 86% 0%, rgba(255,255,255,0.06), transparent 60%),
-                     linear-gradient(180deg, rgba(18,18,32,0.8), rgba(8,8,15,0.95))`,
-              }}
-            >
-              {bannerUrl ? (
-                <>
-                  <Image
-                    src={bannerUrl}
-                    alt={`${organization.name} banner`}
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 1100px"
-                    className="object-cover"
-                    priority
-                  />
-                  {/* readability wash */}
-                  <div
-                    aria-hidden="true"
-                    className="absolute inset-0"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.62) 72%, rgba(8,8,15,0.96) 100%)",
-                    }}
-                  />
-                  {/* accent glow */}
-                  <div
-                    aria-hidden="true"
-                    className="absolute -left-24 -top-20 h-[320px] w-[520px] blur-2xl"
-                    style={{
-                      background: `radial-gradient(circle at 30% 30%, ${accent}2a, transparent 62%)`,
-                    }}
-                  />
-                </>
-              ) : (
-                <>
-                  {/* accent glow */}
-                  <div
-                    aria-hidden="true"
-                    className="absolute -left-24 -top-20 h-[320px] w-[520px] blur-2xl"
-                    style={{
-                      background: `radial-gradient(circle at 30% 30%, ${accent}2a, transparent 62%)`,
-                    }}
-                  />
-                </>
-              )}
-            </div>
-
-            {/* ✅ Logo is now OUTSIDE the overflow-hidden banner, so it won't be clipped */}
-            <div className="absolute left-1/2 bottom-0 z-10 translate-x-[-50%] translate-y-[52%]">
-              <div className="relative h-[84px] w-[84px] rounded-full bg-neutral-950 ring-1 ring-white/10 shadow-2xl shadow-black/60">
-                <div className="absolute inset-[6px] overflow-hidden rounded-full bg-neutral-900 ring-1 ring-white/10">
-                  {logoUrl ? (
+      {showOrgHero ? (
+        <section className="pb-8">
+          {/* Banner */}
+          <div className="px-4 pt-4">
+            {/* ✅ wrapper prevents clipping of the overlapping logo */}
+            <div className="relative">
+              <div
+                className={clsx(
+                  "relative overflow-hidden rounded-card border border-white/5 shadow-xl shadow-black/45",
+                  "h-[200px] sm:h-[240px] lg:h-[260px]",
+                  isScrolled && "will-change-transform",
+                )}
+                style={{
+                  background: bannerUrl
+                    ? undefined
+                    : `radial-gradient(900px 320px at 16% 20%, ${accent}22, transparent 62%),
+                       radial-gradient(780px 320px at 86% 0%, rgba(255,255,255,0.06), transparent 60%),
+                       linear-gradient(180deg, rgba(18,18,32,0.8), rgba(8,8,15,0.95))`,
+                }}
+              >
+                {bannerUrl ? (
+                  <>
                     <Image
-                      src={logoUrl}
-                      alt={`${organization.name} logo`}
+                      src={bannerUrl}
+                      alt={`${organization.name} banner`}
                       fill
-                      sizes="84px"
+                      sizes="(max-width: 1024px) 100vw, 1100px"
                       className="object-cover"
+                      priority
                     />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[18px] font-semibold text-neutral-100">
-                      {initials(organization.name)}
-                    </div>
-                  )}
-                </div>
+                    {/* readability wash */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0"
+                      style={{
+                        background:
+                          "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.62) 72%, rgba(8,8,15,0.96) 100%)",
+                      }}
+                    />
+                    {/* accent glow */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute -left-24 -top-20 h-[320px] w-[520px] blur-2xl"
+                      style={{
+                        background: `radial-gradient(circle at 30% 30%, ${accent}2a, transparent 62%)`,
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {/* accent glow */}
+                    <div
+                      aria-hidden="true"
+                      className="absolute -left-24 -top-20 h-[320px] w-[520px] blur-2xl"
+                      style={{
+                        background: `radial-gradient(circle at 30% 30%, ${accent}2a, transparent 62%)`,
+                      }}
+                    />
+                  </>
+                )}
+              </div>
 
-                {/* tiny accent ring */}
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -inset-[1px] rounded-full"
-                  style={{
-                    background: `linear-gradient(180deg, ${accent}55, rgba(255,255,255,0.10))`,
-                    maskImage:
-                      "radial-gradient(circle at 50% 50%, transparent 66%, #000 68%)",
-                  }}
-                />
+              {/* ✅ Logo is now OUTSIDE the overflow-hidden banner, so it won't be clipped */}
+              <div className="absolute left-1/2 bottom-0 z-10 translate-x-[-50%] translate-y-[52%]">
+                <div className="relative h-[84px] w-[84px] rounded-full bg-neutral-950 ring-1 ring-white/10 shadow-2xl shadow-black/60">
+                  <div className="absolute inset-[6px] overflow-hidden rounded-full bg-neutral-900 ring-1 ring-white/10">
+                    {logoUrl ? (
+                      <Image
+                        src={logoUrl}
+                        alt={`${organization.name} logo`}
+                        fill
+                        sizes="84px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[18px] font-semibold text-neutral-100">
+                        {initials(organization.name)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* tiny accent ring */}
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute -inset-[1px] rounded-full"
+                    style={{
+                      background: `linear-gradient(180deg, ${accent}55, rgba(255,255,255,0.10))`,
+                      maskImage:
+                        "radial-gradient(circle at 50% 50%, transparent 66%, #000 68%)",
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Name + chips */}
-        <div className="px-4 pt-14 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-neutral-0 sm:text-3xl">
-            {organization.name}
-          </h1>
+          {/* Name + chips */}
+          <div className="px-4 pt-14 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight text-neutral-0 sm:text-3xl">
+              {organization.name}
+            </h1>
 
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-            <span className="tikd-chip">
-              <span className="text-neutral-300">{stats.totalEvents}</span>
-              <span className="text-neutral-500">total events</span>
-            </span>
-            <span className="tikd-chip tikd-chip-primary">
-              <span className="text-neutral-0">{stats.upcomingEvents}</span>
-              <span className="text-neutral-100/90">upcoming</span>
-            </span>
-            <span className="tikd-chip tikd-chip-muted">
-              <span className="text-neutral-0">{stats.pastEvents}</span>
-              <span className="text-neutral-200/80">past</span>
-            </span>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              <span className="tikd-chip">
+                <span className="text-neutral-300">{stats.totalEvents}</span>
+                <span className="text-neutral-500">total events</span>
+              </span>
+              <span className="tikd-chip tikd-chip-primary">
+                <span className="text-neutral-0">{stats.upcomingEvents}</span>
+                <span className="text-neutral-100/90">upcoming</span>
+              </span>
+              <span className="tikd-chip tikd-chip-muted">
+                <span className="text-neutral-0">{stats.pastEvents}</span>
+                <span className="text-neutral-200/80">past</span>
+              </span>
+            </div>
+
+            {organization.description ? (
+              <p className="mx-auto mt-3 max-w-2xl text-sm text-neutral-200">
+                {organization.description}
+              </p>
+            ) : null}
           </div>
 
-          {organization.description ? (
-            <p className="mx-auto mt-3 max-w-2xl text-sm text-neutral-200">
-              {organization.description}
-            </p>
-          ) : null}
-        </div>
+          {/* ORG TABS (same styling logic as event dashboard tabs) */}
+          <div className="mt-5 px-4">
+            <div className="no-scrollbar overflow-x-auto overflow-y-visible">
+              <div className="flex w-full justify-center">
+                <nav
+                  aria-label="Organization dashboard tabs"
+                  role="tablist"
+                  className="tikd-tabs-shell relative inline-flex min-w-max items-center gap-3 px-2 py-2"
+                >
+                  {ORG_TABS.map((tab) => {
+                    const href = basePath ? tab.href(basePath) : "#";
+                    const isActive = activeTab === tab.id;
+                    const Icon = tab.Icon;
 
-        {/* ORG TABS (same styling logic as event dashboard tabs) */}
-        <div className="mt-5 px-4">
-          <div className="no-scrollbar overflow-x-auto overflow-y-visible">
-            <div className="flex w-full justify-center">
-              <nav
-                aria-label="Organization dashboard tabs"
-                role="tablist"
-                className="tikd-tabs-shell relative inline-flex min-w-max items-center gap-3 px-2 py-2"
-              >
-                {ORG_TABS.map((tab) => {
-                  const href = basePath ? tab.href(basePath) : "#";
-                  const isActive = activeTab === tab.id;
-                  const Icon = tab.Icon;
-
-                  return (
-                    <Link
-                      key={tab.id}
-                      href={href}
-                      prefetch
-                      scroll={false}
-                      role="tab"
-                      aria-selected={isActive}
-                      aria-current={isActive ? "page" : undefined}
-                      title={!isActive ? tab.label : undefined}
-                      className={clsx(
-                        "relative z-10 min-h-[44px] px-3.5 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
-                        isActive ? "tikd-tab-active" : "tikd-tab-icon",
-                      )}
-                    >
-                      <Icon className={clsx("shrink-0", "h-5.5 w-5.5")} />
-                      {isActive ? (
-                        <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.2px]">
-                          {tab.label}
-                        </span>
-                      ) : (
-                        <span className="sr-only">{tab.label}</span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </nav>
+                    return (
+                      <Link
+                        key={tab.id}
+                        href={href}
+                        prefetch
+                        scroll={false}
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-current={isActive ? "page" : undefined}
+                        title={!isActive ? tab.label : undefined}
+                        className={clsx(
+                          "relative z-10 min-h-[44px] px-3.5 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
+                          isActive ? "tikd-tab-active" : "tikd-tab-icon",
+                        )}
+                      >
+                        <Icon className={clsx("shrink-0", "h-5.5 w-5.5")} />
+                        {isActive ? (
+                          <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.2px]">
+                            {tab.label}
+                          </span>
+                        ) : (
+                          <span className="sr-only">{tab.label}</span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {/* PAGE CONTENT */}
-      <section className="">{children}</section>
+      <section className={clsx(!showOrgHero && "pt-4")}>{children}</section>
     </main>
   );
 }

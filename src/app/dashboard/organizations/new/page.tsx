@@ -1,33 +1,32 @@
 /* ------------------------------------------------------------------ */
-/*  Create Organization – Tikd.                                       */
-/*  - Elegant sectioned layout                                         */
-/*  - Sticky live preview (desktop)                                    */
-/*  - Helpful microcopy + error summary                                */
+/*  src/app/dashboard/organizations/new/page.tsx                       */
 /* ------------------------------------------------------------------ */
 "use client";
 
+import React, { useMemo } from "react";
+import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
-import { useForm, Controller, SubmitHandler } from "react-hook-form";
+import { useForm, Controller, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { v4 as uuid } from "uuid";
-import { useMemo } from "react";
-import type { CSSProperties } from "react";
 import clsx from "clsx";
 import {
   Building2,
   ImagePlus,
   Link2,
-  ExternalLink,
   Sparkles,
   MapPin,
-  Palette,
+  Info,
 } from "lucide-react";
 
 import LabelledInput from "@/components/ui/LabelledInput";
 import { TextArea } from "@/components/ui/TextArea";
 import ImageUpload from "@/components/ui/ImageUpload";
 import { Button } from "@/components/ui/Button";
+import ConnectionProfileCard from "@/components/connections/ConnectionProfileCard";
+import TikdColorPicker from "@/components/ui/TikdColorPicker";
+import PlacesAddressInput from "@/components/ui/PlacesAddressInput";
 
 /* ------------------------------------------------------------------ */
 /*  Constants & schema                                                */
@@ -89,9 +88,8 @@ const websiteSchema = z
   .optional()
   .refine(
     (value) => {
-      if (!value) return true; // empty / undefined => OK
+      if (!value) return true;
       try {
-        // will throw for invalid URLs
         new URL(value);
         return true;
       } catch {
@@ -100,13 +98,17 @@ const websiteSchema = z
     },
     {
       message: "Must be a valid URL (e.g., https://example.com)",
-    }
+    },
   );
 
 const OrgSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
+
+  /** branding */
+  banner: z.string().url().optional(),
   logo: z.string().url().optional(),
+
   website: websiteSchema,
   businessType: z.enum(businessTypeValues),
   location: z.string().min(2, "Location is required"),
@@ -114,7 +116,7 @@ const OrgSchema = z.object({
     .string()
     .regex(
       /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/,
-      "Use a valid hex color (e.g., #6366F1)"
+      "Use a valid hex color (e.g., #6366F1)",
     )
     .optional()
     .or(z.literal("")),
@@ -128,6 +130,36 @@ const meshBg: CSSProperties = {
     "radial-gradient(800px 420px at 85% 0%, rgba(88,101,242,.20), transparent 60%)",
 };
 
+function RequiredAsterisk() {
+  return (
+    <span aria-hidden className="ml-1 text-error-400">
+      *
+    </span>
+  );
+}
+
+function FieldLabel({
+  children,
+  required,
+  htmlFor,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+  htmlFor?: string;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="block text-sm font-medium text-neutral-0"
+    >
+      <span className="inline-flex items-center">
+        {children}
+        {required ? <RequiredAsterisk /> : null}
+      </span>
+    </label>
+  );
+}
+
 function Section({
   title,
   icon,
@@ -140,18 +172,16 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5 md:p-6">
-      <div className="mb-4 flex items-start gap-3">
+    <section className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+      <div className="mb-6 flex items-start gap-3">
         {icon ? (
-          <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-primary-900/50 ring-1 ring-primary-700/40">
+          <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-md bg-primary-900/50 ring-1 ring-primary-500">
             {icon}
           </div>
         ) : null}
         <div>
           <h2 className="text-base font-semibold md:text-lg">{title}</h2>
-          {desc ? (
-            <p className="mt-1 text-sm text-neutral-300">{desc}</p>
-          ) : null}
+          {desc ? <p className="mt-1 text-neutral-300">{desc}</p> : null}
         </div>
       </div>
       {children}
@@ -180,6 +210,9 @@ function getBusinessTypeLabel(value?: BusinessType | null) {
 export default function NewOrganizationPage() {
   const router = useRouter();
 
+  const errorRing =
+    "rounded-lg ring-1 ring-inset ring-error-500 border-transparent";
+
   const {
     register,
     control,
@@ -194,6 +227,8 @@ export default function NewOrganizationPage() {
       website: "",
       location: "",
       accentColor: "",
+      banner: "",
+      logo: "",
     } as Partial<OrgFormData>,
     mode: "onBlur",
   });
@@ -215,6 +250,7 @@ export default function NewOrganizationPage() {
   /* ---------------------------- preview --------------------------- */
   const name = watch("name");
   const description = watch("description");
+  const banner = watch("banner");
   const logo = watch("logo");
   const website = watch("website");
   const businessType = watch("businessType");
@@ -227,10 +263,16 @@ export default function NewOrganizationPage() {
 
   const hasErrors = Object.keys(errors).length > 0;
 
+  const cardDescription =
+    description?.trim() ||
+    siteHost ||
+    (businessType ? getBusinessTypeLabel(businessType) : "") ||
+    "Public profile";
+
   return (
     <main className="relative bg-neutral-950 text-neutral-0">
       {/* Header / mesh */}
-      <div className="relative isolate px-4 pt-10 md:py-12 mt-6 lg:mt-8">
+      <div className="relative isolate mt-6 px-4 pt-10 md:py-12 lg:mt-8">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
           style={meshBg}
@@ -253,6 +295,19 @@ export default function NewOrganizationPage() {
       >
         {/* ------------------------- Main form ----------------------- */}
         <div className="space-y-6 md:col-span-7 lg:col-span-8">
+          {/* Required fields note (same as event creation) */}
+          <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-3">
+            <div className="flex items-center gap-3">
+              <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
+                <Info className="h-5 w-5 text-neutral-200" />
+              </div>
+              <p className="text-sm text-neutral-300 leading-relaxed">
+                Required fields are marked with an{" "}
+                <span className="font-semibold text-error-300">*</span>.
+              </p>
+            </div>
+          </div>
+
           {/* Error summary after first submit */}
           {submitCount > 0 && hasErrors && (
             <div
@@ -271,33 +326,57 @@ export default function NewOrganizationPage() {
             desc="This appears on your organization page and on event cards."
             icon={<Building2 className="h-5 w-5 text-primary-300" />}
           >
-            <div className="space-y-4">
-              <LabelledInput
-                label="Organization Name"
-                placeholder="e.g., Nightwave Collective"
-                {...register("name")}
-                variant="full"
-                size="md"
-                error={errors.name?.message || null}
-              />
+            <div className="space-y-7">
+              <div className="space-y-2">
+                <FieldLabel required>Organization Name</FieldLabel>
+                <LabelledInput
+                  noLabel
+                  aria-label="Organization Name"
+                  placeholder="e.g., Nightwave Collective"
+                  {...register("name")}
+                  variant="transparent"
+                  size="md"
+                  className={clsx(errors.name && errorRing)}
+                />
+                {errors.name?.message ? (
+                  <p className="text-xs text-error-300">
+                    {String(errors.name.message)}
+                  </p>
+                ) : null}
+              </div>
 
-              <LabelledInput
-                label="Location"
-                placeholder="City, Country"
-                {...register("location")}
-                variant="full"
-                size="md"
-                icon={<MapPin className="h-4 w-4 text-neutral-400" />}
-                hint="Where are most of your events based?"
-                error={errors.location?.message || null}
-              />
+              {/* Address autocomplete (same as event creation) */}
+              <div className="space-y-2">
+                <FieldLabel required>Address</FieldLabel>
+                <Controller
+                  control={control}
+                  name="location"
+                  render={({ field }) => (
+                    <PlacesAddressInput
+                      value={field.value ?? ""}
+                      onChange={(v) => field.onChange(v)}
+                      placeholder="Type to search address"
+                      error={!!errors.location}
+                    />
+                  )}
+                />
+                {errors.location?.message ? (
+                  <p className="text-xs text-error-300">
+                    {String(errors.location.message)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-neutral-400">
+                    Where are most of your events based?
+                  </p>
+                )}
+              </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium">Description</label>
+                <FieldLabel>Description</FieldLabel>
                 <TextArea
                   {...register("description")}
                   placeholder="What is this org about?"
-                  variant="full"
+                  variant="transparent"
                   size="md"
                 />
               </div>
@@ -315,16 +394,22 @@ export default function NewOrganizationPage() {
               name="businessType"
               render={({ field }) => (
                 <div className="space-y-3">
+                  <FieldLabel required>Business Type</FieldLabel>
+
                   <p className="text-xs text-neutral-400">
                     Choose one. You can always tweak this later in settings.
                   </p>
+
                   <fieldset>
                     <legend className="sr-only">
                       What describes best the type of your business?
                     </legend>
+
+                    {/* ✅ Equal height cards + centered dot */}
                     <div className="grid gap-3 sm:grid-cols-2">
                       {BUSINESS_TYPES.map((type) => {
                         const selected = field.value === type.value;
+
                         return (
                           <label
                             key={type.value}
@@ -338,21 +423,25 @@ export default function NewOrganizationPage() {
                               onChange={() => field.onChange(type.value)}
                               className="sr-only"
                             />
+
                             <div
                               className={clsx(
-                                "relative flex h-full flex-col rounded-2xl border bg-neutral-900/70 px-4 py-4 text-left transition",
-                                "shadow-[0_18px_45px_rgba(0,0,0,0.55)]",
+                                "relative rounded-2xl border bg-neutral-900/55 px-4 py-3 text-left transition",
+                                "shadow-[0_16px_36px_rgba(0,0,0,0.45)]",
+                                "min-h-[86px] sm:min-h-[86px] pr-12",
                                 selected
-                                  ? "border-primary-500/90 ring-1 ring-primary-400/60 bg-gradient-to-br from-primary-950/60 via-neutral-950 to-neutral-950"
-                                  : "border-white/10 hover:border-primary-500/60 hover:bg-neutral-900"
+                                  ? "border-primary-500/90 ring-1 ring-primary-400/55 bg-gradient-to-br from-primary-950/55 via-neutral-950 to-neutral-950"
+                                  : "border-white/10 hover:border-primary-500/55 hover:bg-neutral-900/70",
                               )}
                             >
-                              <div className="mb-5 flex justify-center">
+                              {/* ✅ radio dot centered vertically on the right */}
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2">
                                 <span
                                   className={clsx(
-                                    "flex h-5 w-5 items-center justify-center rounded-full border border-white/35 bg-black/50",
-                                    selected &&
-                                      "border-primary-400 bg-primary-500/20"
+                                    "flex h-5 w-5 items-center justify-center rounded-full border bg-black/45",
+                                    selected
+                                      ? "border-primary-400 ring-1 ring-primary-400/30"
+                                      : "border-white/25",
                                   )}
                                 >
                                   <span
@@ -360,15 +449,16 @@ export default function NewOrganizationPage() {
                                       "h-2.5 w-2.5 rounded-full",
                                       selected
                                         ? "bg-primary-300"
-                                        : "bg-white/25"
+                                        : "bg-white/20",
                                     )}
                                   />
                                 </span>
                               </div>
+
                               <p className="text-sm font-semibold">
                                 {type.label}
                               </p>
-                              <p className="mt-1 text-xs text-neutral-300">
+                              <p className="mt-1 line-clamp-2 text-xs leading-snug text-neutral-300">
                                 {type.description}
                               </p>
                             </div>
@@ -377,8 +467,9 @@ export default function NewOrganizationPage() {
                       })}
                     </div>
                   </fieldset>
+
                   {errors.businessType && (
-                    <p className="text-xs leading-snug text-error-500">
+                    <p className="text-xs leading-snug text-error-300">
                       Choose the type that best describes your organization.
                     </p>
                   )}
@@ -390,102 +481,72 @@ export default function NewOrganizationPage() {
           {/* Branding */}
           <Section
             title="Branding"
-            desc="Upload a crisp, high-contrast logo and choose your accent color."
+            desc="Upload a banner + a crisp square logo and choose your accent color."
             icon={<ImagePlus className="h-5 w-5 text-primary-300" />}
           >
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* Banner uploader */}
               <Controller
                 control={control}
-                name="logo"
+                name="banner"
                 render={({ field }) => (
                   <ImageUpload
-                    label="Logo"
+                    label="Banner"
                     value={field.value}
                     onChange={field.onChange}
-                    publicId={`temp/orgs/${uuid()}`}
+                    publicId={`temp/orgs/banners/${uuid()}`}
                   />
                 )}
               />
 
-              {/* Accent color: color picker + big preview */}
+              {/* ✅ Logo uploader — simpler, smaller, cleaner */}
+              <div className="rounded-lg border border-white/10 bg-neutral-950/45 p-4">
+                <div className="flex flex-col items-center justify-between gap-4">
+                  <div className="shrink-0">
+                    <Controller
+                      control={control}
+                      name="logo"
+                      render={({ field }) => (
+                        <div>
+                          <ImageUpload
+                            label=""
+                            value={field.value}
+                            onChange={field.onChange}
+                            publicId={`temp/orgs/logos/${uuid()}`}
+                            sizing="square"
+                          />
+                        </div>
+                      )}
+                    />
+                  </div>
+                  <div className="min-w-0 text-center">
+                    <p className="text-sm font-semibold">Logo</p>
+
+                    <p className="mt-2 text-[11px] text-neutral-400">
+                      Recommended: ≥ 512×512, transparent PNG if possible.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Accent color */}
               <Controller
                 control={control}
                 name="accentColor"
-                render={({ field }) => {
-                  const effectiveColor =
-                    field.value && field.value.trim() !== ""
-                      ? field.value
-                      : previewAccent;
-
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <Palette className="h-4 w-4 text-primary-300" />
-                            <p className="text-sm font-medium">
-                              Select an accent color
-                            </p>
-                          </div>
-                          <p className="mt-1 text-xs text-neutral-300">
-                            Used for highlights on your organization page and
-                            event cards.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="grid items-center gap-4 md:grid-cols-[minmax(0,1.5fr)_auto]">
-                        {/* Big preview bar */}
-                        <div className="overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/80">
-                          <div
-                            className="h-16 sm:h-20"
-                            style={{ backgroundColor: effectiveColor }}
-                          />
-                          <div className="flex items-center justify-between px-4 py-2 text-xs text-neutral-200">
-                            <span className="text-neutral-300">Preview</span>
-                            <span className="font-mono uppercase">
-                              {effectiveColor}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Native color input + reset */}
-                        <div className="flex flex-col items-end gap-2">
-                          <input
-                            type="color"
-                            value={effectiveColor}
-                            onChange={(e) => field.onChange(e.target.value)}
-                            className="h-10 w-10 cursor-pointer rounded-full border border-white/30 bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => field.onChange("")}
-                            className="text-[11px] text-neutral-400 underline-offset-2 hover:text-neutral-200 hover:underline"
-                          >
-                            Use default theme color
-                          </button>
-                        </div>
-                      </div>
-
-                      <LabelledInput
-                        noLabel
-                        placeholder="#6366F1"
-                        value={field.value || ""}
-                        onChange={(e) => field.onChange(e.target.value)}
-                        variant="full"
-                        size="sm"
-                        hint="Use a hex color like #6366F1 or pick using the color chooser."
-                        error={errors.accentColor?.message || null}
-                        endAdornment={
-                          <span
-                            className="h-4 w-4 rounded-full border border-white/20"
-                            style={{ backgroundColor: effectiveColor }}
-                          />
-                        }
-                      />
-                    </div>
-                  );
-                }}
+                render={({ field }) => (
+                  <div className="md:pl-1">
+                    <TikdColorPicker
+                      value={field.value || ""}
+                      onChange={field.onChange}
+                      defaultColor="#7C3AED"
+                      label="Select an accent color"
+                      description="Used for highlights on your organization page and event cards."
+                      showAlpha
+                      onResetToDefault={() => field.onChange("")}
+                      error={errors.accentColor?.message || null}
+                    />
+                  </div>
+                )}
               />
             </div>
           </Section>
@@ -496,23 +557,37 @@ export default function NewOrganizationPage() {
             desc="Add your main website so fans and partners can learn more."
             icon={<Link2 className="h-5 w-5 text-primary-300" />}
           >
-            <LabelledInput
-              label="Website (optional)"
-              placeholder="https://example.com"
-              {...register("website")}
-              variant="full"
-              size="md"
-              error={errors.website?.message || null}
-            />
+            <div className="space-y-2">
+              <FieldLabel>Website (optional)</FieldLabel>
+              <LabelledInput
+                noLabel
+                aria-label="Website"
+                placeholder="https://example.com"
+                {...register("website")}
+                variant="transparent"
+                size="md"
+                className={clsx(errors.website && errorRing)}
+              />
+              {errors.website?.message ? (
+                <p className="text-xs text-error-300">
+                  {String(errors.website.message)}
+                </p>
+              ) : null}
+            </div>
           </Section>
 
           {/* Submit */}
-          <div className="flex gap-3">
-            <Button type="submit" variant="primary" loading={isSubmitting}>
-              Create Organization
-            </Button>
+          <div className="flex gap-3 justify-end">
             <Button type="button" variant="ghost" onClick={() => router.back()}>
               Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={isSubmitting}
+              animation
+            >
+              Create Organization
             </Button>
           </div>
         </div>
@@ -521,98 +596,39 @@ export default function NewOrganizationPage() {
         <aside className="md:col-span-5 lg:col-span-4">
           <div className="space-y-6 md:sticky md:top-20">
             {/* Live preview */}
-            <div className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5">
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
               <h3 className="mb-3 text-sm font-semibold">Live Preview</h3>
 
-              <div className="flex items-start gap-4">
-                {/* Logo */}
-                <div
-                  className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 bg-neutral-900/80"
-                  style={{
-                    borderColor: previewAccent,
-                    boxShadow:
-                      "0 0 0 1px rgba(0,0,0,0.6), 0 18px 45px rgba(0,0,0,0.75)",
-                  }}
-                >
-                  {logo ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={logo}
-                      alt="Org logo preview"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div
-                      className="grid h-full w-full place-items-center text-white"
-                      style={{
-                        background: `conic-gradient(from_220deg_at_50%_50%,${previewAccent},#3b82f6,#111827)`,
-                      }}
-                    >
-                      <span className="text-xl font-semibold">
-                        {name?.[0]?.toUpperCase() ?? "O"}
-                      </span>
-                    </div>
-                  )}
-                </div>
+              <div className="flex justify-center">
+                <ConnectionProfileCard
+                  href="#"
+                  kind="organization"
+                  title={name?.trim() || "Organization name"}
+                  description={cardDescription}
+                  bannerUrl={banner || undefined}
+                  iconUrl={logo || undefined}
+                  totalMembers={undefined}
+                  joinDateLabel={
+                    businessType
+                      ? `${getBusinessTypeLabel(businessType)} · Draft`
+                      : "Draft"
+                  }
+                />
+              </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="truncate text-base font-semibold">
-                        {name || "Organization name"}
-                      </h4>
-                      {siteHost && (
-                        <a
-                          href={website}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary-300 hover:underline"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          {siteHost}
-                        </a>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-300">
-                      {businessType && (
-                        <span
-                          className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium"
-                          style={{
-                            backgroundColor: `${previewAccent}1A`,
-                            color: previewAccent,
-                            borderColor: `${previewAccent}33`,
-                            borderWidth: 1,
-                            borderStyle: "solid",
-                          }}
-                        >
-                          {getBusinessTypeLabel(businessType) || "Business"}
-                        </span>
-                      )}
-                      {location && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-neutral-300">
-                          <MapPin className="h-3 w-3 text-neutral-400" />
-                          {location}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <p className="mt-2 line-clamp-3 text-sm text-neutral-300">
-                    {description ||
-                      "Your short mission or tagline appears here."}
-                  </p>
-                </div>
+              <div className="mt-3 text-xs text-neutral-400">
+                Preview reflects your banner/logo/accent choices.
               </div>
             </div>
 
             {/* Tips */}
-            <div className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5">
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
               <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
                 <Sparkles className="h-4 w-4 text-primary-300" />
                 Make it stand out
               </h3>
               <ul className="list-inside list-disc space-y-1 text-sm text-neutral-300">
+                <li>Use a clean banner (≥ 1600×400).</li>
                 <li>Use a simple, square logo (≥ 512×512).</li>
                 <li>Keep the description concise and specific.</li>
                 <li>
@@ -620,6 +636,22 @@ export default function NewOrganizationPage() {
                   see you.
                 </li>
               </ul>
+            </div>
+
+            {/* tiny meta */}
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+              <p className="text-xs text-neutral-300">
+                Address:{" "}
+                <span className="font-semibold text-neutral-0">
+                  {location?.trim() || "—"}
+                </span>
+              </p>
+              <p className="mt-2 text-xs text-neutral-300">
+                Accent:{" "}
+                <span className="font-mono font-semibold text-neutral-0">
+                  {previewAccent}
+                </span>
+              </p>
             </div>
           </div>
         </aside>

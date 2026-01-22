@@ -1,3 +1,4 @@
+// src/models/Organization.ts
 import { Schema, model, models, Types, Document } from "mongoose";
 
 export type OrgBusinessType =
@@ -12,7 +13,11 @@ export interface IOrganization extends Document {
   _id: Types.ObjectId;
   name: string;
   description?: string;
+
+  /** ✅ branding */
+  banner?: string; // Cloudinary URL
   logo?: string; // Cloudinary URL
+
   website?: string;
   businessType: OrgBusinessType;
   location?: string;
@@ -26,7 +31,11 @@ const OrganizationSchema = new Schema<IOrganization>(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
+
+    /** ✅ NEW */
+    banner: { type: String, default: "" },
     logo: { type: String, default: "" },
+
     website: { type: String, default: "" },
     businessType: {
       type: String,
@@ -42,7 +51,7 @@ const OrganizationSchema = new Schema<IOrganization>(
       index: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default models.Organization ||

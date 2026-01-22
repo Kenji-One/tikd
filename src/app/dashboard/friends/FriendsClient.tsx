@@ -3,20 +3,29 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import {
   Users,
+  Users2,
   Search,
   LayoutGrid,
   List,
   MoreVertical,
+  Trash2,
   Phone,
   Mail,
   ChevronLeft,
   ChevronRight,
+  X,
+  Send,
+  UserPlus,
+  Check,
+  Clock,
+  UserX,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/Button";
 
 /* ------------------------------ Types ------------------------------ */
@@ -30,6 +39,38 @@ type Friend = {
   email: string;
   avatarUrl?: string;
 };
+
+type AddCandidate = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  avatarUrl?: string;
+};
+
+type FriendRequest = {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  createdLabel: string; // e.g. "5 min ago"
+};
+
+const DEMO_REQUESTS: FriendRequest[] = [
+  {
+    id: "r-1",
+    name: "Mirza Lutfi",
+    createdLabel: "5 min ago",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=256&q=80",
+  },
+  {
+    id: "r-2",
+    name: "Adil Anas",
+    createdLabel: "12 min ago",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1525134479668-1bee5c7c6845?auto=format&fit=crop&w=256&q=80",
+  },
+];
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -223,28 +264,55 @@ const DEMO_FRIENDS: Friend[] = [
 ];
 
 /* ------------------------ Friends UI pieces ------------------------- */
-function FriendsCard({
-  friend,
-  dense = false,
+function FriendActionsMenu({
+  onRemove,
+  containerClassName,
 }: {
-  friend: Friend;
-  dense?: boolean;
+  onRemove: () => void;
+  containerClassName?: string;
 }) {
-  const badge = initialsFromName(friend.name);
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+
+      const btn = btnRef.current;
+      const panel = panelRef.current;
+
+      if (btn?.contains(t) || panel?.contains(t)) return;
+      setOpen(false);
+    };
+
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("touchstart", onDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("touchstart", onDown);
+    };
+  }, [open]);
 
   return (
-    <div
-      className={clsx(
-        "group relative overflow-hidden rounded-[12px] border border-white/10 hover:border-primary-500",
-        "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))]",
-        "transition-transform duration-200 ",
-      )}
-    >
+    <div className={clsx("relative", containerClassName)}>
       <button
+        ref={btnRef}
         type="button"
         aria-label="More actions"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "absolute right-3 top-3 z-10",
           "inline-flex h-8 w-8 items-center justify-center rounded-full",
           "bg-white/5 text-neutral-200 hover:bg-white/10",
           "border border-white/10",
@@ -254,6 +322,177 @@ function FriendsCard({
       >
         <MoreVertical className="h-4 w-4" />
       </button>
+
+      {open ? (
+        <div
+          ref={panelRef}
+          className={clsx(
+            "absolute right-0 top-[calc(100%+10px)] z-[70] w-[190px]",
+            "overflow-hidden rounded-lg border border-white/10 bg-neutral-950/95",
+            "shadow-[0_18px_70px_rgba(0,0,0,0.60)] backdrop-blur-[10px]",
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onRemove();
+            }}
+            className={clsx(
+              "w-full px-3 py-2.5 text-left",
+              "flex items-center gap-2",
+              "text-[12px] font-semibold",
+              "text-red-300 hover:text-red-200",
+              "hover:bg-red-500/10",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
+            )}
+          >
+            <Trash2 className="h-4 w-4" />
+            Remove Friend
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---- 3D Tilt (no library) -------------------------------------------
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!mq) return;
+
+    const apply = () => setReduced(!!mq.matches);
+    apply();
+
+    // Safari < 14 fallback
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+    else mq.addListener(apply);
+
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", apply);
+      else mq.removeListener(apply);
+    };
+  }, []);
+
+  return reduced;
+}
+
+function useTilt3d<T extends HTMLElement>(opts?: {
+  maxDeg?: number;
+  perspective?: number;
+  liftPx?: number;
+}) {
+  const ref = useRef<T | null>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  const maxDeg = opts?.maxDeg ?? 10;
+  const perspective = opts?.perspective ?? 1100;
+  const liftPx = opts?.liftPx ?? 3;
+
+  const rafRef = useRef<number | null>(null);
+
+  const setTransform = (rx: number, ry: number, lift: number) => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.transform = `perspective(${perspective}px) rotateX(${rx}deg) rotateY(${ry}deg) translateY(${-lift}px)`;
+  };
+
+  const reset = () => {
+    const el = ref.current;
+    if (!el) return;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)";
+    setTransform(0, 0, 0);
+  };
+
+  const onMouseMove: React.MouseEventHandler<HTMLElement> = (e) => {
+    if (prefersReducedMotion) return;
+
+    const el = ref.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width; // 0..1
+    const py = (e.clientY - rect.top) / rect.height; // 0..1
+
+    // center => 0, edges => -1..+1
+    const dx = (px - 0.5) * 2;
+    const dy = (py - 0.5) * 2;
+
+    // rotateX should respond to vertical movement (invert feels natural)
+    const rx = clamp(-dy * maxDeg, -maxDeg, maxDeg);
+    const ry = clamp(dx * maxDeg, -maxDeg, maxDeg);
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      // fast response while moving
+      el.style.transition = "transform 50ms linear";
+      setTransform(rx, ry, liftPx);
+    });
+  };
+
+  const onMouseLeave: React.MouseEventHandler<HTMLElement> = () => reset();
+
+  const onMouseEnter: React.MouseEventHandler<HTMLElement> = () => {
+    const el = ref.current;
+    if (!el || prefersReducedMotion) return;
+    el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)";
+  };
+
+  // for safety on unmount
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return { ref, onMouseMove, onMouseLeave, onMouseEnter, reset };
+}
+
+function FriendsCard({
+  friend,
+  dense = false,
+  onRemove,
+}: {
+  friend: Friend;
+  dense?: boolean;
+  onRemove?: (id: string) => void;
+}) {
+  const badge = initialsFromName(friend.name);
+
+  const tilt = useTilt3d<HTMLDivElement>({
+    maxDeg: 4,
+    perspective: 900,
+    liftPx: 2,
+  });
+
+  return (
+    <div
+      ref={tilt.ref}
+      onMouseEnter={tilt.onMouseEnter}
+      onMouseMove={tilt.onMouseMove}
+      onMouseLeave={tilt.onMouseLeave}
+      className={clsx(
+        "group relative overflow-hidden rounded-[12px] border border-white/10 hover:border-primary-500",
+        "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))]",
+        "transition-[transform,box-shadow,border-color] duration-200",
+        "will-change-transform",
+        "hover:shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
+      )}
+      style={{
+        transform:
+          "perspective(1100px) rotateX(0deg) rotateY(0deg) translateY(0px)",
+        transformStyle: "preserve-3d",
+      }}
+    >
+      <FriendActionsMenu
+        containerClassName="!absolute right-3 top-3 z-10"
+        onRemove={() => onRemove?.(friend.id)}
+      />
 
       <div className={clsx("p-4", dense ? "pb-3" : "pb-4")}>
         <div className="mx-auto flex w-full flex-col items-center">
@@ -350,7 +589,13 @@ function FriendsCard({
   );
 }
 
-function FriendsRow({ friend }: { friend: Friend }) {
+function FriendsRow({
+  friend,
+  onRemove,
+}: {
+  friend: Friend;
+  onRemove?: (id: string) => void;
+}) {
   const badge = initialsFromName(friend.name);
   return (
     <div
@@ -410,18 +655,7 @@ function FriendsRow({ friend }: { friend: Friend }) {
         </div>
       </div>
 
-      <button
-        type="button"
-        aria-label="More actions"
-        className={clsx(
-          "inline-flex h-9 w-9 items-center justify-center rounded-full",
-          "bg-white/5 text-neutral-200 hover:bg-white/10",
-          "border border-white/10",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-        )}
-      >
-        <MoreVertical className="h-4 w-4" />
-      </button>
+      <FriendActionsMenu onRemove={() => onRemove?.(friend.id)} />
     </div>
   );
 }
@@ -496,23 +730,511 @@ function Pagination({
   );
 }
 
+/* ---------------------------- Add Friend ---------------------------- */
+function AddFriendModal({
+  open,
+  onClose,
+  candidates,
+  onSend,
+}: {
+  open: boolean;
+  onClose: () => void;
+  candidates: AddCandidate[];
+  onSend: (selected: AddCandidate[]) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [sent, setSent] = useState(false);
+
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastActiveElRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    lastActiveElRef.current = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = "hidden";
+
+    // focus input after paint
+    const t = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(t);
+      document.body.style.overflow = "";
+      lastActiveElRef.current?.focus?.();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+
+      // simple focus trap
+      if (e.key === "Tab") {
+        const root = panelRef.current;
+        if (!root) return;
+        const focusable = Array.from(
+          root.querySelectorAll<HTMLElement>(
+            'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((el) => !el.hasAttribute("disabled") && !el.ariaDisabled);
+
+        if (!focusable.length) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        const active = document.activeElement as HTMLElement | null;
+
+        if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setSelectedIds([]);
+      setSent(false);
+    }
+  }, [open]);
+
+  const selected = useMemo(() => {
+    const map = new Map(candidates.map((c) => [c.id, c]));
+    return selectedIds
+      .map((id) => map.get(id))
+      .filter(Boolean) as AddCandidate[];
+  }, [selectedIds, candidates]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    const base = candidates.filter((c) => !selectedIds.includes(c.id));
+    if (!q) return base;
+
+    return base.filter((c) => {
+      const hay = `${c.name} ${c.email} ${c.phone ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [query, candidates, selectedIds]);
+
+  const canSend = selected.length > 0;
+
+  function togglePick(id: string) {
+    setSent(false);
+    setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    // keep input active for fast multi-add
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function removePick(id: string) {
+    setSent(false);
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function sendNow() {
+    if (!canSend) return;
+    onSend(selected);
+    setSent(true);
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center px-3 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add friends"
+    >
+      {/* Backdrop */}
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className={clsx(
+          "absolute inset-0",
+          "bg-black/60",
+          "backdrop-blur-[10px]",
+        )}
+      />
+
+      {/* Panel */}
+      <div
+        ref={panelRef}
+        className={clsx(
+          "relative w-full max-w-[780px] overflow-hidden rounded-2xl",
+          "border border-white/10 bg-neutral-950/80",
+          "shadow-[0_30px_120px_rgba(0,0,0,0.75)]",
+        )}
+      >
+        {/* Background wash */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-100"
+          style={{
+            background:
+              "radial-gradient(1100px 520px at 18% -10%, rgba(154,70,255,0.20), transparent 60%), radial-gradient(900px 520px at 100% 20%, rgba(66,139,255,0.10), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+          }}
+        />
+
+        {/* Header */}
+        <div className="relative flex items-center justify-between p-5">
+          <div className="flex items-center gap-3">
+            <div
+              className={clsx(
+                "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20",
+              )}
+            >
+              <UserPlus className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-[16px] font-semibold tracking-[-0.2px] text-neutral-0">
+                Add Friends
+              </div>
+              <div className="mt-1 text-[12px] text-neutral-400">
+                Search by email or phone, pick multiple, then send a request.
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className={clsx(
+              "inline-flex h-10 w-10 items-center justify-center rounded-full",
+              "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+            )}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="relative px-5 pb-5 md:pb-6">
+          {/* Search + chips row */}
+          <div
+            className={clsx(
+              "rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5",
+              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+            )}
+          >
+            <div className="text-[12px] font-medium text-neutral-300">
+              Search by Email / Phone Number
+            </div>
+
+            <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
+              {/* Input + chips container */}
+              <div
+                className={clsx(
+                  "min-h-[52px] w-full rounded-xl border border-white/10 bg-neutral-950/35 px-3 py-2",
+                  "focus-within:ring-2 focus-within:ring-primary-500/35",
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {selected.map((c) => {
+                    const badge = initialsFromName(c.name);
+                    return (
+                      <span
+                        key={c.id}
+                        className={clsx(
+                          "inline-flex items-center gap-2 rounded-full",
+                          "border border-white/10 bg-white/5 px-1 py-1",
+                          "text-[12px] font-semibold text-neutral-100",
+                        )}
+                      >
+                        <span
+                          className={clsx(
+                            "inline-flex h-6 w-6 items-center justify-center rounded-full",
+                            "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/20",
+                            "text-[11px] font-extrabold",
+                          )}
+                        >
+                          {badge}
+                        </span>
+                        <span className="max-w-[180px] truncate">{c.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removePick(c.id)}
+                          aria-label={`Remove ${c.name}`}
+                          className={clsx(
+                            "inline-flex h-6 w-6 items-center justify-center rounded-full",
+                            "bg-white/0 text-neutral-300 hover:bg-white/10 hover:text-neutral-0",
+                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                          )}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    );
+                  })}
+
+                  <div
+                    className={clsx(
+                      "relative w-full",
+                      "min-w-[220px] flex-1",
+                      "rounded-lg border border-white/10 bg-white/5 h-10",
+                    )}
+                  >
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
+                    <input
+                      ref={inputRef}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Type email, phone, or name…"
+                      className={clsx(
+                        "h-10 w-full rounded-lg bg-transparent",
+                        "pl-10 pr-4 text-[12px] text-neutral-100",
+                        "placeholder:text-neutral-500",
+                        "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-2 text-[11px] text-neutral-500">
+                  Tip: you can add multiple friends before sending.
+                </div>
+              </div>
+
+              {/* Send button */}
+              <div className="flex justify-stretch md:justify-end">
+                <button
+                  type="button"
+                  onClick={sendNow}
+                  disabled={!canSend}
+                  className={clsx(
+                    "w-full md:w-auto",
+                    "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl px-5",
+                    "border border-white/10",
+                    canSend
+                      ? "bg-[linear-gradient(90deg,rgba(134,0,238,0.35),rgba(154,70,255,0.55),rgba(170,115,255,0.35))] text-neutral-0 shadow-[0_18px_54px_rgba(154,81,255,0.22)]"
+                      : "bg-white/5 text-neutral-400 opacity-70",
+                    "transition-[transform,filter,box-shadow] duration-200",
+                    canSend &&
+                      "hover:filter hover:brightness-[1.06] active:scale-[0.99]",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                  )}
+                >
+                  <span className="text-[13px] font-semibold tracking-[-0.2px]">
+                    Send Request
+                  </span>
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {sent ? (
+              <div
+                className={clsx(
+                  "mt-3 rounded-xl border border-success-700/30 bg-success-900/25 px-3 py-2",
+                  "text-[12px] text-success-300",
+                )}
+              >
+                Requests sent (demo).
+              </div>
+            ) : null}
+          </div>
+
+          {/* Results */}
+          <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+            <div
+              className={clsx(
+                "flex items-center justify-between px-4 py-3 md:px-5",
+                "border-b border-white/10",
+              )}
+            >
+              <div className="text-[13px] font-semibold text-neutral-200">
+                Suggestions
+              </div>
+              <div className="text-[11px] text-neutral-500">
+                {filtered.length} result{filtered.length === 1 ? "" : "s"}
+              </div>
+            </div>
+
+            <div className="max-h-[340px] overflow-auto p-2 no-scrollbar md:max-h-[420px]">
+              {filtered.length ? (
+                <div className="space-y-2">
+                  {filtered.map((c) => {
+                    const badge = initialsFromName(c.name);
+
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => togglePick(c.id)}
+                        className={clsx(
+                          "w-full text-left",
+                          "flex items-center gap-3 rounded-2xl px-3 py-3",
+                          "border border-white/10 bg-neutral-950/25 hover:bg-neutral-900/35",
+                          "transition-colors",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                        )}
+                      >
+                        <div className="relative">
+                          <div className="h-11 w-11 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            {c.avatarUrl ? (
+                              <img
+                                src={c.avatarUrl}
+                                alt={c.name}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+                                {badge}
+                              </div>
+                            )}
+                          </div>
+                          <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
+                            {badge}
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-semibold text-neutral-0">
+                            {c.name}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-neutral-400">
+                            <span className="inline-flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-primary-300" />
+                              <span className="truncate">{c.email}</span>
+                            </span>
+                            {c.phone ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Phone className="h-4 w-4 text-primary-300" />
+                                <span className="truncate">{c.phone}</span>
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <span
+                          className={clsx(
+                            "inline-flex h-9 items-center justify-center rounded-xl px-3",
+                            "border border-white/10 bg-white/5 text-[12px] font-semibold",
+                            "text-neutral-100 hover:border-primary-500/40",
+                          )}
+                        >
+                          Add
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                  <div
+                    className={clsx(
+                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                    )}
+                  >
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-100">
+                    No matches found
+                  </div>
+                  <div className="text-[12px] text-neutral-500">
+                    Try searching by email, phone, or name.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------ Page ------------------------------- */
 export default function FriendsClient() {
   const [friendsQuery, setFriendsQuery] = useState("");
   const [friendsView, setFriendsView] = useState<"grid" | "list">("grid");
   const [friendsPage, setFriendsPage] = useState(1);
 
+  const [friends, setFriends] = useState<Friend[]>(DEMO_FRIENDS);
+
+  const [addOpen, setAddOpen] = useState(false);
+
+  const [requestsOpen, setRequestsOpen] = useState(false);
+  const [requests, setRequests] = useState<FriendRequest[]>(DEMO_REQUESTS);
+
+  const requestsBtnRef = useRef<HTMLButtonElement | null>(null);
+  const requestsPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!requestsOpen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRequestsOpen(false);
+    };
+
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+
+      const btn = requestsBtnRef.current;
+      const panel = requestsPanelRef.current;
+
+      // click inside button OR panel => ignore
+      if (btn?.contains(t) || panel?.contains(t)) return;
+
+      setRequestsOpen(false);
+    };
+
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("touchstart", onDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("touchstart", onDown);
+    };
+  }, [requestsOpen]);
+
+  function removeFriend(id: string) {
+    setFriends((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function acceptRequest(id: string) {
+    setRequests((prev) => prev.filter((r) => r.id !== id));
+  }
+  function declineRequest(id: string) {
+    setRequests((prev) => prev.filter((r) => r.id !== id));
+  }
+
   const friendsPageSize = 10;
 
   const friendsFiltered = useMemo(() => {
     const q = friendsQuery.trim().toLowerCase();
-    if (!q) return DEMO_FRIENDS;
-    return DEMO_FRIENDS.filter((f) => {
+
+    if (!q) return friends;
+    return friends.filter((f) => {
       const hay =
         `${f.name} ${f.role} ${f.company} ${f.email} ${f.phone}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [friendsQuery]);
+  }, [friendsQuery, friends]);
 
   const friendsTotal = friendsFiltered.length;
   const friendsTotalPages = Math.max(
@@ -523,6 +1245,10 @@ export default function FriendsClient() {
   useEffect(() => {
     setFriendsPage(1);
   }, [friendsQuery]);
+
+  useEffect(() => {
+    setFriendsPage((p) => clamp(p, 1, friendsTotalPages));
+  }, [friendsTotalPages]);
 
   const friendsPageSafe = clamp(friendsPage, 1, friendsTotalPages);
 
@@ -537,6 +1263,42 @@ export default function FriendsClient() {
     const end = Math.min(friendsTotal, start + friendsPageSize - 1);
     return `Showing ${start}-${end} from ${friendsTotal} data`;
   }, [friendsTotal, friendsPageSafe]);
+
+  const addCandidates: AddCandidate[] = useMemo(() => {
+    // Using friend list as “directory suggestions” for now (UI-only).
+    // When backend exists, replace with search endpoint results.
+    const unique = new Map<string, AddCandidate>();
+
+    for (const f of DEMO_FRIENDS.slice(0, 22)) {
+      unique.set(f.id, {
+        id: f.id,
+        name: f.name,
+        email: f.email,
+        phone: f.phone,
+        avatarUrl: f.avatarUrl,
+      });
+    }
+
+    // Add a couple “reference-style” names to make it feel realistic.
+    unique.set("c-1", {
+      id: "c-1",
+      name: "Sara Cruz",
+      email: "sara.cruz@example.com",
+      phone: "+1 415 204 8831",
+      avatarUrl:
+        "https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?auto=format&fit=crop&w=256&q=80",
+    });
+    unique.set("c-2", {
+      id: "c-2",
+      name: "Sebastian Graham",
+      email: "sebastian.graham@example.com",
+      phone: "+1 212 555 0174",
+      avatarUrl:
+        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80",
+    });
+
+    return Array.from(unique.values());
+  }, []);
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
@@ -553,7 +1315,7 @@ export default function FriendsClient() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* Friends Header (Kenji layout kept, title adjusted to FRIENDS) */}
+            {/* Friends Header */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300">
@@ -618,17 +1380,188 @@ export default function FriendsClient() {
                   </button>
                 </div>
 
-                <Button
-                  onClick={() => {
-                    // TODO: open "Add Friend" modal when backend is ready
-                  }}
-                  type="button"
-                  variant="primary"
-                  icon={<Users className="h-4 w-4" />}
-                  animation
-                >
-                  Add Friend
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setAddOpen(true)}
+                    type="button"
+                    variant="primary"
+                    icon={<Users className="h-4 w-4" />}
+                    animation
+                  >
+                    Add Friend
+                  </Button>
+
+                  {/* Friend Requests button */}
+                  <div className="relative">
+                    <button
+                      ref={requestsBtnRef}
+                      type="button"
+                      onClick={() => setRequestsOpen((v) => !v)}
+                      aria-label="Friend requests"
+                      aria-expanded={requestsOpen}
+                      className={clsx(
+                        "relative inline-flex h-10 w-10 items-center justify-center rounded-lg",
+                        "border border-white/10",
+                        requestsOpen
+                          ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
+                          : "bg-white/5 text-neutral-200 hover:bg-white/8",
+                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                      )}
+                    >
+                      <Users2 className="h-4 w-4" />
+
+                      {/* Red dot if pending */}
+                      {requests.length > 0 ? (
+                        <span
+                          className={clsx(
+                            "absolute right-2 top-2 h-2 w-2 rounded-full",
+                            "bg-red-500 ring-2 ring-neutral-950",
+                          )}
+                        />
+                      ) : null}
+                    </button>
+
+                    {/* Dropdown */}
+                    {requestsOpen ? (
+                      <div
+                        ref={requestsPanelRef}
+                        className={clsx(
+                          "absolute right-0 top-[calc(100%+10px)] z-[60] w-[360px]",
+                          "overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/90",
+                          "shadow-[0_24px_90px_rgba(0,0,0,0.65)] backdrop-blur-[10px]",
+                        )}
+                      >
+                        <div className="border-b border-white/10 px-4 py-3">
+                          <div className="text-[12px] font-semibold tracking-[0.18em] text-neutral-300">
+                            FRIEND REQUESTS
+                          </div>
+                        </div>
+
+                        {requests.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                            <div
+                              className={clsx(
+                                "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                                "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                              )}
+                            >
+                              <Users2 className="h-5 w-5" />
+                            </div>
+                            <div className="text-[13px] font-semibold text-neutral-100">
+                              No pending friend requests
+                            </div>
+                            <div className="text-[12px] text-neutral-500">
+                              You’re all caught up.
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="max-h-[420px] overflow-auto p-2 no-scrollbar">
+                            <div className="space-y-2">
+                              {requests.map((r) => {
+                                const badge = initialsFromName(r.name);
+
+                                return (
+                                  <div
+                                    key={r.id}
+                                    className={clsx(
+                                      "flex items-start gap-3 rounded-xl",
+                                      "border border-white/10 bg-white/5 px-3 py-3",
+                                      "hover:bg-white/7 transition-colors",
+                                    )}
+                                  >
+                                    <div className="relative">
+                                      <div className="h-12 w-12 overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        {r.avatarUrl ? (
+                                          <img
+                                            src={r.avatarUrl}
+                                            alt={r.name}
+                                            className="h-full w-full object-cover"
+                                            loading="lazy"
+                                          />
+                                        ) : (
+                                          <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+                                            {badge}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
+                                        {badge}
+                                      </div>
+                                    </div>
+
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="truncate font-semibold text-neutral-0">
+                                          {r.name}
+                                        </div>
+                                        <div className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                                          <Clock className="h-3.5 w-3.5" />
+                                          {r.createdLabel}
+                                        </div>
+                                      </div>
+                                      <div className="mt-1 text-[12px] text-neutral-400">
+                                        Wants to be your friend
+                                      </div>
+
+                                      <div className="mt-3 flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => acceptRequest(r.id)}
+                                          className={clsx(
+                                            "inline-flex h-7 flex-1 items-center justify-center gap-2 rounded-lg px-3",
+                                            "border border-white/10 bg-primary-500/15 text-primary-200",
+                                            "hover:bg-primary-500/20 transition-colors",
+                                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                                          )}
+                                        >
+                                          <Check className="h-4 w-4" />
+                                          <span className="text-[11px] font-semibold">
+                                            Accept
+                                          </span>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => declineRequest(r.id)}
+                                          className={clsx(
+                                            "inline-flex h-7 flex-1 items-center justify-center gap-2 rounded-lg px-3",
+                                            "border border-white/10 bg-white/5 text-neutral-200",
+                                            "hover:bg-white/10 transition-colors",
+                                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                                          )}
+                                        >
+                                          <UserX className="h-4 w-4" />
+                                          <span className="text-[11px] font-semibold">
+                                            Decline
+                                          </span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                    {/* 
+                                    <button
+                                      type="button"
+                                      onClick={() => declineRequest(r.id)}
+                                      aria-label="Dismiss"
+                                      className={clsx(
+                                        "inline-flex h-9 w-9 items-center justify-center rounded-xl",
+                                        "border border-white/10 bg-white/5 text-neutral-200",
+                                        "hover:bg-white/10",
+                                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                                      )}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button> */}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -642,13 +1575,17 @@ export default function FriendsClient() {
                   )}
                 >
                   {friendsSlice.map((f) => (
-                    <FriendsCard key={f.id} friend={f} />
+                    <FriendsCard
+                      key={f.id}
+                      friend={f}
+                      onRemove={removeFriend}
+                    />
                   ))}
                 </div>
               ) : (
                 <div className="space-y-3">
                   {friendsSlice.map((f) => (
-                    <FriendsRow key={f.id} friend={f} />
+                    <FriendsRow key={f.id} friend={f} onRemove={removeFriend} />
                   ))}
                 </div>
               )}
@@ -667,6 +1604,19 @@ export default function FriendsClient() {
           </div>
         </section>
       </section>
+
+      {/* Add Friend Modal */}
+      <AddFriendModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        candidates={addCandidates}
+        onSend={(sel) => {
+          // UI-only placeholder:
+          // later: POST /api/friends/requests { toUserIds: sel.map(s=>s.id) }
+          // Keep it silent for now (modal shows “sent” state).
+          void sel;
+        }}
+      />
     </div>
   );
 }

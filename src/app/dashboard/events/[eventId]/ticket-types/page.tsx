@@ -841,20 +841,28 @@ export default function TicketTypesPage() {
                 onDrop={() => handleDrop(t.id)}
                 className={clsx("relative rounded-lg", isOver && "z-[2]")}
               >
-                {/* insertion indicator line */}
+                {/* insertion indicator line (outside the row, in the gap) */}
                 {isOver ? (
-                  <div className="pointer-events-none absolute inset-0">
+                  <div
+                    className="pointer-events-none absolute left-3 right-3 z-[3]"
+                    style={
+                      dropEdge === "before" ? { top: -10 } : { bottom: -10 }
+                    }
+                  >
                     <div
-                      className={clsx(
-                        "absolute left-3 right-3 h-[2px] rounded-full",
-                        dropEdge === "before" ? "top-1.5" : "bottom-1.5",
-                      )}
+                      className="relative h-[3px] rounded-full"
                       style={{
                         background:
-                          "linear-gradient(90deg, rgba(154,70,255,0), rgba(154,70,255,0.75), rgba(154,70,255,0))",
-                        boxShadow: "0 0 18px rgba(154,70,255,0.35)",
+                          "linear-gradient(90deg, rgba(154,70,255,0), rgba(154,70,255,0.95), rgba(154,70,255,0))",
+                        boxShadow: "0 0 22px rgba(154,70,255,0.45)",
                       }}
-                    />
+                    >
+                      {/* center “beacon” dot so it’s obvious */}
+                      <div
+                        className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-500"
+                        style={{ boxShadow: "0 0 16px rgba(154,70,255,0.8)" }}
+                      />
+                    </div>
                   </div>
                 ) : null}
 

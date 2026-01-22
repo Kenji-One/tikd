@@ -29,23 +29,28 @@ export default function BreakdownCard({
   donutProps,
   onDetailedView,
 }: Props) {
-  const total = segments.reduce((sum, s) => sum + s.value, 0);
+  // ✅ Safety: prevent runtime crashes if something ever passes null/undefined.
+  const safeSegments: DonutSegment[] = Array.isArray(segments) ? segments : [];
+
+  const total = safeSegments.reduce(
+    (sum, s) => sum + (Number(s.value) || 0),
+    0,
+  );
   const isEmpty = total <= 0;
 
   const height = donutProps?.height ?? 180;
   const thickness = donutProps?.thickness ?? 22;
 
-  // ✅ Figma-like empty state:
-  // Render the SAME DonutHalf component, but as a single muted “track” segment.
-  // This preserves exact geometry, thickness, rounding, padding rules, etc.
+  // ✅ Empty arc: keep donut geometry identical, but show only the muted track.
   const emptySegments: DonutSegment[] = [
     {
       label: "Empty",
       value: 1,
-      // soft ghost track (works even if DonutHalf uses stroke)
       color: "rgba(255, 255, 255, 0.14)",
     },
   ];
+
+  const canOpenDetails = !!onDetailedView && !isEmpty;
 
   return (
     <div
@@ -56,8 +61,10 @@ export default function BreakdownCard({
     >
       <DonutHalf
         centerLabel={title}
+        // ✅ If no content: show 0 in the center (as now). Otherwise show the real total.
         centerValue={isEmpty ? 0 : total}
-        segments={isEmpty ? emptySegments : segments}
+        // ✅ If no content: show the empty muted arc. Otherwise show real segments.
+        segments={isEmpty ? emptySegments : safeSegments}
         height={height}
         thickness={thickness}
         startAngle={donutProps?.startAngle}
@@ -67,7 +74,7 @@ export default function BreakdownCard({
       />
 
       <ul className="mt-8">
-        {segments.map((s) => (
+        {safeSegments.map((s) => (
           <li
             key={s.label}
             className="
@@ -84,7 +91,7 @@ export default function BreakdownCard({
               )}
             >
               <span
-                className={clsx("inline-block h-1.5 w-1.5 rounded-full")}
+                className="inline-block h-1.5 w-1.5 rounded-full"
                 style={{
                   backgroundColor: s.color,
                   opacity: isEmpty ? 0.55 : 1,
@@ -100,17 +107,21 @@ export default function BreakdownCard({
                 isEmpty ? "text-neutral-300" : "text-neutral-0",
               )}
             >
-              {s.value.toLocaleString()}
+              {(isEmpty
+                ? 0
+                : Math.max(0, Number(s.value) || 0)
+              ).toLocaleString()}
             </span>
           </li>
         ))}
       </ul>
 
-      <div className="pointer-events-none w-full flex justify-end mt-1">
+      <div className="pointer-events-none mt-1 flex w-full justify-end">
         <button
           type="button"
           onClick={onDetailedView}
-          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!canOpenDetails}
+          className="pointer-events-auto cursor-pointer rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           Detailed View
         </button>

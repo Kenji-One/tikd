@@ -274,6 +274,81 @@ function providerIconSrc(p: WithdrawRow["provider"]) {
   }
 }
 
+function svgDataUri(svg: string) {
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function hashHue(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+/** Small “poster” thumbnail placeholder (for Event column) */
+function posterPlaceholderUrl(seed: string) {
+  const hue = hashHue(seed);
+  const hue2 = (hue + 38) % 360;
+
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="hsl(${hue} 90% 60%)" stop-opacity="0.85"/>
+        <stop offset="1" stop-color="hsl(${hue2} 90% 55%)" stop-opacity="0.25"/>
+      </linearGradient>
+      <radialGradient id="r" cx="30%" cy="20%" r="70%">
+        <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+        <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <rect x="4" y="4" width="64" height="64" rx="14" fill="rgba(18,18,32,1)"/>
+    <rect x="6" y="6" width="60" height="60" rx="12" fill="url(#g)"/>
+    <rect x="6" y="6" width="60" height="60" rx="12" fill="url(#r)"/>
+
+    <!-- simple “poster” blocks -->
+    <rect x="16" y="18" width="40" height="10" rx="5" fill="rgba(0,0,0,0.20)"/>
+    <rect x="16" y="34" width="28" height="8" rx="4" fill="rgba(0,0,0,0.22)"/>
+    <rect x="16" y="46" width="34" height="8" rx="4" fill="rgba(0,0,0,0.16)"/>
+
+    <!-- tiny corner mark -->
+    <circle cx="56" cy="54" r="7" fill="rgba(255,255,255,0.20)"/>
+    <circle cx="56" cy="54" r="3" fill="rgba(255,255,255,0.55)"/>
+  </svg>`;
+
+  return svgDataUri(svg);
+}
+
+/** Small “avatar” placeholder (for Name column) */
+function avatarPlaceholderUrl(seed: string) {
+  const hue = hashHue(seed);
+  const hue2 = (hue + 26) % 360;
+
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="hsl(${hue} 90% 62%)" stop-opacity="0.85"/>
+        <stop offset="1" stop-color="hsl(${hue2} 90% 58%)" stop-opacity="0.25"/>
+      </linearGradient>
+      <radialGradient id="r" cx="35%" cy="25%" r="70%">
+        <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
+        <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <circle cx="32" cy="32" r="30" fill="rgba(18,18,32,1)"/>
+    <circle cx="32" cy="32" r="28" fill="url(#g)"/>
+    <circle cx="32" cy="32" r="28" fill="url(#r)"/>
+
+    <!-- minimal user silhouette -->
+    <circle cx="32" cy="27" r="9" fill="rgba(0,0,0,0.22)"/>
+    <path d="M14 52c2-10 12-14 18-14s16 4 18 14" fill="rgba(0,0,0,0.18)"/>
+  </svg>`;
+
+  return svgDataUri(svg);
+}
+
 /* ------------------------------ Data ------------------------------ */
 async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
   return {
@@ -305,51 +380,51 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       {
         id: "t1",
         name: "Mahfuzul Nabil",
-        avatarUrl: null,
+        avatarUrl: avatarPlaceholderUrl("Mahfuzul Nabil"),
         type: "in",
         amount: 5850,
         event: "Summer Rooftop Party",
-        eventThumbUrl: null,
+        eventThumbUrl: posterPlaceholderUrl("Summer Rooftop Party"),
         dateISO: "2026-10-31T23:00:00.000Z",
       },
       {
         id: "t2",
         name: "Adom Shafi",
-        avatarUrl: null,
+        avatarUrl: avatarPlaceholderUrl("Adom Shafi"),
         type: "out",
         amount: -2550,
         event: "Charity Night Run",
-        eventThumbUrl: null,
+        eventThumbUrl: posterPlaceholderUrl("Charity Night Run"),
         dateISO: "2026-10-05T17:20:00.000Z",
       },
       {
         id: "t3",
         name: "Sami Ahmed",
-        avatarUrl: null,
+        avatarUrl: avatarPlaceholderUrl("Sami Ahmed"),
         type: "in",
         amount: 1100,
         event: "Indie Music Fest",
-        eventThumbUrl: null,
+        eventThumbUrl: posterPlaceholderUrl("Indie Music Fest"),
         dateISO: "2026-09-21T12:10:00.000Z",
       },
       {
         id: "t4",
         name: "Sajib Rahman",
-        avatarUrl: null,
+        avatarUrl: avatarPlaceholderUrl("Sajib Rahman"),
         type: "out",
         amount: -1550,
         event: "Tech Meetup Tbilisi",
-        eventThumbUrl: null,
+        eventThumbUrl: posterPlaceholderUrl("Tech Meetup Tbilisi"),
         dateISO: "2026-08-12T10:05:00.000Z",
       },
       {
         id: "t5",
         name: "Saiful Islam R.",
-        avatarUrl: null,
+        avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
         type: "in",
         amount: 4250,
         event: "Food & Wine Expo",
-        eventThumbUrl: null,
+        eventThumbUrl: posterPlaceholderUrl("Food & Wine Expo"),
         dateISO: "2026-07-04T09:30:00.000Z",
       },
     ],
@@ -529,11 +604,11 @@ export default function FinancesClient() {
         </div>
 
         {/* Layout */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr] lg:gap-5">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr] lg:gap-5 lg:items-stretch">
           {/* LEFT */}
-          <div className="flex flex-col gap-4">
+          <div className="flex h-full flex-col gap-4">
             {/* ✅ Unified Balance + Activity module */}
-            <div className="relative overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70">
+            <div className="relative h-full overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70">
               {/* Purple wash across the whole module (single grouped feel) */}
               <div
                 className="pointer-events-none absolute inset-0 opacity-100"
@@ -550,8 +625,7 @@ export default function FinancesClient() {
                     "radial-gradient(800px 520px at 50% -10%, rgba(0,0,0,0.20), transparent 62%), radial-gradient(1000px 650px at 50% 120%, rgba(0,0,0,0.45), transparent 60%)",
                 }}
               />
-
-              <div className="relative p-4">
+              <div className="relative flex h-full flex-col p-4">
                 {/* Top (Available Balance) - centered like reference */}
                 <div className="rounded-xl pt-5 pb-2">
                   <div className="flex min-h-[170px] flex-col items-center justify-center text-center">
@@ -644,7 +718,7 @@ export default function FinancesClient() {
                 <div className="my-4 h-px w-full bg-white/8" />
 
                 {/* Activity / Withdraw History (inside same container) */}
-                <div className="pb-1">
+                <div className="flex min-h-0 flex-1 flex-col pb-1">
                   <div className="mb-3 flex items-center justify-between px-1">
                     <h2 className="text-[14px] font-bold tracking-[-0.03em] text-neutral-0">
                       Activity
@@ -660,7 +734,7 @@ export default function FinancesClient() {
                     </button>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="min-h-0 flex-1 space-y-2">
                     {(overview?.withdrawHistory ?? []).map((w) => (
                       <div
                         key={w.id}
@@ -793,6 +867,13 @@ export default function FinancesClient() {
 
               <div className="relative w-full overflow-x-auto">
                 <table className="w-full min-w-[980px] border-collapse font-medium leading-tight">
+                  <colgroup>
+                    <col style={{ width: "44%" }} />
+                    <col style={{ width: "28%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "7%" }} />
+                  </colgroup>
                   <thead className="text-neutral-400">
                     <tr className="[&>th]:pb-3 [&>th]:pt-3 [&>th]:px-4">
                       <ThSort
@@ -841,9 +922,9 @@ export default function FinancesClient() {
                       >
                         {/* Event */}
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
                             <EventThumb title={t.event} url={t.eventThumbUrl} />
-                            <div className="text-[13px] font-semibold text-neutral-100">
+                            <div className="min-w-0 truncate text-[13px] font-semibold text-neutral-100">
                               {t.event}
                             </div>
                           </div>
@@ -851,9 +932,9 @@ export default function FinancesClient() {
 
                         {/* Name */}
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
                             <UserAvatar name={t.name} url={t.avatarUrl} />
-                            <div className="text-[13px] font-semibold text-neutral-100">
+                            <div className="min-w-0 truncate text-[13px] font-semibold text-neutral-100">
                               {t.name}
                             </div>
                           </div>

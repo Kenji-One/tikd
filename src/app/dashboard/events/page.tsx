@@ -18,6 +18,8 @@ import {
   Plus,
   Menu,
   Search,
+  ArrowDownNarrowWide,
+  ArrowDownWideNarrow,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/Input";
@@ -251,6 +253,13 @@ function SortControls({
   }, [open]);
 
   function apply(field: SortField) {
+    // Clicking the active option again clears sorting (back to default state)
+    if (sortField === field) {
+      setSortField(null);
+      setOpen(false);
+      return;
+    }
+
     setSortField(field);
     setSortDir(defaultDirFor(field));
     setOpen(false);
@@ -287,9 +296,7 @@ function SortControls({
             <Menu className="h-4 w-4" />
           ) : (
             <>
-              <span className="whitespace-nowrap text-white/90">Sort</span>
-              <span aria-hidden="true" className="h-4 w-px bg-white/18" />
-              <span className="max-w-[120px] truncate text-white/95">
+              <span className="max-w-[140px] truncate text-white/95">
                 {sortLabel}
               </span>
               <ChevronDown
@@ -326,6 +333,7 @@ function SortControls({
                         role="option"
                         aria-selected={active}
                         onClick={() => apply(opt.key)}
+                        title={active ? "Click again to clear sort" : undefined}
                         className={clsx(
                           "flex w-full items-center justify-between",
                           "rounded-lg px-3 py-2.5",
@@ -370,42 +378,17 @@ function SortControls({
           "cursor-pointer",
         )}
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-          className="opacity-90"
-        >
-          <path
-            d="M5 3v10"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
+        {sortDir === "asc" ? (
+          <ArrowDownNarrowWide
+            className="h-4 w-4 opacity-90"
+            aria-hidden="true"
           />
-          <path
-            d="M3 5l2-2 2 2"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        ) : (
+          <ArrowDownWideNarrow
+            className="h-4 w-4 opacity-90"
+            aria-hidden="true"
           />
-          <path
-            d="M11 13V3"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-          <path
-            d="M13 11l-2 2-2-2"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        )}
       </button>
     </div>
   );
@@ -446,7 +429,6 @@ function OrgPickerModal({
 
   if (!open) return null;
 
-  const hasOrgs = filteredOrgs.length > 0;
   const canConfirm = orgs.length > 0 && !!selectedOrgId && !loading;
 
   const handleOverlayClick = () => onClose();
@@ -472,72 +454,67 @@ function OrgPickerModal({
         aria-hidden="true"
       />
 
-      {/* ✅ Bigger modal + vertical layout */}
+      {/* ✅ Taller, more vertical (portrait) modal like reference */}
       <div
         className={clsx(
-          "relative z-10 w-full max-w-3xl rounded-2xl border border-white/12",
-          "bg-neutral-950/95 p-6 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
+          "relative z-10 w-[92vw] max-w-[480px]",
+          "rounded-2xl border border-white/12",
+          "bg-neutral-950/95 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
+          " max-h-[680px]",
+          "p-5 sm:p-6",
         )}
         onClick={handlePanelClick}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-neutral-0">
-              Choose an organization
-            </h2>
+        <div className="flex h-full flex-col">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-neutral-0">
+                Choose an organization
+              </h2>
 
-            {/* ✅ Updated subtitle */}
-            <p className="mt-1 text-xs text-neutral-300">
-              Events operate under an organization. Pick which one this new
-              event belongs to, or create a new organization first.
-            </p>
-
-            <div className="mt-4">
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search organizations..."
-                variant="full"
-                shape="pill"
-                size="md"
-                icon={<Search className="h-4 w-4 text-neutral-400" />}
-                aria-label="Search organizations"
-                className={clsx(
-                  // match modal surface
-                  // make it show a border (your full variant has border-transparent by default)
-                  // keep the purple focus behavior
-                  "focus-visible:!ring-primary-500",
-                  // text sizing + placeholder tone
-                  "!text-[13px] placeholder:!text-neutral-500",
-                  // make sure height feels like your earlier design (optional, but nice)
-                  "!min-h-[44px]",
-                )}
-              />
+              <p className="mt-1 text-xs text-neutral-300">
+                Events operate under an organization. Pick which one this new
+                event belongs to, or create a new organization first.
+              </p>
             </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:border-primary-500 hover:text-neutral-0"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:border-primary-500 hover:text-neutral-0"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {loading ? (
-            // ✅ Loading now matches vertical list
-            <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-[74px] rounded-2xl" />
-              ))}
-            </div>
-          ) : orgs.length > 0 ? (
-            <>
-              {/* ✅ Vertical list (top-to-bottom) */}
-              <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+          <div className="mt-4">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search organizations..."
+              variant="full"
+              shape="pill"
+              size="md"
+              icon={<Search className="h-4 w-4 text-neutral-400" />}
+              aria-label="Search organizations"
+              className={clsx(
+                "focus-visible:!ring-primary-500",
+                "!text-[13px] placeholder:!text-neutral-500",
+                "!min-h-[44px] w-full",
+              )}
+            />
+          </div>
+          {/* Body (scroll area) */}
+          <div className="mt-4 flex-1 overflow-hidden">
+            {loading ? (
+              <div className="h-full space-y-3 overflow-y-auto pr-1">
+                {[...Array(6)].map((_, i) => (
+                  <Skeleton key={i} className="h-[74px] rounded-2xl" />
+                ))}
+              </div>
+            ) : orgs.length > 0 ? (
+              <div className="h-full space-y-3 overflow-y-auto pr-1">
                 {filteredOrgs.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-white/12 bg-neutral-948/90 px-4 py-4 text-sm text-neutral-200">
                     <p className="font-medium text-neutral-0">
@@ -548,103 +525,107 @@ function OrgPickerModal({
                     </p>
                   </div>
                 ) : (
-                  filteredOrgs.map((org) => {
-                    const selected = org._id === selectedOrgId;
+                  <div className="grid grid-cols-2 gap-3">
+                    {filteredOrgs.map((org) => {
+                      const selected = org._id === selectedOrgId;
 
-                    return (
-                      <div
-                        key={org._id}
-                        className={clsx(
-                          "group relative flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
-                          "bg-neutral-948/90 border-white/10 hover:border-primary-500/70 hover:bg-neutral-900/90",
-                          selected &&
-                            "border-primary-500 bg-neutral-948/95 shadow-[0_0_0_1px_rgba(154,70,255,0.55)]",
-                        )}
-                        onClick={(e) => handleCardClick(e, org._id)}
-                      >
+                      return (
                         <div
+                          key={org._id}
                           className={clsx(
-                            "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md",
-                            "bg-neutral-900 ring-1 ring-inset ring-white/10",
-                            selected && "ring-primary-500/80",
+                            "group relative flex flex-col w-full cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
+                            "bg-neutral-948/90 border-white/10 hover:border-primary-500/70 hover:bg-neutral-900/90",
+                            selected &&
+                              "border-primary-500 bg-neutral-948/95 ring-1 ring-inset ring-primary-500/80",
                           )}
+                          onClick={(e) => handleCardClick(e, org._id)}
                         >
-                          {org.logo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={org.logo}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-sm font-semibold text-neutral-0">
-                              {org.name?.[0]?.toUpperCase() ?? "O"}
-                            </span>
-                          )}
-                        </div>
+                          <div
+                            className={clsx(
+                              "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md",
+                              "bg-neutral-900 ring-1 ring-inset ring-white/10",
+                              selected && "ring-primary-500/80",
+                            )}
+                          >
+                            {org.logo ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={org.logo}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-sm font-semibold text-neutral-0">
+                                {org.name?.[0]?.toUpperCase() ?? "O"}
+                              </span>
+                            )}
+                          </div>
 
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-semibold text-neutral-0">
-                            {org.name}
-                          </p>
-                          {org.website && (
-                            <p className="mt-0.5 truncate text-[11px] text-neutral-400">
-                              {domainFromUrl(org.website)}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-semibold text-neutral-0">
+                              {org.name}
                             </p>
-                          )}
-                        </div>
+                            {org.website && (
+                              <p className="mt-0.5 truncate text-[11px] text-neutral-400">
+                                {domainFromUrl(org.website)}
+                              </p>
+                            )}
+                          </div>
 
-                        <div className="ml-2 shrink-0">
-                          {selected ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90 px-2.5 py-1 text-[11px] font-medium text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              Selected
-                            </span>
-                          ) : (
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-white/5 text-[10px] text-neutral-300 group-hover:border-primary-400/80 group-hover:text-primary-200">
-                              <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 group-hover:bg-primary-300" />
-                            </span>
-                          )}
+                          <div className="ml-2 shrink-0">
+                            {selected ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90 px-2.5 py-1 text-[11px] font-medium text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Selected
+                              </span>
+                            ) : (
+                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-white/5 text-[10px] text-neutral-300 group-hover:border-primary-400/80 group-hover:text-primary-200">
+                                <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 group-hover:bg-primary-300" />
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-
-              {/* ✅ Continue button BELOW the list (not off to the side) */}
-              <div className="pt-4">
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    disabled={!canConfirm}
-                    onClick={onConfirm}
-                  >
-                    <CalendarPlus className="h-4 w-4" />
-                    Continue
-                  </Button>
-                </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-white/12 bg-neutral-948/90 px-4 py-4 text-sm text-neutral-200">
+                <p className="font-medium text-neutral-0">
+                  You don&apos;t have any organizations yet.
+                </p>
+                <p className="mt-1 text-xs text-neutral-400">
+                  Create an organization first, then you can launch events under
+                  that brand.
+                </p>
+                <Link
+                  href="/dashboard/organizations/new"
+                  className="mt-4 inline-flex items-center text-xs font-medium text-primary-300 hover:text-primary-200"
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Create organization
+                </Link>
               </div>
-            </>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-white/12 bg-neutral-948/90 px-4 py-4 text-sm text-neutral-200">
-              <p className="font-medium text-neutral-0">
-                You don&apos;t have any organizations yet.
-              </p>
-              <p className="mt-1 text-xs text-neutral-400">
-                Create an organization first, then you can launch events under
-                that brand.
-              </p>
-              <Link
-                href="/dashboard/organizations/new"
-                className="mt-4 inline-flex items-center text-xs font-medium text-primary-300 hover:text-primary-200"
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Create organization
-              </Link>
+            )}
+          </div>
+
+          {/* Footer */}
+          {orgs.length > 0 ? (
+            <div className="pt-8">
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={!canConfirm}
+                  onClick={onConfirm}
+                >
+                  <CalendarPlus className="h-4 w-4" />
+                  Continue
+                </Button>
+              </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

@@ -189,6 +189,17 @@ export default function MyTeamTable({
         style={{ maxHeight: `${MAX}px` }}
       >
         <table className="w-full border-collapse text-xs font-medium">
+          <colgroup>
+            {/* Member */}
+            <col className="w-[26%]" />
+            {/* Tickets */}
+            <col className="w-[24%]" />
+            {/* Views */}
+            <col className="w-[24%]" />
+            {/* Earned */}
+            <col className="w-[24%]" />
+          </colgroup>
+
           <thead className="text-neutral-400">
             <tr className={thRow}>
               <th

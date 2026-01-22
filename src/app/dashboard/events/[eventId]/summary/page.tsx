@@ -102,7 +102,7 @@ function buildDailyLabels(dates: Date[]) {
 
   if (n <= 7) {
     return dates.map((d) =>
-      d.toLocaleDateString(undefined, { weekday: "short" })
+      d.toLocaleDateString(undefined, { weekday: "short" }),
     );
   }
 
@@ -111,7 +111,7 @@ function buildDailyLabels(dates: Date[]) {
   }
 
   return dates.map((d) =>
-    d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    d.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
   );
 }
 
@@ -176,13 +176,12 @@ type EventMetrics = {
 };
 
 function deriveEventMetrics(event?: EventWithMeta): EventMetrics {
+  // Keep your current (real-ish) metrics logic
   const ticketsSold = event?.attendingCount ?? 0;
 
-  // Heuristics until real analytics + Stripe numbers are wired in:
   const pageViews =
     ticketsSold > 0 ? Math.max(ticketsSold * 3, ticketsSold + 10) : 0;
 
-  // If you later have ticketTypes/prices, replace this with real sums.
   const assumedAvgTicket = 25; // USD demo
   const revenue = ticketsSold * assumedAvgTicket;
 
@@ -192,6 +191,7 @@ function deriveEventMetrics(event?: EventWithMeta): EventMetrics {
 function splitByPercent(total: number, percents: number[]) {
   const safeTotal = Math.max(0, total);
   if (safeTotal === 0) return percents.map(() => 0);
+
   const raw = percents.map((p) => (safeTotal * p) / 100);
   const floors = raw.map((x) => Math.floor(x));
   let remainder = safeTotal - floors.reduce((a, b) => a + b, 0);
@@ -211,6 +211,17 @@ function splitByPercent(total: number, percents: number[]) {
   return out;
 }
 
+/** ✅ Deterministic dummy total per event (so it doesn't jump on rerenders) */
+function stableDummyTotal(seed: string, min = 8000, max = 48000) {
+  let h = 2166136261; // FNV-ish
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const n = Math.abs(h) % (max - min + 1);
+  return min + n;
+}
+
 export default function EventSummaryPage() {
   const { eventId } = useParams() as { eventId?: string };
 
@@ -228,11 +239,11 @@ export default function EventSummaryPage() {
 
   const ALL_TIME_START = useMemo(
     () => new Date(currentYear, 0, 1),
-    [currentYear]
+    [currentYear],
   );
   const ALL_TIME_END = useMemo(
     () => new Date(currentYear, 11, 31),
-    [currentYear]
+    [currentYear],
   );
 
   const [dateRange, setDateRange] = useState<DateRangeValue>({
@@ -243,17 +254,17 @@ export default function EventSummaryPage() {
 
   const effectiveStart = useMemo(
     () => (hasChosenRange ? (dateRange.start as Date) : ALL_TIME_START),
-    [hasChosenRange, dateRange.start, ALL_TIME_START]
+    [hasChosenRange, dateRange.start, ALL_TIME_START],
   );
 
   const effectiveEnd = useMemo(
     () => (hasChosenRange ? (dateRange.end as Date) : ALL_TIME_END),
-    [hasChosenRange, dateRange.end, ALL_TIME_END]
+    [hasChosenRange, dateRange.end, ALL_TIME_END],
   );
 
   const rangeDays = useMemo(
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
-    [effectiveStart, effectiveEnd]
+    [effectiveStart, effectiveEnd],
   );
 
   const dailyMode = useMemo(() => {
@@ -272,7 +283,6 @@ export default function EventSummaryPage() {
     return buildDailyDates(effectiveStart, effectiveEnd);
   }, [dailyMode, effectiveStart, effectiveEnd]);
 
-  // Base series (monthly). We scale it by event “size” so the charts feel event-scoped.
   const scale = useMemo(() => {
     const t = metrics.ticketsSold;
     if (t <= 0) return 0.15;
@@ -284,25 +294,25 @@ export default function EventSummaryPage() {
   const sparkRevenueMonthly = useMemo(
     () =>
       [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map((v) =>
-        Math.round(v * 1000 * scale)
+        Math.round(v * 1000 * scale),
       ),
-    [scale]
+    [scale],
   );
 
   const sparkPageViewsMonthly = useMemo(
     () =>
       [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120].map((v) =>
-        Math.max(1, Math.round(v * scale))
+        Math.max(1, Math.round(v * scale)),
       ),
-    [scale]
+    [scale],
   );
 
   const sparkTicketsMonthly = useMemo(
     () =>
       [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480].map((v) =>
-        Math.max(1, Math.round(v * scale))
+        Math.max(1, Math.round(v * scale)),
       ),
-    [scale]
+    [scale],
   );
 
   const revenueData = useMemo(() => {
@@ -314,41 +324,41 @@ export default function EventSummaryPage() {
     if (!dailyMode)
       return mapSeriesToCount(sparkPageViewsMonthly, labels.length);
     return dailyizeFromMonthly(sparkPageViewsMonthly, dates).map((v) =>
-      Math.round(v)
+      Math.round(v),
     );
   }, [dailyMode, labels.length, dates, sparkPageViewsMonthly]);
 
   const ticketsSoldData = useMemo(() => {
     if (!dailyMode) return mapSeriesToCount(sparkTicketsMonthly, labels.length);
     return dailyizeFromMonthly(sparkTicketsMonthly, dates).map((v) =>
-      Math.round(v)
+      Math.round(v),
     );
   }, [dailyMode, labels.length, dates, sparkTicketsMonthly]);
 
   const revenueMax = useMemo(() => Math.max(0, ...revenueData), [revenueData]);
   const revenueDomain = useMemo<[number, number]>(
     () => [0, Math.max(1, revenueMax)],
-    [revenueMax]
+    [revenueMax],
   );
   const revenueTicks = useMemo(
     () => niceTicks(revenueDomain[1], 6),
-    [revenueDomain]
+    [revenueDomain],
   );
 
   const pvMax = useMemo(() => Math.max(0, ...pageViewsData), [pageViewsData]);
   const pvDomain = useMemo<[number, number]>(
     () => [0, Math.max(1, pvMax)],
-    [pvMax]
+    [pvMax],
   );
   const pvTicks = useMemo(() => niceTicks(pvDomain[1], 4), [pvDomain]);
 
   const tsMax = useMemo(
     () => Math.max(0, ...ticketsSoldData),
-    [ticketsSoldData]
+    [ticketsSoldData],
   );
   const tsDomain = useMemo<[number, number]>(
     () => [0, Math.max(1, tsMax)],
-    [tsMax]
+    [tsMax],
   );
   const tsTicks = useMemo(() => niceTicks(tsDomain[1], 4), [tsDomain]);
 
@@ -374,27 +384,32 @@ export default function EventSummaryPage() {
     });
   }, [dates, pinnedIndex, dailyMode]);
 
-  /* ---------- Age + Gender breakdown (demo until real attendee data exists) ---------- */
-  const ageSegments = useMemo(() => {
-    const total = metrics.ticketsSold;
-    const [a, b, c, d] = splitByPercent(total, [34, 38, 18, 10]);
-    return [
-      { label: "18–24", value: a, color: "#9A46FF" },
-      { label: "25–34", value: b, color: "#7C3AED" },
-      { label: "35–44", value: c, color: "#C7A0FF" },
-      { label: "45+", value: d, color: "#45FF79" },
-    ];
-  }, [metrics.ticketsSold]);
+  /* ---------- ✅ Dummy demographics: always non-zero (until real analytics exists) ---------- */
+  const breakdownTotal = useMemo(() => {
+    // If later you get a real metric, you can swap this line.
+    // For now: stable per-event dummy number that "feels" like the mock.
+    return stableDummyTotal(eventId ?? "no-event");
+  }, [eventId]);
 
   const genderSegments = useMemo(() => {
-    const total = metrics.ticketsSold;
-    const [m, f, o] = splitByPercent(total, [52, 46, 2]);
+    const total = breakdownTotal;
+    const [male, female, other] = splitByPercent(total, [66, 23, 11]);
     return [
-      { label: "Male", value: m, color: "#9A46FF" },
-      { label: "Female", value: f, color: "#C7A0FF" },
-      { label: "Other", value: o, color: "#FF7B45" },
+      { label: "Male", value: male, color: "#9A46FF" },
+      { label: "Female", value: female, color: "#FF7A45" },
+      { label: "Other", value: other, color: "#45FF79" },
     ];
-  }, [metrics.ticketsSold]);
+  }, [breakdownTotal]);
+
+  const ageSegments = useMemo(() => {
+    const total = breakdownTotal;
+    const [a, b, c] = splitByPercent(total, [62, 27, 11]);
+    return [
+      { label: "18–24", value: a, color: "#FF7A45" },
+      { label: "25–34", value: b, color: "#FF3B4A" },
+      { label: "Other", value: c, color: "#9A46FF" },
+    ];
+  }, [breakdownTotal]);
 
   const kpiRevenueValue = useMemo(() => {
     const v = metrics.revenue;
@@ -405,7 +420,6 @@ export default function EventSummaryPage() {
 
   return (
     <div className="space-y-5 px-4 md:px-6 lg:px-8">
-      {/* Top section: same layout as Main Dashboard (KPI cluster + right table) */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
         <div className="grid grid-cols-1 rounded-lg border border-neutral-700 bg-neutral-900 pl-4 lg:grid-cols-[3.15fr_1.74fr]">
           <KpiCard
@@ -502,25 +516,31 @@ export default function EventSummaryPage() {
         <RecentSalesTable />
       </section>
 
-      {/* Replace “Upcoming Events” area with Age + Gender breakdown */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <BreakdownCard
-            title="Age Breakdown"
-            segments={ageSegments}
-            donutProps={{ height: 180, thickness: 22 }}
-          />
           <BreakdownCard
             title="Gender Breakdown"
             segments={genderSegments}
             donutProps={{ height: 180, thickness: 22 }}
+            onDetailedView={() => {
+              console.log("Gender breakdown detailed view");
+            }}
+          />
+
+          <BreakdownCard
+            title="Age Breakdown"
+            segments={ageSegments}
+            donutProps={{ height: 180, thickness: 22 }}
+            onDetailedView={() => {
+              console.log("Age breakdown detailed view");
+            }}
           />
         </div>
 
         <MyTeamTable
           members={DEMO_MY_TEAM}
           onDetailedView={() => {
-            console.log("Detailed View clicked");
+            console.log("Team detailed view clicked");
           }}
         />
       </section>

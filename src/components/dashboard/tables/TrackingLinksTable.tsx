@@ -1179,7 +1179,7 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              <th className="text-left text-base font-semibold">QR Code</th>
+              <th className="text-center text-base font-semibold">QR Code</th>
 
               <th
                 className={clsx(thBase, "text-center")}
@@ -1339,12 +1339,12 @@ export default function TrackingLinksTable() {
                   </td>
 
                   {/* QR Code (pulled closer by narrower column + centered) */}
-                  <td className="px-4 py-3 text-left">
+                  <td className="px-4 py-3 text-center">
                     <button
                       type="button"
                       onClick={() => openQr(r)}
                       className={clsx(
-                        "inline-flex items-center justify-center rounded-md p-1 ml-2.5",
+                        "inline-flex items-center justify-center rounded-md p-1 mr-1",
                         "hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
                       )}
                       title="Open QR"
@@ -1368,7 +1368,6 @@ export default function TrackingLinksTable() {
                   {/* Views */}
                   <td className="px-4 py-3 text-center">
                     <span className="tabular-nums inline-flex items-center justify-center gap-1">
-                      {r.views}
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         width="12"
@@ -1384,19 +1383,35 @@ export default function TrackingLinksTable() {
                           fill="#A7A7BC"
                         />
                       </svg>
+                      {r.views}
                     </span>
                   </td>
 
                   {/* Tickets Sold */}
                   <td className="px-4 py-3 text-center">
-                    <span className="tabular-nums text-neutral-200">
+                    <span className="tabular-nums inline-flex items-center justify-center gap-1">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        className="h-4 w-4"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          clipRule="evenodd"
+                          d="M7.00413 9.5015L7.00713 8.5C7.00713 8.36706 7.05994 8.23957 7.15394 8.14556C7.24794 8.05156 7.37544 7.99875 7.50838 7.99875C7.64132 7.99875 7.76881 8.05156 7.86281 8.14556C7.95682 8.23957 8.00963 8.36706 8.00963 8.5V9.4885C8.00963 9.729 8.00963 9.8495 8.08663 9.9235C8.16413 9.997 8.28163 9.992 8.51813 9.982C9.44963 9.9425 10.0221 9.817 10.4251 9.414C10.8301 9.011 10.9556 8.4385 10.9951 7.5055C11.0026 7.3205 11.0066 7.2275 10.9721 7.166C10.9371 7.1045 10.7996 7.0275 10.5236 6.873C10.3682 6.78633 10.2387 6.65971 10.1485 6.50624C10.0584 6.35276 10.0108 6.17799 10.0108 6C10.0108 5.82201 10.0584 5.64724 10.1485 5.49376C10.2387 5.34029 10.3682 5.21367 10.5236 5.127C10.7996 4.973 10.9376 4.8955 10.9721 4.834C11.0066 4.7725 11.0026 4.68 10.9946 4.4945C10.9556 3.5615 10.8296 2.9895 10.4251 2.586C9.98663 2.148 9.34763 2.0375 8.26413 2.0095C8.23095 2.00863 8.19794 2.01442 8.16703 2.02652C8.13613 2.03862 8.10796 2.05678 8.08419 2.07995C8.06043 2.10311 8.04154 2.1308 8.02865 2.16138C8.01575 2.19196 8.00912 2.22481 8.00913 2.258V3.5C8.00913 3.63294 7.95632 3.76043 7.86232 3.85444C7.76831 3.94844 7.64082 4.00125 7.50788 4.00125C7.37494 4.00125 7.24744 3.94844 7.15344 3.85444C7.05944 3.76043 7.00663 3.63294 7.00663 3.5L7.00313 2.2495C7.003 2.18328 6.9766 2.11982 6.92973 2.07305C6.88286 2.02627 6.81934 2 6.75313 2H4.99713C3.10713 2 2.16213 2 1.57463 2.586C1.16963 2.989 1.04413 3.5615 1.00463 4.4945C0.997127 4.6795 0.993127 4.7725 1.02763 4.834C1.06263 4.8955 1.20013 4.973 1.47613 5.127C1.63159 5.21367 1.7611 5.34029 1.85125 5.49376C1.9414 5.64724 1.98893 5.82201 1.98893 6C1.98893 6.17799 1.9414 6.35276 1.85125 6.50624C1.7611 6.65971 1.63159 6.78633 1.47613 6.873C1.20013 7.0275 1.06213 7.1045 1.02763 7.166C0.993127 7.2275 0.997127 7.32 1.00513 7.505C1.04413 8.4385 1.17013 9.011 1.57463 9.414C2.16213 10 3.10713 10 4.99763 10H6.50263C6.73863 10 6.85613 10 6.92963 9.927C7.00313 9.854 7.00363 9.737 7.00413 9.5015ZM8.00913 6.5V5.5C8.00913 5.36706 7.95632 5.23957 7.86232 5.14556C7.76831 5.05156 7.64082 4.99875 7.50788 4.99875C7.37494 4.99875 7.24744 5.05156 7.15344 5.14556C7.05944 5.23957 7.00663 5.36706 7.00663 5.5V6.5C7.00663 6.63301 7.05946 6.76056 7.15351 6.85461C7.24756 6.94866 7.37512 7.0015 7.50813 7.0015C7.64113 7.0015 7.76869 6.94866 7.86274 6.85461C7.95679 6.76056 8.00913 6.63301 8.00913 6.5Z"
+                          fill="#A7A7BC"
+                        />
+                      </svg>{" "}
                       {r.ticketsSold}
                     </span>
                   </td>
 
                   {/* Revenue */}
                   <td className="px-4 py-3 text-center">
-                    <span className="tabular-nums text-neutral-200">
+                    <span className="tabular-nums ">
                       {formatMoneyUSD(r.revenue)}
                     </span>
                   </td>
@@ -1425,7 +1440,7 @@ export default function TrackingLinksTable() {
 
                   {/* Date */}
                   <td className="px-4 py-3 text-center">
-                    <span className="text-neutral-200">{r.created}</span>
+                    <span className="">{r.created}</span>
                   </td>
 
                   {/* Actions */}

@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 
-type Sizing = "small" | "avatar" | "normal" | "big";
+type Sizing = "small" | "avatar" | "normal" | "big" | "square";
 
 type Props = {
   /** Current image URL coming from the form */
@@ -53,7 +53,7 @@ export default function ImageUpload({
       }).toString();
 
       const { timestamp, signature } = await fetch(
-        `/api/cloudinary/sign?${params}`
+        `/api/cloudinary/sign?${params}`,
       ).then((r) => r.json());
 
       const form = new FormData();
@@ -63,7 +63,7 @@ export default function ImageUpload({
       form.append("signature", signature);
       form.append(
         "api_key",
-        process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY as string
+        process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY as string,
       );
       form.append("overwrite", "1");
       form.append("invalidate", "1");
@@ -108,6 +108,15 @@ export default function ImageUpload({
           img: "object-cover rounded-full",
           button:
             "h-20 w-20 rounded-full border border-dashed border-white/30 text-white/80 hover:bg-white/10",
+          wrapper: "inline-flex flex-col gap-2",
+        };
+      case "square":
+        return {
+          label: "text-xs text-white/80",
+          box: "relative h-20 w-20 rounded-full overflow-hidden border border-white/10",
+          img: "object-cover rounded-full",
+          button:
+            "h-20 w-20 rounded-xl border border-dashed border-white/30 text-white/80 hover:bg-white/10",
           wrapper: "inline-flex flex-col gap-2",
         };
       case "big":

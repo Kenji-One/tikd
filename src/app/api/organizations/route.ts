@@ -21,7 +21,7 @@ const websiteSchema = z
   .optional()
   .refine(
     (value) => {
-      if (!value) return true; // empty / undefined => OK
+      if (!value) return true;
       try {
         new URL(value);
         return true;
@@ -29,15 +29,17 @@ const websiteSchema = z
         return false;
       }
     },
-    {
-      message: "Must be a valid URL (e.g., https://example.com)",
-    }
+    { message: "Must be a valid URL (e.g., https://example.com)" },
   );
 
 const orgSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+
+  /** ✅ NEW */
+  banner: z.string().url().optional(),
   logo: z.string().url().optional(),
+
   website: websiteSchema,
   businessType: z.enum(businessTypeValues),
   location: z.string().min(2),
@@ -58,8 +60,6 @@ export async function POST(req: Request) {
   const parsed = orgSchema.safeParse(json);
 
   if (!parsed.success) {
-    // will now return "Must be a valid URL ..." if you enter a bad URL,
-    // and will not complain at all if website is empty.
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
 

@@ -285,7 +285,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                           />
                         </div>
                       ) : (
-                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-neutral-900 ring-1 ring-neutral-800/60 text-[14px] font-semibold text-neutral-200">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60 text-[14px] font-semibold text-neutral-200">
                           {titleInitial(event?.title)}
                         </div>
                       )}
@@ -300,9 +300,9 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       </h1>
 
                       <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span className="tikd-chip">
-                          <CalendarDays className="h-3.5 w-3.5 text-neutral-500" />
-                          <span className="text-neutral-300">
+                        <span className="tikd-chip tikd-chip-primary">
+                          <CalendarDays className="h-3.5 w-3.5 text-primary-200" />
+                          <span>
                             {event?.date
                               ? formatDateTime(event.date)
                               : "Date TBA"}

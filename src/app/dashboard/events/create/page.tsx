@@ -114,7 +114,7 @@ const FormSchema = z
         z.object({
           name: z.string().min(1, "Artist name required"),
           image: z.string().url().optional(),
-        })
+        }),
       )
       .default([]),
 
@@ -322,6 +322,72 @@ function buildLocationString(v: FormValues) {
   }
 }
 
+const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1280" viewBox="0 0 900 1280">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0b16"/>
+      <stop offset="0.45" stop-color="#22113a"/>
+      <stop offset="1" stop-color="#0b1020"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="30%" cy="15%" r="70%">
+      <stop offset="0" stop-color="#9a46ff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#9a46ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="85%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#5865f2" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#5865f2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="900" height="1280" fill="url(#bg)"/>
+  <rect width="900" height="1280" fill="url(#glow)"/>
+  <rect width="900" height="1280" fill="url(#glow2)"/>
+
+  <!-- watermark so it never looks like a real event -->
+  <g opacity="0.08">
+    <text x="-40" y="720" font-family="Arial, Helvetica, sans-serif" font-size="84" font-weight="700"
+      fill="#ffffff" transform="rotate(-20 450 640)">
+      TIXSY • PREVIEW • MOCK • TIXSY • PREVIEW • MOCK • TIXSY • PREVIEW • MOCK
+    </text>
+  </g>
+
+  <!-- top header -->
+  <text x="80" y="150" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800" fill="#ffffff">TIXSY</text>
+  <text x="80" y="210" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="600" fill="#cfcfe6" opacity="0.9">
+    LIVE PREVIEW (SAMPLE POSTER)
+  </text>
+
+  <!-- big placeholder “art” area -->
+  <rect x="80" y="280" width="740" height="640" rx="26" fill="#0b0b16" opacity="0.55" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
+  <rect x="130" y="340" width="640" height="420" rx="20" fill="#0b0b16" opacity="0.35" stroke="#ffffff" stroke-opacity="0.22" stroke-width="2" stroke-dasharray="10 10"/>
+
+  <text x="450" y="560" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#ffffff">
+    YOUR POSTER WILL APPEAR HERE
+  </text>
+  <text x="450" y="610" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600" fill="#cfcfe6" opacity="0.9">
+    Upload a poster to replace this mock preview
+  </text>
+
+  <!-- fake info chips -->
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="18">
+    <rect x="80" y="970" width="250" height="52" rx="26" fill="#ffffff" opacity="0.08" stroke="#ffffff" stroke-opacity="0.16"/>
+    <text x="205" y="1004" text-anchor="middle" fill="#ffffff" opacity="0.9">DATE • TIME</text>
+
+    <rect x="345" y="970" width="250" height="52" rx="26" fill="#ffffff" opacity="0.08" stroke="#ffffff" stroke-opacity="0.16"/>
+    <text x="470" y="1004" text-anchor="middle" fill="#ffffff" opacity="0.9">LOCATION</text>
+
+    <rect x="610" y="970" width="210" height="52" rx="26" fill="#9a46ff" opacity="0.25" stroke="#9a46ff" stroke-opacity="0.55"/>
+    <text x="715" y="1004" text-anchor="middle" fill="#ffffff" opacity="0.95">PREVIEW</text>
+  </g>
+
+  <!-- bottom note -->
+  <text x="80" y="1160" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="600" fill="#cfcfe6" opacity="0.85">
+    This is a mock preview — not a real event poster.
+  </text>
+</svg>
+`)}`;
+
 /* ------------------------------ Page ------------------------------ */
 export default function NewEventPage() {
   const router = useRouter();
@@ -359,7 +425,7 @@ export default function NewEventPage() {
   /** Safe watcher with a default for optional array fields coming from z.input */
   const watchArr = <K extends keyof FormInput>(
     key: K,
-    fallback: NonNullable<FormInput[K]>
+    fallback: NonNullable<FormInput[K]>,
   ) => (watch(key) ?? fallback) as NonNullable<FormInput[K]>;
 
   /* ---------- Lock organizationId from the URL -------------------- */
@@ -524,10 +590,10 @@ export default function NewEventPage() {
       title: title || "Untitled Event",
       dateLabel: startISO ? fmtDateTimeLabel(startISO, endISO) : "Date TBA",
       venue: derivedLocationLabel || "Location TBA",
-      img: image || "/dummy/event-1.png",
+      img: image || TIXSY_MOCK_POSTER,
       category: "Shows",
     }),
-    [title, startISO, endISO, derivedLocationLabel, image]
+    [title, startISO, endISO, derivedLocationLabel, image],
   );
 
   /* ---------- Categories chips ------------------------------------ */
@@ -710,7 +776,7 @@ export default function NewEventPage() {
                     {dateRange.start
                       ? fmtDateRangeShort(
                           dateRange.start,
-                          dateRange.end ?? dateRange.start
+                          dateRange.end ?? dateRange.start,
                         )
                       : "—"}
                   </span>{" "}
@@ -740,7 +806,7 @@ export default function NewEventPage() {
                           "rounded-full border px-4 py-2 text-sm transition-colors",
                           active
                             ? "border-white/20 bg-primary-900/50 text-neutral-0"
-                            : "border-white/10 text-neutral-300 hover:text-neutral-0 hover:border-primary-500"
+                            : "border-white/10 text-neutral-300 hover:text-neutral-0 hover:border-primary-500",
                         )}
                       >
                         {c}
@@ -806,7 +872,7 @@ export default function NewEventPage() {
                           "rounded-full px-3.5 py-1.5 text-sm transition",
                           active
                             ? "bg-primary-900/50 text-neutral-0 ring-1 ring-primary-500/70"
-                            : "text-neutral-300 hover:text-neutral-0"
+                            : "text-neutral-300 hover:text-neutral-0",
                         )}
                       >
                         {t.label}

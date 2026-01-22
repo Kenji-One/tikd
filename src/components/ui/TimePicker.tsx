@@ -53,12 +53,10 @@ function mod(n: number, m: number) {
 
 /**
  * Behavior:
- * 1) When value is empty and user opens picker, show 00:00 *inside dropdown* as placeholder.
- * 2) On FIRST interaction (any arrow or AM/PM):
- *    - treat current as 00:00 baseline (not the old default 6pm)
- *    - commit a valid time
- *    - permanently ban 00:00 for this component instance
- * 3) After lock: 00:00 can never be committed or displayed again in that session.
+ * - Input shows placeholder when value is empty.
+ * - Dropdown shows a sensible default baseline (12:00 AM) when empty.
+ * - Interactions commit a real HH:MM string (including 00:00 if selected).
+ * - No “midnight banning” — wrap-around must be consistent.
  */
 export default function TimePicker({
   label,
@@ -74,18 +72,12 @@ export default function TimePicker({
 
   const parsed = useMemo(() => parseHHMM(value), [value]);
 
-  // Once true, 00:00 is forbidden forever for this component instance.
-  const [zeroLocked, setZeroLocked] = useState(false);
-
-  // If external value ever becomes "00:00", consider it locked (so it won’t reappear).
-  useEffect(() => {
-    if (parsed && parsed.hh === 0 && parsed.mm === 0) setZeroLocked(true);
-  }, [parsed]);
-
-  // Keep your original “idle” internal defaults, but they MUST NOT affect the placeholder UX.
+  // Baseline for local state:
+  // - If value exists, mirror it
+  // - If empty, use 12:00 AM (00:00) as the picker baseline
   const init = useMemo(() => {
     if (parsed) return parsed;
-    return { hh: 18, mm: 0 }; // internal default (only used once we have a real selection)
+    return { hh: 0, mm: 0 };
   }, [parsed]);
 
   const [h12, setH12] = useState(() => to12h(init.hh).h12);
@@ -121,50 +113,27 @@ export default function TimePicker({
     };
   }, [open]);
 
-  // Placeholder state is ONLY for dropdown display, not for the input itself.
-  const showZeroPlaceholderInPicker = open && !parsed && !zeroLocked;
+  function commit24(hh24: number, mm2: number) {
+    const safeHH = clamp(hh24, 0, 23);
+    const safeMM = clamp(mm2, 0, 59);
 
-  function ensureNotMidnight(hh24: number, mm2: number, locked: boolean) {
-    if (!locked) return { hh24, mm: mm2 };
-
-    // After lock: never allow 00:00.
-    if (hh24 === 0 && mm2 === 0) {
-      const step = Math.max(1, Math.floor(minuteStep));
-      return { hh24: 0, mm: clamp(step, 0, 59) };
-    }
-
-    return { hh24, mm: mm2 };
-  }
-
-  function commit24(hh24: number, mm2: number, lockNow: boolean) {
-    const locked = zeroLocked || lockNow;
-
-    const safe = ensureNotMidnight(
-      clamp(hh24, 0, 23),
-      clamp(mm2, 0, 59),
-      locked
-    );
-
-    if (lockNow && !zeroLocked) setZeroLocked(true);
-
-    const t = to12h(safe.hh24);
+    const t = to12h(safeHH);
     setH12(t.h12);
     setAM(t.am);
-    setMM(safe.mm);
+    setMM(safeMM);
 
-    onChange(`${pad2(safe.hh24)}:${pad2(safe.mm)}`);
+    onChange(`${pad2(safeHH)}:${pad2(safeMM)}`);
   }
 
-  // Use 00:00 as the baseline ONLY when the picker is showing the placeholder.
   function getCurrent24() {
-    if (showZeroPlaceholderInPicker) return { hh24: 0, mm: 0 };
+    // If the value is empty, use current local state (which defaults to 12:00 AM baseline).
     return { hh24: to24h(h12, am), mm };
   }
 
   function incHour(delta: number) {
     const cur = getCurrent24();
     const nextHH = mod(cur.hh24 + delta, 24);
-    commit24(nextHH, cur.mm, true);
+    commit24(nextHH, cur.mm);
   }
 
   function incMinute(delta: number) {
@@ -176,20 +145,12 @@ export default function TimePicker({
     const nextHH = Math.floor(nextTotal / 60);
     const nextMM = nextTotal % 60;
 
-    commit24(nextHH, nextMM, true);
+    commit24(nextHH, nextMM);
   }
 
   function setAMPM(nextAM: boolean) {
-    // If placeholder showing 00:00, AM means 00:00 (but will be nudged away after lock),
-    // PM means 12:00.
-    if (showZeroPlaceholderInPicker) {
-      const baseHH = nextAM ? 0 : 12;
-      commit24(baseHH, 0, true);
-      return;
-    }
-
     const hh24 = to24h(h12, nextAM);
-    commit24(hh24, mm, true);
+    commit24(hh24, mm);
   }
 
   const display = parsed ? fmtDisplay(parsed.hh, parsed.mm) : null;
@@ -199,22 +160,24 @@ export default function TimePicker({
     "flex items-center justify-between gap-3",
     "focus:outline-none",
     open ? "border-primary-500" : "border-white/10 hover:border-white/15",
-    error && "border-error-500/70 ring-2 ring-error-500/10"
+    error && "border-error-500/70 ring-2 ring-error-500/10",
   );
 
   const arrowBtn = clsx(
     "grid h-7 w-7 place-items-center rounded-full cursor-pointer transition",
     "text-white/80",
     " hover:text-white",
-    "focus:outline-none"
+    "focus:outline-none",
   );
 
-  // Picker face
-  const pickerHourText = showZeroPlaceholderInPicker ? "00" : String(h12);
-  const pickerMinuteText = showZeroPlaceholderInPicker ? "00" : pad2(mm);
+  // Picker face:
+  // If value is empty AND user hasn't interacted yet, we still show the baseline (12:00 AM)
+  // but we do NOT commit it until they click something.
+  const pickerHourText = String(h12);
+  const pickerMinuteText = pad2(mm);
 
-  const pickerAMActive = showZeroPlaceholderInPicker ? false : am;
-  const pickerPMActive = showZeroPlaceholderInPicker ? false : !am;
+  const pickerAMActive = am;
+  const pickerPMActive = !am;
 
   return (
     <div ref={rootRef} className={clsx("relative", className)}>
@@ -254,7 +217,7 @@ export default function TimePicker({
           <ChevronDown
             className={clsx(
               "h-5 w-5 text-white/45 transition-transform",
-              open && "rotate-180"
+              open && "rotate-180",
             )}
           />
         </div>
@@ -268,7 +231,7 @@ export default function TimePicker({
             "absolute left-0 z-40 mt-2",
             "w-[164px] max-w-[calc(100vw-2rem)]",
             "rounded-xl border border-white/10 bg-neutral-950/92 backdrop-blur-md",
-            "p-3"
+            "p-3",
           )}
         >
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
@@ -338,7 +301,7 @@ export default function TimePicker({
                   "focus:outline-none focus:ring-2 focus:ring-primary-500/15",
                   pickerAMActive
                     ? "bg-primary-500/20 text-primary-200"
-                    : "text-white/65 hover:text-white"
+                    : "text-white/65 hover:text-white",
                 )}
                 aria-pressed={pickerAMActive}
               >
@@ -352,7 +315,7 @@ export default function TimePicker({
                   "focus:outline-none focus:ring-2 focus:ring-primary-500/15",
                   pickerPMActive
                     ? "bg-primary-500/20 text-primary-200"
-                    : "text-white/65 hover:text-white"
+                    : "text-white/65 hover:text-white",
                 )}
                 aria-pressed={pickerPMActive}
               >

@@ -88,11 +88,11 @@ export default function TeamsClient() {
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       {/* Header OUTSIDE the card (title/subtitle + members/button) */}
-      <section className="pt-4">
+      <section className="pt-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-3xl font-bold tracking-[-0.03em] text-neutral-50">
-              TEAMS
+              Teams
             </div>
             <div className="mt-1 text-[13px] tracking-[-0.02em] text-neutral-400">
               Track performance, manage drafts, and jump into event setup.

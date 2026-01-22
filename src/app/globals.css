@@ -340,6 +340,29 @@ select {
     color: rgba(223, 223, 230, 0.85);
   }
 
+  /* Primary (purple) chip — for event date */
+  .tikd-chip-primary {
+    border-color: rgba(154, 70, 255, 0.28);
+    color: rgba(231, 222, 255, 0.92);
+
+    background:
+      radial-gradient(
+        220px 120px at 20% 35%,
+        rgba(199, 160, 255, 0.22),
+        transparent 60%
+      ),
+      linear-gradient(
+        90deg,
+        rgba(134, 0, 238, 0.22) 0%,
+        rgba(154, 70, 255, 0.2) 52%,
+        rgba(170, 115, 255, 0.16) 100%
+      );
+
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 14px 36px rgba(154, 81, 255, 0.14);
+  }
+
   /* Keep your existing styles for these */
   .tikd-action-icon {
     @apply inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-neutral-900/40 text-neutral-200 backdrop-blur-xl;
@@ -620,4 +643,90 @@ select {
 .tikd-leaflet-map .leaflet-control-attribution a:hover {
   color: rgba(231, 222, 255, 1) !important; /* primary-100-ish */
   text-decoration: underline !important;
+}
+
+/* ------------------------------------------------------------------
+   Tikd Color Picker helpers (NEW)
+   ------------------------------------------------------------------ */
+
+/* Checkerboard background (for alpha slider) */
+.tikd-checker {
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.18) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.18) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0px;
+}
+
+/* Range base (pill track + round thumb) */
+.tikd-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(24, 24, 40, 0.6);
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 22px rgba(0, 0, 0, 0.35);
+}
+
+/* Hue rainbow track */
+.tikd-range--hue {
+  background: linear-gradient(
+    90deg,
+    #ff0000 0%,
+    #ffff00 16%,
+    #00ff00 33%,
+    #00ffff 50%,
+    #0000ff 66%,
+    #ff00ff 83%,
+    #ff0000 100%
+  );
+}
+
+/* Webkit thumb */
+.tikd-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  background: rgba(154, 70, 255, 1);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+/* Firefox thumb */
+.tikd-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  background: rgba(154, 70, 255, 1);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+/* Firefox track */
+.tikd-range::-moz-range-track {
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Focus ring */
+.tikd-range:focus-visible {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 22px rgba(0, 0, 0, 0.35),
+    0 0 0 2px rgba(154, 81, 255, 0.4);
 }

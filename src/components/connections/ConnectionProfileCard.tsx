@@ -6,6 +6,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { Building2, Landmark, Users2, type LucideIcon } from "lucide-react";
+import { Tilt3d } from "@/components/ui/Tilt3d";
 
 export type ConnectionProfileKind = "establishment" | "organization" | "team";
 
@@ -25,6 +26,12 @@ export type ConnectionProfileCardProps = {
   /** Footer */
   totalMembers?: number;
   joinDateLabel?: string; // e.g. "Joined Jan 2026"
+
+  /** Optional: enable 3D hover (used by Organizations page) */
+  tilt?: boolean;
+  tiltMaxDeg?: number; // default 4
+  tiltPerspective?: number; // default 900
+  tiltLiftPx?: number; // default 2
 };
 
 const KIND_ICON: Record<ConnectionProfileKind, LucideIcon> = {
@@ -51,23 +58,26 @@ export default function ConnectionProfileCard({
   iconUrl,
   totalMembers,
   joinDateLabel,
+  tilt = false,
+  tiltMaxDeg = 4,
+  tiltPerspective = 900,
+  tiltLiftPx = 2,
 }: ConnectionProfileCardProps) {
   const TypeIcon = KIND_ICON[kind];
 
-  return (
-    <Link
-      href={href}
-      className={clsx(
-        "group relative",
-        "w-full sm:w-[264px]",
-        "overflow-hidden",
-        "rounded-[12px]",
-        "border border-white/10 bg-neutral-948",
-        "transition-all duration-200",
-        "hover:border-primary-500",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 overflow-hidden"
-      )}
-    >
+  const cardShellClass = clsx(
+    "group relative",
+    "w-full sm:w-[264px]",
+    "overflow-hidden",
+    "rounded-[12px]",
+    "border border-white/10 bg-neutral-948",
+    "transition-all duration-200",
+    "hover:border-primary-500",
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 overflow-hidden",
+  );
+
+  const CardBody = (
+    <>
       {/* Banner */}
       <div className="relative h-[112px] w-full overflow-hidden">
         {bannerUrl ? (
@@ -83,7 +93,7 @@ export default function ConnectionProfileCard({
           <div
             className={clsx(
               "h-full w-full",
-              "bg-[radial-gradient(520px_180px_at_25%_0%,rgba(154,70,255,0.55),transparent_62%),radial-gradient(520px_180px_at_90%_120%,rgba(170,115,255,0.40),transparent_60%),linear-gradient(180deg,rgba(28,0,58,0.85),rgba(18,18,32,1))]"
+              "bg-[radial-gradient(520px_180px_at_25%_0%,rgba(154,70,255,0.55),transparent_62%),radial-gradient(520px_180px_at_90%_120%,rgba(170,115,255,0.40),transparent_60%),linear-gradient(180deg,rgba(28,0,58,0.85),rgba(18,18,32,1))]",
             )}
           />
         )}
@@ -99,7 +109,7 @@ export default function ConnectionProfileCard({
             "relative h-[52px] w-[52px] overflow-hidden",
             "rounded-lg",
             "border-[3px] border-neutral-948",
-            "bg-neutral-900"
+            "bg-neutral-900",
           )}
           aria-hidden="true"
         >
@@ -128,7 +138,7 @@ export default function ConnectionProfileCard({
           <span
             className={clsx(
               "mt-[2px] inline-flex h-5 w-5 items-center justify-center rounded-full",
-              "bg-primary-900/50 ring-1 ring-primary-500"
+              "bg-primary-900/50 ring-1 ring-primary-500",
             )}
             title={kind}
             aria-hidden="true"
@@ -175,9 +185,34 @@ export default function ConnectionProfileCard({
         className={clsx(
           "pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200",
           "group-hover:opacity-100",
-          "bg-[radial-gradient(700px_220px_at_25%_0%,rgba(154,70,255,0.07),transparent_60%),radial-gradient(700px_220px_at_90%_120%,rgba(66,139,255,0.05),transparent_60%)]"
+          "bg-[radial-gradient(700px_220px_at_25%_0%,rgba(154,70,255,0.07),transparent_60%),radial-gradient(700px_220px_at_90%_120%,rgba(66,139,255,0.05),transparent_60%)]",
         )}
       />
-    </Link>
+    </>
+  );
+
+  if (!tilt) {
+    return (
+      <Link href={href} className={cardShellClass}>
+        {CardBody}
+      </Link>
+    );
+  }
+
+  return (
+    <Tilt3d
+      maxDeg={tiltMaxDeg}
+      perspective={tiltPerspective}
+      liftPx={tiltLiftPx}
+      className={clsx(
+        cardShellClass,
+        "will-change-transform",
+        "hover:shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
+      )}
+    >
+      <Link href={href} className="block h-full w-full">
+        {CardBody}
+      </Link>
+    </Tilt3d>
   );
 }

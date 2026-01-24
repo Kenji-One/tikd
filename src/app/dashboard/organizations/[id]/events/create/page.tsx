@@ -1,7 +1,7 @@
-// src/app/dashboard/events/create/page.tsx
+// src/app/dashboard/organizations/[id]/events/create/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   useForm,
@@ -431,6 +431,16 @@ export default function NewEventPage() {
   const params = useParams() as { id?: string };
   const orgIdFromRoute = params?.id ?? "";
 
+  const posterUploadRef = useRef<HTMLDivElement | null>(null);
+  const openPosterPicker = () => {
+    const root = posterUploadRef.current;
+    if (!root) return;
+    const input = root.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement | null;
+    input?.click();
+  };
+
   const errorRing =
     "rounded-lg ring-1 ring-inset ring-error-500 border-transparent";
 
@@ -614,11 +624,11 @@ export default function NewEventPage() {
       });
 
       if (res.ok) {
+        const { _id } = await res.json();
         if (status === "draft") {
-          router.push("/dashboard/events?tab=drafts");
+          router.push(`/dashboard/events/${_id}`);
         } else {
-          const { _id } = await res.json();
-          router.push(`/events/${_id}`);
+          router.push(`/dashboard/events/${_id}`);
         }
       } else {
         console.error(await res.json());
@@ -677,6 +687,20 @@ export default function NewEventPage() {
 
   return (
     <main className="relative bg-neutral-950 text-neutral-0 ">
+      <style jsx global>{`
+        .poster-uploader > * {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+        }
+        .poster-uploader img,
+        .poster-uploader video {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+      `}</style>
       <div className="relative isolate px-4 pt-8 md:py-10 mt-2">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
@@ -1223,18 +1247,26 @@ export default function NewEventPage() {
             desc="Upload a featured image/poster. JPEG/PNG/MP4 up to 50MB."
             icon={<ImagePlus className="h-5 w-5 text-primary-300" />}
           >
-            <Controller
-              control={control}
-              name="image"
-              render={({ field }) => (
-                <ImageUpload
-                  label="Add Event Poster"
-                  value={field.value}
-                  onChange={field.onChange}
-                  publicId={`temp/events/${uuid()}`}
+            <div className="mt-3 flex justify-center pb-6">
+              <div
+                ref={posterUploadRef}
+                className="poster-uploader flex relative w-full max-w-[224px] max-h-[309px] rounded-2xl aspect-[4/6]"
+              >
+                <Controller
+                  control={control}
+                  name="image"
+                  render={({ field }) => (
+                    <ImageUpload
+                      label="Add Event Poster"
+                      value={field.value}
+                      onChange={field.onChange}
+                      publicId={`temp/events/${uuid()}`}
+                      sizing="full"
+                    />
+                  )}
                 />
-              )}
-            />
+              </div>
+            </div>
           </Section>
 
           <Section
@@ -1289,7 +1321,33 @@ export default function NewEventPage() {
           <div className="md:sticky md:top-20 space-y-6">
             <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
               <h3 className="mb-3 text-sm font-semibold">Live Preview</h3>
-              <EventCard {...preview} clickable={false} />
+              <div className="relative group">
+                <EventCard {...preview} clickable={false} />
+
+                {/* Click poster (preview) to change it */}
+                <button
+                  type="button"
+                  onClick={openPosterPicker}
+                  aria-label="Change event poster"
+                  className={[
+                    "absolute inset-0 rounded-[14px]",
+                    "cursor-pointer",
+                    "ring-1 ring-transparent",
+                    "",
+                    "outline-none",
+                  ].join(" ")}
+                >
+                  <span className="sr-only">Change event poster</span>
+                </button>
+
+                {/* tiny hint chip (subtle, only on hover) */}
+                <div className="pointer-events-none absolute left-3 top-3 opacity-0 translate-y-[-2px] transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-200">
+                    <ImagePlus className="h-4 w-4 text-primary-300" />
+                    Click poster to change
+                  </div>
+                </div>
+              </div>
               <div className="mt-3 flex items-center justify-end gap-2 text-xs text-neutral-300">
                 <MapPin className="h-4 w-4" />
                 {preview.venue}

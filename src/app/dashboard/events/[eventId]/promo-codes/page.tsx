@@ -239,7 +239,7 @@ function PromoCodeWizard({
       setValue(
         "applicableTicketTypeIds",
         current.filter((x) => x !== id),
-        { shouldDirty: true }
+        { shouldDirty: true },
       );
     } else {
       setValue("applicableTicketTypeIds", [...current, id], {
@@ -323,7 +323,7 @@ function PromoCodeWizard({
                       ? "border-transparent bg-primary-600 shadow-[0_0_28px_rgba(133,0,255,0.65)]"
                       : isCompleted
                         ? "border-primary-600 bg-neutral-0"
-                        : "border-neutral-700 bg-neutral-0"
+                        : "border-neutral-700 bg-neutral-0",
                   )}
                 >
                   <Icon
@@ -333,7 +333,7 @@ function PromoCodeWizard({
                         ? "text-neutral-0"
                         : isCompleted
                           ? "text-primary-600"
-                          : "text-neutral-500"
+                          : "text-neutral-500",
                     )}
                   />
                 </div>
@@ -344,7 +344,7 @@ function PromoCodeWizard({
                       ? "text-neutral-0"
                       : isCompleted
                         ? "text-neutral-0"
-                        : "text-neutral-300"
+                        : "text-neutral-300",
                   )}
                 >
                   {step.label}
@@ -453,7 +453,7 @@ function PromoCodeWizard({
                   "flex flex-col items-center gap-3 rounded-lg border px-4 py-4 text-center transition-all bg-neutral-900",
                   kind === "discount"
                     ? "border-success-500 "
-                    : "border-white/10 hover:border-white/30"
+                    : "border-white/10 hover:border-white/30",
                 )}
               >
                 <span
@@ -461,7 +461,7 @@ function PromoCodeWizard({
                     "flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-0 ",
                     kind === "discount"
                       ? "text-success-500"
-                      : "text-neutral-400"
+                      : "text-neutral-400",
                   )}
                 >
                   <Percent className="h-4 w-4" />
@@ -486,7 +486,7 @@ function PromoCodeWizard({
                   "flex flex-col items-center gap-3 rounded-lg border px-4 py-4 text-center transition-all bg-neutral-900",
                   kind === "special_access"
                     ? "border-success-500 "
-                    : "border-white/10 hover:border-white/30"
+                    : "border-white/10 hover:border-white/30",
                 )}
               >
                 <span
@@ -494,7 +494,7 @@ function PromoCodeWizard({
                     "flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-0 ",
                     kind === "special_access"
                       ? "text-success-500"
-                      : "text-neutral-400"
+                      : "text-neutral-400",
                   )}
                 >
                   <KeyRound className="h-4 w-4" />
@@ -688,13 +688,13 @@ function PromoCodeWizard({
                             "relative inline-flex h-5 w-9 items-center rounded-full border transition-colors",
                             checked
                               ? "border-primary-500 bg-primary-600"
-                              : "border-white/20 bg-[#171826]"
+                              : "border-white/20 bg-[#171826]",
                           )}
                         >
                           <span
                             className={clsx(
                               "absolute left-[3px] h-3.5 w-3.5 rounded-full bg-white transition-transform",
-                              checked && "translate-x-4"
+                              checked && "translate-x-4",
                             )}
                           />
                         </div>
@@ -769,7 +769,7 @@ export default function PromoCodesPage() {
     const list = promos ?? [];
     if (!query.trim()) return list;
     return list.filter((p) =>
-      p.code.toLowerCase().includes(query.toLowerCase())
+      p.code.toLowerCase().includes(query.toLowerCase()),
     );
   }, [promos, query]);
 
@@ -850,7 +850,7 @@ export default function PromoCodesPage() {
           {filtered.map((p) => (
             <RowCard
               key={p.id}
-              icon={<Ticket className="h-5 w-5" />}
+              icon={<Percent className="h-5 w-5" />}
               title={p.title}
               description={p.description}
               meta={
@@ -868,7 +868,7 @@ export default function PromoCodesPage() {
                         "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
                         p.active
                           ? "border border-success-700/40 bg-success-900/40 text-success-300"
-                          : "border border-white/10 bg-neutral-900 text-neutral-200"
+                          : "border border-white/10 bg-neutral-900 text-neutral-200",
                       )}
                     >
                       {p.active ? "Active" : "Inactive"}

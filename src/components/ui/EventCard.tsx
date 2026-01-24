@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Calendar } from "lucide-react";
 import clsx from "classnames";
+import { Tilt3d } from "@/components/ui/Tilt3d";
 
 /* -------------------------------------------------------------------------- */
 /*  Props                                                                     */
@@ -42,10 +43,13 @@ export function EventCard({
   const ellipseBg = "bg-[rgba(154,81,255,0.6)]";
   const borderHover = "hover:border-primary-951";
 
-  const baseClasses = clsx(
+  // IMPORTANT:
+  // Keep these classes on the *actual card element* (Link/div),
+  // so the internal layout (flex-col + gaps) stays identical.
+  const cardClasses = clsx(
     "group/card relative flex w-full flex-col gap-2 transition-opacity",
     "group-hover/row:opacity-60 hover:opacity-100",
-    className
+    className,
   );
 
   const inner = (
@@ -65,17 +69,17 @@ export function EventCard({
           group-hover/card:opacity-100
           rounded-full
         `,
-          ellipseBg
+          ellipseBg,
         )}
       />
 
       <div
         className={clsx(
           "p-[4px] w-full h-full rounded-[10px] border border-transparent transition duration-300 group-hover:border-primary-500",
-          borderHover
+          borderHover,
         )}
       >
-        <div className="aspect-[171/214] sm:aspect-[79/95] relative w-full overflow-hidden rounded-lg ">
+        <div className="relative w-full overflow-hidden rounded-lg aspect-[171/214] sm:aspect-[79/95]">
           <Image
             src={img}
             alt={title}
@@ -97,16 +101,23 @@ export function EventCard({
     </>
   );
 
-  // If clickable, wrap with <Link>. Otherwise plain <div>.
-  if (clickable) {
-    const targetHref = href ?? `/events/${id}`;
+  const targetHref = href ?? `/events/${id}`;
 
+  // Wrap with Tilt3d, but keep the original layout on the Link/div itself.
+  // This prevents the image area from stretching / creating extra space.
+  if (clickable) {
     return (
-      <Link href={targetHref} className={baseClasses}>
-        {inner}
-      </Link>
+      <Tilt3d maxDeg={6} perspective={900} liftPx={2} className="w-full">
+        <Link href={targetHref} className={cardClasses}>
+          {inner}
+        </Link>
+      </Tilt3d>
     );
   }
 
-  return <div className={baseClasses}>{inner}</div>;
+  return (
+    <Tilt3d maxDeg={6} perspective={900} liftPx={2} className="w-full">
+      <div className={cardClasses}>{inner}</div>
+    </Tilt3d>
+  );
 }

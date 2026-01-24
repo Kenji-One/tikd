@@ -19,7 +19,6 @@ type GoogleMapsLike = {
 declare global {
   interface Window {
     google?: GoogleMapsLike;
-    // internal flag we set when Google callback fires
     __tikdPlacesReady?: boolean;
   }
 }
@@ -36,32 +35,27 @@ type Props = {
   /** Optional: restrict to a country (e.g. "us", "ge") */
   country?: string;
 
+  /** Force Google Places language (default: "en") */
+  language?: string;
+  /** Optional region bias for results (default: "US") */
+  region?: string;
+
   /** Optional: extra className on wrapper */
   className?: string;
 };
 
 const SCRIPT_ID = "google-maps-places-script";
-
-/**
- * IMPORTANT:
- * This must match `callbackName` passed to usePlacesAutocomplete.
- * Google Maps JS will call this function when fully ready.
- */
 const CALLBACK_NAME = "__tikdMapsPlacesInit";
-
 const INIT_TIMEOUT_MS = 12000;
 
-// shared listeners (handles multiple mounts / fast refresh gracefully)
 let initListeners: Array<() => void> = [];
+let loadPromise: Promise<void> | null = null;
+let loadedSignature: string | null = null;
 
 function hasPlacesLoaded(): boolean {
   return Boolean(window.google?.maps?.places);
 }
 
-/**
- * Define the global callback function BEFORE loading the script.
- * If it doesn't exist, Google will throw: "callback is not a function"
- */
 function ensureGlobalCallback(): void {
   if (typeof window === "undefined") return;
 
@@ -87,8 +81,8 @@ function waitForInit(timeoutMs: number): Promise<void> {
       else
         reject(
           new Error(
-            "Google Maps initialized, but Places library is still missing."
-          )
+            "Google Maps initialized, but Places library is still missing.",
+          ),
         );
     }, timeoutMs);
 
@@ -99,56 +93,86 @@ function waitForInit(timeoutMs: number): Promise<void> {
   });
 }
 
-async function loadGoogleMapsPlacesScript(apiKey: string): Promise<void> {
+function scriptSrcMatches(src: string, language: string, region: string) {
+  const langOk = src.includes(`language=${encodeURIComponent(language)}`);
+  const regionOk = src.includes(`region=${encodeURIComponent(region)}`);
+  const placesOk = src.includes("libraries=places");
+  const cbOk = src.includes(`callback=${CALLBACK_NAME}`);
+  return placesOk && cbOk && langOk && regionOk;
+}
+
+async function loadGoogleMapsPlacesScript(
+  apiKey: string,
+  language: string,
+  region: string,
+): Promise<void> {
   if (typeof window === "undefined") return;
 
-  // If Places already available, we're done.
-  if (hasPlacesLoaded()) return;
+  const signature = `${apiKey}::${language}::${region}`;
+
+  // If already loaded with same signature, we're done.
+  if (hasPlacesLoaded() && loadedSignature === signature) return;
+
+  // If there's an inflight load with same signature, await it.
+  if (loadPromise && loadedSignature === signature) {
+    await loadPromise;
+    return;
+  }
 
   ensureGlobalCallback();
 
   const existing = document.getElementById(
-    SCRIPT_ID
+    SCRIPT_ID,
   ) as HTMLScriptElement | null;
 
-  // If a script exists but is missing required params, remove it.
+  // If a script exists but doesn't match required params, replace it.
   if (existing) {
     const src = existing.src || "";
-    const isCorrect =
-      src.includes("libraries=places") &&
-      src.includes(`callback=${CALLBACK_NAME}`);
-
-    if (!isCorrect) {
+    if (!scriptSrcMatches(src, language, region)) {
       existing.remove();
+      // best-effort reset (helps during dev/hot reload)
+      try {
+        delete (window as any).google;
+      } catch {
+        /* noop */
+      }
+      window.__tikdPlacesReady = false;
     } else {
-      // Correct script exists — wait briefly.
+      // Script matches — just wait until places is actually ready.
+      loadedSignature = signature;
       try {
         await waitForInit(2000);
-        if (hasPlacesLoaded() || window.__tikdPlacesReady) return;
       } catch {
-        // ignore, we'll force reload below
+        // fall through: script may be "stuck", we will reload below
+        existing.remove();
+        window.__tikdPlacesReady = false;
+        try {
+          delete (window as any).google;
+        } catch {
+          /* noop */
+        }
       }
-
-      // If we're here, script is "stuck" (common after callback error / hot reload).
-      // Nuke and reload cleanly.
-      existing.remove();
-      window.__tikdPlacesReady = false;
+      if (hasPlacesLoaded()) return;
     }
   }
 
-  // Create script tag (callback must already be defined!)
-  await new Promise<void>((resolve, reject) => {
+  loadedSignature = signature;
+
+  loadPromise = new Promise<void>((resolve, reject) => {
     const s = document.createElement("script");
     s.id = SCRIPT_ID;
     s.async = true;
     s.defer = true;
 
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
-      apiKey
-    )}&v=weekly&libraries=places&callback=${CALLBACK_NAME}&loading=async`;
+    s.src =
+      `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}` +
+      `&v=weekly&libraries=places&callback=${CALLBACK_NAME}&loading=async` +
+      `&language=${encodeURIComponent(language)}` +
+      `&region=${encodeURIComponent(region)}`;
 
     const onError = () => {
       cleanup();
+      loadPromise = null;
       reject(new Error("Failed to load Google Maps script"));
     };
 
@@ -157,10 +181,9 @@ async function loadGoogleMapsPlacesScript(apiKey: string): Promise<void> {
     };
 
     s.addEventListener("error", onError);
-
     document.head.appendChild(s);
 
-    // Resolve when callback fires (not onload).
+    // Resolve when callback fires OR places becomes available.
     waitForInit(INIT_TIMEOUT_MS)
       .then(() => {
         cleanup();
@@ -168,11 +191,16 @@ async function loadGoogleMapsPlacesScript(apiKey: string): Promise<void> {
       })
       .catch((e) => {
         cleanup();
+        loadPromise = null;
         reject(
-          e instanceof Error ? e : new Error("Failed to initialize Google Maps")
+          e instanceof Error
+            ? e
+            : new Error("Failed to initialize Google Maps"),
         );
       });
   });
+
+  await loadPromise;
 }
 
 function LoadingInput({
@@ -198,7 +226,7 @@ function LoadingInput({
           "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
           "opacity-60 cursor-not-allowed",
           error && "ring-1 ring-inset ring-error-500 border-transparent",
-          disabled && "opacity-60 cursor-not-allowed"
+          disabled && "opacity-60 cursor-not-allowed",
         )}
         placeholder={placeholder}
         value=""
@@ -223,6 +251,8 @@ function LoadedPlacesCombobox({
   scriptOk,
 }: Props & { scriptOk: boolean }) {
   const requestOptions = useMemo(() => {
+    // "address" is fine, but some accounts return better with "geocode".
+    // We'll keep address (your original intent), but allow full results.
     const base: Record<string, unknown> = { types: ["address"] };
     if (country) base.componentRestrictions = { country };
     return base;
@@ -234,26 +264,36 @@ function LoadedPlacesCombobox({
     setValue,
     suggestions: { status, data },
     clearSuggestions,
+    init,
   } = usePlacesAutocomplete({
     requestOptions: requestOptions as never,
     debounce: 250,
     cache: 24 * 60 * 60,
-    callbackName: CALLBACK_NAME, // must match script callback=
+    callbackName: CALLBACK_NAME,
+    initOnMount: false, // ✅ critical: we will init manually when script is ready
   });
 
-  // Normalize incoming prop to a safe string (prevents null warnings)
   const safePropValue = typeof value === "string" ? value : "";
-
-  // Normalize hook value too
   const inputValue = typeof inputValueRaw === "string" ? inputValueRaw : "";
 
-  // Keep hook input in sync with parent value.
+  // When parent value changes (reset/edit), update the input without triggering new fetch.
   useEffect(() => {
     setValue(safePropValue, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePropValue]);
 
-  const enabled = scriptOk && ready && !disabled;
+  // ✅ Initialize the hook AFTER the script is confirmed ready.
+  useEffect(() => {
+    if (!scriptOk) return;
+    if (!hasPlacesLoaded()) return;
+    if (disabled) return;
+
+    // init() is idempotent; safe to call.
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scriptOk, disabled, country]);
+
+  const enabled = scriptOk && hasPlacesLoaded() && ready && !disabled;
   const options = enabled && status === "OK" ? data : [];
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -285,16 +325,19 @@ function LoadedPlacesCombobox({
               "bg-white/5 text-neutral-0 placeholder:text-neutral-500",
               "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
               (!enabled || disabled) && "opacity-60 cursor-not-allowed",
-              error && "ring-1 ring-inset ring-error-500 border-transparent"
+              error && "ring-1 ring-inset ring-error-500 border-transparent",
             )}
             placeholder={placeholder}
-            value={inputValue} // never null/undefined
+            value={inputValue}
             onChange={(e) => {
               const v = e.target.value ?? "";
               setValue(v, true);
               onChange(v);
             }}
-            onBlur={() => clearSuggestions()}
+            // Don’t instantly wipe suggestions: it can cancel option clicks
+            onBlur={() => {
+              window.setTimeout(() => clearSuggestions(), 120);
+            }}
             autoComplete="off"
           />
 
@@ -308,7 +351,7 @@ function LoadedPlacesCombobox({
             static
             className={clsx(
               "absolute z-50 mt-2 max-h-64 w-full overflow-auto rounded-lg border p-1 shadow-xl",
-              "border-white/10 bg-neutral-948/95 backdrop-blur"
+              "border-white/10 bg-neutral-948/95 backdrop-blur",
             )}
           >
             {options.map((opt) => (
@@ -320,7 +363,7 @@ function LoadedPlacesCombobox({
                     "cursor-pointer select-none rounded-md px-3 py-2 text-sm",
                     active
                       ? "bg-primary-900/40 text-neutral-0"
-                      : "text-neutral-200"
+                      : "text-neutral-200",
                   )
                 }
               >
@@ -345,6 +388,8 @@ export default function PlacesAddressInput({
   disabled,
   country,
   className,
+  language = "en",
+  region = "US",
 }: Props) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
 
@@ -360,7 +405,7 @@ export default function PlacesAddressInput({
 
     let alive = true;
 
-    loadGoogleMapsPlacesScript(apiKey)
+    loadGoogleMapsPlacesScript(apiKey, language, region)
       .then(() => {
         if (!alive) return;
         setScriptOk(true);
@@ -370,14 +415,14 @@ export default function PlacesAddressInput({
         if (!alive) return;
         setScriptOk(false);
         setScriptError(
-          e instanceof Error ? e.message : "Failed to load Google Maps"
+          e instanceof Error ? e.message : "Failed to load Google Maps",
         );
       });
 
     return () => {
       alive = false;
     };
-  }, [apiKey]);
+  }, [apiKey, language, region]);
 
   return (
     <div className={clsx("relative", className)}>
@@ -397,6 +442,8 @@ export default function PlacesAddressInput({
           country={country}
           className={className}
           scriptOk={scriptOk}
+          language={language}
+          region={region}
         />
       )}
 

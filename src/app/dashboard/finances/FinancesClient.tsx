@@ -3,7 +3,8 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import clsx from "clsx";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -65,9 +66,10 @@ type SortDir = "asc" | "desc";
 function formatUSD(n: number) {
   const sign = n < 0 ? "-" : "";
   const abs = Math.abs(n);
-  return `${sign}$${abs.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const whole = Math.round(abs);
+  return `${sign}$${whole.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   })}`;
 }
 
@@ -361,19 +363,37 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
         dateLabel: "31 Oct, 11:00pm",
         amount: 500,
       },
-      { id: "w2", provider: "Wise", dateLabel: "27 Sep, 10:40am", amount: 200 },
+      { id: "w2", provider: "Wise", dateLabel: "27 Sep, 10:40am", amount: 350 },
       {
         id: "w3",
         provider: "Payoneer",
         dateLabel: "15 Aug, 08:00am",
-        amount: 50,
+        amount: 5000,
       },
       { id: "w4", provider: "Bank", dateLabel: "11 Jun, 12:00pm", amount: 800 },
       {
         id: "w5",
         provider: "Payoneer",
         dateLabel: "31 Apr, 11:00am",
-        amount: 80,
+        amount: 1000,
+      },
+      {
+        id: "w6",
+        provider: "PayPal",
+        dateLabel: "31 Apr, 11:00am",
+        amount: 800,
+      },
+      {
+        id: "w7",
+        provider: "PayPal",
+        dateLabel: "31 Apr, 11:00am",
+        amount: 250,
+      },
+      {
+        id: "w8",
+        provider: "PayPal",
+        dateLabel: "31 Apr, 11:00am",
+        amount: 500,
       },
     ],
     transfers: [
@@ -419,6 +439,46 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t5",
+        name: "Saiful Islam R.",
+        avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
+        type: "in",
+        amount: 4250,
+        event: "Food & Wine Expo",
+        eventThumbUrl: posterPlaceholderUrl("Food & Wine Expo"),
+        dateISO: "2026-07-04T09:30:00.000Z",
+      },
+      {
+        id: "t6",
+        name: "Saiful Islam R.",
+        avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
+        type: "in",
+        amount: 4250,
+        event: "Food & Wine Expo",
+        eventThumbUrl: posterPlaceholderUrl("Food & Wine Expo"),
+        dateISO: "2026-07-04T09:30:00.000Z",
+      },
+      {
+        id: "t7",
+        name: "Sajib Rahman",
+        avatarUrl: avatarPlaceholderUrl("Sajib Rahman"),
+        type: "out",
+        amount: -1550,
+        event: "Tech Meetup Tbilisi",
+        eventThumbUrl: posterPlaceholderUrl("Tech Meetup Tbilisi"),
+        dateISO: "2026-08-12T10:05:00.000Z",
+      },
+      {
+        id: "t8",
+        name: "Saiful Islam R.",
+        avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
+        type: "in",
+        amount: 4250,
+        event: "Food & Wine Expo",
+        eventThumbUrl: posterPlaceholderUrl("Food & Wine Expo"),
+        dateISO: "2026-07-04T09:30:00.000Z",
+      },
+      {
+        id: "t9",
         name: "Saiful Islam R.",
         avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
         type: "in",
@@ -577,6 +637,12 @@ export default function FinancesClient() {
     return formatUSD(sum);
   }, [chartTab, overview?.withdrawHistory, overview?.transfers, series]);
 
+  const ACTIVITY_MAX_ITEMS = 6;
+
+  const activityAll = overview?.withdrawHistory ?? [];
+  const activityShown = activityAll.slice(0, ACTIVITY_MAX_ITEMS);
+  const activityHasMore = activityAll.length > ACTIVITY_MAX_ITEMS;
+
   return (
     <div className="w-full py-4 sm:py-6">
       <div className="mx-auto w-full max-w-[1600px]">
@@ -593,7 +659,13 @@ export default function FinancesClient() {
 
           <Button
             type="button"
-            onClick={() => router.push("/dashboard/finances/payout-portal")}
+            onClick={() =>
+              window.open(
+                "/dashboard/finances/payout-portal",
+                "_blank",
+                "noopener,noreferrer",
+              )
+            }
             animation={true}
           >
             <span className="mr-1 inline-flex items-center">
@@ -604,11 +676,11 @@ export default function FinancesClient() {
         </div>
 
         {/* Layout */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr] lg:gap-5 lg:items-stretch">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr] lg:gap-5 lg:items-start">
           {/* LEFT */}
-          <div className="flex h-full flex-col gap-4">
+          <div className="flex flex-col gap-4">
             {/* ✅ Unified Balance + Activity module */}
-            <div className="relative h-full overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70">
+            <div className="relative overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70">
               {/* Purple wash across the whole module (single grouped feel) */}
               <div
                 className="pointer-events-none absolute inset-0 opacity-100"
@@ -625,7 +697,7 @@ export default function FinancesClient() {
                     "radial-gradient(800px 520px at 50% -10%, rgba(0,0,0,0.20), transparent 62%), radial-gradient(1000px 650px at 50% 120%, rgba(0,0,0,0.45), transparent 60%)",
                 }}
               />
-              <div className="relative flex h-full flex-col p-4">
+              <div className="relative flex flex-col p-4 pb-2">
                 {/* Top (Available Balance) - centered like reference */}
                 <div className="rounded-xl pt-5 pb-2">
                   <div className="flex min-h-[170px] flex-col items-center justify-center text-center">
@@ -718,7 +790,7 @@ export default function FinancesClient() {
                 <div className="my-4 h-px w-full bg-white/8" />
 
                 {/* Activity / Withdraw History (inside same container) */}
-                <div className="flex min-h-0 flex-1 flex-col pb-1">
+                <div className="flex min-h-0 flex-1 flex-col">
                   <div className="mb-3 flex items-center justify-between px-1">
                     <h2 className="text-[14px] font-bold tracking-[-0.03em] text-neutral-0">
                       Activity
@@ -734,39 +806,45 @@ export default function FinancesClient() {
                     </button>
                   </div>
 
-                  <div className="min-h-0 flex-1 space-y-2">
-                    {(overview?.withdrawHistory ?? []).map((w) => (
-                      <div
-                        key={w.id}
-                        className={clsx(
-                          "flex items-center justify-between gap-3 rounded-xl",
-                          "border border-white/10 bg-neutral-950/12 px-3 py-2.5",
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <ProviderLogo provider={w.provider} />
-                          <div>
-                            <div className="text-[13px] font-semibold text-neutral-0">
-                              {w.provider} Withdraw
+                  <div className="relative min-h-0 flex-1 overflow-hidden">
+                    <div className="space-y-2 pr-1">
+                      {activityShown.map((w) => (
+                        <div
+                          key={w.id}
+                          className={clsx(
+                            "flex items-center justify-between gap-3 rounded-xl",
+                            "border border-white/10 bg-neutral-950/12 px-3 py-2.5",
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <ProviderLogo provider={w.provider} />
+                            <div>
+                              <div className="text-[13px] font-semibold text-neutral-0">
+                                {w.provider} Withdraw
+                              </div>
+                              <div className="mt-1 text-[12px] text-neutral-400">
+                                {w.dateLabel}
+                              </div>
                             </div>
-                            <div className="mt-1 text-[12px] text-neutral-400">
-                              {w.dateLabel}
+                          </div>
+
+                          <div className="text-right">
+                            <div className="text-[13px] font-bold text-error-400">
+                              {formatUSD(-Math.abs(w.amount))}
                             </div>
                           </div>
                         </div>
+                      ))}
 
-                        <div className="text-right">
-                          <div className="text-[13px] font-bold text-error-400">
-                            {formatUSD(-Math.abs(w.amount))}
-                          </div>
+                      {!activityAll.length && (
+                        <div className="rounded-xl border border-dashed border-white/12 bg-neutral-950/10 p-4 text-center text-[13px] text-neutral-400">
+                          No withdrawals yet.
                         </div>
-                      </div>
-                    ))}
+                      )}
+                    </div>
 
-                    {!overview?.withdrawHistory?.length && (
-                      <div className="rounded-xl border border-dashed border-white/12 bg-neutral-950/10 p-4 text-center text-[13px] text-neutral-400">
-                        No withdrawals yet.
-                      </div>
+                    {activityHasMore && (
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(0deg,#121220_0%,rgba(18,18,32,0)_100%)]" />
                     )}
                   </div>
                 </div>
@@ -868,11 +946,11 @@ export default function FinancesClient() {
               <div className="relative w-full overflow-x-auto">
                 <table className="w-full min-w-[980px] border-collapse font-medium leading-tight">
                   <colgroup>
-                    <col style={{ width: "44%" }} />
-                    <col style={{ width: "28%" }} />
-                    <col style={{ width: "14%" }} />
-                    <col style={{ width: "7%" }} />
-                    <col style={{ width: "7%" }} />
+                    <col style={{ width: "32%" }} />
+                    <col style={{ width: "20%" }} />
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "16%" }} />
                   </colgroup>
                   <thead className="text-neutral-400">
                     <tr className="[&>th]:pb-3 [&>th]:pt-3 [&>th]:px-4">
@@ -893,6 +971,7 @@ export default function FinancesClient() {
                         active={sortBy === "type"}
                         dir={dir}
                         onClick={() => toggleSort("type")}
+                        center
                       />
                       <ThSort
                         label="Amount"
@@ -941,8 +1020,10 @@ export default function FinancesClient() {
                         </td>
 
                         {/* Type */}
-                        <td className="px-4 py-3">
-                          <span className={pillClasses(t.type)}>
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={pillClasses(t.type) + " text-center"}
+                          >
                             {t.type === "in" ? "Sent In" : "Sent Out"}
                           </span>
                         </td>
@@ -1072,15 +1153,21 @@ function ThSort({
   dir,
   onClick,
   right,
+  center,
 }: {
   label: string;
   active: boolean;
   dir: SortDir;
   onClick: () => void;
   right?: boolean;
+  center?: boolean;
 }) {
   const base = "font-semibold cursor-pointer select-none hover:text-white/80";
-  const cls = right ? `${base} text-right` : `${base} text-left`;
+  const cls = center
+    ? `${base} text-center `
+    : right
+      ? `${base} text-right`
+      : `${base} text-left`;
 
   return (
     <th

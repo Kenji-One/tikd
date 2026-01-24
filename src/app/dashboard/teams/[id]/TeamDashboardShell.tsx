@@ -1,4 +1,4 @@
-// src/app/dashboard/organizations/[id]/OrgDashboardShell.tsx
+// src/app/dashboard/teams/[id]/TeamDashboardShell.tsx
 "use client";
 
 import {
@@ -14,15 +14,14 @@ import { usePathname, useParams } from "next/navigation";
 import clsx from "clsx";
 import {
   LayoutDashboard,
-  CalendarDays,
   UsersRound,
   PencilLine,
   Settings,
 } from "lucide-react";
 
-type OrgShellProps = {
+type TeamShellProps = {
   children: React.ReactNode;
-  organization: {
+  team: {
     _id: string;
     name: string;
     description?: string;
@@ -32,21 +31,21 @@ type OrgShellProps = {
     accentColor?: string;
   };
   stats: {
-    upcomingEvents: number;
-    pastEvents: number;
-    totalEvents: number;
+    totalMembers: number;
+    activeMembers: number;
+    pendingInvites: number;
   };
 };
 
-type OrgTabId = "summary" | "events" | "members" | "edit" | "settings";
-type OrgTabIcon = ComponentType<SVGProps<SVGSVGElement>>;
+type TeamTabId = "summary" | "members" | "edit" | "settings";
+type TeamTabIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
-type OrgTab = {
-  id: OrgTabId;
+type TeamTab = {
+  id: TeamTabId;
   label: string;
-  Icon: OrgTabIcon;
+  Icon: TeamTabIcon;
   href: (basePath: string) => string;
-  matchSegments: string[]; // url segments that map to this tab
+  matchSegments: string[];
 };
 
 function initials(name: string) {
@@ -58,17 +57,17 @@ function initials(name: string) {
     .join("");
 }
 
-export default function OrgDashboardShell({
+export default function TeamDashboardShell({
   children,
-  organization,
+  team,
   stats,
-}: OrgShellProps) {
+}: TeamShellProps) {
   const pathname = usePathname();
   const { id } = useParams() as { id?: string };
 
-  const basePath = id ? `/dashboard/organizations/${id}` : "";
+  const basePath = id ? `/dashboard/teams/${id}` : "";
 
-  const ORG_TABS: OrgTab[] = useMemo(
+  const TEAM_TABS: TeamTab[] = useMemo(
     () => [
       {
         id: "summary",
@@ -78,19 +77,11 @@ export default function OrgDashboardShell({
         matchSegments: ["summary"],
       },
       {
-        id: "events",
-        label: "Events",
-        Icon: CalendarDays,
-        href: (b) => `${b}/events`,
-        matchSegments: ["events"],
-      },
-      {
-        // NOTE: existing routes in your org dashboard used `team`
         id: "members",
         label: "Members",
         Icon: UsersRound,
         href: (b) => `${b}/members`,
-        matchSegments: ["team", "members"],
+        matchSegments: ["members"],
       },
       {
         id: "edit",
@@ -110,51 +101,33 @@ export default function OrgDashboardShell({
     [],
   );
 
-  const activeTab: OrgTabId = useMemo(() => {
+  const activeTab: TeamTabId = useMemo(() => {
     if (!basePath) return "summary";
 
-    // Accept both `/summary` and base route as “Summary”
     if (pathname === basePath || pathname === `${basePath}/`) return "summary";
-
     if (!pathname.startsWith(basePath)) return "summary";
 
     const rest = pathname.slice(basePath.length);
     const segment = rest.split("/").filter(Boolean)[0] || "";
 
-    const hit = ORG_TABS.find((t) => t.matchSegments.includes(segment));
+    const hit = TEAM_TABS.find((t) => t.matchSegments.includes(segment));
     return hit?.id ?? "summary";
-  }, [ORG_TABS, basePath, pathname]);
+  }, [TEAM_TABS, basePath, pathname]);
 
-  const bannerUrl = organization.banner?.trim() || "";
-  const logoUrl = organization.logo?.trim() || "";
+  const bannerUrl = team.banner?.trim() || "";
+  const logoUrl = team.logo?.trim() || "";
 
-  // Subtle “org accent” wash (fallback to primary if org accent missing/invalid)
   const accent = useMemo(() => {
-    const v = (organization.accentColor ?? "").trim();
+    const v = (team.accentColor ?? "").trim();
     if (/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v)) return v;
     return "#9A46FF";
-  }, [organization.accentColor]);
+  }, [team.accentColor]);
 
-  const showOrgHero = useMemo(() => {
-    const p = pathname || "";
+  const showTeamHero = true;
 
-    // org dashboard base path: /dashboard/organizations/:id
-    // event creation path:      /dashboard/organizations/:id/events/create
-    if (
-      basePath &&
-      (p === `${basePath}/events/create` ||
-        p.startsWith(`${basePath}/events/create/`))
-    ) {
-      return false;
-    }
-
-    return true;
-  }, [pathname, basePath]);
-
-  // Optional: keep the hero feeling stable on scroll (tiny polish)
   const [isScrolled, setIsScrolled] = useState(false);
   useEffect(() => {
-    if (!showOrgHero) return;
+    if (!showTeamHero) return;
 
     const threshold = 8;
     let raf: number | null = null;
@@ -173,16 +146,14 @@ export default function OrgDashboardShell({
       window.removeEventListener("scroll", onScroll);
       if (raf != null) window.cancelAnimationFrame(raf);
     };
-  }, [showOrgHero]);
+  }, [showTeamHero]);
 
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
-      {/* ORG HERO */}
-      {showOrgHero ? (
+      {showTeamHero ? (
         <section className="pb-8">
           {/* Banner */}
           <div className="px-4 pt-4">
-            {/* ✅ wrapper prevents clipping of the overlapping logo */}
             <div className="relative">
               <div
                 className={clsx(
@@ -202,13 +173,12 @@ export default function OrgDashboardShell({
                   <>
                     <Image
                       src={bannerUrl}
-                      alt={`${organization.name} banner`}
+                      alt={`${team.name} banner`}
                       fill
                       sizes="(max-width: 1024px) 100vw, 1100px"
                       className="object-cover"
                       priority
                     />
-                    {/* readability wash */}
                     <div
                       aria-hidden="true"
                       className="absolute inset-0"
@@ -217,7 +187,6 @@ export default function OrgDashboardShell({
                           "linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.62) 72%, rgba(8,8,15,0.96) 100%)",
                       }}
                     />
-                    {/* accent glow */}
                     <div
                       aria-hidden="true"
                       className="absolute -left-24 -top-20 h-[320px] w-[520px] blur-2xl"
@@ -227,39 +196,35 @@ export default function OrgDashboardShell({
                     />
                   </>
                 ) : (
-                  <>
-                    {/* accent glow */}
-                    <div
-                      aria-hidden="true"
-                      className="absolute -left-24 -top-20 h-[320px] w-[520px] blur-2xl"
-                      style={{
-                        background: `radial-gradient(circle at 30% 30%, ${accent}2a, transparent 62%)`,
-                      }}
-                    />
-                  </>
+                  <div
+                    aria-hidden="true"
+                    className="absolute -left-24 -top-20 h-[320px] w-[520px] blur-2xl"
+                    style={{
+                      background: `radial-gradient(circle at 30% 30%, ${accent}2a, transparent 62%)`,
+                    }}
+                  />
                 )}
               </div>
 
-              {/* ✅ Logo is now OUTSIDE the overflow-hidden banner, so it won't be clipped */}
+              {/* Logo */}
               <div className="absolute left-1/2 bottom-0 z-10 translate-x-[-50%] translate-y-[52%]">
                 <div className="relative h-[84px] w-[84px] rounded-full bg-neutral-950 ring-1 ring-white/10 shadow-2xl shadow-black/60">
                   <div className="absolute inset-[6px] overflow-hidden rounded-full bg-neutral-900 ring-1 ring-white/10">
                     {logoUrl ? (
                       <Image
                         src={logoUrl}
-                        alt={`${organization.name} logo`}
+                        alt={`${team.name} logo`}
                         fill
                         sizes="84px"
                         className="object-cover"
                       />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center text-[18px] font-semibold text-neutral-100">
-                        {initials(organization.name)}
+                        {initials(team.name)}
                       </div>
                     )}
                   </div>
 
-                  {/* tiny accent ring */}
                   <div
                     aria-hidden="true"
                     className="pointer-events-none absolute -inset-[1px] rounded-full"
@@ -277,41 +242,41 @@ export default function OrgDashboardShell({
           {/* Name + chips */}
           <div className="px-4 pt-14 text-center">
             <h1 className="text-2xl font-semibold tracking-tight text-neutral-0 sm:text-3xl">
-              {organization.name}
+              {team.name}
             </h1>
 
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
               <span className="tikd-chip">
-                <span className="text-neutral-300">{stats.totalEvents}</span>
-                <span className="text-neutral-500">total events</span>
+                <span className="text-neutral-300">{stats.totalMembers}</span>
+                <span className="text-neutral-500">total members</span>
               </span>
               <span className="tikd-chip tikd-chip-primary">
-                <span className="text-neutral-0">{stats.upcomingEvents}</span>
-                <span className="text-neutral-100/90">upcoming</span>
+                <span className="text-neutral-0">{stats.activeMembers}</span>
+                <span className="text-neutral-100/90">active</span>
               </span>
               <span className="tikd-chip tikd-chip-muted">
-                <span className="text-neutral-0">{stats.pastEvents}</span>
-                <span className="text-neutral-200/80">past</span>
+                <span className="text-neutral-0">{stats.pendingInvites}</span>
+                <span className="text-neutral-200/80">invited</span>
               </span>
             </div>
 
-            {organization.description ? (
+            {team.description ? (
               <p className="mx-auto mt-3 max-w-2xl text-sm text-neutral-200">
-                {organization.description}
+                {team.description}
               </p>
             ) : null}
           </div>
 
-          {/* ORG TABS (same styling logic as event dashboard tabs) */}
+          {/* Tabs */}
           <div className="mt-5 px-4">
             <div className="no-scrollbar overflow-x-auto overflow-y-visible">
               <div className="flex w-full justify-center">
                 <nav
-                  aria-label="Organization dashboard tabs"
+                  aria-label="Team dashboard tabs"
                   role="tablist"
                   className="tikd-tabs-shell relative inline-flex min-w-max items-center gap-3 px-2 py-2"
                 >
-                  {ORG_TABS.map((tab) => {
+                  {TEAM_TABS.map((tab) => {
                     const href = basePath ? tab.href(basePath) : "#";
                     const isActive = activeTab === tab.id;
                     const Icon = tab.Icon;
@@ -349,8 +314,8 @@ export default function OrgDashboardShell({
         </section>
       ) : null}
 
-      {/* PAGE CONTENT */}
-      <section className={clsx(!showOrgHero && "pt-4")}>{children}</section>
+      {/* Content */}
+      <section className={clsx(!showTeamHero && "pt-4")}>{children}</section>
     </main>
   );
 }

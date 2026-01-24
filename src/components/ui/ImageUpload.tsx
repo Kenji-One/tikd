@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 
-type Sizing = "small" | "avatar" | "normal" | "big" | "square";
+type Sizing = "small" | "avatar" | "normal" | "big" | "full" | "square";
 
 type Props = {
   /** Current image URL coming from the form */
@@ -126,6 +126,15 @@ export default function ImageUpload({
           img: "object-cover rounded-xl",
           button:
             "flex h-64 w-full items-center justify-center rounded-xl border border-dashed border-white/30 text-white/80 hover:bg-white/10",
+          wrapper: "space-y-2",
+        };
+      case "full":
+        return {
+          label: "text-sm text-white",
+          box: "relative h-full w-full rounded-xl overflow-hidden",
+          img: "object-cover rounded-xl",
+          button:
+            "flex h-full w-full items-center justify-center rounded-xl border border-dashed border-white/30 text-white/80 hover:bg-white/10",
           wrapper: "space-y-2",
         };
       case "normal":

@@ -3,6 +3,7 @@
 
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -600,7 +601,18 @@ export default function TicketTypesPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<"before" | "after">("before");
-  const dragGhostRef = useRef<HTMLDivElement | null>(null);
+  const dropEdgeRef = useRef<"before" | "after">("before");
+  const dragOverIdRef = useRef<string | null>(null);
+  const isPointerDraggingRef = useRef(false);
+
+  // keep latest lists for global pointer listeners
+  const orderedRef = useRef<TicketTypeRow[]>([]);
+  const visibleRef = useRef<TicketTypeRow[]>([]);
+
+  // call persistOrder from global handlers (avoid stale closures)
+  const persistOrderRef = useRef<
+    ((next: TicketTypeRow[], prev: TicketTypeRow[]) => Promise<void>) | null
+  >(null);
 
   // Fetch ticket types
   const {
@@ -644,6 +656,9 @@ export default function TicketTypesPage() {
     );
   }, [ordered, query]);
 
+  orderedRef.current = ordered;
+  visibleRef.current = visible;
+
   async function persistOrder(next: TicketTypeRow[], prev: TicketTypeRow[]) {
     if (!eventId) return;
 
@@ -672,75 +687,137 @@ export default function TicketTypesPage() {
     }
   }
 
-  function handleDragStart(e: React.DragEvent, id: string) {
-    dragActiveIdRef.current = id;
-    setDraggingId(id);
-    setDragOverId(null);
+  persistOrderRef.current = persistOrder;
 
-    // make it feel intentional
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", id);
+  const onGlobalPointerMove = (ev: PointerEvent) => {
+    if (!isPointerDraggingRef.current) return;
+    ev.preventDefault();
 
-    // clean drag ghost instead of a random screenshot
-    if (dragGhostRef.current) {
-      e.dataTransfer.setDragImage(dragGhostRef.current, 16, 16);
-    }
-  }
-
-  function handleDragEnd() {
-    dragActiveIdRef.current = null;
-    setDraggingId(null);
-    setDragOverId(null);
-  }
-
-  function handleDragOver(e: React.DragEvent, overId: string) {
-    e.preventDefault(); // required to allow drop
-    if (!draggingId || draggingId === overId) return;
-
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const isAfter = e.clientY > rect.top + rect.height / 2;
-
-    setDragOverId(overId);
-    setDropEdge(isAfter ? "after" : "before");
-  }
-
-  function handleDragLeave(e: React.DragEvent, overId: string) {
-    // Only clear when actually leaving the row container (not moving between children)
-    const current = e.currentTarget as HTMLElement;
-    const related = e.relatedTarget as Node | null;
-    if (related && current.contains(related)) return;
-
-    if (dragOverId === overId) {
-      setDragOverId(null);
-    }
-  }
-
-  function handleDrop(overId: string) {
     const activeId = dragActiveIdRef.current;
-    dragActiveIdRef.current = null;
+    if (!activeId) return;
 
-    if (!activeId || activeId === overId) {
-      setDraggingId(null);
-      setDragOverId(null);
+    const el = document.elementFromPoint(
+      ev.clientX,
+      ev.clientY,
+    ) as HTMLElement | null;
+
+    const row = el?.closest?.("[data-ticket-row-id]") as HTMLElement | null;
+
+    if (!row) {
+      if (dragOverIdRef.current !== null) {
+        dragOverIdRef.current = null;
+        setDragOverId(null);
+      }
       return;
     }
 
-    const prev = ordered;
+    const overId = row.dataset.ticketRowId;
+    if (!overId || overId === activeId) {
+      if (dragOverIdRef.current !== null) {
+        dragOverIdRef.current = null;
+        setDragOverId(null);
+      }
+      return;
+    }
+
+    const rect = row.getBoundingClientRect();
+    const isAfter = ev.clientY > rect.top + rect.height / 2;
+    const edge = isAfter ? "after" : "before";
+
+    dragOverIdRef.current = overId;
+    dropEdgeRef.current = edge;
+
+    setDragOverId(overId);
+    setDropEdge(edge);
+  };
+
+  const onGlobalPointerUp = useCallback((ev: PointerEvent) => {
+    if (!isPointerDraggingRef.current) return;
+    ev.preventDefault();
+
+    const activeId = dragActiveIdRef.current;
+    const overId = dragOverIdRef.current;
+    const edge = dropEdgeRef.current;
+
+    // cleanup FIRST (prevents “stuck until refresh”)
+    stopPointerDrag();
+
+    if (!activeId || !overId || activeId === overId) return;
+
+    const prev = orderedRef.current;
 
     const next = reorderFullByVisibleDrag({
-      full: ordered,
-      visible,
+      full: prev,
+      visible: visibleRef.current,
       activeId,
       overId,
-      edge: dropEdge,
+      edge,
     });
 
+    if (next === prev) return;
+
     setOrdered(next);
-    void persistOrder(next, prev);
+    void persistOrderRef.current?.(next, prev);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function stopPointerDrag() {
+    isPointerDraggingRef.current = false;
+    dragActiveIdRef.current = null;
+    dragOverIdRef.current = null;
+    dropEdgeRef.current = "before";
 
     setDraggingId(null);
     setDragOverId(null);
+    setDropEdge("before");
+
+    window.removeEventListener("pointermove", onGlobalPointerMove);
+    window.removeEventListener("pointerup", onGlobalPointerUp);
+    window.removeEventListener("pointercancel", onGlobalPointerUp);
+
+    document.body.style.userSelect = "";
+
+    document.body.style.webkitUserSelect = "";
+    document.body.style.cursor = "";
   }
+
+  function startPointerDrag(e: React.PointerEvent, id: string) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // if anything got stuck from navigation, reset
+    stopPointerDrag();
+
+    isPointerDraggingRef.current = true;
+    dragActiveIdRef.current = id;
+
+    setDraggingId(id);
+    setDragOverId(null);
+    setDropEdge("before");
+
+    // select-none + no text selection while dragging
+    document.body.style.userSelect = "none";
+
+    document.body.style.webkitUserSelect = "";
+    document.body.style.cursor = "grabbing";
+
+    window.addEventListener("pointermove", onGlobalPointerMove, {
+      passive: false,
+    });
+    window.addEventListener("pointerup", onGlobalPointerUp, { passive: false });
+    window.addEventListener("pointercancel", onGlobalPointerUp, {
+      passive: false,
+    });
+  }
+
+  useEffect(() => {
+    return () => {
+      stopPointerDrag();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!eventId) {
     return (
@@ -750,14 +827,6 @@ export default function TicketTypesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Drag ghost (used by setDragImage) */}
-      <div
-        ref={dragGhostRef}
-        className="pointer-events-none fixed -left-[9999px] -top-[9999px] z-[9999] rounded-lg border border-white/10 bg-neutral-950 px-3 py-2 text-sm font-medium text-neutral-0 shadow-[0_14px_40px_rgba(0,0,0,0.55)]"
-      >
-        Moving ticket type…
-      </div>
-
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-neutral-0">Ticket types</h2>
@@ -836,10 +905,11 @@ export default function TicketTypesPage() {
             return (
               <div
                 key={rowKey}
-                onDragOver={(e) => handleDragOver(e, t.id)}
-                onDragLeave={(e) => handleDragLeave(e, t.id)}
-                onDrop={() => handleDrop(t.id)}
-                className={clsx("relative rounded-lg", isOver && "z-[2]")}
+                data-ticket-row-id={t.id}
+                className={clsx(
+                  "relative rounded-lg select-none",
+                  isOver && "z-[2]",
+                )}
               >
                 {/* insertion indicator line (outside the row, in the gap) */}
                 {isOver ? (
@@ -874,12 +944,10 @@ export default function TicketTypesPage() {
                   leading={
                     <button
                       type="button"
-                      draggable
                       aria-label="Reorder ticket type"
-                      onDragStart={(e) => handleDragStart(e, t.id)}
-                      onDragEnd={handleDragEnd}
+                      onPointerDown={(e) => startPointerDrag(e, t.id)}
                       className={clsx(
-                        "inline-flex h-10 w-7 items-center justify-center rounded-md",
+                        "inline-flex h-10 w-7 items-center justify-center rounded-md touch-none",
                         "text-neutral-500 hover:text-neutral-200",
                         "border border-transparent hover:border-white/10",
                         "bg-transparent hover:bg-neutral-900/30",

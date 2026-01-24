@@ -35,7 +35,7 @@ type EventDoc = HydratedDocument<IEvent> & {
 /* ------------------------------------------------------------------ */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
@@ -97,20 +97,36 @@ export async function GET(
 /*  PATCH /api/events/:id – update basic event fields                 */
 /* ------------------------------------------------------------------ */
 
+const artistInputSchema = z.object({
+  name: z.string().min(1),
+  image: z.string().url().optional(),
+});
+
 const patchSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
+
+  // Start/end datetime (ISO -> Date)
   date: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+
   minAge: z.coerce.number().int().min(0).max(99).optional(),
   location: z.string().min(1).optional(),
   image: z.string().url().optional(),
+
+  categories: z.array(z.string()).optional(),
+  promoters: z.array(z.string().email()).optional(),
+  message: z.string().optional(),
+
+  artists: z.array(artistInputSchema).optional(),
+
   status: z.enum(["published", "draft"]).optional(),
   internalNotes: z.string().optional(),
 });
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -136,8 +152,8 @@ export async function PATCH(
 
   // Permission: org owner or event creator can edit
   const org = await Organization.findById(event.organizationId).select(
-    "_id ownerId"
-  ); // no .lean() so TS knows about ownerId
+    "_id ownerId",
+  );
 
   const isOwner = !!org && String(org.ownerId) === String(session.user.id);
 
@@ -153,11 +169,56 @@ export async function PATCH(
 
   if (data.title !== undefined) event.title = data.title;
   if (data.description !== undefined) event.description = data.description;
+
+  // date/endDate + derived durationMinutes
   if (data.date !== undefined) event.date = data.date;
+  if (data.endDate !== undefined) event.endDate = data.endDate;
+
+  // Recompute durationMinutes if we have a valid endDate and date
+  if (event.endDate && event.date) {
+    const ms = event.endDate.getTime() - event.date.getTime();
+    if (Number.isFinite(ms) && ms > 0) {
+      event.durationMinutes = Math.round(ms / 60000);
+    } else {
+      event.durationMinutes = undefined;
+    }
+  }
+
   if (data.minAge !== undefined) event.minAge = data.minAge;
   if (data.location !== undefined) event.location = data.location;
   if (data.image !== undefined) event.image = data.image;
+
+  if (data.categories !== undefined) event.categories = data.categories;
+  if (data.promoters !== undefined) event.promoters = data.promoters;
+  if (data.message !== undefined) event.message = data.message;
+
+  // Artists: replace list (recreate docs to match POST behavior)
+  if (data.artists !== undefined) {
+    const prevIds = Array.isArray(event.artists) ? event.artists : [];
+
+    if (prevIds.length > 0) {
+      try {
+        await Artist.deleteMany({ _id: { $in: prevIds } });
+      } catch {
+        // ignore cleanup errors; event refs will be overwritten anyway
+      }
+    }
+
+    const newIds = await Promise.all(
+      data.artists.map(async (a) => {
+        const doc = await Artist.create({
+          stageName: a.name,
+          avatar: a.image ?? "",
+        });
+        return doc._id;
+      }),
+    );
+
+    event.artists = newIds as unknown as Types.ObjectId[];
+  }
+
   if (data.status !== undefined) event.status = data.status;
+
   if (data.internalNotes !== undefined) {
     event.internalNotes = data.internalNotes;
   }

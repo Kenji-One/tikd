@@ -146,10 +146,16 @@ export default function UpcomingEventsTable() {
   }, [sortField, sortDir]);
 
   const applySortField = (key: SortField) => {
+    if (sortField === key) {
+      setSortField(null);
+      setSortOpen(false);
+      setSortDir("desc");
+      return;
+    }
+
     setSortField(key);
     setSortOpen(false);
 
-    // Smart default: title -> A→Z, numbers/dates -> High→Low
     if (key === "title") setSortDir("asc");
     else setSortDir("desc");
   };
@@ -338,10 +344,10 @@ export default function UpcomingEventsTable() {
                   <div
                     className={[
                       "grid items-center",
-                      // ✅ equal spacing between ALL columns
-                      "gap-x-10 gap-y-3",
-                      // ✅ 1st col = event (poster + text), then 4 equal-ish metric cols
-                      "sm:grid-cols-[minmax(0,1fr)_120px_120px_140px_140px]",
+                      "gap-y-3",
+                      // ✅ first column a bit wider, and slightly more space after it
+                      "sm:grid-cols-[2fr_1fr_1fr_1fr_1fr]",
+                      "sm:gap-x-8",
                     ].join(" ")}
                   >
                     {/* Col 1: Event (Poster + Title/Date) */}
@@ -372,8 +378,8 @@ export default function UpcomingEventsTable() {
                     </div>
 
                     {/* Page Views */}
-                    <div className="justify-self-center">
-                      <div className="flex flex-col items-center text-center">
+                    <div className="justify-self-stretch">
+                      <div className="flex w-full flex-col items-center text-center">
                         <div className="flex items-center justify-center gap-1.5 text-base font-extrabold">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -399,8 +405,8 @@ export default function UpcomingEventsTable() {
                     </div>
 
                     {/* Tickets Sold */}
-                    <div className="justify-self-center">
-                      <div className="flex flex-col items-center text-center">
+                    <div className="justify-self-stretch">
+                      <div className="flex w-full flex-col items-center text-center">
                         <div className="flex items-center justify-center gap-1.5 text-base font-extrabold">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -426,8 +432,8 @@ export default function UpcomingEventsTable() {
                     </div>
 
                     {/* Revenue */}
-                    <div className="justify-self-center">
-                      <div className="flex flex-col items-center text-center">
+                    <div className="justify-self-stretch">
+                      <div className="flex w-full flex-col items-center text-center">
                         <div className="text-base font-extrabold tabular-nums">
                           {r.revenue}
                         </div>
@@ -438,8 +444,8 @@ export default function UpcomingEventsTable() {
                     </div>
 
                     {/* Event Date */}
-                    <div className="justify-self-center">
-                      <div className="flex flex-col items-center text-center">
+                    <div className="justify-self-stretch">
+                      <div className="flex w-full flex-col items-center text-center">
                         <div className="text-base font-extrabold uppercase tabular-nums">
                           {r.eventDate}
                         </div>

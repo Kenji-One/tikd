@@ -560,24 +560,21 @@ export default function EditEventPage() {
 
   /* ---------- Derive orgId from event ----------------------------- */
   const orgIdFromEvent = useMemo(() => {
-    const anyEvent = event as unknown as Record<string, any> | undefined;
-    if (!anyEvent) return "";
+    if (!event) return "";
 
-    // API returns `organization` key + possibly populated `organizationId`
-    const org =
-      anyEvent.organization ||
-      (typeof anyEvent.organizationId === "object"
-        ? anyEvent.organizationId
-        : null);
+    // Prefer populated `organization` object if available
+    if (event.organization?._id) return String(event.organization._id);
 
-    const id =
-      (org && typeof org === "object" && org._id) ||
-      (typeof anyEvent.organizationId === "string"
-        ? anyEvent.organizationId
-        : "") ||
-      "";
+    // If backend returns `organizationId` as a string
+    if (typeof event.organizationId === "string") return event.organizationId;
 
-    return String(id || "");
+    // If backend returns populated `organizationId` object
+    if (event.organizationId && typeof event.organizationId === "object") {
+      const maybe = event.organizationId as { _id?: unknown };
+      if (typeof maybe._id === "string") return maybe._id;
+    }
+
+    return "";
   }, [event]);
 
   /* ---------- Prefill from existing event ------------------------- */
@@ -836,7 +833,9 @@ export default function EditEventPage() {
   const categories = watchArr("categories", [] as unknown as string[]);
   const toggleCat = (c: string) => {
     const set = new Set(categories as string[]);
-    set.has(c) ? set.delete(c) : set.add(c);
+    if (set.has(c)) set.delete(c);
+    else set.add(c);
+
     setValue("categories", Array.from(set), { shouldDirty: true });
   };
 

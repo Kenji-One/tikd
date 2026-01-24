@@ -59,7 +59,9 @@ function hasPlacesLoaded(): boolean {
 function ensureGlobalCallback(): void {
   if (typeof window === "undefined") return;
 
-  const w = window as unknown as Record<string, unknown>;
+  // ✅ No `any` – typed index signature for the callback slot.
+  const w = window as unknown as { [key: string]: unknown };
+
   if (typeof w[CALLBACK_NAME] !== "function") {
     w[CALLBACK_NAME] = () => {
       window.__tikdPlacesReady = true;
@@ -101,6 +103,16 @@ function scriptSrcMatches(src: string, language: string, region: string) {
   return placesOk && cbOk && langOk && regionOk;
 }
 
+// ✅ helper: remove google safely without `any`
+function clearWindowGoogle(): void {
+  try {
+    const w = window as unknown as { google?: unknown };
+    delete w.google;
+  } catch {
+    /* noop */
+  }
+}
+
 async function loadGoogleMapsPlacesScript(
   apiKey: string,
   language: string,
@@ -131,11 +143,7 @@ async function loadGoogleMapsPlacesScript(
     if (!scriptSrcMatches(src, language, region)) {
       existing.remove();
       // best-effort reset (helps during dev/hot reload)
-      try {
-        delete (window as any).google;
-      } catch {
-        /* noop */
-      }
+      clearWindowGoogle();
       window.__tikdPlacesReady = false;
     } else {
       // Script matches — just wait until places is actually ready.
@@ -146,11 +154,7 @@ async function loadGoogleMapsPlacesScript(
         // fall through: script may be "stuck", we will reload below
         existing.remove();
         window.__tikdPlacesReady = false;
-        try {
-          delete (window as any).google;
-        } catch {
-          /* noop */
-        }
+        clearWindowGoogle();
       }
       if (hasPlacesLoaded()) return;
     }

@@ -1,3 +1,4 @@
+// src/app/dashboard/organizations/[id]/members/page.tsx
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -230,7 +231,11 @@ function MemberActionsMenu({
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -253,27 +258,50 @@ function MemberActionsMenu({
     const reposition = () => {
       const btn = btnRef.current;
       if (!btn) return;
+
       const r = btn.getBoundingClientRect();
       const PANEL_W = 230;
       const PAD = 12;
+
+      const maxHeight = Math.max(180, window.innerHeight - PAD * 2);
 
       // right-align to button by default
       let left = r.right - PANEL_W;
       left = Math.max(PAD, Math.min(left, window.innerWidth - PANEL_W - PAD));
 
-      // initial: below the button
-      let top = r.bottom + 10;
+      // prefer: below the button
+      const belowTop = r.bottom + 10;
 
-      setPos({ top, left });
+      // set a first-pass position so panel mounts and we can measure it
+      setPos({ top: belowTop, left, maxHeight });
 
-      // after panel mounts, flip up if needed (needs panel height)
+      // after panel mounts, compute best top so it NEVER goes off-screen
       requestAnimationFrame(() => {
-        const h = panelRef.current?.offsetHeight ?? 0;
+        const panel = panelRef.current;
+        const hRaw = panel?.offsetHeight ?? 0;
+        const h = Math.min(hRaw, maxHeight);
+
         const maxBottom = window.innerHeight - PAD;
-        if (top + h > maxBottom) {
-          top = Math.max(PAD, r.top - 10 - h);
-          setPos({ top, left });
+
+        const belowFits = belowTop + h <= maxBottom;
+        const aboveTop = r.top - 10 - h;
+        const aboveFits = aboveTop >= PAD;
+
+        let top = belowTop;
+
+        if (belowFits) {
+          top = belowTop;
+        } else if (aboveFits) {
+          top = aboveTop;
+        } else {
+          // panel is too tall for the available space either way -> pin inside viewport
+          top = PAD;
         }
+
+        // final clamp just to be paranoid
+        top = Math.max(PAD, Math.min(top, maxBottom - h));
+
+        setPos({ top, left, maxHeight });
       });
     };
 
@@ -318,7 +346,11 @@ function MemberActionsMenu({
         ? createPortal(
             <div
               ref={panelRef}
-              style={{ top: pos.top, left: pos.left }}
+              style={{
+                top: pos.top,
+                left: pos.left,
+                maxHeight: pos.maxHeight,
+              }}
               className={clsx(
                 "fixed z-[9999] w-[230px]",
                 "overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95",
@@ -337,76 +369,79 @@ function MemberActionsMenu({
                 </div>
               </div>
 
-              <div className="p-2 space-y-1">
-                {(
-                  ["admin", "promoter", "scanner", "collaborator"] as Role[]
-                ).map((r) => {
-                  const active = r === member.role;
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        onChangeRole(r);
-                        setOpen(false);
-                      }}
-                      className={clsx(
-                        "w-full px-2.5 py-2 rounded-lg text-left",
-                        "flex items-center gap-2",
-                        "border border-white/10",
-                        active
-                          ? "bg-primary-500/12 text-primary-100 ring-1 ring-primary-500/20"
-                          : "bg-white/5 text-neutral-200 hover:bg-white/10",
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                      )}
-                    >
-                      <span
+              {/* scroll container so it NEVER pushes off-screen */}
+              <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
+                <div className="p-2 space-y-1">
+                  {(
+                    ["admin", "promoter", "scanner", "collaborator"] as Role[]
+                  ).map((r) => {
+                    const active = r === member.role;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          onChangeRole(r);
+                          setOpen(false);
+                        }}
                         className={clsx(
-                          "inline-flex h-7 w-7 items-center justify-center rounded-lg",
+                          "w-full px-2.5 py-2 rounded-lg text-left",
+                          "flex items-center gap-2",
+                          "border border-white/10",
                           active
-                            ? "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/25"
-                            : "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                            ? "bg-primary-500/12 text-primary-100 ring-1 ring-primary-500/20"
+                            : "bg-white/5 text-neutral-200 hover:bg-white/10",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                         )}
                       >
-                        {ROLE_META[r].icon}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12px] font-semibold">
-                          {ROLE_META[r].label}
-                        </div>
-                        <div className="text-[11px] text-neutral-500">
-                          {ROLE_META[r].blurb}
-                        </div>
-                      </div>
-                      {active ? (
-                        <span className="text-[11px] font-semibold text-primary-200">
-                          Selected
+                        <span
+                          className={clsx(
+                            "inline-flex h-7 w-7 items-center justify-center rounded-lg",
+                            active
+                              ? "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/25"
+                              : "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                          )}
+                        >
+                          {ROLE_META[r].icon}
                         </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] font-semibold">
+                            {ROLE_META[r].label}
+                          </div>
+                          <div className="text-[11px] text-neutral-500">
+                            {ROLE_META[r].blurb}
+                          </div>
+                        </div>
+                        {active ? (
+                          <span className="text-[11px] font-semibold text-primary-200">
+                            Selected
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
 
-              <div className="border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    onRemove();
-                  }}
-                  className={clsx(
-                    "w-full px-3 py-2.5 text-left",
-                    "flex items-center gap-2",
-                    "text-[12px] font-semibold",
-                    "text-red-300 hover:text-red-200",
-                    "hover:bg-red-500/10",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
-                  )}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Remove
-                </button>
+                <div className="border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      onRemove();
+                    }}
+                    className={clsx(
+                      "w-full px-3 py-2.5 text-left",
+                      "flex items-center gap-2",
+                      "text-[12px] font-semibold",
+                      "text-red-300 hover:text-red-200",
+                      "hover:bg-red-500/10",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
+                    )}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>,
             document.body,
@@ -653,8 +688,9 @@ export default function OrgMembersPage() {
 
   /* ---------------------- Shared Grid Template ---------------------- */
   // ✅ One grid template used by BOTH header + rows => consistent spacing/align
+  // Added "Role" column to the LEFT of "Date Added".
   const GRID =
-    "md:grid md:items-center md:gap-6 md:grid-cols-[minmax(300px,2.2fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(200px,1fr)]";
+    "md:grid md:items-center md:gap-6 md:grid-cols-[minmax(300px,2.2fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(200px,1fr)]";
 
   /* --------------------------- Data --------------------------- */
   const { data: members, isLoading } = useQuery<TeamMember[]>({
@@ -884,6 +920,7 @@ export default function OrgMembersPage() {
                 <div>Page Views</div>
                 <div>Tickets Sold</div>
                 <div>Revenue</div>
+                <div>Role</div>
                 <div>Date Added</div>
                 <div>Status</div>
               </div>
@@ -962,6 +999,16 @@ export default function OrgMembersPage() {
                             <div className="text-[12px] text-neutral-200">
                               <span className="font-semibold text-neutral-100">
                                 {fmtUsd(met.revenue)}
+                              </span>
+                            </div>
+
+                            {/* Role */}
+                            <div className="text-[12px] text-neutral-200">
+                              <span className="inline-flex items-center gap-2 font-semibold text-neutral-100">
+                                <span className="inline-flex items-center justify-center text-primary-300">
+                                  {ROLE_META[m.role]?.icon}
+                                </span>
+                                {ROLE_META[m.role]?.label ?? "—"}
                               </span>
                             </div>
 
@@ -1044,6 +1091,15 @@ export default function OrgMembersPage() {
                               icon={<CircleDollarSign className="h-4 w-4" />}
                               label="Revenue"
                               value={fmtUsd(met.revenue)}
+                            />
+                            <MetricChip
+                              icon={
+                                ROLE_META[m.role]?.icon ?? (
+                                  <UsersIcon className="h-4 w-4" />
+                                )
+                              }
+                              label="Role"
+                              value={ROLE_META[m.role]?.label ?? "—"}
                             />
                             <MetricChip
                               icon={<CalendarDays className="h-4 w-4" />}

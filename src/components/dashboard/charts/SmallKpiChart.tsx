@@ -367,6 +367,8 @@ function SmallKpiChart({
           <Tooltip
             cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1 }}
             isAnimationActive={false}
+            /** ✅ Fix: prevent the tooltip wrapper from catching the mouse */
+            wrapperStyle={{ pointerEvents: "none" }}
             content={(props: HoverTooltipProps) => {
               const active = props.active;
               const payload = props.payload;

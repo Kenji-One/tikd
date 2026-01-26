@@ -25,7 +25,7 @@ type Row = {
   revenue: number; // USD number
   type: LinkType;
   status: Status;
-  created: string; // "Sep 19, 2025"
+  created: string; // "Sep 19, 2025 4:12 PM" style
 };
 
 /* ----------------------------- Mock Data --------------------------- */
@@ -38,7 +38,7 @@ const INITIAL_ROWS: Row[] = new Array(7).fill(0).map((_, i) => ({
   revenue: 1000 + i * 37,
   type: "Event",
   status: i % 2 ? "Active" : "Paused",
-  created: "Sep 19, 2025",
+  created: `Sep 19, 2025 ${3 + (i % 3)}:${String(12 + i).padStart(2, "0")} PM`,
 }));
 
 /* ----------------------------- Helpers ----------------------------- */
@@ -54,12 +54,33 @@ type SortDir = "asc" | "desc";
 const parseDate = (d: string) => Date.parse(d) || 0;
 
 function formatCreated(d: Date) {
-  // "Sep 19, 2025" style
-  return d.toLocaleDateString("en-US", {
+  // "Sep 19, 2025 3:24 PM" style
+  const date = d.toLocaleDateString("en-US", {
     month: "short",
     day: "2-digit",
     year: "numeric",
   });
+  const time = d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${date} ${time}`;
+}
+
+function formatCreatedParts(label: string) {
+  const ms = Date.parse(String(label || ""));
+  if (!Number.isFinite(ms)) return { date: label, time: "" };
+  const d = new Date(ms);
+  const date = d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return { date, time };
 }
 
 function makeId(prefix = "row") {
@@ -1439,9 +1460,21 @@ export default function TrackingLinksTable() {
                   </td>
 
                   {/* Date */}
-                  <td className="px-4 py-3 text-center">
-                    <span className="">{r.created}</span>
-                  </td>
+                  {(() => {
+                    const c = formatCreatedParts(r.created);
+                    return (
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex flex-col items-center leading-tight">
+                          <span className="text-sm text-neutral-0">
+                            {c.date}
+                          </span>
+                          <span className="text-xs text-neutral-500">
+                            {c.time || "—"}
+                          </span>
+                        </div>
+                      </td>
+                    );
+                  })()}
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-right">

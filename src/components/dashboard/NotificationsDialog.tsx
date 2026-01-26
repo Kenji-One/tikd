@@ -1,13 +1,9 @@
-/* ------------------------------------------------------------------ */
-/*  src/components/dashboard/NotificationsDialog.tsx                  */
-/*  - Tikd-styled notifications modal                                 */
-/*  - LocalStorage-backed (fully functional now), easy to swap to API  */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCheck, X } from "lucide-react";
+import { CheckCheck, X, Bell } from "lucide-react";
+import clsx from "clsx";
 
 export type NotificationItem = {
   id: string;
@@ -37,15 +33,14 @@ function timeAgo(iso: string) {
 
   const m = Math.floor(diff / (60 * 1000));
   if (m < 1) return "Just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return `${m}m`;
 
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return `${h}h`;
 
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
+  if (d < 7) return `${d}d`;
 
-  // fallback to a short date
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
@@ -65,7 +60,7 @@ function safeParse(json: string | null): NotificationItem[] {
 
 function loadNotifications(): NotificationItem[] {
   return safeParse(
-    typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null
+    typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null,
   );
 }
 
@@ -121,7 +116,7 @@ export default function NotificationsDialog({
 
   const unreadCount = useMemo(
     () => items.filter((n) => !n.read).length,
-    [items]
+    [items],
   );
 
   const visible = useMemo(() => {
@@ -132,10 +127,8 @@ export default function NotificationsDialog({
   // Load + seed on open
   useEffect(() => {
     if (!open) return;
-
     const seeded = seedIfEmpty();
     setItems(seeded);
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -144,16 +137,6 @@ export default function NotificationsDialog({
     if (!open && items.length === 0) return;
     onUnreadChange?.(unreadCount);
   }, [unreadCount, onUnreadChange, open, items.length]);
-
-  // Lock body scroll while open
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
 
   function setAndPersist(next: NotificationItem[]) {
     setItems(next);
@@ -183,140 +166,188 @@ export default function NotificationsDialog({
 
   return (
     <div
+      className={clsx(
+        "absolute right-0 top-[calc(100%+10px)] z-[60] w-[380px]",
+        "overflow-hidden rounded-2xl",
+        // glass container (match Friends page)
+        "border border-white/10",
+        "bg-neutral-950/55 backdrop-blur-2xl",
+        // subtle “friends popover” glow
+        "bg-[radial-gradient(1100px_520px_at_12%_-10%,rgba(154,70,255,0.22),transparent_55%),radial-gradient(900px_520px_at_110%_-15%,rgba(154,70,255,0.14),transparent_55%)]",
+        // depth + inner highlight
+        "shadow-[0_28px_110px_rgba(0,0,0,0.72)]",
+        "ring-1 ring-white/[0.06]",
+      )}
       role="dialog"
-      aria-modal="true"
       aria-label="Notifications"
-      className="fixed inset-0 z-[60]"
-      onMouseDown={(e) => {
-        // close only when clicking the backdrop, not the panel
-        if (e.target === e.currentTarget) onClose();
-      }}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" />
-
-      {/* Panel wrapper (mobile bottom sheet, desktop centered) */}
-      <div className="relative z-[61] flex h-full items-end justify-center p-3 sm:items-center">
-        <div className="w-full max-w-[520px] overflow-hidden rounded-card border border-white/10 bg-neutral-948 shadow-2xl">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-white">Notifications</p>
-              <p className="mt-1 text-[12px] text-neutral-500">
-                {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
-              </p>
+      {/* Header */}
+      <div
+        className={clsx(
+          "border-b border-white/10 px-4 py-3",
+          "bg-white/[0.03] backdrop-blur-xl",
+        )}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[12px] font-semibold tracking-[0.18em] text-neutral-300">
+              NOTIFICATIONS
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={markAllRead}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-neutral-900 px-3 py-1.5 text-[12px] font-semibold text-white/90 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary-500/40 disabled:opacity-50"
-                disabled={unreadCount === 0}
-              >
-                <CheckCheck className="h-4 w-4 opacity-80" />
-                Mark all read
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close notifications"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-900 text-white/90 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="mt-1 text-[12px] text-neutral-500">
+              {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-2 px-4 py-3">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setTab("all")}
-              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
-                tab === "all"
-                  ? "bg-white/10 text-white"
-                  : "border border-white/10 bg-neutral-900 text-white/80 hover:bg-white/5"
-              }`}
+              onClick={markAllRead}
+              disabled={unreadCount === 0}
+              className={clsx(
+                "inline-flex h-8 items-center justify-center gap-2 rounded-lg px-3",
+                "border border-white/10 bg-primary-500/15 text-primary-200",
+                "hover:bg-primary-500/20 transition-colors",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                "disabled:opacity-50 disabled:hover:bg-primary-500/15",
+              )}
+              aria-label="Mark all as read"
             >
-              All
+              <CheckCheck className="h-4 w-4" />
+              <span className="text-[11px] font-semibold">Mark all</span>
             </button>
+
             <button
               type="button"
-              onClick={() => setTab("unread")}
-              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
-                tab === "unread"
-                  ? "bg-white/10 text-white"
-                  : "border border-white/10 bg-neutral-900 text-white/80 hover:bg-white/5"
-              }`}
+              onClick={onClose}
+              aria-label="Close notifications"
+              className={clsx(
+                "inline-flex h-8 w-8 items-center justify-center rounded-lg",
+                "border border-white/10 bg-white/[0.06] text-neutral-200",
+                "hover:bg-white/[0.10] transition-colors",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+              )}
             >
-              Unread
+              <X className="h-4 w-4" />
             </button>
           </div>
+        </div>
 
-          {/* List */}
-          <div className="max-h-[62vh] overflow-auto px-2 pb-2 sm:max-h-[420px]">
-            {visible.length === 0 ? (
-              <div className="mx-2 rounded-xl border border-white/10 bg-neutral-900 px-4 py-10 text-center">
-                <p className="text-sm font-semibold text-white">
-                  No notifications
-                </p>
-                <p className="mt-2 text-[12px] text-neutral-500">
-                  {tab === "unread"
-                    ? "You have no unread updates."
-                    : "You’re all caught up."}
-                </p>
-              </div>
-            ) : (
-              visible.map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => openNotification(n)}
-                  className="group relative mx-2 mb-2 w-[calc(100%-16px)] rounded-xl border border-white/10 bg-neutral-900 px-4 py-3 text-left hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary-500/35"
-                >
-                  {/* unread dot */}
-                  {!n.read && (
-                    <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-error-500" />
-                  )}
-
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white">
-                        {n.title}
-                      </p>
-                      {n.message ? (
-                        <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-neutral-500">
-                          {n.message}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <p className="flex-shrink-0 text-[11px] font-semibold text-neutral-500">
-                      {timeAgo(n.createdAt)}
-                    </p>
-                  </div>
-
-                  {n.href ? (
-                    <p className="mt-2 text-[11px] font-semibold text-primary-400 opacity-0 transition group-hover:opacity-100">
-                      Open →
-                    </p>
-                  ) : null}
-                </button>
-              ))
+        {/* Tabs */}
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTab("all")}
+            className={clsx(
+              "inline-flex h-7 items-center justify-center rounded-lg px-3",
+              "border border-white/10 text-[11px] font-semibold",
+              tab === "all"
+                ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
+                : "bg-white/[0.06] text-neutral-200 hover:bg-white/[0.10]",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
             )}
-          </div>
-
-          {/* Footer */}
-          {/* <div className="border-t border-white/10 px-4 py-3">
-            <p className="text-[11px] text-neutral-500">
-              Tip: later you can back this with an API and real-time updates
-              (Ably/WebSockets).
-            </p>
-          </div> */}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("unread")}
+            className={clsx(
+              "inline-flex h-7 items-center justify-center rounded-lg px-3",
+              "border border-white/10 text-[11px] font-semibold",
+              tab === "unread"
+                ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
+                : "bg-white/[0.06] text-neutral-200 hover:bg-white/[0.10]",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+            )}
+          >
+            Unread
+          </button>
         </div>
       </div>
+
+      {/* List */}
+      {visible.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+          <div
+            className={clsx(
+              "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+              "bg-white/[0.06] text-neutral-200 ring-1 ring-white/10",
+              "backdrop-blur-xl",
+            )}
+          >
+            <Bell className="h-5 w-5" />
+          </div>
+          <div className="text-[13px] font-semibold text-neutral-100">
+            No notifications
+          </div>
+          <div className="text-[12px] text-neutral-500">
+            {tab === "unread"
+              ? "You have no unread updates."
+              : "You’re all caught up."}
+          </div>
+        </div>
+      ) : (
+        <div className="max-h-[420px] overflow-auto p-2 no-scrollbar">
+          <div className="space-y-2">
+            {visible.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => openNotification(n)}
+                className={clsx(
+                  "group relative w-full rounded-xl text-left",
+                  // frosted item cards like Friends page
+                  "border border-white/10",
+                  "bg-white/[0.05] backdrop-blur-xl",
+                  "px-3 py-3",
+                  // subtle inner sheen
+                  "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                  // hover lift
+                  "hover:bg-white/[0.08] hover:border-white/15 transition-colors",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                )}
+              >
+                {!n.read ? (
+                  <span
+                    className={clsx(
+                      "absolute right-3 top-3 h-2 w-2 rounded-full",
+                      "bg-red-500 ring-2 ring-neutral-950/60",
+                    )}
+                  />
+                ) : null}
+
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold text-neutral-0">
+                      {n.title}
+                    </div>
+                    {n.message ? (
+                      <div className="mt-1 line-clamp-2 text-[12px] text-neutral-400">
+                        {n.message}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex-shrink-0 text-[11px] text-neutral-500">
+                    {timeAgo(n.createdAt)}
+                  </div>
+                </div>
+
+                {n.href ? (
+                  <div
+                    className={clsx(
+                      "mt-2 text-[11px] font-semibold text-primary-300",
+                      "opacity-80 group-hover:opacity-95 transition-opacity",
+                    )}
+                  >
+                    Open →
+                  </div>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

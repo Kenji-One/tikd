@@ -12,160 +12,177 @@ type Sale = {
   id: string;
   name: string;
   event: string;
+
+  /**
+   * Purchase datetime label (must include time, e.g. "Sep 19, 2025 3:24 PM")
+   * In real data, you can also store ISO and format here — but we keep the
+   * existing shape and make it time-aware.
+   */
   date: string;
-  total: number;
-  avatarBg?: string;
-  avatarText?: string;
+
+  /** Renamed from "total" -> "amount" */
+  amount: number;
+
+  /** User's Instagram profile photo URL (or already-resolved avatar URL) */
+  instagramAvatarUrl?: string;
+
+  /** Small event poster thumbnail URL */
+  eventPosterUrl?: string;
 };
 
-type SortKey = "id" | "name" | "event" | "date" | "total";
+type SortKey = "name" | "event" | "date" | "amount";
 type SortDir = "asc" | "desc";
 
 /* ---------------------------- Mock Data ---------------------------- */
+/**
+ * NOTE:
+ * - instagramAvatarUrl should be the IG profile photo URL you store/resolve server-side.
+ * - eventPosterUrl should be your event poster image URL (Cloudinary etc.).
+ */
 const SALES: Sale[] = [
   {
     id: "#2935",
     name: "Dennis Valentine",
     event: "Valentines Gala",
-    date: "Sep 19, 2025",
-    total: 3692.79,
-    avatarBg: "bg-gradient-to-br from-indigo-500 to-cyan-400",
-    avatarText: "DV",
+    date: "Sep 19, 2025 3:24 PM",
+    amount: 3692.79,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=12",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-1/80/80",
   },
   {
     id: "#2936",
     name: "Dennis Collis",
     event: "Valentines Gala",
-    date: "Sep 16, 2025",
-    total: 9000.07,
-    avatarBg: "bg-gradient-to-br from-fuchsia-500 to-rose-500",
-    avatarText: "DC",
+    date: "Sep 16, 2025 11:02 AM",
+    amount: 9000.07,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=32",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-2/80/80",
   },
   {
     id: "#2937",
     name: "Dennis F.",
     event: "Valentines Gala",
-    date: "Sep 2, 2025",
-    total: 447.24,
-    avatarBg: "bg-gradient-to-br from-slate-500 to-slate-700",
-    avatarText: "DF",
+    date: "Sep 2, 2025 6:41 PM",
+    amount: 447.24,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=8",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-3/80/80",
   },
   {
     id: "#2938",
     name: "Dennis R.",
     event: "Valentines Gala",
-    date: "Aug 29, 2025",
-    total: 545.23,
-    avatarBg: "bg-gradient-to-br from-zinc-500 to-neutral-700",
-    avatarText: "DR",
+    date: "Aug 29, 2025 9:15 AM",
+    amount: 545.23,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=18",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-4/80/80",
   },
   {
     id: "#2939",
     name: "Dennis S.",
     event: "Valentines Gala",
-    date: "Aug 27, 2025",
-    total: 7800.57,
-    avatarBg: "bg-gradient-to-br from-orange-500 to-amber-500",
-    avatarText: "DS",
+    date: "Aug 27, 2025 1:07 PM",
+    amount: 7800.57,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=45",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-5/80/80",
   },
   {
     id: "#2940",
     name: "Dennis K.",
     event: "Valentines Gala",
-    date: "Sep 9, 2025",
-    total: 9608.33,
-    avatarBg: "bg-gradient-to-br from-teal-500 to-emerald-500",
-    avatarText: "DK",
+    date: "Sep 9, 2025 8:33 PM",
+    amount: 9608.33,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=5",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-6/80/80",
   },
   {
     id: "#2941",
     name: "Denise P.",
     event: "Valentines Gala",
-    date: "Sep 4, 2025",
-    total: 9731.58,
-    avatarBg: "bg-gradient-to-br from-cyan-500 to-blue-500",
-    avatarText: "DP",
+    date: "Sep 4, 2025 10:58 AM",
+    amount: 9731.58,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=25",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-7/80/80",
   },
   {
     id: "#2942",
     name: "Dennis W.",
     event: "Valentines Gala",
-    date: "Sep 15, 2025",
-    total: 2930.93,
-    avatarBg: "bg-gradient-to-br from-primary-500 to-purple-500",
-    avatarText: "DW",
+    date: "Sep 15, 2025 5:12 PM",
+    amount: 2930.93,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=15",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-8/80/80",
   },
   {
     id: "#2943",
     name: "Goga G.",
     event: "Valentines Gala",
-    date: "Dec 21, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "GG",
+    date: "Dec 21, 2025 2:09 PM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=50",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-9/80/80",
   },
   {
     id: "#2944",
     name: "Dennis Y.",
     event: "Valentines Gala",
-    date: "Dec 21, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "DY",
+    date: "Dec 21, 2025 4:44 PM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=52",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-10/80/80",
   },
   {
     id: "#2945",
     name: "Jake P.",
     event: "Valentines Gala",
-    date: "Dec 23, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "JP",
+    date: "Dec 23, 2025 12:00 PM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=11",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-11/80/80",
   },
   {
     id: "#2946",
     name: "Mike T.",
     event: "Valentines Gala",
-    date: "Dec 26, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "MT",
+    date: "Dec 26, 2025 9:30 AM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=29",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-12/80/80",
   },
   {
     id: "#2947",
     name: "John M.",
     event: "Valentines Gala",
-    date: "Dec 27, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "JM",
+    date: "Dec 27, 2025 7:21 PM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=3",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-13/80/80",
   },
   {
     id: "#2948",
     name: "John Y.",
     event: "Valentines Gala",
-    date: "Dec 27, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "JY",
+    date: "Dec 27, 2025 7:29 PM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=6",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-14/80/80",
   },
   {
     id: "#2949",
     name: "John W.",
     event: "Valentines Gala",
-    date: "Dec 27, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "JW",
+    date: "Dec 27, 2025 8:10 PM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=7",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-15/80/80",
   },
   {
     id: "#2950",
     name: "John B.",
     event: "Valentines Gala",
-    date: "Dec 27, 2025",
-    total: 232.2,
-    avatarBg: "bg-gradient-to-br from-gray-500 to-gray-700",
-    avatarText: "JB",
+    date: "Dec 27, 2025 8:35 PM",
+    amount: 232.2,
+    instagramAvatarUrl: "https://i.pravatar.cc/80?img=10",
+    eventPosterUrl: "https://picsum.photos/seed/tikd-ev-16/80/80",
   },
 ];
 
@@ -177,30 +194,96 @@ const fmtUsd = (n: number) =>
     maximumFractionDigits: 2,
   });
 
-const firstWordEllip = (s: string) => {
-  const first = s.trim().split(/\s+/)[0] ?? s;
-  return `${first}…`;
-};
+function initialsFromName(name: string) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
 
-function Avatar({ text, bg }: { text: string; bg?: string }) {
+  const a = (parts[0]?.[0] ?? "").toUpperCase();
+  const b = (parts[1]?.[0] ?? "").toUpperCase();
+  const c = (parts[0]?.[1] ?? "").toUpperCase();
+
+  // If we only have one word, take first 2 letters
+  return parts.length >= 2 ? `${a}${b}` : `${a}${c}`.trim() || "NA";
+}
+
+/** Parse "Sep 19, 2025 3:24 PM" into a timestamp for sorting */
+function dateToMs(label: string) {
+  const ms = Date.parse(String(label || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function formatDateParts(label: string) {
+  const ms = dateToMs(label);
+  if (!ms) return { date: label, time: "" };
+
+  const d = new Date(ms);
+  const date = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  }).format(d);
+
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(d);
+
+  return { date, time };
+}
+
+function CircularAvatar({ name, src }: { name: string; src?: string | null }) {
+  const fallback = initialsFromName(name);
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        referrerPolicy="no-referrer"
+        className="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
+        onError={(e) => {
+          // fallback to initials if image fails
+          const el = e.currentTarget;
+          el.style.display = "none";
+        }}
+      />
+    );
+  }
+
   return (
     <div
       aria-hidden
-      className={clsx(
-        "grid h-5 w-5 place-items-center rounded-sm text-[10px] font-semibold text-white/90",
-        bg ?? "bg-white/10",
-      )}
+      className="grid h-6 w-6 place-items-center rounded-full bg-white/10 text-[10px] font-semibold text-white/85 ring-1 ring-white/10"
     >
-      {text}
+      {fallback.slice(0, 2)}
     </div>
   );
 }
 
-/** Parse "Sep 19, 2025" / "Dec 21" into a timestamp for sorting */
-function dateToMs(label: string) {
-  const withYear = /\d{4}/.test(label) ? label : `${label}, 2025`;
-  const ms = Date.parse(withYear);
-  return Number.isFinite(ms) ? ms : 0;
+function PosterThumb({ alt, src }: { alt: string; src?: string | null }) {
+  if (!src) {
+    return (
+      <div
+        aria-hidden
+        className="h-7 w-7 rounded-md bg-white/10 ring-1 ring-white/10"
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      referrerPolicy="no-referrer"
+      className="h-7 w-7 rounded-md object-cover ring-1 ring-white/10"
+      onError={(e) => {
+        const el = e.currentTarget;
+        el.style.display = "none";
+      }}
+    />
+  );
 }
 
 /* ---------------------------- Component ---------------------------- */
@@ -224,12 +307,9 @@ export default function RecentSalesTable() {
   const sorted = useMemo(() => {
     const arr = [...SALES];
     arr.sort((a, b) => {
-      const A = a[sortBy];
-      const B = b[sortBy];
-
       // numeric column
-      if (sortBy === "total") {
-        return dir === "asc" ? a.total - b.total : b.total - a.total;
+      if (sortBy === "amount") {
+        return dir === "asc" ? a.amount - b.amount : b.amount - a.amount;
       }
 
       // date column
@@ -240,11 +320,9 @@ export default function RecentSalesTable() {
       }
 
       // strings
-      const aStr = String(A);
-      const bStr = String(B);
-      return dir === "asc"
-        ? aStr.localeCompare(bStr)
-        : bStr.localeCompare(aStr);
+      const A = String(a[sortBy] ?? "");
+      const B = String(b[sortBy] ?? "");
+      return dir === "asc" ? A.localeCompare(B) : B.localeCompare(A);
     });
 
     return arr;
@@ -289,28 +367,9 @@ export default function RecentSalesTable() {
         <table className="w-full border-collapse text-xs font-medium leading-tight">
           <thead className="text-neutral-400">
             <tr className={thRow}>
+              {/* Name */}
               <th
                 className={thBase}
-                onClick={() => toggleSort("id")}
-                aria-sort={
-                  sortBy === "id"
-                    ? dir === "asc"
-                      ? "ascending"
-                      : "descending"
-                    : "none"
-                }
-              >
-                <div className="inline-flex items-center">
-                  Order
-                  <SortArrowsIcon
-                    direction={sortBy === "id" ? dir : null}
-                    className="ml-2 -translate-y-[1px]"
-                  />
-                </div>
-              </th>
-
-              <th
-                className={thBase + " !pl-0"}
                 onClick={() => toggleSort("name")}
                 aria-sort={
                   sortBy === "name"
@@ -329,8 +388,9 @@ export default function RecentSalesTable() {
                 </div>
               </th>
 
+              {/* Event */}
               <th
-                className={clsx(thBase, "truncate !pl-0")}
+                className={clsx(thBase, "truncate")}
                 onClick={() => toggleSort("event")}
                 aria-sort={
                   sortBy === "event"
@@ -349,6 +409,7 @@ export default function RecentSalesTable() {
                 </div>
               </th>
 
+              {/* Date */}
               <th
                 className={thBase}
                 onClick={() => toggleSort("date")}
@@ -369,11 +430,12 @@ export default function RecentSalesTable() {
                 </div>
               </th>
 
+              {/* Amount */}
               <th
                 className={thBaseRight}
-                onClick={() => toggleSort("total")}
+                onClick={() => toggleSort("amount")}
                 aria-sort={
-                  sortBy === "total"
+                  sortBy === "amount"
                     ? dir === "asc"
                       ? "ascending"
                       : "descending"
@@ -381,9 +443,9 @@ export default function RecentSalesTable() {
                 }
               >
                 <div className="inline-flex items-center justify-end">
-                  Total
+                  Amount
                   <SortArrowsIcon
-                    direction={sortBy === "total" ? dir : null}
+                    direction={sortBy === "amount" ? dir : null}
                     className="ml-2 -translate-y-[1px]"
                   />
                 </div>
@@ -395,45 +457,56 @@ export default function RecentSalesTable() {
             {sorted.flatMap((s, i) => {
               const isLast = i === sorted.length - 1;
               const rowBg = i % 2 === 0 ? "bg-neutral-948" : "bg-neutral-900";
+              const dt = formatDateParts(s.date);
 
               const dataRow = (
                 <tr
                   key={`${s.id}-${i}`}
                   className={clsx("transition-colors", rowBg)}
                 >
-                  <td className="pl-4 py-2 align-middle text-neutral-200">
-                    {s.id}
-                  </td>
-
-                  <td className="py-2">
-                    <div className="flex min-w-0 items-center gap-1">
-                      <Avatar
-                        text={(s.avatarText ?? "NA").slice(0, 2)}
-                        bg={s.avatarBg}
+                  {/* Name */}
+                  <td className="px-4 py-2 align-middle">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <CircularAvatar
+                        name={s.name}
+                        src={s.instagramAvatarUrl}
                       />
-                      <span className="truncate" title={s.name}>
-                        {firstWordEllip(s.name)}
+                      <span className="min-w-0 truncate" title={s.name}>
+                        {s.name}
                       </span>
                     </div>
                   </td>
 
-                  <td className="pr-2 py-2">
-                    <span className="block truncate" title={s.event}>
-                      {firstWordEllip(s.event)}
-                    </span>
+                  {/* Event */}
+                  <td className="px-4 py-2 align-middle">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <PosterThumb alt={s.event} src={s.eventPosterUrl} />
+                      <span className="min-w-0 truncate" title={s.event}>
+                        {s.event}
+                      </span>
+                    </div>
                   </td>
 
-                  <td className="px-2 py-2">{s.date}</td>
+                  {/* Date (date + time) */}
+                  <td className="px-4 py-2 align-middle">
+                    <div className="flex flex-col leading-tight">
+                      <span className="text-white/90">{dt.date}</span>
+                      <span className="text-[11px] text-neutral-400">
+                        {dt.time || "—"}
+                      </span>
+                    </div>
+                  </td>
 
-                  <td className="px-2 py-2 text-right font-medium text-success-500">
-                    <span className="mr-3">{fmtUsd(s.total)}</span>
+                  {/* Amount */}
+                  <td className="px-4 py-2 align-middle text-right font-medium text-success-500">
+                    <span className="mr-3">{fmtUsd(s.amount)}</span>
                   </td>
                 </tr>
               );
 
               const separatorRow = !isLast ? (
                 <tr key={`${s.id}-sep`} aria-hidden className="bg-neutral-900">
-                  <td colSpan={7} className="p-0">
+                  <td colSpan={4} className="p-0">
                     <div className={clsx("mx-4 h-px", separatorLine)} />
                   </td>
                 </tr>

@@ -3,13 +3,18 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Plus, Users, Search, RefreshCw } from "lucide-react";
+import { Plus, Users, Search, RefreshCw, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
+import GridListToggle, {
+  type GridListValue,
+} from "@/components/ui/GridListToggle";
 import ConnectionProfileCard, {
   type ConnectionProfileKind,
 } from "@/components/connections/ConnectionProfileCard";
@@ -45,13 +50,18 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function formatMembers(n?: number) {
-  if (!n || n <= 0) return "—";
-  try {
-    return new Intl.NumberFormat(undefined).format(n);
-  } catch {
-    return String(n);
-  }
+function initialsFromName(name: string) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "TM";
+
+  const a = parts[0]?.[0] ?? "";
+  const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
+  const two = `${a}${b}`.toUpperCase();
+  return two || "TM";
 }
 
 function formatJoinDateLabel(createdAt?: string) {
@@ -64,7 +74,7 @@ function formatJoinDateLabel(createdAt?: string) {
       month: "short",
       year: "numeric",
     }).format(d);
-    return `Joined ${label}`;
+    return `Created ${label}`;
   } catch {
     return undefined;
   }
@@ -157,11 +167,79 @@ function Pagination({
   );
 }
 
+function TeamListRow({ item }: { item: CardRow }) {
+  const badge = initialsFromName(item.title);
+
+  return (
+    <Link
+      href={item.href}
+      className={clsx(
+        "group flex w-full items-center justify-between gap-4",
+        "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
+        "hover:border-primary-500 hover:bg-white/7 transition-colors",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="relative h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+          {item.iconUrl ? (
+            <Image
+              src={item.iconUrl}
+              alt={item.title}
+              width={40}
+              height={40}
+              className="h-10 w-10 object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+              {badge}
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold text-neutral-50">
+            {item.title}
+          </div>
+          <div className="mt-0.5 truncate text-[12px] text-neutral-400">
+            {item.description}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden items-center gap-6 md:flex">
+        <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
+            <Users className="h-4 w-4" />
+          </span>
+          <span className="font-semibold text-neutral-100">
+            {typeof item.totalMembers === "number" ? item.totalMembers : 0}
+          </span>
+          <span className="text-neutral-400">members</span>
+        </div>
+
+        {item.joinDateLabel ? (
+          <div className="text-[12px] text-neutral-400">
+            {item.joinDateLabel}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
+        <ChevronRight className="h-4 w-4" />
+      </div>
+    </Link>
+  );
+}
+
 export default function TeamsClient() {
   const router = useRouter();
 
   const [teamsQuery, setTeamsQuery] = useState("");
   const [teamsPage, setTeamsPage] = useState(1);
+
+  // ✅ new view toggle state
+  const [teamsView, setTeamsView] = useState<GridListValue>("grid");
 
   const {
     data: teams,
@@ -225,11 +303,6 @@ export default function TeamsClient() {
     return `Showing ${start}-${end} from ${teamsTotal} data`;
   }, [teamsTotal, teamsPageSafe]);
 
-  const totalMembers = useMemo(() => {
-    const sum = rows.reduce((acc, r) => acc + (r.totalMembers ?? 0), 0);
-    return sum > 0 ? sum : undefined;
-  }, [rows]);
-
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       <section className="pb-16">
@@ -279,13 +352,12 @@ export default function TeamsClient() {
 
                 {/* Top-right controls swap */}
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-200">
-                    <Users className="h-4 w-4 text-neutral-400" />
-                    <span className="font-semibold text-neutral-0">
-                      {formatMembers(totalMembers)}
-                    </span>
-                    <span className="text-neutral-400">Total members</span>
-                  </span>
+                  {/* ✅ replace Total Members bubble with Dribbble-style toggle */}
+                  <GridListToggle
+                    value={teamsView}
+                    onChange={setTeamsView}
+                    ariaLabel="Teams view toggle"
+                  />
 
                   <Button
                     onClick={() => router.push("/dashboard/teams/new")}
@@ -331,25 +403,33 @@ export default function TeamsClient() {
                   </div>
                 </div>
               ) : teamsSlice.length ? (
-                <div className="flex flex-wrap gap-4">
-                  {teamsSlice.map((item) => (
-                    <ConnectionProfileCard
-                      key={item.id}
-                      href={item.href}
-                      kind={item.kind}
-                      title={item.title}
-                      description={item.description}
-                      bannerUrl={item.bannerUrl}
-                      iconUrl={item.iconUrl}
-                      totalMembers={item.totalMembers}
-                      joinDateLabel={item.joinDateLabel}
-                      tilt
-                      tiltMaxDeg={4}
-                      tiltPerspective={900}
-                      tiltLiftPx={2}
-                    />
-                  ))}
-                </div>
+                teamsView === "grid" ? (
+                  <div className="flex flex-wrap gap-4">
+                    {teamsSlice.map((item) => (
+                      <ConnectionProfileCard
+                        key={item.id}
+                        href={item.href}
+                        kind={item.kind}
+                        title={item.title}
+                        description={item.description}
+                        bannerUrl={item.bannerUrl}
+                        iconUrl={item.iconUrl}
+                        totalMembers={item.totalMembers}
+                        joinDateLabel={item.joinDateLabel}
+                        tilt
+                        tiltMaxDeg={4}
+                        tiltPerspective={900}
+                        tiltLiftPx={2}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {teamsSlice.map((item) => (
+                      <TeamListRow key={item.id} item={item} />
+                    ))}
+                  </div>
+                )
               ) : (
                 <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-10 text-center">
                   <p className="text-sm font-medium text-neutral-0">

@@ -3,16 +3,21 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Users } from "lucide-react";
+import { Search, Plus, Users, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import ConnectionProfileCard from "@/components/connections/ConnectionProfileCard";
+import GridListToggle, {
+  type GridListValue,
+} from "@/components/ui/GridListToggle";
 
 /* ------------------------------ Types ------------------------------ */
 type Org = {
@@ -52,24 +57,29 @@ function domainFromUrl(url?: string) {
   }
 }
 
-function formatMembers(n?: number) {
-  if (!n || n <= 0) return "—";
-  try {
-    return new Intl.NumberFormat(undefined).format(n);
-  } catch {
-    return String(n);
-  }
-}
-
 function joinLabel(iso?: string) {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
     const m = d.toLocaleString(undefined, { month: "short" });
-    return `Joined ${m} ${d.getFullYear()}`;
+    return `Created ${m} ${d.getFullYear()}`;
   } catch {
     return "—";
   }
+}
+
+function initialsFromName(name: string) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "OR";
+
+  const a = parts[0]?.[0] ?? "";
+  const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
+  const two = `${a}${b}`.toUpperCase();
+  return two || "OR";
 }
 
 function Pagination({
@@ -142,6 +152,79 @@ function Pagination({
   );
 }
 
+/* ------------------------ Row card (List) ------------------------- */
+/** ✅ Match TeamsClient row design exactly */
+function OrganizationListRow({
+  org,
+  description,
+}: {
+  org: Org;
+  description: string;
+}) {
+  const badge = initialsFromName(org.name);
+
+  return (
+    <Link
+      href={`/dashboard/organizations/${org._id}`}
+      className={clsx(
+        "group flex w-full items-center justify-between gap-4",
+        "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
+        "hover:border-primary-500 hover:bg-white/7 transition-colors",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="relative h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+          {org.logo ? (
+            <Image
+              src={org.logo}
+              alt={org.name}
+              width={40}
+              height={40}
+              className="h-10 w-10 object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+              {badge}
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold text-neutral-50">
+            {org.name}
+          </div>
+          <div className="mt-0.5 truncate text-[12px] text-neutral-400">
+            {description}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden items-center gap-6 md:flex">
+        <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
+            <Users className="h-4 w-4" />
+          </span>
+          <span className="font-semibold text-neutral-100">
+            {typeof org.totalMembers === "number" ? org.totalMembers : 0}
+          </span>
+          <span className="text-neutral-400">members</span>
+        </div>
+
+        {org.createdAt ? (
+          <div className="text-[12px] text-neutral-400">
+            {joinLabel(org.createdAt)}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
+        <ChevronRight className="h-4 w-4" />
+      </div>
+    </Link>
+  );
+}
+
 /* ------------------------------ Page ------------------------------- */
 export default function OrganizationsClient() {
   const router = useRouter();
@@ -149,6 +232,9 @@ export default function OrganizationsClient() {
 
   const [orgsQuery, setOrgsQuery] = useState("");
   const [orgsPage, setOrgsPage] = useState(1);
+
+  // ✅ view toggle state
+  const [view, setView] = useState<GridListValue>("grid");
 
   const { data: orgs, isLoading: orgsLoading } = useQuery<Org[]>({
     queryKey: ["orgs", "organizations-page"],
@@ -194,12 +280,6 @@ export default function OrganizationsClient() {
     const end = Math.min(orgsTotal, start + orgsPageSize - 1);
     return `Showing ${start}-${end} from ${orgsTotal} data`;
   }, [orgsTotal, orgsPageSafe]);
-
-  const totalMembers = useMemo(() => {
-    const base = orgs ?? [];
-    const sum = base.reduce((acc, o) => acc + (o.totalMembers ?? 0), 0);
-    return sum > 0 ? sum : undefined;
-  }, [orgs]);
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
@@ -248,15 +328,8 @@ export default function OrganizationsClient() {
                   />
                 </div>
 
-                {/* Top-right controls swap (client request) */}
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-200">
-                    <Users className="h-4 w-4 text-neutral-400" />
-                    <span className="font-semibold text-neutral-0">
-                      {formatMembers(totalMembers)}
-                    </span>
-                    <span className="text-neutral-400">Total members</span>
-                  </span>
+                  <GridListToggle value={view} onChange={setView} />
 
                   <Button
                     onClick={() => router.push("/dashboard/organizations/new")}
@@ -274,40 +347,71 @@ export default function OrganizationsClient() {
             {/* Content */}
             <div className="mt-4">
               {orgsLoading ? (
-                <div className="flex flex-wrap gap-4">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <Skeleton
-                      key={`org-skel-${i}`}
-                      className="h-[224px] w-full sm:w-[264px] rounded-[12px]"
-                    />
-                  ))}
-                </div>
-              ) : orgsSlice.length ? (
-                <div className="flex flex-wrap gap-4">
-                  {orgsSlice.map((o) => {
-                    const site = domainFromUrl(o.website);
-                    const desc =
-                      o.description?.trim() || (site ? site : "Public profile");
-
-                    return (
-                      <ConnectionProfileCard
-                        key={o._id}
-                        href={`/dashboard/organizations/${o._id}`}
-                        kind="organization"
-                        title={o.name}
-                        description={desc}
-                        bannerUrl={o.banner}
-                        iconUrl={o.logo}
-                        totalMembers={o.totalMembers}
-                        joinDateLabel={joinLabel(o.createdAt)}
-                        tilt
-                        tiltMaxDeg={4}
-                        tiltPerspective={900}
-                        tiltLiftPx={2}
+                view === "grid" ? (
+                  <div className="flex flex-wrap gap-4">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <Skeleton
+                        key={`org-skel-${i}`}
+                        className="h-[224px] w-full sm:w-[264px] rounded-[12px]"
                       />
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <Skeleton
+                        key={`org-row-skel-${i}`}
+                        className="h-[56px] w-full rounded-[12px]"
+                      />
+                    ))}
+                  </div>
+                )
+              ) : orgsSlice.length ? (
+                view === "grid" ? (
+                  <div className="flex flex-wrap gap-4">
+                    {orgsSlice.map((o) => {
+                      const site = domainFromUrl(o.website);
+                      const desc =
+                        o.description?.trim() ||
+                        (site ? site : "Public profile");
+
+                      return (
+                        <ConnectionProfileCard
+                          key={o._id}
+                          href={`/dashboard/organizations/${o._id}`}
+                          kind="organization"
+                          title={o.name}
+                          description={desc}
+                          bannerUrl={o.banner}
+                          iconUrl={o.logo}
+                          totalMembers={o.totalMembers}
+                          joinDateLabel={joinLabel(o.createdAt)}
+                          tilt
+                          tiltMaxDeg={6}
+                          tiltPerspective={900}
+                          tiltLiftPx={2}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {orgsSlice.map((o) => {
+                      const site = domainFromUrl(o.website);
+                      const desc =
+                        o.description?.trim() ||
+                        (site ? site : "Public profile");
+
+                      return (
+                        <OrganizationListRow
+                          key={o._id}
+                          org={o}
+                          description={desc}
+                        />
+                      );
+                    })}
+                  </div>
+                )
               ) : (
                 <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-10 text-center">
                   <p className="text-sm font-medium text-neutral-0">

@@ -10,8 +10,6 @@ import {
   Users,
   Users2,
   Search,
-  LayoutGrid,
-  List,
   MoreVertical,
   Trash2,
   Phone,
@@ -25,6 +23,7 @@ import {
   Clock,
   UserX,
 } from "lucide-react";
+import GridListToggle from "@/components/ui/GridListToggle";
 
 import { Button } from "@/components/ui/Button";
 import { Tilt3d } from "@/components/ui/Tilt3d";
@@ -374,7 +373,9 @@ function FriendsCard({
       perspective={900}
       liftPx={2}
       className={clsx(
-        "group relative overflow-hidden rounded-[12px] border border-white/10 hover:border-primary-500",
+        // ✅ Match ConnectionProfileCard sizing
+        "group relative w-full sm:w-[264px]",
+        "overflow-hidden rounded-[12px] border border-white/10 hover:border-primary-500",
         "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))]",
         "transition-[transform,box-shadow,border-color] duration-200",
         "will-change-transform",
@@ -392,7 +393,8 @@ function FriendsCard({
             <div
               className={clsx(
                 "relative overflow-hidden",
-                "h-[68px] w-[68px] rounded-lg",
+                // ✅ slightly smaller avatar block to feel like Team cards
+                "h-[58px] w-[58px] rounded-lg",
                 "bg-white/5 ring-1 ring-white/10",
               )}
             >
@@ -405,7 +407,7 @@ function FriendsCard({
                   loading="lazy"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-lg font-semibold text-neutral-200">
+                <div className="flex h-full w-full items-center justify-center text-[16px] font-semibold text-neutral-200">
                   {badge}
                 </div>
               )}
@@ -414,14 +416,15 @@ function FriendsCard({
             <div
               className={clsx(
                 "absolute -right-2 -bottom-2",
-                "h-8 w-8 rounded-[10px]",
+                // ✅ slightly smaller badge
+                "h-7 w-7 rounded-[10px]",
                 "border border-white/10",
                 "bg-primary-500/90",
                 "shadow-[0_12px_30px_rgba(154,70,255,0.25)]",
                 "flex items-center justify-center",
               )}
             >
-              <span className="text-[12px] font-extrabold tracking-[-0.2px] text-neutral-0">
+              <span className="text-[11px] font-extrabold tracking-[-0.2px] text-neutral-0">
                 {badge}
               </span>
             </div>
@@ -449,7 +452,8 @@ function FriendsCard({
           <div className="flex items-center gap-3">
             <span
               className={clsx(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md",
+                // ✅ smaller icon tiles
+                "inline-flex h-7 w-7 items-center justify-center rounded-md",
                 "bg-primary-500/15 text-primary-300",
                 "ring-1 ring-primary-500/20",
               )}
@@ -464,7 +468,7 @@ function FriendsCard({
           <div className="flex items-center gap-3">
             <span
               className={clsx(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md",
+                "inline-flex h-7 w-7 items-center justify-center rounded-md",
                 "bg-primary-500/15 text-primary-300",
                 "ring-1 ring-primary-500/20",
               )}
@@ -1239,38 +1243,11 @@ export default function FriendsClient() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFriendsView("list")}
-                    aria-label="List view"
-                    className={clsx(
-                      "inline-flex h-10 w-10 items-center justify-center rounded-lg",
-                      "border border-white/10",
-                      friendsView === "list"
-                        ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
-                        : "bg-white/5 text-neutral-200 hover:bg-white/8",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                    )}
-                  >
-                    <List className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFriendsView("grid")}
-                    aria-label="Grid view"
-                    className={clsx(
-                      "inline-flex h-10 w-10 items-center justify-center rounded-lg",
-                      "border border-white/10",
-                      friendsView === "grid"
-                        ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
-                        : "bg-white/5 text-neutral-200 hover:bg-white/8",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                    )}
-                  >
-                    <LayoutGrid className="h-4 w-4" />
-                  </button>
-                </div>
+                <GridListToggle
+                  value={friendsView}
+                  onChange={(v) => setFriendsView(v)}
+                  ariaLabel="Friends view toggle"
+                />
 
                 <div className="flex items-center gap-2">
                   <Button
@@ -1460,12 +1437,7 @@ export default function FriendsClient() {
             {/* Friends Content */}
             <div className="mt-4">
               {friendsView === "grid" ? (
-                <div
-                  className={clsx(
-                    "grid gap-4",
-                    "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5",
-                  )}
-                >
+                <div className="flex flex-wrap gap-4">
                   {friendsSlice.map((f) => (
                     <FriendsCard
                       key={f.id}

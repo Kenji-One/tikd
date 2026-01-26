@@ -659,13 +659,7 @@ export default function FinancesClient() {
 
           <Button
             type="button"
-            onClick={() =>
-              window.open(
-                "/dashboard/finances/payout-portal",
-                "_blank",
-                "noopener,noreferrer",
-              )
-            }
+            onClick={() => router.push("/dashboard/finances/payout-portal")}
             animation={true}
           >
             <span className="mr-1 inline-flex items-center">

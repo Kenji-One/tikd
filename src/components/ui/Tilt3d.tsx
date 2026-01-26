@@ -1,4 +1,3 @@
-// src/components/ui/Tilt3d.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -31,33 +30,55 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
+/**
+ * NOTE:
+ * We intentionally split "perspective host" (the element that receives mouse events)
+ * from "surface" (the element that gets rotated).
+ *
+ * This reduces GPU text rasterization blur in Chromium browsers because the perspective
+ * is applied as a CSS property on the host (not as `perspective()` inside transform).
+ */
 export function useTilt3d<T extends HTMLElement>(opts?: {
   maxDeg?: number;
   perspective?: number;
   liftPx?: number;
   disabled?: boolean;
 }) {
+  // This ref points to the INNER surface that we transform.
   const ref = useRef<T | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   const maxDeg = opts?.maxDeg ?? 10;
-  const perspective = opts?.perspective ?? 1100;
   const liftPx = opts?.liftPx ?? 3;
   const disabled = !!opts?.disabled;
 
   const rafRef = useRef<number | null>(null);
 
+  const setVars = (el: HTMLElement, rx: number, ry: number, lift: number) => {
+    el.style.setProperty("--tikd-tilt-rx", `${rx}deg`);
+    el.style.setProperty("--tikd-tilt-ry", `${ry}deg`);
+    el.style.setProperty("--tikd-tilt-rx-inv", `${-rx}deg`);
+    el.style.setProperty("--tikd-tilt-ry-inv", `${-ry}deg`);
+    el.style.setProperty("--tikd-tilt-lift", `${lift}px`);
+  };
+
   const setTransform = (rx: number, ry: number, lift: number) => {
     const el = ref.current;
     if (!el) return;
-    el.style.transform = `perspective(${perspective}px) rotateX(${rx}deg) rotateY(${ry}deg) translateY(${-lift}px)`;
+
+    setVars(el, rx, ry, lift);
+
+    // IMPORTANT: no `perspective()` here — perspective is applied on the parent via CSS property.
+    el.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) translate3d(0, ${-lift}px, 0)`;
   };
 
   const reset = () => {
     const el = ref.current;
     if (!el) return;
+
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
+
     el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)";
     setTransform(0, 0, 0);
   };
@@ -68,7 +89,10 @@ export function useTilt3d<T extends HTMLElement>(opts?: {
     const el = ref.current;
     if (!el) return;
 
-    const rect = el.getBoundingClientRect();
+    // Use the element receiving the handler (host) for bounds.
+    const host = e.currentTarget as HTMLElement;
+    const rect = host.getBoundingClientRect();
+
     const px = (e.clientX - rect.left) / rect.width; // 0..1
     const py = (e.clientY - rect.top) / rect.height; // 0..1
 
@@ -126,20 +150,41 @@ export function Tilt3d({
     disabled,
   });
 
+  const persp = perspective ?? 1100;
+
   return (
     <div
-      ref={tilt.ref}
       onMouseEnter={tilt.onMouseEnter}
       onMouseMove={tilt.onMouseMove}
       onMouseLeave={tilt.onMouseLeave}
-      className={clsx("will-change-transform", className)}
+      className={clsx("relative", className)}
       style={{
-        transform: `perspective(${perspective ?? 1100}px) rotateX(0deg) rotateY(0deg) translateY(0px)`,
-        transformStyle: "preserve-3d",
+        // Perspective is applied here (host), not inside transform.
+        perspective: `${persp}px`,
         ...style,
       }}
     >
-      {children}
+      <div
+        ref={tilt.ref}
+        className={clsx("h-full w-full will-change-transform")}
+        style={{
+          // default vars so child layers can safely reference them
+          // (they’ll be updated live on hover)
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+          ...({
+            "--tikd-tilt-rx": "0deg",
+            "--tikd-tilt-ry": "0deg",
+            "--tikd-tilt-rx-inv": "0deg",
+            "--tikd-tilt-ry-inv": "0deg",
+            "--tikd-tilt-lift": "0px",
+          } as React.CSSProperties),
+          transform: "rotateX(0deg) rotateY(0deg) translate3d(0, 0, 0)",
+          transformStyle: "preserve-3d",
+          backfaceVisibility: "hidden",
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }

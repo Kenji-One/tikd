@@ -218,7 +218,7 @@ function MiniSelect<T extends string>({
   );
 }
 
-/* ---------------------- Sort Controls (NEW) ------------------------- */
+/* ---------------------- Sort Controls (MERGED) ---------------------- */
 function SortControls({
   options,
   sortField,
@@ -226,7 +226,7 @@ function SortControls({
   setSortField,
   setSortDir,
   defaultDirFor,
-  dropdownWidthClass = "w-[144px]",
+  dropdownWidthClass = "w-[200px]",
 }: {
   options: { key: SortField; label: string }[];
   sortField: SortField | null;
@@ -256,140 +256,168 @@ function SortControls({
     // Clicking the active option again clears sorting (back to default state)
     if (sortField === field) {
       setSortField(null);
-      setOpen(false);
       return;
     }
 
     setSortField(field);
     setSortDir(defaultDirFor(field));
-    setOpen(false);
   }
 
-  function toggleDir() {
+  function setDir(dir: SortDir) {
     if (!sortField) return;
-    setSortDir(sortDir === "asc" ? "desc" : "asc");
+    setSortDir(dir);
   }
+
+  const DirIcon = sortDir === "asc" ? ArrowDownNarrowWide : ArrowDownWideNarrow;
 
   return (
-    <div className="flex items-center gap-2">
-      <div ref={ref} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-label={!sortField ? "Sort" : `Sort by ${sortLabel}`}
-          className={clsx(
-            "flex items-center justify-between gap-3",
-            "border border-white/10 outline-none",
-            "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
-            "cursor-pointer",
-            !sortField
-              ? "grid h-[30px] w-[38px] items-center justify-center rounded-md bg-neutral-700 text-white/80"
-              : [
-                  "h-[30px] rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90",
-                  "px-3 text-xs font-medium text-white/90",
-                ].join(" "),
-          )}
-        >
-          {!sortField ? (
-            <Menu className="h-4 w-4" />
-          ) : (
-            <>
-              <span className="max-w-[140px] truncate text-white/95">
-                {sortLabel}
-              </span>
-              <ChevronDown
-                className={clsx(
-                  "h-4 w-4 opacity-80 transition-transform",
-                  open ? "rotate-180" : "",
-                )}
-              />
-            </>
-          )}
-        </button>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={
+          !sortField
+            ? "Sort"
+            : `Sort by ${sortLabel} ${
+                sortDir === "asc" ? "ascending" : "descending"
+              }`
+        }
+        className={clsx(
+          "flex items-center justify-between gap-3",
+          "border border-white/10 outline-none",
+          "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
+          "cursor-pointer",
+          !sortField
+            ? "grid h-[30px] w-[38px] items-center justify-center rounded-md bg-neutral-700 text-white/80"
+            : [
+                "h-[30px] rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90",
+                "px-3 text-xs font-medium text-white/90",
+              ].join(" "),
+        )}
+      >
+        {!sortField ? (
+          <Menu className="h-4 w-4" />
+        ) : (
+          <>
+            <span className="max-w-[140px] truncate text-white/95">
+              {sortLabel}
+            </span>
+            <DirIcon className="h-4 w-4 opacity-85" aria-hidden="true" />
+            <ChevronDown
+              className={clsx(
+                "h-4 w-4 opacity-80 transition-transform",
+                open ? "rotate-180" : "",
+              )}
+            />
+          </>
+        )}
+      </button>
 
-        {open && (
-          <div className="absolute right-0 z-50 mt-2">
-            <div className="relative">
-              <span className="pointer-events-none absolute -top-1 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
-              <div
-                role="listbox"
-                aria-label="Sort"
-                className={clsx(
-                  "overflow-hidden rounded-2xl border border-white/10",
-                  "bg-[#121420] backdrop-blur",
-                  "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
-                  dropdownWidthClass,
-                )}
-              >
-                <div className="p-2">
-                  {options.map((opt) => {
-                    const active = opt.key === sortField;
-                    return (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        onClick={() => apply(opt.key)}
-                        title={active ? "Click again to clear sort" : undefined}
-                        className={clsx(
-                          "flex w-full items-center justify-between",
-                          "rounded-lg px-3 py-2.5",
-                          "text-left text-sm outline-none",
-                          "hover:bg-white/5 focus:bg-white/5",
-                          active ? "bg-white/5 text-white" : "text-white/90",
-                        )}
-                      >
-                        <span className="truncate">{opt.label}</span>
-                        {active ? (
-                          <span className="text-xs font-semibold text-white/80">
-                            ✓
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
+      {open && (
+        <div className="absolute right-0 z-50 mt-2">
+          <div className="relative">
+            <span className="pointer-events-none absolute -top-1 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
+            <div
+              className={clsx(
+                "overflow-hidden rounded-2xl border border-white/10",
+                "bg-[#121420] backdrop-blur",
+                "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
+                dropdownWidthClass,
+              )}
+            >
+              {/* Sort fields */}
+              <div role="listbox" aria-label="Sort" className="p-2">
+                {options.map((opt) => {
+                  const active = opt.key === sortField;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onClick={() => apply(opt.key)}
+                      title={active ? "Click again to clear sort" : undefined}
+                      className={clsx(
+                        "flex w-full items-center justify-between",
+                        "rounded-lg px-3 py-2.5",
+                        "text-left text-sm outline-none",
+                        "hover:bg-white/5 focus:bg-white/5",
+                        active ? "bg-white/5 text-white" : "text-white/90",
+                      )}
+                    >
+                      <span className="truncate">{opt.label}</span>
+                      {active ? (
+                        <span className="text-xs font-semibold text-white/80">
+                          ✓
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Divider */}
+              <div className="h-px w-full bg-white/10" />
+
+              {/* Asc/Desc toggle (merged into dropdown) */}
+              <div className="p-2">
+                <div
+                  className={clsx(
+                    "grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35",
+                    !sortField && "opacity-60",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setDir("asc")}
+                    disabled={!sortField}
+                    className={clsx(
+                      "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
+                      "outline-none transition",
+                      "hover:bg-white/6 focus-visible:bg-white/6",
+                      sortField && sortDir === "asc"
+                        ? "bg-white/8 text-white"
+                        : "text-white/80",
+                      "disabled:cursor-not-allowed",
+                    )}
+                    aria-label="Ascending"
+                  >
+                    <ArrowDownNarrowWide className="h-4 w-4 opacity-90" />
+                    Asc
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDir("desc")}
+                    disabled={!sortField}
+                    className={clsx(
+                      "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
+                      "outline-none transition",
+                      "hover:bg-white/6 focus-visible:bg-white/6",
+                      sortField && sortDir === "desc"
+                        ? "bg-white/8 text-white"
+                        : "text-white/80",
+                      "disabled:cursor-not-allowed",
+                    )}
+                    aria-label="Descending"
+                  >
+                    <ArrowDownWideNarrow className="h-4 w-4 opacity-90" />
+                    Desc
+                  </button>
                 </div>
+
+                {!sortField ? (
+                  <p className="mt-2 px-1 text-[11px] text-white/45">
+                    Select a sort type first
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={toggleDir}
-        disabled={!sortField}
-        aria-label={
-          !sortField
-            ? "Select a sort type first"
-            : sortDir === "asc"
-              ? "Sort direction ascending"
-              : "Sort direction descending"
-        }
-        className={clsx(
-          "grid h-[30px] w-[38px] place-items-center rounded-md",
-          "border border-white/10 bg-neutral-700",
-          "text-white/80 outline-none",
-          "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
-          "cursor-pointer",
-        )}
-      >
-        {sortDir === "asc" ? (
-          <ArrowDownNarrowWide
-            className="h-4 w-4 opacity-90"
-            aria-hidden="true"
-          />
-        ) : (
-          <ArrowDownWideNarrow
-            className="h-4 w-4 opacity-90"
-            aria-hidden="true"
-          />
-        )}
-      </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -724,7 +752,7 @@ function UpcomingEventsGridPanel({
             setSortField={setSortField}
             setSortDir={setSortDir}
             defaultDirFor={defaultDirFor}
-            dropdownWidthClass="w-[144px]"
+            dropdownWidthClass="w-[200px]"
           />
         </div>
 
@@ -761,7 +789,7 @@ function UpcomingEventsGridPanel({
                 dateLabel={formatEventDate(ev.date)}
                 venue={ev.location ?? ""}
                 category={ev.category ?? ""}
-                img={ev.image ?? "/placeholder.jpg"}
+                img={ev.image ?? ""}
                 href={`/dashboard/events/${ev._id}`}
                 className="w-full"
               />
@@ -843,7 +871,6 @@ function PastEventsListPanel({
             Past Events
           </p>
 
-          {/* ✅ replaced old metric dropdown with the NEW sort control */}
           <SortControls
             options={SORT_FIELDS}
             sortField={sortField}
@@ -851,7 +878,7 @@ function PastEventsListPanel({
             setSortField={setSortField}
             setSortDir={setSortDir}
             defaultDirFor={defaultDirFor}
-            dropdownWidthClass="w-[144px]"
+            dropdownWidthClass="w-[200px]"
           />
         </div>
 
@@ -907,7 +934,11 @@ function PastEventsListPanel({
                       <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={ev.image ?? "/placeholder.jpg"}
+                          src={
+                            ev.image && ev.image.trim()
+                              ? ev.image
+                              : "/placeholder.jpg"
+                          }
                           alt=""
                           className="h-full w-full object-cover"
                         />
@@ -1024,7 +1055,6 @@ function DraftsListPanel({
             Drafts
           </p>
 
-          {/* ✅ replaced old draft sort dropdown with the NEW sort control */}
           <SortControls
             options={SORT_FIELDS}
             sortField={sortField}
@@ -1032,7 +1062,7 @@ function DraftsListPanel({
             setSortField={setSortField}
             setSortDir={setSortDir}
             defaultDirFor={defaultDirFor}
-            dropdownWidthClass="w-[144px]"
+            dropdownWidthClass="w-[200px]"
           />
         </div>
 
@@ -1098,7 +1128,11 @@ function DraftsListPanel({
                       <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={ev.image ?? "/placeholder.jpg"}
+                          src={
+                            ev.image && ev.image.trim()
+                              ? ev.image
+                              : "/placeholder.jpg"
+                          }
                           alt=""
                           className="h-full w-full object-cover"
                         />

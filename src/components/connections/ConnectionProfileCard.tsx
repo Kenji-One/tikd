@@ -93,6 +93,14 @@ export default function ConnectionProfileCard({
     "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
   );
 
+  // ✅ IMPORTANT: Hooks must be called unconditionally.
+  // We call it always, and only attach handlers/use the ref when tilt=true.
+  const tiltApi = useTilt3d<HTMLDivElement>({
+    maxDeg: tiltMaxDeg,
+    perspective: tiltPerspective,
+    liftPx: tiltLiftPx,
+  });
+
   const Banner = (
     <div className="relative h-[112px] w-full overflow-hidden rounded-t-[12px]">
       {bannerUrl ? (
@@ -260,12 +268,6 @@ export default function ConnectionProfileCard({
   }
 
   // Tilt mode: tilt ONLY the visual surface; keep text flat above it (no blur).
-  const tiltApi = useTilt3d<HTMLDivElement>({
-    maxDeg: tiltMaxDeg,
-    perspective: tiltPerspective,
-    liftPx: tiltLiftPx,
-  });
-
   return (
     <div
       className={tiltWrapperClass}

@@ -230,6 +230,20 @@ select {
     @apply relative;
   }
 
+.tikd-tilt-crisp {
+    transform:
+      rotateX(var(--tikd-tilt-rx-inv))
+      rotateY(var(--tikd-tilt-ry-inv))
+      translate3d(0, 0, 0.07px);     /* tiny z-push */
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  will-change: transform;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
   .tikd-event-topbar-bg {
     position: fixed;
     left: 0;

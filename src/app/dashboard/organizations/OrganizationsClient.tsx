@@ -387,8 +387,8 @@ export default function OrganizationsClient() {
                           totalMembers={o.totalMembers}
                           joinDateLabel={joinLabel(o.createdAt)}
                           tilt
-                          tiltMaxDeg={6}
-                          tiltPerspective={900}
+                          tiltMaxDeg={3.5}
+                          tiltPerspective={1600}
                           tiltLiftPx={2}
                         />
                       );

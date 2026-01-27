@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { EventCard } from "@/components/ui/EventCard";
+import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
 
 /* ------------------------------ Types ------------------------------ */
 type Org = {
@@ -901,6 +902,11 @@ function PastEventsListPanel({
 
               const activeRow = idx === 0;
 
+              const rowImg =
+                ev.image && ev.image.trim()
+                  ? ev.image.trim()
+                  : EVENT_CARD_DEFAULT_POSTER;
+
               return (
                 <Link
                   key={ev._id}
@@ -934,13 +940,16 @@ function PastEventsListPanel({
                       <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={
-                            ev.image && ev.image.trim()
-                              ? ev.image
-                              : "/placeholder.jpg"
-                          }
+                          src={rowImg}
                           alt=""
                           className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.src !== EVENT_CARD_DEFAULT_POSTER) {
+                              img.onerror = null;
+                              img.src = EVENT_CARD_DEFAULT_POSTER;
+                            }
+                          }}
                         />
                       </div>
 
@@ -1095,6 +1104,11 @@ function DraftsListPanel({
             sorted.map((ev, idx) => {
               const activeRow = idx === 0;
 
+              const rowImg =
+                ev.image && ev.image.trim()
+                  ? ev.image.trim()
+                  : EVENT_CARD_DEFAULT_POSTER;
+
               return (
                 <Link
                   key={ev._id}
@@ -1128,13 +1142,16 @@ function DraftsListPanel({
                       <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={
-                            ev.image && ev.image.trim()
-                              ? ev.image
-                              : "/placeholder.jpg"
-                          }
+                          src={rowImg}
                           alt=""
                           className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.src !== EVENT_CARD_DEFAULT_POSTER) {
+                              img.onerror = null;
+                              img.src = EVENT_CARD_DEFAULT_POSTER;
+                            }
+                          }}
                         />
                       </div>
 

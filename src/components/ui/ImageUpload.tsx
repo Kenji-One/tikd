@@ -1,7 +1,9 @@
-// src/components/ui/ImageUpload.tsx
+/* ------------------------------------------------------------------ */
+/*  src/components/ui/ImageUpload.tsx                                 */
+/* ------------------------------------------------------------------ */
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 
@@ -36,6 +38,11 @@ export default function ImageUpload({
   const [preview, setPreview] = useState<string | undefined>(value);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ✅ Keep local preview in sync when parent value changes (e.g. after "Apply" crop)
+  useEffect(() => {
+    setPreview(value || undefined);
+  }, [value]);
 
   const handleSelect = () => fileInputRef.current?.click();
 
@@ -113,8 +120,8 @@ export default function ImageUpload({
       case "square":
         return {
           label: "text-xs text-white/80",
-          box: "relative h-20 w-20 rounded-full overflow-hidden border border-white/10",
-          img: "object-cover rounded-full",
+          box: "relative h-20 w-20 rounded-xl overflow-hidden border border-white/10",
+          img: "object-cover rounded-xl",
           button:
             "h-20 w-20 rounded-xl border border-dashed border-white/30 text-white/80 hover:bg-white/10",
           wrapper: "inline-flex flex-col gap-2",
@@ -160,6 +167,7 @@ export default function ImageUpload({
           onClick={handleSelect}
         >
           <Image
+            key={preview} // ✅ force remount when URL changes (fixes “still old image” after Apply)
             src={preview}
             alt="preview"
             fill

@@ -62,15 +62,6 @@ function humanizeStatus(value?: string) {
   return value.replaceAll("_", " ");
 }
 
-/** Move one item inside a list */
-function arrayMove<T>(arr: T[], from: number, to: number): T[] {
-  if (from === to) return arr;
-  const next = arr.slice();
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
-}
-
 /**
  * Reorder `full` list using a drag/drop that occurred inside `visible`.
  * Keeps all "hidden" (non-visible) items in their original relative positions.
@@ -217,8 +208,6 @@ function TicketTypeWizard({
 
   const logoUrl = watch("logoUrl");
   const backgroundUrl = watch("backgroundUrl");
-
-  const PRICE_STEP = 0.5;
 
   const handlePriceStep = (delta: number) => {
     const current = Number.isFinite(price as number) ? Number(price) : 0;
@@ -595,24 +584,41 @@ export default function TicketTypesPage() {
 
   // local order state (this is what the user is reordering)
   const [ordered, setOrdered] = useState<TicketTypeRow[]>([]);
-  const dragActiveIdRef = useRef<string | null>(null);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropEdge, setDropEdge] = useState<"before" | "after">("before");
+
+  const listRootRef = useRef<HTMLDivElement | null>(null);
+
+  const dragActiveIdRef = useRef<string | null>(null);
   const dropEdgeRef = useRef<"before" | "after">("before");
   const dragOverIdRef = useRef<string | null>(null);
   const isPointerDraggingRef = useRef(false);
 
-  // keep latest lists for global pointer listeners
+  // pointer capture reliability
+  const dragHandleElRef = useRef<HTMLElement | null>(null);
+  const pointerIdRef = useRef<number | null>(null);
+
+  // keep latest lists for drag handlers
   const orderedRef = useRef<TicketTypeRow[]>([]);
   const visibleRef = useRef<TicketTypeRow[]>([]);
 
-  // call persistOrder from global handlers (avoid stale closures)
+  // call persistOrder from handlers (avoid stale closures)
   const persistOrderRef = useRef<
     ((next: TicketTypeRow[], prev: TicketTypeRow[]) => Promise<void>) | null
   >(null);
+
+  // drag listeners attached only during active drag (fixes “first load” issue)
+  const dragListenersRef = useRef<{
+    attached: boolean;
+    onMove?: (ev: PointerEvent) => void;
+    onUp?: (ev: PointerEvent) => void;
+    onCancel?: (ev: PointerEvent) => void;
+    onBlur?: () => void;
+    onVis?: () => void;
+  }>({ attached: false });
 
   // Fetch ticket types
   const {
@@ -637,6 +643,7 @@ export default function TicketTypesPage() {
   // Keep ordered list in sync with server data (but don't fight the user mid-drag)
   useEffect(() => {
     if (!ticketTypes) return;
+    if (isPointerDraggingRef.current) return;
     setOrdered(ticketTypes);
   }, [ticketTypes]);
 
@@ -664,7 +671,7 @@ export default function TicketTypesPage() {
 
     setIsSavingOrder(true);
 
-    // Optimistically update react-query cache too (so refetch/other components stay consistent)
+    // Optimistically update react-query cache too
     queryClient.setQueryData(["ticket-types", eventId], next);
 
     try {
@@ -678,9 +685,6 @@ export default function TicketTypesPage() {
         // rollback
         setOrdered(prev);
         queryClient.setQueryData(["ticket-types", eventId], prev);
-      } else {
-        // optional: keep in sync by refetching server truth
-        // await refetch();
       }
     } finally {
       setIsSavingOrder(false);
@@ -689,80 +693,41 @@ export default function TicketTypesPage() {
 
   persistOrderRef.current = persistOrder;
 
-  const onGlobalPointerMove = (ev: PointerEvent) => {
-    if (!isPointerDraggingRef.current) return;
-    ev.preventDefault();
+  const detachDragListeners = useCallback(() => {
+    const d = dragListenersRef.current;
+    if (!d.attached) return;
 
-    const activeId = dragActiveIdRef.current;
-    if (!activeId) return;
+    if (d.onMove) window.removeEventListener("pointermove", d.onMove);
+    if (d.onUp) window.removeEventListener("pointerup", d.onUp);
+    if (d.onCancel) window.removeEventListener("pointercancel", d.onCancel);
+    if (d.onBlur) window.removeEventListener("blur", d.onBlur);
+    if (d.onVis) document.removeEventListener("visibilitychange", d.onVis);
 
-    const el = document.elementFromPoint(
-      ev.clientX,
-      ev.clientY,
-    ) as HTMLElement | null;
-
-    const row = el?.closest?.("[data-ticket-row-id]") as HTMLElement | null;
-
-    if (!row) {
-      if (dragOverIdRef.current !== null) {
-        dragOverIdRef.current = null;
-        setDragOverId(null);
-      }
-      return;
-    }
-
-    const overId = row.dataset.ticketRowId;
-    if (!overId || overId === activeId) {
-      if (dragOverIdRef.current !== null) {
-        dragOverIdRef.current = null;
-        setDragOverId(null);
-      }
-      return;
-    }
-
-    const rect = row.getBoundingClientRect();
-    const isAfter = ev.clientY > rect.top + rect.height / 2;
-    const edge = isAfter ? "after" : "before";
-
-    dragOverIdRef.current = overId;
-    dropEdgeRef.current = edge;
-
-    setDragOverId(overId);
-    setDropEdge(edge);
-  };
-
-  const onGlobalPointerUp = useCallback((ev: PointerEvent) => {
-    if (!isPointerDraggingRef.current) return;
-    ev.preventDefault();
-
-    const activeId = dragActiveIdRef.current;
-    const overId = dragOverIdRef.current;
-    const edge = dropEdgeRef.current;
-
-    // cleanup FIRST (prevents “stuck until refresh”)
-    stopPointerDrag();
-
-    if (!activeId || !overId || activeId === overId) return;
-
-    const prev = orderedRef.current;
-
-    const next = reorderFullByVisibleDrag({
-      full: prev,
-      visible: visibleRef.current,
-      activeId,
-      overId,
-      edge,
-    });
-
-    if (next === prev) return;
-
-    setOrdered(next);
-    void persistOrderRef.current?.(next, prev);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    dragListenersRef.current = { attached: false };
   }, []);
 
-  function stopPointerDrag() {
+  const stopPointerDrag = useCallback(() => {
     isPointerDraggingRef.current = false;
+
+    // release pointer capture (best-effort)
+    try {
+      if (
+        dragHandleElRef.current &&
+        pointerIdRef.current != null &&
+        typeof (dragHandleElRef.current as any).releasePointerCapture ===
+          "function"
+      ) {
+        (dragHandleElRef.current as any).releasePointerCapture(
+          pointerIdRef.current,
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    dragHandleElRef.current = null;
+    pointerIdRef.current = null;
+
     dragActiveIdRef.current = null;
     dragOverIdRef.current = null;
     dropEdgeRef.current = "before";
@@ -771,53 +736,211 @@ export default function TicketTypesPage() {
     setDragOverId(null);
     setDropEdge("before");
 
-    window.removeEventListener("pointermove", onGlobalPointerMove);
-    window.removeEventListener("pointerup", onGlobalPointerUp);
-    window.removeEventListener("pointercancel", onGlobalPointerUp);
-
     document.body.style.userSelect = "";
-
     document.body.style.webkitUserSelect = "";
     document.body.style.cursor = "";
-  }
 
-  function startPointerDrag(e: React.PointerEvent, id: string) {
+    detachDragListeners();
+  }, [detachDragListeners]);
+
+  // extra safety: cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopPointerDrag();
+    };
+  }, [stopPointerDrag]);
+
+  const pickNearestRow = useCallback((clientY: number, activeId: string) => {
+    const root = listRootRef.current;
+    if (!root) return null;
+
+    const nodes = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-ticket-row-id]"),
+    ).filter((n) => {
+      const id = n.dataset.ticketRowId;
+      return Boolean(id) && id !== activeId;
+    });
+
+    if (nodes.length === 0) return null;
+
+    let best: {
+      node: HTMLElement;
+      dist: number;
+      edge: "before" | "after";
+    } | null = null;
+
+    for (const node of nodes) {
+      const rect = node.getBoundingClientRect();
+
+      const clampedY = Math.max(rect.top, Math.min(clientY, rect.bottom));
+      const dist = Math.abs(clientY - clampedY);
+
+      let edge: "before" | "after" = "before";
+      if (clientY < rect.top) edge = "before";
+      else if (clientY > rect.bottom) edge = "after";
+      else edge = clientY > rect.top + rect.height / 2 ? "after" : "before";
+
+      if (!best || dist < best.dist) {
+        best = { node, dist, edge };
+      }
+    }
+
+    if (!best) return null;
+
+    const overId = best.node.dataset.ticketRowId;
+    if (!overId) return null;
+
+    return { overId, edge: best.edge };
+  }, []);
+
+  const attachDragListeners = useCallback(() => {
+    const d = dragListenersRef.current;
+    if (d.attached) return;
+
+    const onMove = (ev: PointerEvent) => {
+      if (!isPointerDraggingRef.current) return;
+      ev.preventDefault();
+
+      const activeId = dragActiveIdRef.current;
+      if (!activeId) return;
+
+      let overId: string | null = null;
+      let edge: "before" | "after" = "before";
+
+      const el = document.elementFromPoint(
+        ev.clientX,
+        ev.clientY,
+      ) as HTMLElement | null;
+
+      const row = el?.closest?.("[data-ticket-row-id]") as HTMLElement | null;
+
+      if (row) {
+        const rid = row.dataset.ticketRowId || null;
+        if (rid && rid !== activeId) {
+          const rect = row.getBoundingClientRect();
+          const isAfter = ev.clientY > rect.top + rect.height / 2;
+          overId = rid;
+          edge = isAfter ? "after" : "before";
+        }
+      }
+
+      if (!overId) {
+        const picked = pickNearestRow(ev.clientY, activeId);
+        if (picked) {
+          overId = picked.overId;
+          edge = picked.edge;
+        }
+      }
+
+      if (!overId || overId === activeId) {
+        if (dragOverIdRef.current !== null) {
+          dragOverIdRef.current = null;
+          setDragOverId(null);
+        }
+        return;
+      }
+
+      const changedId = dragOverIdRef.current !== overId;
+      const changedEdge = dropEdgeRef.current !== edge;
+
+      dragOverIdRef.current = overId;
+      dropEdgeRef.current = edge;
+
+      if (changedId) setDragOverId(overId);
+      if (changedEdge) setDropEdge(edge);
+    };
+
+    const onEnd = (ev: PointerEvent) => {
+      if (!isPointerDraggingRef.current) return;
+      ev.preventDefault();
+
+      const activeId = dragActiveIdRef.current;
+      const overId = dragOverIdRef.current;
+      const edge = dropEdgeRef.current;
+
+      // cleanup FIRST
+      stopPointerDrag();
+
+      if (!activeId || !overId || activeId === overId) return;
+
+      const prev = orderedRef.current;
+
+      const next = reorderFullByVisibleDrag({
+        full: prev,
+        visible: visibleRef.current,
+        activeId,
+        overId,
+        edge,
+      });
+
+      if (next === prev) return;
+
+      setOrdered(next);
+      void persistOrderRef.current?.(next, prev);
+    };
+
+    const onBlur = () => stopPointerDrag();
+    const onVis = () => {
+      if (document.hidden) stopPointerDrag();
+    };
+
+    // Attach now (during drag), not on mount
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onEnd, { passive: false });
+    window.addEventListener("pointercancel", onEnd, { passive: false });
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVis);
+
+    dragListenersRef.current = {
+      attached: true,
+      onMove,
+      onUp: onEnd,
+      onCancel: onEnd,
+      onBlur,
+      onVis,
+    };
+  }, [pickNearestRow, stopPointerDrag]);
+
+  function startPointerDrag(
+    e: React.PointerEvent<HTMLButtonElement>,
+    id: string,
+  ) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
 
     e.preventDefault();
     e.stopPropagation();
 
-    // if anything got stuck from navigation, reset
+    // reset any stuck state
     stopPointerDrag();
 
     isPointerDraggingRef.current = true;
     dragActiveIdRef.current = id;
 
+    dragOverIdRef.current = null;
+    dropEdgeRef.current = "before";
+
     setDraggingId(id);
     setDragOverId(null);
     setDropEdge("before");
 
-    // select-none + no text selection while dragging
+    // pointer capture for reliability
+    dragHandleElRef.current = e.currentTarget;
+    pointerIdRef.current = e.pointerId;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    // Attach listeners RIGHT NOW (this is the fix)
+    attachDragListeners();
+
+    // no text selection while dragging
     document.body.style.userSelect = "none";
-
-    document.body.style.webkitUserSelect = "";
+    document.body.style.webkitUserSelect = "none";
     document.body.style.cursor = "grabbing";
-
-    window.addEventListener("pointermove", onGlobalPointerMove, {
-      passive: false,
-    });
-    window.addEventListener("pointerup", onGlobalPointerUp, { passive: false });
-    window.addEventListener("pointercancel", onGlobalPointerUp, {
-      passive: false,
-    });
   }
-
-  useEffect(() => {
-    return () => {
-      stopPointerDrag();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   if (!eventId) {
     return (
@@ -891,7 +1014,7 @@ export default function TicketTypesPage() {
       ) : null}
 
       {!isLoading && !isError && visible && visible.length > 0 && (
-        <div className="space-y-3">
+        <div ref={listRootRef} className="space-y-3">
           {visible.map((t, idx) => {
             const rawStatus = (t?.status as unknown as string) ?? "";
             const safeStatus = rawStatus || "unknown";
@@ -899,7 +1022,6 @@ export default function TicketTypesPage() {
             const isOver =
               !!draggingId && draggingId !== t.id && dragOverId === t.id;
 
-            // ✅ make key ALWAYS defined + unique (even if t.id is missing/duplicated)
             const rowKey = `${t?.id ?? "no-id"}-${idx}`;
 
             return (
@@ -911,7 +1033,6 @@ export default function TicketTypesPage() {
                   isOver && "z-[2]",
                 )}
               >
-                {/* insertion indicator line (outside the row, in the gap) */}
                 {isOver ? (
                   <div
                     className="pointer-events-none absolute left-3 right-3 z-[3]"
@@ -927,7 +1048,6 @@ export default function TicketTypesPage() {
                         boxShadow: "0 0 22px rgba(154,70,255,0.45)",
                       }}
                     >
-                      {/* center “beacon” dot so it’s obvious */}
                       <div
                         className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-500"
                         style={{ boxShadow: "0 0 16px rgba(154,70,255,0.8)" }}
@@ -1013,7 +1133,6 @@ export default function TicketTypesPage() {
         </div>
       )}
 
-      {/* Modal overlay for creation */}
       {mode === "create" && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
           <div className="flex min-h-full items-start justify-center px-3 py-10">

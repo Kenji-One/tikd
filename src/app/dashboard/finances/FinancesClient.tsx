@@ -670,11 +670,11 @@ export default function FinancesClient() {
         </div>
 
         {/* Layout */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr] lg:gap-5 lg:items-start">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr] lg:gap-5 lg:items-stretch">
           {/* LEFT */}
-          <div className="flex flex-col gap-4">
+          <div className="flex min-h-0 flex-col gap-4 lg:h-full">
             {/* ✅ Unified Balance + Activity module */}
-            <div className="relative overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70">
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70">
               {/* Purple wash across the whole module (single grouped feel) */}
               <div
                 className="pointer-events-none absolute inset-0 opacity-100"
@@ -691,9 +691,10 @@ export default function FinancesClient() {
                     "radial-gradient(800px 520px at 50% -10%, rgba(0,0,0,0.20), transparent 62%), radial-gradient(1000px 650px at 50% 120%, rgba(0,0,0,0.45), transparent 60%)",
                 }}
               />
-              <div className="relative flex flex-col p-4 pb-2">
+
+              <div className="relative flex min-h-0 flex-1 flex-col">
                 {/* Top (Available Balance) - centered like reference */}
-                <div className="rounded-xl pt-5 pb-2">
+                <div className="rounded-xl pt-5 pb-2 px-4">
                   <div className="flex min-h-[170px] flex-col items-center justify-center text-center">
                     <div className="relative">
                       {/* bigger icon in a soft orb */}
@@ -781,11 +782,13 @@ export default function FinancesClient() {
                 </div>
 
                 {/* Divider to make it feel ONE card, but still separated */}
-                <div className="my-4 h-px w-full bg-white/8" />
+                <div className="px-4">
+                  <div className="my-4 h-px w-full bg-white/8" />
+                </div>
 
                 {/* Activity / Withdraw History (inside same container) */}
                 <div className="flex min-h-0 flex-1 flex-col">
-                  <div className="mb-3 flex items-center justify-between px-1">
+                  <div className="mb-3 flex items-center justify-between px-5">
                     <h2 className="text-[14px] font-bold tracking-[-0.03em] text-neutral-0">
                       Activity
                     </h2>
@@ -801,7 +804,7 @@ export default function FinancesClient() {
                   </div>
 
                   <div className="relative min-h-0 flex-1 overflow-hidden">
-                    <div className="space-y-2 pr-1">
+                    <div className="space-y-2 px-4">
                       {activityShown.map((w) => (
                         <div
                           key={w.id}

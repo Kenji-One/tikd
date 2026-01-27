@@ -117,7 +117,7 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
   </g>
 </svg>
 `)}`;
-
+export const EVENT_CARD_DEFAULT_POSTER = DEFAULT_POSTER;
 /* -------------------------------------------------------------------------- */
 /*  Component                                                                 */
 /* -------------------------------------------------------------------------- */

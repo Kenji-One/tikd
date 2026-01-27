@@ -6,7 +6,7 @@
 import Link from "next/link";
 import clsx from "clsx";
 import { Building2, Landmark, Users2, type LucideIcon } from "lucide-react";
-import { useTilt3d } from "@/components/ui/Tilt3d";
+import { Tilt3d } from "@/components/ui/Tilt3d";
 
 export type ConnectionProfileKind = "establishment" | "organization" | "team";
 
@@ -41,7 +41,7 @@ const KIND_ICON: Record<ConnectionProfileKind, LucideIcon> = {
 };
 
 function formatMembers(n?: number) {
-  if (!n || n <= 0) return "—";
+  if (!n || n <= 0) return "0";
   try {
     return new Intl.NumberFormat(undefined).format(n);
   } catch {
@@ -66,7 +66,7 @@ export default function ConnectionProfileCard({
   const TypeIcon = KIND_ICON[kind];
 
   const cardLinkClass = clsx(
-    "group relative",
+    "group relative block",
     "w-full sm:w-[264px]",
     "rounded-[12px]",
     "border border-white/10 bg-neutral-948",
@@ -75,31 +75,13 @@ export default function ConnectionProfileCard({
     "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
   );
 
-  // Wrapper used only in tilt mode (host for mouse events + perspective)
-  const tiltWrapperClass = clsx(
+  const tiltShellClass = clsx(
     "group relative",
     "w-full sm:w-[264px]",
     "rounded-[12px]",
+    "transition-shadow duration-200",
     "hover:shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
   );
-
-  // The actual clickable card (text stays FLAT inside this)
-  const tiltLinkClass = clsx(
-    "relative block h-full w-full",
-    "rounded-[12px]",
-    "border border-white/10 bg-transparent",
-    "transition-all duration-200",
-    "group-hover:border-primary-500",
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-  );
-
-  // ✅ IMPORTANT: Hooks must be called unconditionally.
-  // We call it always, and only attach handlers/use the ref when tilt=true.
-  const tiltApi = useTilt3d<HTMLDivElement>({
-    maxDeg: tiltMaxDeg,
-    perspective: tiltPerspective,
-    liftPx: tiltLiftPx,
-  });
 
   const Banner = (
     <div className="relative h-[112px] w-full overflow-hidden rounded-t-[12px]">
@@ -110,6 +92,7 @@ export default function ConnectionProfileCard({
           alt=""
           className="h-full w-full object-cover"
           loading="lazy"
+          draggable={false}
         />
       ) : (
         <div
@@ -143,10 +126,12 @@ export default function ConnectionProfileCard({
             alt=""
             className="h-full w-full object-cover"
             loading="lazy"
+            draggable={false}
           />
         ) : (
           <div className="grid h-full w-full place-items-center bg-[conic-gradient(from_220deg_at_50%_50%,#9a46ff,#6600b7,#111827)]">
-            <span className="text-[13px] font-semibold text-neutral-0">
+            {/* ✅ Keep the fallback initial crisp too */}
+            <span className="text-[13px] font-semibold text-neutral-0 tikd-tilt-crisp">
               {title?.[0]?.toUpperCase() ?? "C"}
             </span>
           </div>
@@ -155,14 +140,13 @@ export default function ConnectionProfileCard({
     </div>
   );
 
-  const TextBody = (
+  const CardInner = (
     <>
-      {/* Reserve space for banner (banner itself is rendered in visual layer in tilt mode) */}
-      <div className="h-[112px] w-full" aria-hidden="true" />
-
+      {Banner}
       {IconTile}
 
-      <div className="relative px-4 pb-3 pt-7">
+      {/* This block counter-rotates to keep fonts crisp while the card tilts */}
+      <div className="relative px-4 pb-3 pt-7 tikd-tilt-crisp">
         <div className="flex items-start gap-2">
           <span
             className={clsx(
@@ -193,10 +177,12 @@ export default function ConnectionProfileCard({
               className="h-2 w-2 rounded-full bg-primary-500/90"
               aria-hidden="true"
             />
-            <span className="font-semibold text-neutral-100">
-              {formatMembers(totalMembers)}
-            </span>
-            <span className="text-neutral-400">Total members</span>
+            <div className="">
+              <span className="font-semibold text-neutral-100 mr-1">
+                {formatMembers(totalMembers)}
+              </span>
+              <span className="text-neutral-400">Total members</span>
+            </div>
           </div>
 
           <div className="inline-flex items-center gap-2 text-neutral-400">
@@ -211,93 +197,26 @@ export default function ConnectionProfileCard({
     </>
   );
 
-  // Non-tilt: same as before
+  // Non-tilt: unchanged
   if (!tilt) {
     return (
       <Link href={href} className={cardLinkClass}>
-        {Banner}
-        {IconTile}
-
-        <div className="relative px-4 pb-3 pt-7">
-          <div className="flex items-start gap-2">
-            <span
-              className={clsx(
-                "mt-[2px] inline-flex h-5 w-5 items-center justify-center rounded-full",
-                "bg-primary-900/50 ring-1 ring-primary-500",
-              )}
-              title={kind}
-              aria-hidden="true"
-            >
-              <TypeIcon className="h-3.5 w-3.5 text-primary-300" />
-            </span>
-
-            <div className="min-w-0">
-              <div className="truncate text-[14px] font-semibold tracking-[-0.28px] text-neutral-50">
-                {title}
-              </div>
-
-              <div className="mt-1 line-clamp-2 text-[12px] leading-[1.35] text-neutral-300/90">
-                {description}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-3 text-[12px] text-neutral-300/90">
-            <div className="inline-flex items-center gap-2">
-              <span
-                className="h-2 w-2 rounded-full bg-primary-500/90"
-                aria-hidden="true"
-              />
-              <span className="font-semibold text-neutral-100">
-                {formatMembers(totalMembers)}
-              </span>
-              <span className="text-neutral-400">Total members</span>
-            </div>
-
-            <div className="inline-flex items-center gap-2 text-neutral-400">
-              <span
-                className="h-2 w-2 rounded-full bg-neutral-700"
-                aria-hidden="true"
-              />
-              <span className="truncate">{joinDateLabel ?? "—"}</span>
-            </div>
-          </div>
-        </div>
+        {CardInner}
       </Link>
     );
   }
 
-  // Tilt mode: tilt ONLY the visual surface; keep text flat above it (no blur).
+  // Tilt: whole card tilts, text stays crisp via tikd-tilt-crisp + improved Tilt3d handling
   return (
-    <div
-      className={tiltWrapperClass}
-      onMouseEnter={tiltApi.onMouseEnter}
-      onMouseMove={tiltApi.onMouseMove}
-      onMouseLeave={tiltApi.onMouseLeave}
-      style={{ perspective: `${tiltPerspective}px` }}
+    <Tilt3d
+      className={tiltShellClass}
+      maxDeg={tiltMaxDeg}
+      perspective={tiltPerspective}
+      liftPx={tiltLiftPx}
     >
-      {/* This is the ONLY thing that rotates in 3D */}
-      <div
-        ref={tiltApi.ref}
-        className={clsx(
-          "pointer-events-none absolute inset-0 rounded-[12px] will-change-transform",
-        )}
-        style={{
-          transform: "rotateX(0deg) rotateY(0deg) translate3d(0, 0, 0)",
-          transformStyle: "preserve-3d",
-          backfaceVisibility: "hidden",
-        }}
-        aria-hidden="true"
-      >
-        <div className="h-full w-full rounded-[12px] bg-neutral-948">
-          {Banner}
-        </div>
-      </div>
-
-      {/* Flat clickable content (stays crisp) */}
-      <Link href={href} className={tiltLinkClass}>
-        {TextBody}
+      <Link href={href} className={cardLinkClass}>
+        {CardInner}
       </Link>
-    </div>
+    </Tilt3d>
   );
 }

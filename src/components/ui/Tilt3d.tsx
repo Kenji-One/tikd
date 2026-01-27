@@ -35,8 +35,8 @@ function usePrefersReducedMotion() {
  * We intentionally split "perspective host" (the element that receives mouse events)
  * from "surface" (the element that gets rotated).
  *
- * This reduces GPU text rasterization blur in Chromium browsers because the perspective
- * is applied as a CSS property on the host (not as `perspective()` inside transform).
+ * We ALSO avoid always-on `will-change: transform` because Chromium may rasterize text
+ * at a lower quality while animating. Instead, we enable will-change only on hover.
  */
 export function useTilt3d<T extends HTMLElement>(opts?: {
   maxDeg?: number;
@@ -66,14 +66,16 @@ export function useTilt3d<T extends HTMLElement>(opts?: {
     const el = ref.current;
     if (!el) return;
 
-    setVars(el, rx, ry, lift);
+    setVars(el as unknown as HTMLElement, rx, ry, lift);
 
     // IMPORTANT: no `perspective()` here — perspective is applied on the parent via CSS property.
-    el.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg) translate3d(0, ${-lift}px, 0)`;
+    // Small translateZ helps keep 3D pipeline stable (and helps our counter-rotated text layer).
+    (el as unknown as HTMLElement).style.transform =
+      `rotateX(${rx}deg) rotateY(${ry}deg) translate3d(0, ${-lift}px, 0) translateZ(0.01px)`;
   };
 
   const reset = () => {
-    const el = ref.current;
+    const el = ref.current as unknown as HTMLElement | null;
     if (!el) return;
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -81,12 +83,19 @@ export function useTilt3d<T extends HTMLElement>(opts?: {
 
     el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)";
     setTransform(0, 0, 0);
+
+    // ✅ Remove will-change after settling to avoid “blurry bitmap layer” behavior
+    window.setTimeout(() => {
+      const cur = ref.current as unknown as HTMLElement | null;
+      if (!cur) return;
+      cur.style.willChange = "auto";
+    }, 240);
   };
 
   const onMouseMove: React.MouseEventHandler<HTMLElement> = (e) => {
     if (disabled || prefersReducedMotion) return;
 
-    const el = ref.current;
+    const el = ref.current as unknown as HTMLElement | null;
     if (!el) return;
 
     // Use the element receiving the handler (host) for bounds.
@@ -112,12 +121,18 @@ export function useTilt3d<T extends HTMLElement>(opts?: {
   const onMouseLeave: React.MouseEventHandler<HTMLElement> = () => reset();
 
   const onMouseEnter: React.MouseEventHandler<HTMLElement> = () => {
-    const el = ref.current;
+    const el = ref.current as unknown as HTMLElement | null;
     if (!el || disabled || prefersReducedMotion) return;
+
+    // ✅ Enable will-change ONLY while hovering
+    el.style.willChange = "transform";
     el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)";
   };
 
   useEffect(() => {
+    const el = ref.current as unknown as HTMLElement | null;
+    if (el) el.style.willChange = "auto";
+
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
@@ -166,7 +181,7 @@ export function Tilt3d({
     >
       <div
         ref={tilt.ref}
-        className={clsx("h-full w-full will-change-transform")}
+        className={clsx("h-full w-full")}
         style={{
           // default vars so child layers can safely reference them
           // (they’ll be updated live on hover)
@@ -178,9 +193,12 @@ export function Tilt3d({
             "--tikd-tilt-ry-inv": "0deg",
             "--tikd-tilt-lift": "0px",
           } as React.CSSProperties),
-          transform: "rotateX(0deg) rotateY(0deg) translate3d(0, 0, 0)",
+          transform:
+            "rotateX(0deg) rotateY(0deg) translate3d(0, 0, 0) translateZ(0.01px)",
           transformStyle: "preserve-3d",
           backfaceVisibility: "hidden",
+          // willChange is managed dynamically in the hook
+          willChange: "auto",
         }}
       >
         {children}

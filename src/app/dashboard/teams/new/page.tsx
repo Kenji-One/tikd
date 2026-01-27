@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -20,6 +20,9 @@ import { Button } from "@/components/ui/Button";
 import ConnectionProfileCard from "@/components/connections/ConnectionProfileCard";
 import TikdColorPicker from "@/components/ui/TikdColorPicker";
 import PlacesAddressInput from "@/components/ui/PlacesAddressInput";
+import ImagePositionEditorModal, {
+  type ImageEditorMode,
+} from "@/components/ui/ImagePositionEditorModal";
 
 /* ------------------------------------------------------------------ */
 /*  Constants & schema                                                */
@@ -44,12 +47,35 @@ const websiteSchema = z
     },
   );
 
+/**
+ * ✅ Optional URL field that can be "", undefined, or a valid URL.
+ * This fixes the “cannot submit unless logo/icon is provided” bug,
+ * caused by defaultValues using "" for optional URL fields.
+ */
+const optionalUrlSchema = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .refine(
+    (value) => {
+      if (!value) return true;
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Must be a valid URL" },
+  );
+
 const TeamSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
 
-  banner: z.string().url().optional(),
-  logo: z.string().url().optional(),
+  banner: optionalUrlSchema,
+  logo: optionalUrlSchema,
 
   website: websiteSchema,
   location: z.string().min(2, "Location is required"),
@@ -139,6 +165,10 @@ function hostFromUrl(u?: string) {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
+/* ------------------------------------------------------------------ */
+
 export default function NewTeamPage() {
   const router = useRouter();
 
@@ -148,11 +178,16 @@ export default function NewTeamPage() {
   const bannerPublicId = useMemo(() => uuid(), []);
   const logoPublicId = useMemo(() => uuid(), []);
 
+  // Keep originals so user can re-adjust even after we apply Cloudinary crop URL
+  const bannerOriginalRef = useRef<string | null>(null);
+  const logoOriginalRef = useRef<string | null>(null);
+
   const {
     register,
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting, submitCount },
   } = useForm<TeamFormData>({
     resolver: zodResolver(TeamSchema),
@@ -168,15 +203,69 @@ export default function NewTeamPage() {
     mode: "onBlur",
   });
 
+  const [editor, setEditor] = useState<{
+    open: boolean;
+    mode: ImageEditorMode;
+    src: string;
+    title: string;
+  } | null>(null);
+
+  function openAdjust(mode: ImageEditorMode) {
+    const banner = watch("banner") || "";
+    const logo = watch("logo") || "";
+
+    if (mode === "banner") {
+      const original = bannerOriginalRef.current || banner;
+      if (!original) return;
+      setEditor({
+        open: true,
+        mode,
+        src: original,
+        title: "Adjust banner",
+      });
+      return;
+    }
+
+    const original = logoOriginalRef.current || logo;
+    if (!original) return;
+    setEditor({
+      open: true,
+      mode,
+      src: original,
+      title: "Adjust logo",
+    });
+  }
+
   const onSubmit: SubmitHandler<TeamFormData> = async (data) => {
+    // ✅ sanitize: convert "" to undefined so backend doesn't store empty strings
+    const payload = {
+      ...data,
+      banner: data.banner?.trim() ? data.banner.trim() : undefined,
+      logo: data.logo?.trim() ? data.logo.trim() : undefined,
+      website: data.website?.trim() ? data.website.trim() : undefined,
+      accentColor: data.accentColor?.trim()
+        ? data.accentColor.trim()
+        : undefined,
+      description: data.description?.trim()
+        ? data.description.trim()
+        : undefined,
+      location: data.location?.trim() ? data.location.trim() : data.location,
+      name: data.name?.trim() ? data.name.trim() : data.name,
+    };
+
     const res = await fetch("/api/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
 
     if (res.ok) {
-      router.push("/dashboard/teams");
+      const body = await res.json().catch(() => null);
+      const teamId = body?._id || body?.id;
+
+      // ✅ go to Team Dashboard after creation
+      if (teamId) router.push(`/dashboard/teams/${teamId}`);
+      else router.push("/dashboard/teams");
     } else {
       alert("Failed to create team");
     }
@@ -190,7 +279,7 @@ export default function NewTeamPage() {
   const location = watch("location");
   const accentColor = watch("accentColor");
 
-  const siteHost = useMemo(() => hostFromUrl(website), [website]);
+  const siteHost = useMemo(() => hostFromUrl(website || undefined), [website]);
   const previewAccent =
     accentColor && accentColor.trim() !== "" ? accentColor : "#7C3AED";
 
@@ -199,6 +288,30 @@ export default function NewTeamPage() {
 
   return (
     <main className="relative bg-neutral-950 text-neutral-0">
+      {editor?.open ? (
+        <ImagePositionEditorModal
+          open={editor.open}
+          mode={editor.mode}
+          src={editor.src}
+          title={editor.title}
+          onClose={() => setEditor(null)}
+          onApply={({ cropUrl }) => {
+            if (editor.mode === "banner") {
+              setValue("banner", cropUrl, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+            } else {
+              setValue("logo", cropUrl, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+            }
+            setEditor(null);
+          }}
+        />
+      ) : null}
+
       <div className="relative isolate mt-6 px-4 pt-10 md:py-12 lg:mt-8">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
@@ -315,12 +428,29 @@ export default function NewTeamPage() {
                 control={control}
                 name="banner"
                 render={({ field }) => (
-                  <ImageUpload
-                    label="Banner"
-                    value={field.value}
-                    onChange={field.onChange}
-                    publicId={`temp/teams/banners/${bannerPublicId}`}
-                  />
+                  <div className="space-y-2">
+                    <ImageUpload
+                      label="Banner"
+                      value={field.value || ""}
+                      onChange={(next) => {
+                        field.onChange(next);
+                        if (next && next.trim())
+                          bannerOriginalRef.current = next;
+                      }}
+                      publicId={`temp/teams/banners/${bannerPublicId}`}
+                    />
+                    {field.value?.trim() ? (
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => openAdjust("banner")}
+                        >
+                          Adjust banner
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
                 )}
               />
 
@@ -331,14 +461,29 @@ export default function NewTeamPage() {
                       control={control}
                       name="logo"
                       render={({ field }) => (
-                        <div>
+                        <div className="space-y-2">
                           <ImageUpload
                             label=""
-                            value={field.value}
-                            onChange={field.onChange}
+                            value={field.value || ""}
+                            onChange={(next) => {
+                              field.onChange(next);
+                              if (next && next.trim())
+                                logoOriginalRef.current = next;
+                            }}
                             publicId={`temp/teams/logos/${logoPublicId}`}
                             sizing="square"
                           />
+                          {field.value?.trim() ? (
+                            <div className="flex justify-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => openAdjust("logo")}
+                              >
+                                Adjust logo
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     />
@@ -423,8 +568,8 @@ export default function NewTeamPage() {
                   kind="team"
                   title={name?.trim() || "Team name"}
                   description={cardDescription}
-                  bannerUrl={banner || undefined}
-                  iconUrl={logo || undefined}
+                  bannerUrl={banner?.trim() ? banner : undefined}
+                  iconUrl={logo?.trim() ? logo : undefined}
                   totalMembers={undefined}
                   joinDateLabel="Draft"
                 />

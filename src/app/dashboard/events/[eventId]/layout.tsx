@@ -79,15 +79,52 @@ function titleInitial(title?: string) {
   return t[0]!.toUpperCase();
 }
 
+function mapTicketTypeApiToRow(api: {
+  _id: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  soldCount?: number;
+  totalQuantity: number | null;
+  availabilityStatus?: string;
+}) {
+  return {
+    id: api._id,
+    name: api.name,
+    description: api.description ?? "",
+    price: api.price,
+    currency: api.currency,
+    sold: api.soldCount ?? 0,
+    capacity: api.totalQuantity,
+    status: (api.availabilityStatus ?? "on_sale") as
+      | "on_sale"
+      | "sale_ended"
+      | "scheduled"
+      | "unknown",
+  };
+}
+
 /**
- * Prefetch helpers — IMPORTANT:
- * We prefetch RAW API arrays, and the pages use `select` to map into rows.
- * That way, cache data type is consistent across layout + page.
+ * IMPORTANT:
+ * The ticket-types page expects TicketTypeRow[] (with `id`),
+ * so prefetch MUST store the same shape in the cache.
+ * Otherwise first client navigation reads cached raw API data and drag/drop breaks.
  */
-async function fetchTicketTypesApi(eventId: string) {
+async function fetchTicketTypesRows(eventId: string) {
   const res = await fetch(`/api/events/${eventId}/ticket-types`);
   if (!res.ok) throw new Error("Failed to load ticket types");
-  return res.json();
+  const json = (await res.json()) as Array<{
+    _id: string;
+    name: string;
+    description?: string;
+    price: number;
+    currency: string;
+    soldCount?: number;
+    totalQuantity: number | null;
+    availabilityStatus?: string;
+  }>;
+  return json.map(mapTicketTypeApiToRow);
 }
 
 async function fetchPromoCodesApi(eventId: string) {
@@ -147,9 +184,10 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       staleTime: 5 * 60_000,
     });
 
+    // ✅ Prefetch rows (NOT raw API), so cache matches ticket-types page
     qc.prefetchQuery({
       queryKey: ["ticket-types", eventId],
-      queryFn: () => fetchTicketTypesApi(eventId),
+      queryFn: () => fetchTicketTypesRows(eventId),
       staleTime: 60_000,
     });
 
@@ -223,7 +261,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     if (tabId === "ticket-types") {
       qc.prefetchQuery({
         queryKey: ["ticket-types", eventId],
-        queryFn: () => fetchTicketTypesApi(eventId),
+        queryFn: () => fetchTicketTypesRows(eventId),
         staleTime: 60_000,
       });
       return;
@@ -252,9 +290,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
       <section className="tikd-event-hero pb-14">
-        {/* Neutral hero wash behind header */}
-        {/* <div aria-hidden="true" className="tikd-event-hero-bg" /> */}
-
         {/* Sticky TOP HEADER ONLY (tabs NOT included) */}
         <div className="tikd-event-header-sticky">
           <header
@@ -384,14 +419,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
         {/* Tabs */}
         <div className="mt-5 px-4">
           <div className="no-scrollbar overflow-x-auto overflow-y-visible">
-            {/* ✅ Center tabs on wide screens, still scrollable on small screens */}
             <div className="flex w-full justify-center">
               <nav
                 aria-label="Event dashboard tabs"
                 role="tablist"
                 aria-busy={isPending ? "true" : "false"}
                 className={clsx(
-                  // ⬆️ Bigger shell (height/padding/rounding) + a bit more spacing
                   "tikd-tabs-shell relative inline-flex min-w-max items-center gap-3 px-2 py-2",
                   isPending && "tikd-tabs-pending",
                 )}
@@ -401,7 +434,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                     basePath && eventId ? `${basePath}/${tab.id}` : "#";
                   const isActive = activeTab === tab.id;
 
-                  // While route is changing: make clicked tab look “selected/loading”
                   const isVisuallyActive =
                     isActive || (isPending && pendingTab === tab.id);
 
@@ -420,7 +452,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       onClick={() => onTabClick(tab.id)}
                       onMouseEnter={() => prefetchForTab(tab.id)}
                       className={clsx(
-                        // ⬆️ Bigger hit-area for each tab
                         "relative z-10 min-h-[44px] px-3.5 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
                         isVisuallyActive ? "tikd-tab-active" : "tikd-tab-icon",
                         isPending &&
@@ -428,11 +459,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                           "tikd-tab-clicked",
                       )}
                     >
-                      {/* ⬆️ Slightly larger icon */}
                       <Icon className={clsx("shrink-0", "h-5.5 w-5.5")} />
-
                       {isVisuallyActive ? (
-                        // ⬆️ Slightly larger label
                         <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.2px]">
                           {tab.label}
                         </span>

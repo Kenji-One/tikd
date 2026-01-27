@@ -176,11 +176,42 @@ function StatusPill({ status }: { status: Status }) {
     <span
       className={clsx(
         "inline-flex items-center gap-1.5 rounded-full px-3 py-1",
-        "text-[12px] font-semibold ring-1 ring-inset",
+        "text-[13px] font-semibold ring-1 ring-inset",
         map[status],
       )}
     >
       {label}
+    </span>
+  );
+}
+
+function RolePill({ role }: { role: Role }) {
+  const map: Record<Role, string> = {
+    admin:
+      "bg-primary-500/12 text-primary-200 ring-primary-500/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    promoter:
+      "bg-[#428BFF]/12 text-[#A9C9FF] ring-[#428BFF]/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    scanner:
+      "bg-emerald-500/12 text-emerald-200 ring-emerald-500/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    collaborator:
+      "bg-white/8 text-neutral-100 ring-white/14 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+  };
+
+  const meta = ROLE_META[role];
+
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center gap-1 rounded-full px-2.5 pl-2 py-1.5",
+        "text-[13px] font-semibold ring-1 ring-inset",
+        map[role] ?? map.collaborator,
+      )}
+      aria-label={`Role: ${meta?.label ?? role}`}
+    >
+      <span className="inline-flex items-center justify-center">
+        {meta?.icon}
+      </span>
+      <span className="leading-none">{meta?.label ?? "—"}</span>
     </span>
   );
 }
@@ -199,7 +230,7 @@ function MetricChip({
       className={clsx(
         "inline-flex items-center gap-2 rounded-lg px-2.5 py-2",
         "border border-white/10 bg-white/5",
-        "text-[12px] text-neutral-200",
+        "text-[13px] text-neutral-200",
       )}
     >
       <span
@@ -912,7 +943,7 @@ export default function OrgMembersPage() {
               className={clsx(
                 "hidden md:block",
                 "rounded-[12px] border border-white/10 bg-white/5 px-4 py-2.5",
-                "text-[12px] font-semibold text-neutral-300",
+                "text-[13px] font-semibold text-neutral-300",
               )}
             >
               <div className={GRID}>
@@ -931,7 +962,7 @@ export default function OrgMembersPage() {
               {isLoading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-[84px] rounded-[12px]" />
+                    <Skeleton key={i} className="h-[88px] rounded-[12px]" />
                   ))}
                 </div>
               ) : slice.length ? (
@@ -961,7 +992,7 @@ export default function OrgMembersPage() {
                               <div className="flex min-w-0 items-center gap-3">
                                 <div className="relative">
                                   <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
-                                    <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+                                    <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
                                       {badge}
                                     </div>
                                   </div>
@@ -971,10 +1002,10 @@ export default function OrgMembersPage() {
                                 </div>
 
                                 <div className="min-w-0">
-                                  <div className="truncate text-[13px] font-semibold text-neutral-0">
+                                  <div className="truncate text-[14px] font-semibold text-neutral-0">
                                     {title}
                                   </div>
-                                  <div className="truncate text-[12px] text-neutral-400">
+                                  <div className="truncate text-[13px] text-neutral-400">
                                     {m.email}
                                   </div>
                                 </div>
@@ -982,38 +1013,33 @@ export default function OrgMembersPage() {
                             </div>
 
                             {/* Views */}
-                            <div className="text-[12px] text-neutral-200">
+                            <div className="text-[13px] text-neutral-200">
                               <span className="font-semibold text-neutral-100">
                                 {fmtNum(met.views)}
                               </span>
                             </div>
 
                             {/* Tickets */}
-                            <div className="text-[12px] text-neutral-200">
+                            <div className="text-[13px] text-neutral-200">
                               <span className="font-semibold text-neutral-100">
                                 {fmtNum(met.tickets)}
                               </span>
                             </div>
 
                             {/* Revenue */}
-                            <div className="text-[12px] text-neutral-200">
+                            <div className="text-[13px] text-neutral-200">
                               <span className="font-semibold text-neutral-100">
                                 {fmtUsd(met.revenue)}
                               </span>
                             </div>
 
                             {/* Role */}
-                            <div className="text-[12px] text-neutral-200">
-                              <span className="inline-flex items-center gap-2 font-semibold text-neutral-100">
-                                <span className="inline-flex items-center justify-center text-primary-300">
-                                  {ROLE_META[m.role]?.icon}
-                                </span>
-                                {ROLE_META[m.role]?.label ?? "—"}
-                              </span>
+                            <div className="text-[13px] text-neutral-200">
+                              <RolePill role={m.role} />
                             </div>
 
                             {/* Date */}
-                            <div className="text-[12px] text-neutral-400">
+                            <div className="text-[13px] text-neutral-400">
                               {prettyDateShort(m.createdAt)}
                             </div>
 
@@ -1041,7 +1067,7 @@ export default function OrgMembersPage() {
                             <div className="flex min-w-0 items-center gap-3">
                               <div className="relative">
                                 <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
-                                  <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+                                  <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
                                     {badge}
                                   </div>
                                 </div>
@@ -1051,10 +1077,10 @@ export default function OrgMembersPage() {
                               </div>
 
                               <div className="min-w-0">
-                                <div className="truncate text-[13px] font-semibold text-neutral-0">
+                                <div className="truncate text-[14px] font-semibold text-neutral-0">
                                   {title}
                                 </div>
-                                <div className="truncate text-[12px] text-neutral-400">
+                                <div className="truncate text-[13px] text-neutral-400">
                                   {m.email}
                                 </div>
                               </div>

@@ -711,15 +711,8 @@ export default function TicketTypesPage() {
 
     // release pointer capture (best-effort)
     try {
-      if (
-        dragHandleElRef.current &&
-        pointerIdRef.current != null &&
-        typeof (dragHandleElRef.current as any).releasePointerCapture ===
-          "function"
-      ) {
-        (dragHandleElRef.current as any).releasePointerCapture(
-          pointerIdRef.current,
-        );
+      if (dragHandleElRef.current && pointerIdRef.current != null) {
+        dragHandleElRef.current.releasePointerCapture(pointerIdRef.current);
       }
     } catch {
       // ignore

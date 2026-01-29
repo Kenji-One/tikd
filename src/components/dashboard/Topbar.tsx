@@ -276,32 +276,34 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                   }}
                   className="tikd-chat-btn relative rounded-full bg-neutral-900 p-[9px] hover:border-primary-500 focus:outline-none ring-1 ring-white/10 hover:ring-primary-500 focus:ring-primary-500 cursor-pointer transition"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="tikd-chat-svg text-[#727293]"
-                  >
-                    <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" />
-                    <path
-                      className="tikd-chat-dot tikd-chat-dot-1"
-                      d="M8 12h.01"
-                    />
-                    <path
-                      className="tikd-chat-dot tikd-chat-dot-2"
-                      d="M12 12h.01"
-                    />
-                    <path
-                      className="tikd-chat-dot tikd-chat-dot-3"
-                      d="M16 12h.01"
-                    />
-                  </svg>
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="tikd-chat-svg text-[#727293] w-5.5 h-5.5"
+                    >
+                      <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" />
+                      <path
+                        className="tikd-chat-dot tikd-chat-dot-1"
+                        d="M8 12h.01"
+                      />
+                      <path
+                        className="tikd-chat-dot tikd-chat-dot-2"
+                        d="M12 12h.01"
+                      />
+                      <path
+                        className="tikd-chat-dot tikd-chat-dot-3"
+                        d="M16 12h.01"
+                      />
+                    </svg>
+                  </div>
 
                   {chatUnreadCount > 0 && (
                     <span className="absolute right-[9px] top-[9px] h-1.5 w-1.5 rounded-full bg-error-500" />

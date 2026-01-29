@@ -31,19 +31,6 @@ type SessionLike =
   | null
   | undefined;
 
-// ✅ Next route handler context type (avoids Vercel "invalid PUT export" error)
-type RouteContext = { params: Record<string, string | string[]> };
-
-function getParam(
-  params: Record<string, string | string[]>,
-  key: string,
-): string | null {
-  const v = params[key];
-  if (typeof v === "string") return v;
-  if (Array.isArray(v)) return v[0] ?? null;
-  return null;
-}
-
 /**
  * Canonical resolver:
  * - Prefer email -> real Mongo user _id (most reliable)
@@ -76,8 +63,15 @@ async function resolveMongoUserObjectId(session: SessionLike) {
  * PUT /api/events/:id/pin
  * Body: { pinned: boolean }
  * Pins/unpins for current user (DB-backed => sync across devices).
+ *
+ * NOTE (Next 15):
+ * Route handler context params are typed as a Promise in the generated types,
+ * so the second argument MUST match: { params: Promise<{ id: string }> }.
  */
-export async function PUT(req: NextRequest, context: RouteContext) {
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const session = (await auth()) as SessionLike;
   const mongoUserId = await resolveMongoUserObjectId(session);
 
@@ -85,7 +79,8 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const id = getParam(context.params, "id");
+  const { id } = await params;
+
   if (!id || !isObjectId(id)) {
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
   }

@@ -119,8 +119,11 @@ const FormSchema = z
       )
       .default([]),
 
-    /** Status */
-    status: z.enum(["published", "draft"]).default("published"),
+    /** Status
+     *  ✅ IMPORTANT: new events must start as NOT published.
+     *  We use "draft" as the internal state for "Unpublished".
+     */
+    status: z.enum(["published", "draft"]).default("draft"),
   })
   .superRefine((v, ctx) => {
     // ✅ Require times (but still allow empty initial UI state)
@@ -335,26 +338,19 @@ function buildLocationString(v: FormValues) {
 const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1280" viewBox="0 0 900 1280">
   <defs>
-    <!-- single clean background -->
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#08080f"/>
       <stop offset="0.6" stop-color="#120a24"/>
       <stop offset="1" stop-color="#08080f"/>
     </linearGradient>
-
-    <!-- one soft glow only -->
     <radialGradient id="glow" cx="30%" cy="18%" r="70%">
       <stop offset="0" stop-color="#9a46ff" stop-opacity="0.30"/>
       <stop offset="1" stop-color="#9a46ff" stop-opacity="0"/>
     </radialGradient>
-
-    <!-- watermark gradient -->
     <linearGradient id="wm" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0.02"/>
     </linearGradient>
-
-    <!-- subtle glass for the dashed zone fill -->
     <linearGradient id="zoneFill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.06"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0.02"/>
@@ -364,7 +360,6 @@ const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
   <rect width="900" height="1280" fill="url(#bg)"/>
   <rect width="900" height="1280" fill="url(#glow)"/>
 
-  <!-- subtle watermark -->
   <g opacity="0.16">
     <text x="-360" y="1188"
       font-family="Arial, Helvetica, sans-serif"
@@ -377,15 +372,11 @@ const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
     </text>
   </g>
 
-  <!-- Dashed drop zone: truly centered with even margins -->
-  <!-- margins: left/right=110, top/bottom=150 -->
   <rect x="110" y="150" width="680" height="980" rx="36"
     fill="url(#zoneFill)"
     stroke="#ffffff" stroke-opacity="0.22" stroke-width="2"
     stroke-dasharray="18 14"/>
 
-  <!-- Logo INSIDE dashed block, top centered (smaller) -->
-  <!-- original logo: 56x24, scale 4.2 => 235.2x100.8 -->
   <g transform="translate(450 215) translate(-118 0) scale(4.2)" opacity="0.95">
     <svg width="56" height="24" viewBox="0 0 56 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <g clip-path="url(#clip0_1413_879)">
@@ -403,9 +394,7 @@ const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
     </svg>
   </g>
 
-  <!-- centered icon + text (centered relative to dashed zone) -->
   <g font-family="Arial, Helvetica, sans-serif" text-anchor="middle">
-    <!-- icon -->
     <rect x="402" y="610" width="96" height="96" rx="24"
       fill="#ffffff" fill-opacity="0.06"
       stroke="#ffffff" stroke-opacity="0.12" />
@@ -414,7 +403,6 @@ const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
     <path d="M432 654 l18-18 18 18" fill="none" stroke="#ffffff" stroke-opacity="0.86" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M418 704 h64" stroke="#ffffff" stroke-opacity="0.22" stroke-width="4" stroke-linecap="round"/>
 
-    <!-- text -->
     <text x="450" y="800" font-size="46" font-weight="900" fill="#ffffff" opacity="0.94">
       Upload your poster
     </text>
@@ -460,7 +448,8 @@ export default function NewEventPage() {
       categories: [],
       promoters: [],
       artists: [],
-      status: "published",
+      // ✅ default to "draft" (Unpublished)
+      status: "draft",
       locationMode: "specific",
       locationCity: "",
       locationAddress: "",
@@ -625,11 +614,7 @@ export default function NewEventPage() {
 
       if (res.ok) {
         const { _id } = await res.json();
-        if (status === "draft") {
-          router.push(`/dashboard/events/${_id}`);
-        } else {
-          router.push(`/dashboard/events/${_id}`);
-        }
+        router.push(`/dashboard/events/${_id}`);
       } else {
         console.error(await res.json());
         alert("Failed to create event");
@@ -701,6 +686,7 @@ export default function NewEventPage() {
           object-fit: cover;
         }
       `}</style>
+
       <div className="relative isolate px-4 pt-8 md:py-10 mt-2">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
@@ -719,8 +705,9 @@ export default function NewEventPage() {
         </div>
       </div>
 
+      {/* ✅ IMPORTANT: default submit creates a DRAFT (Unpublished) */}
       <form
-        onSubmit={handleSubmit(submitImpl("published"))}
+        onSubmit={handleSubmit(submitImpl("draft"))}
         className="grid grid-cols-1 gap-6 pt-6 pb-14 md:grid-cols-12 max-w-7xl mx-auto"
         noValidate
       >
@@ -1296,14 +1283,18 @@ export default function NewEventPage() {
             >
               Cancel
             </Button>
+
             <div className="flex gap-3 flex-wrap">
+              {/* ✅ Optional: allow instant publish */}
               <Button
                 type="button"
                 variant="secondary"
-                onClick={handleSubmit(submitImpl("draft"))}
+                onClick={handleSubmit(submitImpl("published"))}
               >
-                Send to Drafts
+                Publish Now
               </Button>
+
+              {/* ✅ Default action: create Unpublished (draft) */}
               <Button
                 type="submit"
                 variant="primary"

@@ -16,13 +16,10 @@ type Props = {
   onChange: (url: string) => void;
   /** Optional label shown above the uploader */
   label?: string;
-  /** Deterministic Cloudinary public_id, e.g. "events/123/poster"
-   *  • Pass the same id again when user edits to overwrite the file.
-   *  • If omitted, a random id will be generated.
-   */
+  /** Deterministic Cloudinary public_id, e.g. "events/123/poster" */
   publicId?: string;
   /** Size preset for the uploader */
-  sizing?: Sizing; // "avatar" | "normal" | "big"
+  sizing?: Sizing;
   /** Optional extra className on the outer wrapper */
   className?: string;
 };
@@ -39,7 +36,7 @@ export default function ImageUpload({
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // ✅ Keep local preview in sync when parent value changes (e.g. after "Apply" crop)
+  // ✅ Keep local preview in sync when parent value changes (e.g. after crop commit)
   useEffect(() => {
     setPreview(value || undefined);
   }, [value]);
@@ -49,6 +46,7 @@ export default function ImageUpload({
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     setLoading(true);
 
     try {
@@ -82,7 +80,6 @@ export default function ImageUpload({
       if (!res.ok) {
         const errorText = await res.text();
         console.error("Cloudinary upload failed:", errorText);
-        setLoading(false);
         return;
       }
 
@@ -93,6 +90,9 @@ export default function ImageUpload({
       console.error("Upload error:", err);
     } finally {
       setLoading(false);
+
+      // ✅ allow selecting the same file twice in a row
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -167,7 +167,7 @@ export default function ImageUpload({
           onClick={handleSelect}
         >
           <Image
-            key={preview} // ✅ force remount when URL changes (fixes “still old image” after Apply)
+            key={preview} // ✅ force remount when URL changes
             src={preview}
             alt="preview"
             fill

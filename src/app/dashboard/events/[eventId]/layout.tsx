@@ -4,11 +4,18 @@
 "use client";
 
 import type { ReactNode, ComponentType, SVGProps } from "react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  useCallback,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   CalendarDays,
@@ -23,6 +30,9 @@ import {
   UserRoundCog,
   Users,
   UsersRound,
+  Rocket,
+  X,
+  Loader2,
 } from "lucide-react";
 
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
@@ -133,6 +143,190 @@ async function fetchPromoCodesApi(eventId: string) {
   return res.json();
 }
 
+/* ------------------------------------------------------------------ */
+/*  Status mutation                                                    */
+/* ------------------------------------------------------------------ */
+async function patchEventStatus(
+  eventId: string,
+  status: "published" | "draft",
+) {
+  const res = await fetch(`/api/events/${eventId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ status }),
+  });
+
+  if (!res.ok) {
+    let message = "Failed to update event status";
+    try {
+      const j = (await res.json()) as any;
+      message =
+        j?.error ||
+        j?.message ||
+        (typeof j === "string" ? j : message) ||
+        message;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+
+  return true;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Galaxy Publish Button                                              */
+/* ------------------------------------------------------------------ */
+function GalaxyPublishButton(props: {
+  disabled?: boolean;
+  pending?: boolean;
+  onClick: () => void;
+  title?: string;
+}) {
+  const { disabled, pending, onClick, title } = props;
+
+  const ref = useRef<HTMLButtonElement | null>(null);
+
+  const burstTimeout = useRef<number | null>(null);
+  const [burst, setBurst] = useState(false);
+
+  const setCenter = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.setProperty("--mx", "50%");
+    el.style.setProperty("--my", "50%");
+    el.style.setProperty("--mxpx", "0px");
+    el.style.setProperty("--mypx", "0px");
+  }, []);
+
+  useEffect(() => {
+    setCenter();
+    return () => {
+      if (burstTimeout.current != null)
+        window.clearTimeout(burstTimeout.current);
+    };
+  }, [setCenter]);
+
+  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+
+    const px = e.clientX - r.left;
+    const py = e.clientY - r.top;
+
+    const mx = Math.max(0, Math.min(100, (px / r.width) * 100));
+    const my = Math.max(0, Math.min(100, (py / r.height) * 100));
+
+    el.style.setProperty("--mx", `${mx}%`);
+    el.style.setProperty("--my", `${my}%`);
+
+    const dx = (mx - 50) / 50;
+    const dy = (my - 50) / 50;
+    el.style.setProperty("--mxpx", `${dx * 6}px`);
+    el.style.setProperty("--mypx", `${dy * 5}px`);
+  };
+
+  const triggerBurst = () => {
+    if (disabled || pending) return;
+    setBurst(false);
+    requestAnimationFrame(() => setBurst(true));
+    if (burstTimeout.current != null) window.clearTimeout(burstTimeout.current);
+    burstTimeout.current = window.setTimeout(() => setBurst(false), 720);
+  };
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={clsx(
+        "tikd-publish-pill",
+        disabled && "tikd-publish-pill-disabled",
+      )}
+      onClick={() => {
+        triggerBurst();
+        onClick();
+      }}
+      onPointerMove={onPointerMove}
+      onPointerEnter={setCenter}
+      onPointerLeave={setCenter}
+      disabled={disabled}
+      aria-disabled={disabled ? "true" : "false"}
+      data-burst={burst ? "true" : "false"}
+      data-pending={pending ? "true" : "false"}
+      title={title ?? "Publish event"}
+    >
+      <span className="tikd-publish-pill-bg" aria-hidden="true" />
+      <span className="tikd-publish-sky" aria-hidden="true" />
+      <span className="tikd-publish-stars" aria-hidden="true" />
+
+      {/* Border (base + aurora only) */}
+      <span className="tikd-publish-border" aria-hidden="true">
+        <svg
+          className="tikd-publish-border-svg"
+          viewBox="0 0 100 40"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <defs>
+            <linearGradient
+              id="tikdPublishBorderBaseGrad"
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="1"
+            >
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.62" />
+              <stop offset="55%" stopColor="#ffffff" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+            </linearGradient>
+
+            <linearGradient
+              id="tikdPublishBorderAurora"
+              x1="0"
+              y1="0"
+              x2="1"
+              y2="1"
+            >
+              <stop offset="0%" stopColor="#ff5adc" stopOpacity="0.55" />
+              <stop offset="45%" stopColor="#9a46ff" stopOpacity="0.75" />
+              <stop offset="100%" stopColor="#c7a0ff" stopOpacity="0.55" />
+            </linearGradient>
+          </defs>
+
+          <path
+            className="tikd-publish-border-base"
+            d="M20 1H80A19 19 0 0 1 99 20A19 19 0 0 1 80 39H20A19 19 0 0 1 1 20A19 19 0 0 1 20 1Z"
+            pathLength="100"
+            vectorEffect="non-scaling-stroke"
+          />
+
+          <path
+            className="tikd-publish-border-aurora"
+            d="M20 1H80A19 19 0 0 1 99 20A19 19 0 0 1 80 39H20A19 19 0 0 1 1 20A19 19 0 0 1 20 1Z"
+            pathLength="100"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      </span>
+
+      <span className="tikd-publish-rocketWrap" aria-hidden="true">
+        {pending ? (
+          <span className="tikd-publish-spinner" />
+        ) : (
+          <Rocket className="tikd-publish-rocket h-4 w-4" />
+        )}
+      </span>
+
+      <span className="tikd-publish-pill-text">
+        {pending ? "Publishing…" : "Publish"}
+      </span>
+    </button>
+  );
+}
+
 export default function EventDashboardLayout({ children }: EventLayoutProps) {
   const { eventId } = useParams() as { eventId?: string };
   const pathname = usePathname();
@@ -147,6 +341,9 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
   // Sticky styling when user scrolls
   const [isScrolled, setIsScrolled] = useState(false);
 
+  // Publish success popup
+  const [publishSuccessOpen, setPublishSuccessOpen] = useState(false);
+
   const basePath = eventId ? `/dashboard/events/${eventId}` : "";
 
   const { data: event, isLoading } = useQuery<EventWithMeta>({
@@ -156,6 +353,9 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
   });
+
+  const status = event?.status as "draft" | "published" | undefined;
+  const isPublished = status === "published";
 
   const activeTab: EventTabId = useMemo(() => {
     let tab: EventTabId = "summary";
@@ -171,7 +371,11 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
   const isSummaryPage = useMemo(() => {
     if (!basePath) return false;
-    return pathname === `${basePath}/summary` || activeTab === "summary";
+    return (
+      pathname === `${basePath}/summary` ||
+      activeTab === "summary" ||
+      activeTab === "guests"
+    );
   }, [activeTab, basePath, pathname]);
 
   // Prefetch the “heavy tabs” once we know the eventId.
@@ -229,7 +433,18 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     };
   }, []);
 
-  const status = event?.status;
+  // Close publish popup on ESC
+  useEffect(() => {
+    if (!publishSuccessOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPublishSuccessOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [publishSuccessOpen]);
+
   const statusLabel = status === "draft" ? "Draft" : "Published";
 
   const statusChipClasses =
@@ -287,8 +502,108 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
   const posterUrl = event?.image || "";
 
+  const setEventStatusInCache = useCallback(
+    (nextStatus: "published" | "draft") => {
+      if (!eventId) return;
+
+      qc.setQueryData(["event", eventId], (prev: EventWithMeta | undefined) => {
+        if (!prev) return prev;
+        return { ...prev, status: nextStatus };
+      });
+    },
+    [eventId, qc],
+  );
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      if (!eventId) throw new Error("Missing event id");
+      return patchEventStatus(eventId, "published");
+    },
+    onSuccess: () => {
+      setEventStatusInCache("published");
+      qc.invalidateQueries({ queryKey: ["event", eventId] });
+      setPublishSuccessOpen(true);
+    },
+  });
+
+  const unpublishMutation = useMutation({
+    mutationFn: async () => {
+      if (!eventId) throw new Error("Missing event id");
+      return patchEventStatus(eventId, "draft");
+    },
+    onSuccess: () => {
+      setEventStatusInCache("draft");
+      qc.invalidateQueries({ queryKey: ["event", eventId] });
+    },
+  });
+
+  const isStatusBusy = publishMutation.isPending || unpublishMutation.isPending;
+
+  const handlePublishClick = () => {
+    if (!eventId || isStatusBusy) return;
+    publishMutation.mutate();
+  };
+
+  const handleUnpublishClick = () => {
+    if (!eventId || isStatusBusy) return;
+    unpublishMutation.mutate();
+  };
+
+  const openPublicEvent = () => {
+    if (!eventId) return;
+    window.open(`/events/${eventId}`, "_blank", "noreferrer");
+  };
+
+  const statusError =
+    publishMutation.error?.message || unpublishMutation.error?.message || "";
+
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
+      {/* Publish success modal */}
+      {publishSuccessOpen && (
+        <div
+          className="tikd-publish-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Event published"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setPublishSuccessOpen(false);
+          }}
+        >
+          <div className="tikd-publish-modal">
+            <button
+              type="button"
+              className="tikd-publish-modal-close"
+              onClick={() => setPublishSuccessOpen(false)}
+              aria-label="Close"
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="tikd-publish-modal-icon">
+              <Check className="h-6 w-6" />
+            </div>
+
+            <h3 className="tikd-publish-modal-title">Event Published!</h3>
+            <p className="tikd-publish-modal-subtext">
+              Your event is now live and visible to users. You can manage
+              details, tickets, and settings at any time.
+            </p>
+
+            <div className="mt-5 flex items-center justify-center">
+              <button
+                type="button"
+                className="tikd-publish-modal-btn"
+                onClick={openPublicEvent}
+              >
+                View Live Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="tikd-event-hero pb-14">
         {/* Sticky TOP HEADER ONLY (tabs NOT included) */}
         <div className="tikd-event-header-sticky">
@@ -366,6 +681,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                           </span>
                         </span>
                       </div>
+
+                      {!!statusError && (
+                        <div className="mt-2 text-[12.5px] font-medium text-red-300">
+                          {statusError}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -409,6 +730,41 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                         View
                       </Link>
                     </Button>
+                  )}
+
+                  {/* Publish / Unpublish */}
+                  {eventId && (
+                    <>
+                      {isPublished ? (
+                        <button
+                          type="button"
+                          className={clsx(
+                            "tikd-unpublish-btn",
+                            isStatusBusy && "tikd-unpublish-btn-disabled",
+                          )}
+                          onClick={handleUnpublishClick}
+                          disabled={isStatusBusy}
+                          aria-disabled={isStatusBusy ? "true" : "false"}
+                          title="Unpublish event"
+                        >
+                          {unpublishMutation.isPending ? (
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Unpublishing
+                            </span>
+                          ) : (
+                            "Unpublish"
+                          )}
+                        </button>
+                      ) : (
+                        <GalaxyPublishButton
+                          disabled={isStatusBusy}
+                          pending={publishMutation.isPending}
+                          onClick={handlePublishClick}
+                          title="Publish event"
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               </div>

@@ -21,10 +21,8 @@ export function cloudinaryPrefixToUpload(url: string) {
 function isTransformSegment(seg: string) {
   if (!seg) return false;
 
-  // Most transforms are comma-separated in a single segment
   if (seg.includes(",")) return true;
 
-  // Allow single-key transforms (w_300, c_fill, q_auto, f_auto, g_auto, etc.)
   return /^(?:c|w|h|x|y|g|q|f|b|ar|dpr|e|l|u|a|r|t|bo|so|co|fl)_[^/]+$/i.test(
     seg,
   );
@@ -32,7 +30,7 @@ function isTransformSegment(seg: string) {
 
 /**
  * Extract the "rest" (version + publicId, or just publicId) AFTER /upload/
- * while stripping any existing transformations, whether or not the URL has /v123/.
+ * while stripping any existing transformations.
  */
 export function cloudinaryRestFromUploadSegment(url: string) {
   const clean = stripQueryAndHash(url);
@@ -43,13 +41,11 @@ export function cloudinaryRestFromUploadSegment(url: string) {
   const segs = rest.split("/").filter(Boolean);
   if (!segs.length) return null;
 
-  // Prefer version segment if present
   const vIdx = segs.findIndex((s) => /^v\d+$/i.test(s));
   if (vIdx >= 0) {
     return segs.slice(vIdx).join("/");
   }
 
-  // Otherwise strip all leading transform segments
   let firstNonTransform = 0;
   while (
     firstNonTransform < segs.length &&
@@ -58,7 +54,6 @@ export function cloudinaryRestFromUploadSegment(url: string) {
     firstNonTransform += 1;
   }
 
-  // If everything looked like a transform (rare), fall back to original
   if (firstNonTransform >= segs.length) return segs.join("/");
 
   return segs.slice(firstNonTransform).join("/");
@@ -66,7 +61,6 @@ export function cloudinaryRestFromUploadSegment(url: string) {
 
 /**
  * ✅ Returns a "raw asset" Cloudinary URL (no transforms).
- * This fixes the "padded black area" issue when src already had c_pad/c_fill/etc.
  */
 export function makeCloudinaryAssetUrl(url: string) {
   if (!isProbablyCloudinaryUrl(url)) return null;
@@ -106,13 +100,12 @@ export function makeCloudinaryCroppedUrl({
   const w = Math.max(1, Math.round(cropW));
   const h = Math.max(1, Math.round(cropH));
 
-  // Crop precisely, then output at desired dimensions.
-  const transform = [
-    `c_crop,x_${x},y_${y},w_${w},h_${h}`,
-    `c_fill,w_${outW},h_${outH}`,
-    "f_auto",
-    "q_auto",
-  ].join(",");
+  // ✅ IMPORTANT:
+  // Cloudinary applies transformations in "blocks" separated by "/".
+  // If you do "c_crop,...,c_fill,..." in ONE block, c_fill overrides c_crop.
+  const t1 = `c_crop,x_${x},y_${y},w_${w},h_${h}`;
+  const t2 = `c_fill,w_${outW},h_${outH}`;
+  const t3 = `f_auto,q_auto`;
 
-  return `${prefix}${transform}/${rest}`;
+  return `${prefix}${t1}/${t2}/${t3}/${rest}`;
 }

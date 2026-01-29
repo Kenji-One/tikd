@@ -26,7 +26,9 @@ type Props = {
   src: string;
   title: string;
   onClose: () => void;
-  onApply: (result: { cropUrl: string }) => void;
+
+  // ✅ allow async apply (we commit crop on server)
+  onApply: (result: { cropUrl: string }) => void | Promise<void>;
 
   /** Optional override */
   out?: Partial<OutSpec>;
@@ -64,7 +66,6 @@ export default function ImagePositionEditorModal({
 
   /**
    * 🔥 Critical: always edit the RAW asset (no existing transforms).
-   * This removes the "half black padded square" problem when src already had transforms.
    */
   const assetSrc = useMemo(() => {
     const raw = makeCloudinaryAssetUrl(src);
@@ -78,6 +79,8 @@ export default function ImagePositionEditorModal({
   const [zoom, setZoom] = useState(1.0);
   const [offset, setOffset] = useState({ x: 0, y: 0 }); // viewport px
   const [dragging, setDragging] = useState(false);
+
+  const [applying, setApplying] = useState(false);
 
   const dragStart = useRef<{
     x: number;
@@ -257,12 +260,9 @@ export default function ImagePositionEditorModal({
     if (!imgSize) return;
     if (vpSize.w <= 0 || vpSize.h <= 0) return;
 
-    // ✅ Only left mouse button should drag.
-    // (Touch/pen pointers don’t use "button" the same way, so allow those.)
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (e.isPrimary === false) return;
 
-    // ✅ Prevent native drag/selection "ghost image" behavior.
     e.preventDefault();
     e.stopPropagation();
 
@@ -287,7 +287,6 @@ export default function ImagePositionEditorModal({
     const start = dragStart.current;
     if (!start) return;
 
-    // keep the browser from starting any default drag ops mid-move
     e.preventDefault();
 
     const dx = e.clientX - start.x;
@@ -401,9 +400,6 @@ export default function ImagePositionEditorModal({
     ],
   );
 
-  /**
-   * Apply URL (Cloudinary only). If not Cloudinary, we still "apply" the same src.
-   */
   const cropUrl = useMemo(() => {
     if (!crop) return assetSrc;
     if (!isProbablyCloudinaryUrl(assetSrc)) return assetSrc;
@@ -435,8 +431,13 @@ export default function ImagePositionEditorModal({
     };
   }, [crop, imgSize, pvSize.w, pvSize.h]);
 
-  function apply() {
-    onApply({ cropUrl });
+  async function apply() {
+    setApplying(true);
+    try {
+      await onApply({ cropUrl });
+    } finally {
+      setApplying(false);
+    }
   }
 
   if (!open) return null;
@@ -450,7 +451,7 @@ export default function ImagePositionEditorModal({
     >
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-2xl"
-        onClick={onClose}
+        onClick={applying ? undefined : onClose}
       />
 
       <div
@@ -482,12 +483,14 @@ export default function ImagePositionEditorModal({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={applying ? undefined : onClose}
+            disabled={applying}
             className={clsx(
               "grid h-9 w-9 place-items-center rounded-full",
               "border border-white/10 bg-white/[0.06] text-neutral-200",
               "transition hover:bg-white/[0.10] hover:text-neutral-0",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+              applying && "opacity-60 cursor-not-allowed",
             )}
             aria-label="Close editor"
           >
@@ -500,7 +503,6 @@ export default function ImagePositionEditorModal({
           {/* Left */}
           <div className="p-4 lg:col-span-8">
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-xl">
-              {/* Viewport wrapper */}
               <div
                 ref={viewportRef}
                 className={clsx(
@@ -515,7 +517,7 @@ export default function ImagePositionEditorModal({
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
-                onDragStart={(e) => e.preventDefault()} // ✅ kill native HTML5 drag
+                onDragStart={(e) => e.preventDefault()}
               >
                 {/* Image */}
                 <div
@@ -607,10 +609,7 @@ export default function ImagePositionEditorModal({
                     {previewTransform && imgSize ? (
                       <div
                         className="absolute left-0 top-0"
-                        style={{
-                          ...previewTransform,
-                          willChange: "transform",
-                        }}
+                        style={{ ...previewTransform, willChange: "transform" }}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -646,10 +645,7 @@ export default function ImagePositionEditorModal({
                     {previewTransform && imgSize ? (
                       <div
                         className="absolute left-0 top-0"
-                        style={{
-                          ...previewTransform,
-                          willChange: "transform",
-                        }}
+                        style={{ ...previewTransform, willChange: "transform" }}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -681,13 +677,19 @@ export default function ImagePositionEditorModal({
               </div>
 
               <div className="mt-5 flex items-center justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={onClose}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={onClose}
+                  disabled={applying}
+                >
                   Cancel
                 </Button>
                 <Button
                   type="button"
                   variant="primary"
                   onClick={apply}
+                  loading={applying}
                   animation
                 >
                   Apply

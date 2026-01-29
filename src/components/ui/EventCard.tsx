@@ -24,6 +24,16 @@ export interface EventCardProps {
   clickable?: boolean;
   /** optional custom href (defaults to `/events/:id`) when clickable */
   href?: string;
+
+  /**
+   * Optional: hover-only pin icon in top-right.
+   * Clicking it MUST NOT navigate.
+   */
+  pin?: {
+    pinned: boolean;
+    onToggle: () => void;
+    ariaLabel?: string;
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -117,7 +127,36 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
   </g>
 </svg>
 `)}`;
+
 export const EVENT_CARD_DEFAULT_POSTER = DEFAULT_POSTER;
+
+function PinIcon({ className }: { className?: string }) {
+  // Client-provided SVG adapted to currentColor
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 75 100"
+      fill="none"
+      className={className}
+      aria-hidden="true"
+    >
+      <line
+        x1="37"
+        y1="64"
+        x2="37"
+        y2="100"
+        stroke="currentColor"
+        strokeWidth="12"
+      />
+      <path
+        d="M16.5 36V4.5H58.5V36V53.75V54.9752L59.1862 55.9903L66.9674 67.5H8.03256L15.8138 55.9903L16.5 54.9752V53.75V36Z"
+        stroke="currentColor"
+        strokeWidth="10"
+      />
+    </svg>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Component                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -131,6 +170,7 @@ export function EventCard({
   className,
   clickable = true,
   href,
+  pin,
 }: EventCardProps) {
   const dateColour = "text-primary-951";
   const ellipseBg = "bg-[rgba(154,81,255,0.6)]";
@@ -155,8 +195,52 @@ export function EventCard({
     className,
   );
 
+  const targetHref = href ?? `/events/${id}`;
+
+  const pinButton = pin ? (
+     pin.pinned ? (
+      <div
+        className={clsx(
+          "absolute right-3 top-3 z-20",
+          "pointer-events-none select-none",
+          "inline-flex items-center gap-1.5",
+          "rounded-full border border-primary-500/35",
+          "bg-primary-700/15 px-2.5 py-1",
+          "text-[11px] font-semibold text-primary-200",
+          "shadow-[0_10px_28px_rgba(154,70,255,0.18)]",
+        )}
+        aria-label={pin.ariaLabel ?? "Pinned event"}
+      >
+        <PinIcon className="h-4 w-4 drop-shadow-[0_6px_16px_rgba(154,70,255,0.35)]" />
+        <span>Pinned</span>
+      </div>
+    ) : (
+      // ✅ Unpinned state: hover-only, clickable pin button
+      <button
+        type="button"
+        aria-label={pin.ariaLabel ?? "Pin event"}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          pin.onToggle();
+        }}
+        className={clsx(
+          "absolute right-3 top-3 z-20",
+          "opacity-0 transition-opacity duration-200",
+          "group-hover/card:opacity-100 focus-visible:opacity-100",
+          "text-white/85 hover:text-white",
+          "focus-visible:outline-none",
+        )}
+      >
+        <PinIcon className="h-5 w-5" />
+      </button>
+    )
+  ) : null;
+
   const inner = (
     <>
+      {pinButton}
+
       {/* glow ellipse – visible only while *this* card is hovered */}
       <div
         className={clsx(
@@ -211,8 +295,6 @@ export function EventCard({
       </div>
     </>
   );
-
-  const targetHref = href ?? `/events/${id}`;
 
   if (clickable) {
     return (

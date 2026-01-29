@@ -14,13 +14,13 @@ export async function GET(req: NextRequest) {
   if (!public_id) {
     return NextResponse.json(
       { error: "`public_id` query param is required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
   /* -------- optional flags ----------------------------------------- */
   const overwrite = searchParams.get("overwrite") === "1";
-  const invalidate = overwrite; // automatically invalidate CDN
+  const invalidate = overwrite;
 
   const timestamp = Math.floor(Date.now() / 1000);
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       ...(overwrite ? { overwrite: "1" } : {}),
       ...(invalidate ? { invalidate: "1" } : {}),
     },
-    process.env.CLOUDINARY_API_SECRET as string
+    process.env.CLOUDINARY_API_SECRET as string,
   );
 
   return NextResponse.json({

@@ -67,7 +67,7 @@ export default function Toggle({
       htmlFor={inputId}
       className={clsx(
         "group inline-flex items-center gap-3",
-        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
       )}
     >
       <input
@@ -104,7 +104,7 @@ export default function Toggle({
           "after:content-[''] after:absolute after:inset-0 after:rounded-full after:pointer-events-none after:opacity-0",
           "peer-checked:after:opacity-100",
 
-          className
+          className,
         )}
       >
         {/* KNOB */}
@@ -117,7 +117,7 @@ export default function Toggle({
             // knob color (use React state to toggle; peer-checked can’t reach a descendant)
             isOn ? "bg-success-500" : "bg-neutral-600",
             // optional sheen
-            "after:content-[''] after:absolute after:inset-0 after:rounded-full after:pointer-events-none"
+            "after:content-[''] after:absolute after:inset-0 after:rounded-full after:pointer-events-none",
           )}
         />
       </span>

@@ -6,40 +6,101 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
-import { ChevronDown, Check, Plus, Pencil, X, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Check,
+  Plus,
+  Pencil,
+  X,
+  Trash2,
+  Search,
+} from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
 import CopyButton from "@/components/ui/CopyButton";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { Button } from "@/components/ui/Button";
 
 /* ------------------------------- Types ------------------------------ */
+type DestinationKind = "Event" | "Organization";
 type Status = "Active" | "Paused" | "Disabled";
-type LinkType = "Event" | "Promo" | "Other";
+
+type PresetIconKey =
+  | "instagram"
+  | "facebook"
+  | "twitter"
+  | "linkedin"
+  | "google"
+  | "youtube"
+  | "snapchat"
+  | "reddit"
+  | "tiktok"
+  | "telegram";
 
 type Row = {
   id: string;
   name: string;
-  url: string; // path-only label (e.g., "/Tweets/32u8cxjh/")
+
+  /** The actual route destination (picked via search selector) */
+  destinationKind: DestinationKind;
+  destinationId: string;
+  destinationTitle: string;
+
+  /** The path label shown in the table and copied (computed from destination) */
+  url: string;
+
+  /** Optional icon */
+  iconKey?: PresetIconKey | null;
+  iconUrl?: string | null; // custom uploaded icon (object url for now)
+
   views: number;
   ticketsSold: number;
   revenue: number; // USD number
-  type: LinkType;
   status: Status;
   created: string; // "Sep 19, 2025 4:12 PM" style
 };
 
 /* ----------------------------- Mock Data --------------------------- */
-const INITIAL_ROWS: Row[] = new Array(7).fill(0).map((_, i) => ({
-  id: `row-${i}`,
-  name: "Tracking Link Name",
-  url: `/Tweets/${(Math.random() + 1).toString(36).slice(2, 8)}/`,
-  views: 2384,
-  ticketsSold: 18 + i * 3,
-  revenue: 1000 + i * 37,
-  type: "Event",
-  status: i % 2 ? "Active" : "Paused",
-  created: `Sep 19, 2025 ${3 + (i % 3)}:${String(12 + i).padStart(2, "0")} PM`,
-}));
+const MOCK_DESTINATIONS: Array<{
+  kind: DestinationKind;
+  id: string;
+  title: string;
+}> = [
+  { kind: "Event", id: "evt_2p9aQk", title: "Tikd Launch Night" },
+  { kind: "Event", id: "evt_k7Lm21", title: "Summer Rooftop Session" },
+  { kind: "Event", id: "evt_8zP0dd", title: "Indie Fest 2026" },
+  { kind: "Organization", id: "org_1aB2c3", title: "Tikd Studios" },
+  { kind: "Organization", id: "org_9xY8z7", title: "Wave Promotions" },
+  { kind: "Organization", id: "org_7qW6e5", title: "Neon Collective" },
+];
+
+function makeDestinationPath(kind: DestinationKind, id: string) {
+  // Adjust these if your public routes differ
+  const base = kind === "Event" ? "/events" : "/organizations";
+  const p = `${base}/${id}/`;
+  return p.startsWith("/") ? p : `/${p}`;
+}
+
+const INITIAL_ROWS: Row[] = new Array(7).fill(0).map((_, i) => {
+  const pick = MOCK_DESTINATIONS[i % MOCK_DESTINATIONS.length];
+  return {
+    id: `row-${i}`,
+    name: "Tracking Link Name",
+    destinationKind: pick.kind,
+    destinationId: pick.id,
+    destinationTitle: pick.title,
+    url: makeDestinationPath(pick.kind, pick.id),
+
+    // keep existing “twitter icon everywhere” feel for the mock rows
+    iconKey: "twitter",
+    iconUrl: null,
+
+    views: 2384,
+    ticketsSold: 18 + i * 3,
+    revenue: 1000 + i * 37,
+    status: i % 2 ? "Active" : "Paused",
+    created: `Sep 19, 2025 ${3 + (i % 3)}:${String(12 + i).padStart(2, "0")} PM`,
+  };
+});
 
 /* ----------------------------- Helpers ----------------------------- */
 type SortKey =
@@ -110,7 +171,7 @@ function normalizePathInput(inputRaw: string) {
   return withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
 }
 
-/* Tiny Twitter glyph matching table size */
+/* Preset icon button glyphs (monochrome like current twitter) */
 function TwitterIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
     <svg
@@ -124,6 +185,100 @@ function TwitterIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
       />
     </svg>
   );
+}
+
+/**
+ * For the rest of the presets we keep the same monochrome “chip glyph” style.
+ * These are intentionally neutral + consistent (like your current twitter icon).
+ */
+function LetterGlyph({
+  text,
+  className = "h-5 w-5",
+}: {
+  text: string;
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className={clsx("opacity-80", className)}
+    >
+      <path
+        fill="currentColor"
+        d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4z"
+        opacity="0.18"
+      />
+      <path
+        fill="currentColor"
+        d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4z"
+        opacity="0.35"
+      />
+      <text
+        x="12"
+        y="13.2"
+        textAnchor="middle"
+        fontSize="9"
+        fontWeight="700"
+        fill="currentColor"
+        style={{ letterSpacing: "0.2px" }}
+      >
+        {text}
+      </text>
+    </svg>
+  );
+}
+
+function PresetIcon({
+  iconKey,
+  className = "h-5 w-5",
+}: {
+  iconKey: PresetIconKey;
+  className?: string;
+}) {
+  if (iconKey === "twitter") return <TwitterIcon className={className} />;
+
+  const map: Record<Exclude<PresetIconKey, "twitter">, string> = {
+    instagram: "IG",
+    facebook: "F",
+    linkedin: "in",
+    google: "G",
+    youtube: "YT",
+    snapchat: "S",
+    reddit: "R",
+    tiktok: "TT",
+    telegram: "TG",
+  };
+
+  return (
+    <LetterGlyph
+      text={map[iconKey as Exclude<PresetIconKey, "twitter">]}
+      className={className}
+    />
+  );
+}
+
+function TrackingIcon({
+  iconKey,
+  iconUrl,
+  className = "h-5 w-5",
+}: {
+  iconKey?: PresetIconKey | null;
+  iconUrl?: string | null;
+  className?: string;
+}) {
+  if (iconUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={iconUrl}
+        alt=""
+        className={clsx("rounded-[6px] object-cover", className, "opacity-80")}
+      />
+    );
+  }
+  if (iconKey) return <PresetIcon iconKey={iconKey} className={className} />;
+  return null;
 }
 
 function Chip({
@@ -476,9 +631,16 @@ function QrDialog({
 
 type TrackingLinkDraft = {
   name: string;
-  url: string;
-  type: LinkType;
+
+  destinationKind: DestinationKind | null;
+  destinationId: string;
+  destinationTitle: string;
+
   status: Status;
+
+  /** Optional icon */
+  iconKey?: PresetIconKey | null;
+  iconUrl?: string | null; // custom upload (object URL)
 };
 
 function TrackingLinkDialog({
@@ -498,43 +660,67 @@ function TrackingLinkDialog({
 
   const [draft, setDraft] = useState<TrackingLinkDraft>({
     name: "",
-    url: "",
-    type: "Event",
+    destinationKind: null,
+    destinationId: "",
+    destinationTitle: "",
     status: "Active",
+    iconKey: null,
+    iconUrl: null,
   });
 
   const [touched, setTouched] = useState(false);
 
-  // Custom selects open state
-  const [typeOpen, setTypeOpen] = useState(false);
+  // Destination search UI state
+  const [destQuery, setDestQuery] = useState("");
+  const [destOpen, setDestOpen] = useState(false);
+  const destWrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Status dropdown state
   const [statusOpen, setStatusOpen] = useState(false);
-  const typeWrapRef = useRef<HTMLDivElement | null>(null);
   const statusWrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Custom icon upload
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const lastObjectUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
 
     setTouched(false);
-    setTypeOpen(false);
+    setDestQuery("");
+    setDestOpen(false);
     setStatusOpen(false);
+
+    // cleanup any previous object url on open
+    if (lastObjectUrlRef.current) {
+      URL.revokeObjectURL(lastObjectUrlRef.current);
+      lastObjectUrlRef.current = null;
+    }
 
     if (mode === "edit" && initial) {
       setDraft({
         name: initial.name || "",
-        url: initial.url || "",
-        type: initial.type,
+        destinationKind: initial.destinationKind,
+        destinationId: initial.destinationId,
+        destinationTitle: initial.destinationTitle,
         status: initial.status,
+        iconKey: initial.iconKey ?? null,
+        iconUrl: initial.iconUrl ?? null,
       });
     } else {
+      // ✅ Client requirement: name should be empty, with placeholder “Enter name.”
       setDraft({
-        name: "Tracking Link Name",
-        url: "/Tweets/",
-        type: "Event",
+        name: "",
+        destinationKind: null,
+        destinationId: "",
+        destinationTitle: "",
         status: "Active",
+        iconKey: null,
+        iconUrl: null,
       });
     }
 
-    // focus next tick (LabelledInput doesn't forward refs, so focus by id)
+    // focus next tick
     const t = window.setTimeout(() => {
       const el = document.getElementById("tracking-link-name");
       if (el && "focus" in el) (el as HTMLInputElement).focus();
@@ -551,10 +737,10 @@ function TrackingLinkDialog({
       const target = e.target as Node | null;
       if (!target) return;
 
-      const inType = !!typeWrapRef.current?.contains(target);
+      const inDest = !!destWrapRef.current?.contains(target);
       const inStatus = !!statusWrapRef.current?.contains(target);
 
-      if (!inType) setTypeOpen(false);
+      if (!inDest) setDestOpen(false);
       if (!inStatus) setStatusOpen(false);
     };
 
@@ -566,38 +752,35 @@ function TrackingLinkDialog({
     };
   }, [open]);
 
-  if (!open) return null;
+  useEffect(() => {
+    // cleanup custom icon object url when dialog closes
+    if (open) return;
+    if (lastObjectUrlRef.current) {
+      URL.revokeObjectURL(lastObjectUrlRef.current);
+      lastObjectUrlRef.current = null;
+    }
+  }, [open]);
 
   const title =
     mode === "create" ? "Create Tracking Link" : "Edit Tracking Link";
-
-  const normalizedUrl = normalizePathInput(draft.url);
-  const nameOk = draft.name.trim().length >= 2;
-  const urlOk = normalizedUrl.startsWith("/") && normalizedUrl.length >= 2;
-
-  const canSave = nameOk && urlOk;
-
-  const errName = !nameOk && touched;
-  const errUrl = !urlOk && touched;
-
-  const typeOptions: { value: LinkType; label: string; desc?: string }[] = [
-    {
-      value: "Event",
-      label: "Event",
-      desc: "Tracking link for a specific event",
-    },
-    {
-      value: "Promo",
-      label: "Promo",
-      desc: "Used for promotions and campaigns",
-    },
-    { value: "Other", label: "Other", desc: "Anything else" },
-  ];
 
   const statusOptions: { value: Status; label: string; desc?: string }[] = [
     { value: "Active", label: "Active", desc: "Enabled and collecting views" },
     { value: "Paused", label: "Paused", desc: "Temporarily disabled" },
     { value: "Disabled", label: "Disabled", desc: "Fully disabled" },
+  ];
+
+  const presetIcons: Array<{ key: PresetIconKey; label: string }> = [
+    { key: "instagram", label: "Instagram" },
+    { key: "facebook", label: "Facebook" },
+    { key: "twitter", label: "Twitter" },
+    { key: "linkedin", label: "LinkedIn" },
+    { key: "google", label: "Google" },
+    { key: "youtube", label: "YouTube" },
+    { key: "snapchat", label: "Snapchat" },
+    { key: "reddit", label: "Reddit" },
+    { key: "tiktok", label: "TikTok" },
+    { key: "telegram", label: "Telegram" },
   ];
 
   const selectBtnCls = clsx(
@@ -618,6 +801,76 @@ function TrackingLinkDialog({
     "w-full text-left px-4 py-3 transition flex items-start justify-between gap-3",
     "hover:bg-white/5 focus:bg-white/5 focus:outline-none",
   );
+
+  // Destination filtering
+  const filteredDestinations = useMemo(() => {
+    const q = destQuery.trim().toLowerCase();
+    const list = MOCK_DESTINATIONS;
+    if (!q) return list.slice(0, 8);
+
+    return list.filter((x) => x.title.toLowerCase().includes(q)).slice(0, 12);
+  }, [destQuery]);
+
+  if (!open) return null;
+
+  const destinationOk = !!draft.destinationKind && !!draft.destinationId;
+  const nameOk = draft.name.trim().length >= 2;
+  const statusOk = !!draft.status;
+
+  // ✅ Client requirement: everything required except icon
+  const canSave = nameOk && destinationOk && statusOk;
+
+  const errName = !nameOk && touched;
+  const errDest = !destinationOk && touched;
+
+  const destinationPath = destinationOk
+    ? makeDestinationPath(
+        draft.destinationKind as DestinationKind,
+        draft.destinationId,
+      )
+    : "";
+
+  const handlePickDestination = (d: {
+    kind: DestinationKind;
+    id: string;
+    title: string;
+  }) => {
+    setDraft((prev) => ({
+      ...prev,
+      destinationKind: d.kind,
+      destinationId: d.id,
+      destinationTitle: d.title,
+    }));
+    setDestOpen(false);
+    setDestQuery("");
+  };
+
+  const handleUploadIcon = (file: File | null) => {
+    if (!file) return;
+
+    // cleanup previous
+    if (lastObjectUrlRef.current) {
+      URL.revokeObjectURL(lastObjectUrlRef.current);
+      lastObjectUrlRef.current = null;
+    }
+
+    const url = URL.createObjectURL(file);
+    lastObjectUrlRef.current = url;
+
+    setDraft((prev) => ({
+      ...prev,
+      iconUrl: url,
+      iconKey: null,
+    }));
+  };
+
+  const clearCustomIcon = () => {
+    if (lastObjectUrlRef.current) {
+      URL.revokeObjectURL(lastObjectUrlRef.current);
+      lastObjectUrlRef.current = null;
+    }
+    setDraft((prev) => ({ ...prev, iconUrl: null }));
+  };
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
@@ -667,7 +920,8 @@ function TrackingLinkDialog({
                   setDraft((d) => ({ ...d, name: e.target.value }))
                 }
                 onBlur={() => setTouched(true)}
-                placeholder="e.g. Twitter Campaign A"
+                // ✅ Client requirement
+                placeholder="Enter name."
                 size="lg"
                 variant="full"
                 error={
@@ -684,131 +938,252 @@ function TrackingLinkDialog({
               />
             </div>
 
-            {/* Path */}
+            {/* Icon selector (optional) */}
             <div className="md:col-span-2">
-              <p className="text-sm text-neutral-500">
-                This is the path users will see in the table (you can paste a
-                full URL; we’ll keep the pathname).
-              </p>
+              <label className="block leading-[90%] font-normal text-white mb-2">
+                Icon (optional)
+              </label>
 
-              <div className="mt-2">
-                <LabelledInput
-                  id="tracking-link-path"
-                  label="Link Path"
-                  value={draft.url}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, url: e.target.value }))
-                  }
-                  onBlur={() => setTouched(true)}
-                  placeholder="/Tweets/abc123/"
-                  size="lg"
-                  variant="full"
-                  error={
-                    errUrl
-                      ? "Please enter a valid path (must start with “/”)."
-                      : null
-                  }
-                  className={clsx(
-                    "bg-neutral-900 border-white/10",
-                    errUrl
-                      ? "border-error-500 focus:border-error-400"
-                      : "focus:border-primary-600/50",
-                  )}
-                />
-              </div>
+              <div className="rounded-lg border border-white/10 bg-neutral-900 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* None */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearCustomIcon();
+                      setDraft((d) => ({ ...d, iconKey: null, iconUrl: null }));
+                    }}
+                    className={clsx(
+                      "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                      "transition cursor-pointer",
+                      !draft.iconKey && !draft.iconUrl
+                        ? "border-primary-500/40 bg-primary-500/10 text-neutral-0"
+                        : "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10",
+                    )}
+                  >
+                    <span className="h-5 w-5 rounded-[6px] bg-white/10" />
+                    None
+                  </button>
 
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-neutral-400">
-                <span className="rounded-md border border-white/10 bg-neutral-800 px-2.5 py-1">
-                  Preview
-                </span>
-                <span className="text-neutral-300">{normalizedUrl || "—"}</span>
-                {normalizedUrl ? (
-                  <span className="text-neutral-500">
-                    ({fullTrackingUrl(normalizedUrl)})
-                  </span>
+                  {/* Presets */}
+                  {presetIcons.map((p) => {
+                    const selected = draft.iconKey === p.key && !draft.iconUrl;
+                    return (
+                      <button
+                        key={p.key}
+                        type="button"
+                        onClick={() => {
+                          clearCustomIcon();
+                          setDraft((d) => ({
+                            ...d,
+                            iconKey: p.key,
+                            iconUrl: null,
+                          }));
+                        }}
+                        className={clsx(
+                          "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                          "transition cursor-pointer",
+                          selected
+                            ? "border-primary-500/40 bg-primary-500/10 text-neutral-0"
+                            : "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10",
+                        )}
+                        title={p.label}
+                      >
+                        <span className="text-neutral-400">
+                          <PresetIcon iconKey={p.key} className="h-5 w-5" />
+                        </span>
+                        {p.label}
+                      </button>
+                    );
+                  })}
+
+                  {/* Upload */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) =>
+                      handleUploadIcon(e.target.files?.[0] ?? null)
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className={clsx(
+                      "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                      "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10 transition cursor-pointer",
+                    )}
+                  >
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-[6px] bg-white/10 text-neutral-200">
+                      <Plus size={14} />
+                    </span>
+                    Upload custom
+                  </button>
+
+                  {draft.iconUrl ? (
+                    <button
+                      type="button"
+                      onClick={clearCustomIcon}
+                      className="ml-auto inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-300 hover:bg-white/10 transition cursor-pointer"
+                      title="Remove custom icon"
+                    >
+                      <X size={14} />
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+
+                {draft.iconUrl ? (
+                  <div className="mt-3 flex items-center gap-3 text-sm text-neutral-400">
+                    <span className="text-neutral-300">Selected:</span>
+                    <TrackingIcon iconUrl={draft.iconUrl} className="h-6 w-6" />
+                    <span className="text-neutral-500">(custom upload)</span>
+                  </div>
+                ) : draft.iconKey ? (
+                  <div className="mt-3 flex items-center gap-3 text-sm text-neutral-400">
+                    <span className="text-neutral-300">Selected:</span>
+                    <span className="text-neutral-400">
+                      <PresetIcon iconKey={draft.iconKey} className="h-6 w-6" />
+                    </span>
+                    <span className="text-neutral-500">
+                      {presetIcons.find((x) => x.key === draft.iconKey)
+                        ?.label ?? ""}
+                    </span>
+                  </div>
                 ) : null}
               </div>
             </div>
 
-            {/* Type (custom select) */}
-            <div ref={typeWrapRef} className="relative">
+            {/* Link Path -> Destination search selector */}
+            <div ref={destWrapRef} className="relative md:col-span-2">
               <label className="block leading-[90%] font-normal text-white mb-2">
-                Link Type
+                Link Path
               </label>
 
-              <button
-                type="button"
-                className={selectBtnCls}
-                aria-haspopup="listbox"
-                aria-expanded={typeOpen}
-                onClick={() => {
-                  setStatusOpen(false);
-                  setTypeOpen((v) => !v);
-                }}
-              >
-                <span className="truncate">
-                  {typeOptions.find((o) => o.value === draft.type)?.label ??
-                    draft.type}
-                </span>
-                <ChevronDown
-                  size={16}
+              <p className="text-sm text-neutral-500">
+                Search and select an Event or Organization this tracking link
+                will route to.
+              </p>
+
+              <div className="mt-2">
+                <div
                   className={clsx(
-                    "text-neutral-400 transition",
-                    typeOpen && "rotate-180 text-neutral-200",
+                    "relative w-full",
+                    "rounded-lg border border-white/10 bg-white/5 h-12",
+                    errDest && "border-error-500",
                   )}
-                />
-              </button>
+                >
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
 
-              {typeOpen ? (
-                <div className={dropdownPanelCls} role="listbox">
-                  <div className="max-h-64 overflow-auto">
-                    {typeOptions.map((opt) => {
-                      const selected = opt.value === draft.type;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          className={clsx(
-                            optionBtnBase,
-                            selected && "bg-primary-500/10",
-                          )}
-                          onClick={() => {
-                            setDraft((d) => ({ ...d, type: opt.value }));
-                            setTypeOpen(false);
-                          }}
-                        >
-                          <span className="min-w-0">
-                            <span className="block text-sm font-semibold text-neutral-0">
-                              {opt.label}
-                            </span>
-                            {opt.desc ? (
-                              <span className="mt-1 block text-xs text-neutral-400">
-                                {opt.desc}
-                              </span>
-                            ) : null}
-                          </span>
+                  <input
+                    value={destQuery}
+                    onChange={(e) => {
+                      setDestQuery(e.target.value);
+                      setDestOpen(true);
+                    }}
+                    onFocus={() => setDestOpen(true)}
+                    onBlur={() => setTouched(true)}
+                    placeholder="Search events or organizations…"
+                    className={clsx(
+                      "h-12 w-full rounded-lg bg-transparent",
+                      "pl-10 pr-10 text-[12px] text-neutral-100",
+                      "placeholder:text-neutral-500",
+                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                    )}
+                  />
 
-                          {selected ? (
-                            <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-primary-500/30 bg-primary-500/15 text-primary-200">
-                              <Check size={16} />
-                            </span>
-                          ) : (
-                            <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-transparent">
-                              <Check size={16} />
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusOpen(false);
+                      setDestOpen((v) => !v);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-md border border-white/10 bg-white/5 p-2 text-neutral-300 hover:bg-white/10 transition cursor-pointer"
+                    aria-haspopup="listbox"
+                    aria-expanded={destOpen}
+                    title="Open search"
+                  >
+                    <ChevronDown
+                      size={16}
+                      className={clsx(
+                        destOpen && "rotate-180 text-neutral-200",
+                      )}
+                    />
+                  </button>
                 </div>
-              ) : null}
+
+                {destOpen ? (
+                  <div className={dropdownPanelCls} role="listbox">
+                    <div className="max-h-64 overflow-auto">
+                      {filteredDestinations.map((opt) => {
+                        const selected =
+                          opt.id === draft.destinationId &&
+                          opt.kind === draft.destinationKind;
+
+                        return (
+                          <button
+                            key={`${opt.kind}-${opt.id}`}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            className={clsx(
+                              optionBtnBase,
+                              selected && "bg-primary-500/10",
+                            )}
+                            onClick={() => handlePickDestination(opt)}
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-neutral-0">
+                                {opt.title}
+                              </span>
+                              <span className="mt-1 block text-xs text-neutral-400">
+                                {opt.kind}
+                              </span>
+                            </span>
+
+                            {selected ? (
+                              <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-primary-500/30 bg-primary-500/15 text-primary-200">
+                                <Check size={16} />
+                              </span>
+                            ) : (
+                              <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-transparent">
+                                <Check size={16} />
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+
+                      {filteredDestinations.length === 0 ? (
+                        <div className="px-4 py-4 text-sm text-neutral-400">
+                          No matches.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Preview */}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-neutral-400">
+                  <span className="rounded-md border border-white/10 bg-neutral-800 px-2.5 py-1">
+                    Preview
+                  </span>
+                  <span className="text-neutral-300">
+                    {destinationPath || "—"}
+                  </span>
+                  {destinationPath ? (
+                    <span className="text-neutral-500">
+                      ({fullTrackingUrl(destinationPath)})
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             {/* Status (custom select) */}
-            <div ref={statusWrapRef} className="relative">
+            <div ref={statusWrapRef} className="relative md:col-span-2">
               <label className="block leading-[90%] font-normal text-white mb-2">
                 Status
               </label>
@@ -819,7 +1194,7 @@ function TrackingLinkDialog({
                 aria-haspopup="listbox"
                 aria-expanded={statusOpen}
                 onClick={() => {
-                  setTypeOpen(false);
+                  setDestOpen(false);
                   setStatusOpen((v) => !v);
                 }}
               >
@@ -842,7 +1217,6 @@ function TrackingLinkDialog({
                     {statusOptions.map((opt) => {
                       const selected = opt.value === draft.status;
 
-                      // subtle status tint
                       const tint =
                         opt.value === "Active"
                           ? "bg-success-500/10 border-success-500/25"
@@ -932,9 +1306,12 @@ function TrackingLinkDialog({
 
                 onSave({
                   name: draft.name.trim(),
-                  url: normalizePathInput(draft.url),
-                  type: draft.type,
+                  destinationKind: draft.destinationKind,
+                  destinationId: draft.destinationId,
+                  destinationTitle: draft.destinationTitle,
                   status: draft.status,
+                  iconKey: draft.iconKey ?? null,
+                  iconUrl: draft.iconUrl ?? null,
                 });
               }}
               className={clsx(
@@ -1074,18 +1451,23 @@ export default function TrackingLinksTable() {
     setCreateOpen(false);
   };
 
-  const handleCreate = (draft: {
-    name: string;
-    url: string;
-    type: LinkType;
-    status: Status;
-  }) => {
+  const handleCreate = (draft: TrackingLinkDraft) => {
     const now = new Date();
+
+    const kind = (draft.destinationKind || "Event") as DestinationKind;
+    const url = makeDestinationPath(kind, draft.destinationId);
+
     const newRow: Row = {
       id: makeId("row"),
       name: draft.name,
-      url: draft.url,
-      type: draft.type,
+      destinationKind: kind,
+      destinationId: draft.destinationId,
+      destinationTitle: draft.destinationTitle,
+      url,
+
+      iconKey: draft.iconKey ?? null,
+      iconUrl: draft.iconUrl ?? null,
+
       status: draft.status,
       created: formatCreated(now),
       views: 0,
@@ -1093,18 +1475,15 @@ export default function TrackingLinksTable() {
       revenue: 0,
     };
 
-    // Add to top (feels right for dashboards)
     setData((prev) => [newRow, ...prev]);
     setCreateOpen(false);
   };
 
-  const handleEdit = (draft: {
-    name: string;
-    url: string;
-    type: LinkType;
-    status: Status;
-  }) => {
+  const handleEdit = (draft: TrackingLinkDraft) => {
     if (!activeRow) return;
+
+    const kind = (draft.destinationKind || "Event") as DestinationKind;
+    const url = makeDestinationPath(kind, draft.destinationId);
 
     setData((prev) =>
       prev.map((r) =>
@@ -1112,9 +1491,13 @@ export default function TrackingLinksTable() {
           ? {
               ...r,
               name: draft.name,
-              url: draft.url,
-              type: draft.type,
+              destinationKind: kind,
+              destinationId: draft.destinationId,
+              destinationTitle: draft.destinationTitle,
+              url,
               status: draft.status,
+              iconKey: draft.iconKey ?? null,
+              iconUrl: draft.iconUrl ?? null,
             }
           : r,
       ),
@@ -1262,7 +1645,9 @@ export default function TrackingLinksTable() {
                 </div>
               </th>
 
-              <th className="text-center text-base font-semibold">Link Type</th>
+              <th className="text-center text-base font-semibold">
+                Destination
+              </th>
 
               <th
                 className={clsx(thBase, "text-center")}
@@ -1323,7 +1708,16 @@ export default function TrackingLinksTable() {
                       </p>
 
                       <div className="mt-2 flex min-w-0 items-center gap-2 text-neutral-400">
-                        <TwitterIcon className="h-5 w-5 opacity-70" />
+                        {r.iconKey || r.iconUrl ? (
+                          <span className="text-neutral-400">
+                            <TrackingIcon
+                              iconKey={r.iconKey}
+                              iconUrl={r.iconUrl}
+                              className="h-5 w-5"
+                            />
+                          </span>
+                        ) : null}
+
                         <span className="min-w-0 truncate text-neutral-300">
                           {r.url}
                         </span>
@@ -1437,10 +1831,10 @@ export default function TrackingLinksTable() {
                     </span>
                   </td>
 
-                  {/* Link Type */}
+                  {/* Destination */}
                   <td className="px-4 py-3 text-center">
                     <div className="inline-block">
-                      <Chip color="primary">{r.type}</Chip>
+                      <Chip color="primary">{r.destinationKind}</Chip>
                     </div>
                   </td>
 

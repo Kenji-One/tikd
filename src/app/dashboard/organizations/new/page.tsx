@@ -99,7 +99,6 @@ const websiteSchema = z
 
 /**
  * ✅ Optional URL field that can be "", undefined, or a valid URL.
- * Fixes the “cannot create unless icon/logo is provided” bug.
  */
 const optionalUrlSchema = z
   .string()
@@ -247,6 +246,32 @@ function withCacheBust(u: string, nonce: number) {
   }
 }
 
+async function commitCloudinaryCrop(args: {
+  publicId: string;
+  cropUrl: string;
+}) {
+  const res = await fetch("/api/cloudinary/commit-crop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      public_id: args.publicId,
+      source_url: args.cropUrl,
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || "Failed to commit crop");
+  }
+
+  const json = (await res.json().catch(() => null)) as {
+    secure_url?: string;
+  } | null;
+
+  if (!json?.secure_url) throw new Error("Invalid crop response");
+  return json.secure_url;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
@@ -256,7 +281,7 @@ export default function NewOrganizationPage() {
   const errorRing =
     "rounded-lg ring-1 ring-inset ring-error-500 border-transparent";
 
-  // ✅ Stable publicIds (previous version used uuid() in render, causing re-renders to change ids)
+  // ✅ Stable publicIds
   const bannerPublicId = useMemo(() => uuid(), []);
   const logoPublicId = useMemo(() => uuid(), []);
 
@@ -293,6 +318,7 @@ export default function NewOrganizationPage() {
     mode: ImageEditorMode;
     src: string;
     title: string;
+    publicId: string;
   } | null>(null);
 
   function openAdjust(mode: ImageEditorMode) {
@@ -302,22 +328,26 @@ export default function NewOrganizationPage() {
     if (mode === "banner") {
       const original = bannerOriginalRef.current || stripQueryAndHash(banner);
       if (!original) return;
+
       setEditor({
         open: true,
         mode,
         src: original,
         title: "Adjust banner",
+        publicId: `temp/orgs/banners/${bannerPublicId}`,
       });
       return;
     }
 
     const original = logoOriginalRef.current || stripQueryAndHash(logo);
     if (!original) return;
+
     setEditor({
       open: true,
       mode,
       src: original,
       title: "Adjust logo",
+      publicId: `temp/orgs/logos/${logoPublicId}`,
     });
   }
 
@@ -353,7 +383,6 @@ export default function NewOrganizationPage() {
       const body = await res.json().catch(() => null);
       const orgId = body?._id || body?.id;
 
-      // ✅ go to Org Dashboard after creation
       if (orgId) router.push(`/dashboard/organizations/${orgId}`);
       else router.push("/dashboard/organizations");
     } else {
@@ -403,25 +432,32 @@ export default function NewOrganizationPage() {
           src={editor.src}
           title={editor.title}
           onClose={() => setEditor(null)}
-          onApply={({ cropUrl }) => {
-            const fieldName = editor.mode === "banner" ? "banner" : "logo";
+          onApply={async ({ cropUrl }) => {
+            // ✅ Commit crop to Cloudinary (overwrite the temp asset)
+            // This makes "Apply" actually apply everywhere, immediately.
+            const secureUrl = await commitCloudinaryCrop({
+              publicId: editor.publicId,
+              cropUrl,
+            });
 
-            // ✅ bump nonce so Cloudinary + Next/Image can’t reuse stale cached asset
             const nonce = Date.now();
             setPreviewNonce(nonce);
 
-            // ✅ store cache-busted URL for immediate preview
-            const nextValue = withCacheBust(cropUrl, nonce);
+            // Keep track of the true original for re-editing (raw, no cachebust)
+            const clean = stripQueryAndHash(secureUrl);
+            if (editor.mode === "banner") bannerOriginalRef.current = clean;
+            else logoOriginalRef.current = clean;
 
-            setValue(fieldName, nextValue, {
+            const fieldName = editor.mode === "banner" ? "banner" : "logo";
+
+            // Store cache-busted URL for instant UI update; strip before submit
+            setValue(fieldName, withCacheBust(secureUrl, nonce), {
               shouldDirty: true,
               shouldValidate: true,
               shouldTouch: true,
             });
 
-            // ✅ propagate immediately
             void trigger(fieldName);
-
             setEditor(null);
           }}
         />
@@ -451,7 +487,7 @@ export default function NewOrganizationPage() {
       >
         {/* ------------------------- Main form ----------------------- */}
         <div className="space-y-6 md:col-span-7 lg:col-span-8">
-          {/* Required fields note (same as event creation) */}
+          {/* Required fields note */}
           <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-3">
             <div className="flex items-center gap-3">
               <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
@@ -654,7 +690,6 @@ export default function NewOrganizationPage() {
                         if (cleanOriginal)
                           bannerOriginalRef.current = cleanOriginal;
 
-                        // store cache-busted for UI responsiveness; strip on submit
                         field.onChange(withCacheBust(next, nonce));
                       }}
                       publicId={`temp/orgs/banners/${bannerPublicId}`}
@@ -792,7 +827,6 @@ export default function NewOrganizationPage() {
 
               <div className="flex justify-center">
                 <ConnectionProfileCard
-                  // key includes URLs so any internal memoization can’t freeze old images
                   key={`org-live-${uiBanner}-${uiLogo}-${previewNonce}`}
                   href="#"
                   kind="organization"

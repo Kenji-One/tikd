@@ -1,6 +1,16 @@
+// src/app/dashboard/events/[eventId]/promo-codes/page.tsx
 "use client";
 
-import { useMemo, useState, type SVGProps, type ComponentType } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from "react";
 import { useParams } from "next/navigation";
 import {
   Search,
@@ -10,7 +20,6 @@ import {
   CalendarClock,
   ListChecks,
   X,
-  Ticket,
 } from "lucide-react";
 
 import { useQuery } from "@tanstack/react-query";
@@ -179,6 +188,22 @@ function PromoCodeWizard({
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const [serverError, setServerError] = useState<string | null>(null);
 
+  // tiny “nova” burst for step clicks (pure UX candy)
+  const [stepBurst, setStepBurst] = useState(false);
+  const burstTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (burstTimerRef.current) window.clearTimeout(burstTimerRef.current);
+    };
+  }, []);
+
+  const triggerStepBurst = useCallback(() => {
+    setStepBurst(true);
+    if (burstTimerRef.current) window.clearTimeout(burstTimerRef.current);
+    burstTimerRef.current = window.setTimeout(() => setStepBurst(false), 260);
+  }, []);
+
   const {
     register,
     handleSubmit,
@@ -292,85 +317,146 @@ function PromoCodeWizard({
     onCreated();
   }
 
+  const activeLeftExpr =
+    steps.length === 1
+      ? "50%"
+      : `calc(${activeStep / (steps.length - 1)} * (100% - 50px) + 20px)`;
+
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="flex flex-col gap-5 px-6 py-5"
+      className="flex flex-col gap-5 px-6 pb-5"
       noValidate
     >
-      {/* Stepper header */}
-      <div className="flex w-full items-center justify-between gap-3">
-        {steps.map((step, idx) => {
-          const Icon = step.icon;
-          const isActive = activeStep === idx;
-          const isCompleted = activeStep > idx;
-          const isLast = idx === steps.length - 1;
-
-          return (
-            <div
-              key={step.id}
-              className="flex flex-1 items-start gap-3 last:flex-none"
-            >
-              <button
-                type="button"
-                onClick={() => setActiveStep(idx as 0 | 1 | 2 | 3)}
-                className="flex flex-col items-center gap-2 outline-none"
+      {/* Galaxy stepper header (same as ticket-types) */}
+      <div className="-mx-6">
+        <div
+          className={clsx(
+            "tikd-ttw-stepper",
+            stepBurst && "tikd-ttw-stepper--burst",
+          )}
+        >
+          <div className="tikd-ttw-stepperInner px-8 py-4">
+            {/* active aura */}
+            <div className="pointer-events-none absolute inset-0 z-0">
+              <div
+                style={{ left: activeLeftExpr }}
+                className={clsx(
+                  "absolute top-[34px] -translate-x-1/2 -translate-y-1/2",
+                  "transition-[left,opacity,transform] duration-500",
+                  "ease-[cubic-bezier(0.2,0.85,0.2,1)]",
+                )}
               >
-                <div
-                  className={clsx(
-                    "flex h-9 w-9 items-center justify-center rounded-full border  transition-all duration-200",
-                    isActive
-                      ? "border-transparent bg-primary-600 shadow-[0_0_28px_rgba(133,0,255,0.65)]"
-                      : isCompleted
-                        ? "border-primary-600 bg-neutral-0"
-                        : "border-neutral-700 bg-neutral-0",
-                  )}
-                >
-                  <Icon
+                <div className="tikd-ttw-aura" />
+              </div>
+            </div>
+
+            {/* dots + connectors */}
+            <div className="relative z-10 flex w-full items-center">
+              {steps.map((step, idx) => {
+                const Icon = step.icon;
+                const isActive = activeStep === idx;
+                const isCompleted = activeStep > idx;
+
+                return (
+                  <Fragment key={step.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveStep(idx as 0 | 1 | 2 | 3);
+                        triggerStepBurst();
+                      }}
+                      className={clsx(
+                        "group relative z-10 flex items-center justify-center outline-none",
+                        "h-10 w-10 rounded-full",
+                        isActive
+                          ? "tikd-ttw-dot tikd-ttw-dot--active"
+                          : isCompleted
+                            ? "tikd-ttw-dot tikd-ttw-dot--done"
+                            : "tikd-ttw-dot",
+                      )}
+                      aria-current={isActive ? "step" : undefined}
+                    >
+                      <Icon
+                        className={clsx(
+                          "relative transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+                          isActive ? "h-4 w-4" : "h-[14px] w-[14px]",
+                          isActive
+                            ? "text-neutral-0"
+                            : isCompleted
+                              ? "text-primary-600"
+                              : "text-neutral-500",
+                        )}
+                      />
+                    </button>
+
+                    {idx < steps.length - 1 && (
+                      <div className="flex-1 px-1.5">
+                        <div
+                          className={clsx(
+                            "h-px w-full",
+                            activeStep > idx
+                              ? "bg-primary-600/45"
+                              : "bg-white/10",
+                          )}
+                        />
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </div>
+
+            {/* labels row */}
+            <div className="relative mt-2 h-6">
+              {steps.map((step, idx) => {
+                const isActive = activeStep === idx;
+                const isCompleted = activeStep > idx;
+
+                const leftExpr =
+                  steps.length === 1
+                    ? "50%"
+                    : `calc(${idx / (steps.length - 1)} * (100% - 40px) + 20px)`;
+
+                return (
+                  <button
+                    key={`${step.id}-label`}
+                    type="button"
+                    onClick={() => {
+                      setActiveStep(idx as 0 | 1 | 2 | 3);
+                      triggerStepBurst();
+                    }}
+                    style={{ left: leftExpr }}
                     className={clsx(
-                      "h-4 w-4 transition-colors duration-200",
+                      "absolute top-0 -translate-x-1/2 text-center font-medium tracking-[0.01em] outline-none",
+                      "w-[92px]",
                       isActive
                         ? "text-neutral-0"
                         : isCompleted
-                          ? "text-primary-600"
-                          : "text-neutral-500",
+                          ? "text-neutral-100"
+                          : "text-neutral-300",
                     )}
-                  />
-                </div>
-                <span
-                  className={clsx(
-                    "font-medium tracking-[0.01em] text-[11px] transition-colors duration-200",
-                    isActive
-                      ? "text-neutral-0"
-                      : isCompleted
-                        ? "text-neutral-0"
-                        : "text-neutral-300",
-                  )}
-                >
-                  {step.label}
-                </span>
-              </button>
-              {!isLast && (
-                <div className="mt-4 flex-1">
-                  <div className="h-px w-full bg-neutral-700" />
-                </div>
-              )}
+                  >
+                    {step.label}
+                  </button>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        </div>
       </div>
 
-      {/* Modal title + close */}
+      {/* Modal title + close (same style as ticket-types) */}
       <div className="mt-1 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold text-neutral-0">
+          <h2 className="mt-1 text-lg font-semibold text-neutral-0">
             {stepTitles[activeStep]}
           </h2>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-neutral-400 hover:text-neutral-50 cursor-pointer"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50"
         >
           <X className="h-4 w-4" />
         </button>
@@ -881,11 +967,11 @@ export default function PromoCodesPage() {
         </div>
       )}
 
-      {/* Modal overlay for creation */}
+      {/* Modal overlay for creation (same shell styling as ticket-types) */}
       {mode === "create" && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
           <div className="flex min-h-full items-start justify-center px-3 py-10">
-            <div className="w-full max-w-[550px] rounded-3xl border border-white/10 bg-neutral-950">
+            <div className="tikd-ttw-modalShell w-full max-w-[550px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950">
               <PromoCodeWizard
                 eventId={eventId}
                 onCancel={() => setMode("list")}

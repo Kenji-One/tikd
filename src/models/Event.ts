@@ -29,6 +29,9 @@ export interface IEvent extends Document {
   artists: Types.ObjectId[];
   status: "published" | "draft";
 
+  /** Per-user pinning (sync across devices) */
+  pinnedByUserIds: Types.ObjectId[];
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,10 +71,19 @@ const EventSchema = new Schema<IEvent>(
     status: {
       type: String,
       enum: ["published", "draft"],
-      default: "published",
+      // ✅ IMPORTANT: default to draft (Unpublished)
+      default: "draft",
+    },
+
+    // ✅ sync pins across devices/users
+    pinnedByUserIds: {
+      type: [Schema.Types.ObjectId],
+      ref: "User",
+      default: [],
+      index: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default models.Event || model<IEvent>("Event", EventSchema);

@@ -13,20 +13,23 @@ import {
   ChevronDown,
   History,
   Calendar,
-  Mic2,
   Building2,
+  Users2,
+  UserRound,
 } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────
    Types
    ──────────────────────────────────────────────────────────────── */
-type Filter = "all" | "event" | "artist" | "org";
+type Filter = "event" | "org" | "team" | "friend";
+
+type ItemType = "event" | "org" | "team" | "friend";
 
 type Item = {
   id: string;
-  type: "event" | "artist" | "org";
+  type: ItemType;
   title: string;
-  subtitle?: string; // for artists/orgs and also orgName for events
+  subtitle?: string; // for orgs/teams/friends, and can also be orgName for events
   orgName?: string | null;
   date?: string | null; // ISO string
   image?: string | null; // poster/avatar/logo
@@ -35,15 +38,23 @@ type Item = {
 
 type Results = {
   events: Item[];
-  artists: Item[];
   orgs: Item[];
+  teams: Item[];
+  friends: Item[];
 };
 
 const FILTER_LABEL: Record<Filter, string> = {
-  all: "All",
-  event: "Event",
-  artist: "Artist",
-  org: "Organization",
+  event: "Events",
+  org: "Organizations",
+  team: "Teams",
+  friend: "Friends",
+};
+
+const ITEM_LABEL: Record<ItemType, string> = {
+  event: "Events",
+  org: "Organizations",
+  team: "Teams",
+  friend: "Friends",
 };
 
 /* ────────────────────────────────────────────────────────────────
@@ -67,7 +78,7 @@ function highlight(text: string, query: string): ReactNode {
         className="rounded-[0.35rem] px-1 py-0.5 bg-primary-900/35 text-primary-200"
       >
         {text.slice(start, end)}
-      </mark>
+      </mark>,
     );
     lastIdx = end;
   }
@@ -121,22 +132,22 @@ export default function SearchModal({
   const cardRef = useRef<HTMLDivElement | null>(null); // ⬅️ modal card ref
 
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("event");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Results>({
     events: [],
-    artists: [],
     orgs: [],
+    teams: [],
+    friends: [],
   });
   const [active, setActive] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const flatResults: Item[] = useMemo(() => {
-    const items: Item[] = [];
-    if (filter === "event" || filter === "all") items.push(...results.events);
-    if (filter === "artist" || filter === "all") items.push(...results.artists);
-    if (filter === "org" || filter === "all") items.push(...results.orgs);
-    return items;
+    if (filter === "event") return results.events ?? [];
+    if (filter === "org") return results.orgs ?? [];
+    if (filter === "team") return results.teams ?? [];
+    return results.friends ?? [];
   }, [results, filter]);
 
   /* recent search history */
@@ -197,7 +208,7 @@ export default function SearchModal({
     if (!open) return;
     const q = query.trim();
     if (!q) {
-      setResults({ events: [], artists: [], orgs: [] });
+      setResults({ events: [], orgs: [], teams: [], friends: [] });
       setActive(null);
       return;
     }
@@ -207,16 +218,27 @@ export default function SearchModal({
       try {
         const res = await fetch(
           `/api/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(
-            filter
+            filter,
           )}&limit=8`,
-          { signal: ac.signal, cache: "no-store" }
+          { signal: ac.signal, cache: "no-store" },
         );
         const data: { results?: Results } = await res.json();
-        setResults(data.results || { events: [], artists: [], orgs: [] });
+
+        const safe: Results = data.results || {
+          events: [],
+          orgs: [],
+          teams: [],
+          friends: [],
+        };
+        setResults(safe);
+
         const first =
-          data.results?.events?.[0] ||
-          data.results?.artists?.[0] ||
-          data.results?.orgs?.[0];
+          (filter === "event" ? safe.events?.[0] : null) ||
+          (filter === "org" ? safe.orgs?.[0] : null) ||
+          (filter === "team" ? safe.teams?.[0] : null) ||
+          (filter === "friend" ? safe.friends?.[0] : null) ||
+          null;
+
         setActive(first?.id ?? null);
       } catch (err) {
         if (!(err instanceof DOMException && err.name === "AbortError")) {
@@ -239,7 +261,7 @@ export default function SearchModal({
     <div
       className={clsx(
         "fixed inset-0 z-[100] overflow-y-auto overscroll-contain",
-        "bg-gradient-to-b from-neutral-950/80 to-neutral-950/60 backdrop-blur-md"
+        "bg-gradient-to-b from-neutral-950/80 to-neutral-950/60 backdrop-blur-md",
       )}
       // Close when clicking/tapping anywhere outside the card
       onPointerDown={(e) => {
@@ -260,7 +282,7 @@ export default function SearchModal({
             ref={cardRef}
             className={clsx(
               "relative rounded-2xl sm:rounded-[1.5rem] border border-white/8 bg-neutral-900/70 backdrop-blur-xl",
-              "shadow-[0_16px_40px_-12px_rgba(0,0,0,0.45),0_4px_16px_rgba(0,0,0,0.35)]"
+              "shadow-[0_16px_40px_-12px_rgba(0,0,0,0.45),0_4px_16px_rgba(0,0,0,0.35)]",
             )}
           >
             {/* Top row */}
@@ -273,13 +295,13 @@ export default function SearchModal({
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search events, artists, organizers…"
+                placeholder="Search events, organizations, teams, friends…"
                 aria-label="Search"
                 inputMode="search"
                 className={clsx(
                   "w-full peer flex-1 bg-transparent text-neutral-0 placeholder:text-neutral-400",
                   "outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 border-0",
-                  "text-[14px] sm:text-base"
+                  "text-[14px] sm:text-base",
                 )}
               />
 
@@ -291,7 +313,7 @@ export default function SearchModal({
                   className={clsx(
                     "group inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5",
                     "h-7 sm:h-9 px-2 sm:px-3 text-[11px] sm:text-xs text-neutral-200",
-                    "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40"
+                    "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40",
                   )}
                   aria-haspopup="listbox"
                   aria-expanded={dropdownOpen}
@@ -307,11 +329,11 @@ export default function SearchModal({
                     className={clsx(
                       "absolute right-0 mt-2 w-44 sm:w-48 overflow-hidden rounded-xl border border-white/10",
                       "bg-neutral-900/95 backdrop-blur-xl",
-                      "shadow-[0_22px_50px_-20px_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.35)]"
+                      "shadow-[0_22px_50px_-20px_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.35)]",
                     )}
                     onPointerDown={(e) => e.stopPropagation()} // prevent outside-close when interacting the menu
                   >
-                    {(["all", "event", "artist", "org"] as Filter[]).map(
+                    {(["event", "org", "team", "friend"] as Filter[]).map(
                       (f) => (
                         <button
                           key={f}
@@ -324,24 +346,24 @@ export default function SearchModal({
                           }}
                           className={clsx(
                             "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none",
-                            filter === f && "bg-white/7"
+                            filter === f && "bg-white/7",
                           )}
                         >
                           {f === "event" && (
                             <Calendar className="h-4 w-4 opacity-80" />
                           )}
-                          {f === "artist" && (
-                            <Mic2 className="h-4 w-4 opacity-80" />
-                          )}
                           {f === "org" && (
                             <Building2 className="h-4 w-4 opacity-80" />
                           )}
-                          {f === "all" && (
-                            <Search className="h-4 w-4 opacity-80" />
+                          {f === "team" && (
+                            <Users2 className="h-4 w-4 opacity-80" />
+                          )}
+                          {f === "friend" && (
+                            <UserRound className="h-4 w-4 opacity-80" />
                           )}
                           <span>{FILTER_LABEL[f]}</span>
                         </button>
-                      )
+                      ),
                     )}
                   </div>
                 )}
@@ -438,13 +460,13 @@ export default function SearchModal({
                               "grid-cols-[48px_1fr_auto] sm:grid-cols-[56px_1fr_auto]",
                               "gap-3 sm:gap-4 px-3.5 sm:px-4 py-3",
                               "hover:bg-white/5 focus:outline-none",
-                              activeNow && "bg-white/6"
+                              activeNow && "bg-white/6",
                             )}
                           >
                             <div
                               className={clsx(
                                 "h-12 w-12 sm:h-14 sm:w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5",
-                                "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                                "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
                               )}
                             >
                               {item.image ? (
@@ -477,14 +499,14 @@ export default function SearchModal({
                             </div>
 
                             <span className="hidden sm:inline-flex rounded-full bg-primary-900/30 px-2 py-1 text-[10px] uppercase tracking-wide text-primary-300">
-                              Event
+                              Events
                             </span>
                           </button>
                         </li>
                       );
                     }
 
-                    // Artists / Orgs
+                    // Orgs / Teams / Friends
                     return (
                       <li key={item.id}>
                         <button
@@ -501,13 +523,13 @@ export default function SearchModal({
                             "grid-cols-[40px_1fr_auto] sm:grid-cols-[44px_1fr_auto]",
                             "gap-3 sm:gap-3.5 px-3.5 sm:px-4 py-3",
                             "hover:bg-white/5 focus:outline-none",
-                            activeNow && "bg-white/6"
+                            activeNow && "bg-white/6",
                           )}
                         >
                           <div
                             className={clsx(
                               "h-10 w-10 sm:h-11 sm:w-11 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5",
-                              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
                             )}
                           >
                             {item.image ? (
@@ -520,10 +542,14 @@ export default function SearchModal({
                               />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center text-neutral-400">
-                                {item.type === "artist" ? (
-                                  <Mic2 className="h-4 w-4" />
-                                ) : (
+                                {item.type === "org" && (
                                   <Building2 className="h-4 w-4" />
+                                )}
+                                {item.type === "team" && (
+                                  <Users2 className="h-4 w-4" />
+                                )}
+                                {item.type === "friend" && (
+                                  <UserRound className="h-4 w-4" />
                                 )}
                               </div>
                             )}
@@ -541,13 +567,15 @@ export default function SearchModal({
                           <span
                             className={clsx(
                               "hidden sm:inline-flex rounded-full px-2 py-1 text-[10px] uppercase tracking-wide",
-                              item.type === "artist" &&
-                                "bg-success-950 text-success-300",
                               item.type === "org" &&
-                                "bg-warning-950 text-warning-300"
+                                "bg-warning-950 text-warning-300",
+                              item.type === "team" &&
+                                "bg-success-950 text-success-300",
+                              item.type === "friend" &&
+                                "bg-white/7 text-neutral-200",
                             )}
                           >
-                            {item.type}
+                            {ITEM_LABEL[item.type]}
                           </span>
                         </button>
                       </li>
@@ -568,16 +596,13 @@ export default function SearchModal({
                   </p>
                   <p className="mt-1 text-sm text-neutral-400">
                     Try a different spelling, or use the filter for events,
-                    artists, or organizers.
+                    organizations, teams, or friends.
                   </p>
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                    <Chip onClick={() => setFilter("event")}>Events only</Chip>
-                    <Chip onClick={() => setFilter("artist")}>
-                      Artists only
-                    </Chip>
-                    <Chip onClick={() => setFilter("org")}>
-                      Organizers only
-                    </Chip>
+                    <Chip onClick={() => setFilter("event")}>Events</Chip>
+                    <Chip onClick={() => setFilter("org")}>Organizations</Chip>
+                    <Chip onClick={() => setFilter("team")}>Teams</Chip>
+                    <Chip onClick={() => setFilter("friend")}>Friends</Chip>
                   </div>
                 </div>
               )}
@@ -587,6 +612,6 @@ export default function SearchModal({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

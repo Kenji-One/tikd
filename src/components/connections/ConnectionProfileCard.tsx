@@ -10,6 +10,8 @@ import { Tilt3d } from "@/components/ui/Tilt3d";
 
 export type ConnectionProfileKind = "establishment" | "organization" | "team";
 
+export type ConnectionProfileCardWidth = "default" | "compact";
+
 export type ConnectionProfileCardProps = {
   href: string;
   kind: ConnectionProfileKind;
@@ -32,6 +34,9 @@ export type ConnectionProfileCardProps = {
   tiltMaxDeg?: number; // default 4
   tiltPerspective?: number; // default 900
   tiltLiftPx?: number; // default 2
+
+  /** ✅ Optional width override (Organizations page uses compact to fit 6/row) */
+  cardWidth?: ConnectionProfileCardWidth; // default "default"
 };
 
 const KIND_ICON: Record<ConnectionProfileKind, LucideIcon> = {
@@ -62,12 +67,15 @@ export default function ConnectionProfileCard({
   tiltMaxDeg = 4,
   tiltPerspective = 900,
   tiltLiftPx = 2,
+  cardWidth = "default",
 }: ConnectionProfileCardProps) {
   const TypeIcon = KIND_ICON[kind];
 
+  const widthClass = cardWidth === "compact" ? "w-full" : "w-full sm:w-[264px]";
+
   const cardLinkClass = clsx(
     "group relative block",
-    "w-full sm:w-[264px]",
+    widthClass,
     "rounded-[12px]",
     "border border-white/10 bg-neutral-948",
     "transition-all duration-200",
@@ -77,7 +85,7 @@ export default function ConnectionProfileCard({
 
   const tiltShellClass = clsx(
     "group relative",
-    "w-full sm:w-[264px]",
+    widthClass,
     "rounded-[12px]",
     "transition-shadow duration-200",
     "hover:shadow-[0_22px_70px_rgba(0,0,0,0.55)]",

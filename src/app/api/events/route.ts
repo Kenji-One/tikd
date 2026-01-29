@@ -43,7 +43,8 @@ const bodySchema = z.object({
 
   artists: z.array(artistInputSchema).default([]),
 
-  status: z.enum(["published", "draft"]).default("published"),
+  // ✅ IMPORTANT: default new events to "draft" (Unpublished)
+  status: z.enum(["published", "draft"]).default("draft"),
 });
 
 /* --------------------------- GET --------------------------- */
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
   if (!org) {
     return NextResponse.json(
       { error: "Organization not found or not yours" },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -109,7 +110,7 @@ export async function POST(req: Request) {
         avatar: a.image ?? "",
       });
       return doc._id;
-    })
+    }),
   );
 
   // Duration minutes:
@@ -152,6 +153,8 @@ export async function POST(req: Request) {
     organizationId: parsed.data.organizationId,
     artists: artistIds,
     createdByUserId: session.user.id,
+
+    // ✅ Unpublished by default unless explicitly "published"
     status: parsed.data.status,
   });
 

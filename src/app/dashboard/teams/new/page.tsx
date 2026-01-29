@@ -165,6 +165,57 @@ function hostFromUrl(u?: string) {
   }
 }
 
+/** Remove query/hash so we never store cache-busters in DB. */
+function stripQueryAndHash(u?: string) {
+  if (!u) return "";
+  try {
+    const url = new URL(u);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return u.split("?")[0]?.split("#")[0] ?? u;
+  }
+}
+
+/** Force fresh fetch after overwrite/crop (Cloudinary CDN + Next/Image cache). */
+function withCacheBust(u: string, nonce: number) {
+  try {
+    const url = new URL(u);
+    url.searchParams.set("cb", String(nonce));
+    return url.toString();
+  } catch {
+    const sep = u.includes("?") ? "&" : "?";
+    return `${u}${sep}cb=${nonce}`;
+  }
+}
+
+async function commitCloudinaryCrop(args: {
+  publicId: string;
+  cropUrl: string;
+}) {
+  const res = await fetch("/api/cloudinary/commit-crop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      public_id: args.publicId,
+      source_url: args.cropUrl,
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || "Failed to commit crop");
+  }
+
+  const json = (await res.json().catch(() => null)) as {
+    secure_url?: string;
+  } | null;
+
+  if (!json?.secure_url) throw new Error("Invalid crop response");
+  return json.secure_url;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
@@ -175,6 +226,7 @@ export default function NewTeamPage() {
   const errorRing =
     "rounded-lg ring-1 ring-inset ring-error-500 border-transparent";
 
+  // ✅ Stable publicIds
   const bannerPublicId = useMemo(() => uuid(), []);
   const logoPublicId = useMemo(() => uuid(), []);
 
@@ -182,12 +234,16 @@ export default function NewTeamPage() {
   const bannerOriginalRef = useRef<string | null>(null);
   const logoOriginalRef = useRef<string | null>(null);
 
+  // ✅ Global “cache-bust” nonce used to force fresh Cloudinary/Next fetches
+  const [previewNonce, setPreviewNonce] = useState<number>(() => Date.now());
+
   const {
     register,
     control,
     handleSubmit,
     watch,
     setValue,
+    trigger,
     formState: { errors, isSubmitting, submitCount },
   } = useForm<TeamFormData>({
     resolver: zodResolver(TeamSchema),
@@ -208,6 +264,7 @@ export default function NewTeamPage() {
     mode: ImageEditorMode;
     src: string;
     title: string;
+    publicId: string;
   } | null>(null);
 
   function openAdjust(mode: ImageEditorMode) {
@@ -215,33 +272,43 @@ export default function NewTeamPage() {
     const logo = watch("logo") || "";
 
     if (mode === "banner") {
-      const original = bannerOriginalRef.current || banner;
+      const original =
+        bannerOriginalRef.current || stripQueryAndHash(banner || "");
       if (!original) return;
+
       setEditor({
         open: true,
         mode,
         src: original,
         title: "Adjust banner",
+        publicId: `temp/teams/banners/${bannerPublicId}`,
       });
       return;
     }
 
-    const original = logoOriginalRef.current || logo;
+    const original = logoOriginalRef.current || stripQueryAndHash(logo || "");
     if (!original) return;
+
     setEditor({
       open: true,
       mode,
       src: original,
       title: "Adjust logo",
+      publicId: `temp/teams/logos/${logoPublicId}`,
     });
   }
 
   const onSubmit: SubmitHandler<TeamFormData> = async (data) => {
-    // ✅ sanitize: convert "" to undefined so backend doesn't store empty strings
+    // ✅ strip cache-busters before saving
+    const cleanBanner = data.banner?.trim()
+      ? stripQueryAndHash(data.banner)
+      : "";
+    const cleanLogo = data.logo?.trim() ? stripQueryAndHash(data.logo) : "";
+
     const payload = {
       ...data,
-      banner: data.banner?.trim() ? data.banner.trim() : undefined,
-      logo: data.logo?.trim() ? data.logo.trim() : undefined,
+      banner: cleanBanner ? cleanBanner : undefined,
+      logo: cleanLogo ? cleanLogo : undefined,
       website: data.website?.trim() ? data.website.trim() : undefined,
       accentColor: data.accentColor?.trim()
         ? data.accentColor.trim()
@@ -263,7 +330,6 @@ export default function NewTeamPage() {
       const body = await res.json().catch(() => null);
       const teamId = body?._id || body?.id;
 
-      // ✅ go to Team Dashboard after creation
       if (teamId) router.push(`/dashboard/teams/${teamId}`);
       else router.push("/dashboard/teams");
     } else {
@@ -271,6 +337,7 @@ export default function NewTeamPage() {
     }
   };
 
+  /* ---------------------------- preview --------------------------- */
   const name = watch("name");
   const description = watch("description");
   const banner = watch("banner");
@@ -286,6 +353,17 @@ export default function NewTeamPage() {
   const hasErrors = Object.keys(errors).length > 0;
   const cardDescription = description?.trim() || siteHost || "Public profile";
 
+  // ✅ Always show cache-busted URLs in UI so overwrites/crops reflect instantly
+  const uiBanner = useMemo(() => {
+    const v = banner?.trim() ? banner.trim() : "";
+    return v ? withCacheBust(v, previewNonce) : "";
+  }, [banner, previewNonce]);
+
+  const uiLogo = useMemo(() => {
+    const v = logo?.trim() ? logo.trim() : "";
+    return v ? withCacheBust(v, previewNonce) : "";
+  }, [logo, previewNonce]);
+
   return (
     <main className="relative bg-neutral-950 text-neutral-0">
       {editor?.open ? (
@@ -295,18 +373,31 @@ export default function NewTeamPage() {
           src={editor.src}
           title={editor.title}
           onClose={() => setEditor(null)}
-          onApply={({ cropUrl }) => {
-            if (editor.mode === "banner") {
-              setValue("banner", cropUrl, {
-                shouldDirty: true,
-                shouldValidate: true,
-              });
-            } else {
-              setValue("logo", cropUrl, {
-                shouldDirty: true,
-                shouldValidate: true,
-              });
-            }
+          onApply={async ({ cropUrl }) => {
+            // ✅ Commit crop to Cloudinary (overwrite the temp asset)
+            const secureUrl = await commitCloudinaryCrop({
+              publicId: editor.publicId,
+              cropUrl,
+            });
+
+            const nonce = Date.now();
+            setPreviewNonce(nonce);
+
+            // Keep the true original for re-editing (raw, no cachebust)
+            const clean = stripQueryAndHash(secureUrl);
+            if (editor.mode === "banner") bannerOriginalRef.current = clean;
+            else logoOriginalRef.current = clean;
+
+            const fieldName = editor.mode === "banner" ? "banner" : "logo";
+
+            // Store cache-busted URL for instant UI update; strip before submit
+            setValue(fieldName, withCacheBust(secureUrl, nonce), {
+              shouldDirty: true,
+              shouldValidate: true,
+              shouldTouch: true,
+            });
+
+            void trigger(fieldName);
             setEditor(null);
           }}
         />
@@ -431,11 +522,16 @@ export default function NewTeamPage() {
                   <div className="space-y-2">
                     <ImageUpload
                       label="Banner"
-                      value={field.value || ""}
+                      value={uiBanner || ""}
                       onChange={(next) => {
-                        field.onChange(next);
-                        if (next && next.trim())
-                          bannerOriginalRef.current = next;
+                        const nonce = Date.now();
+                        setPreviewNonce(nonce);
+
+                        const cleanOriginal = stripQueryAndHash(next);
+                        if (cleanOriginal)
+                          bannerOriginalRef.current = cleanOriginal;
+
+                        field.onChange(withCacheBust(next, nonce));
                       }}
                       publicId={`temp/teams/banners/${bannerPublicId}`}
                     />
@@ -461,14 +557,19 @@ export default function NewTeamPage() {
                       control={control}
                       name="logo"
                       render={({ field }) => (
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex flex-col items-center">
                           <ImageUpload
                             label=""
-                            value={field.value || ""}
+                            value={uiLogo || ""}
                             onChange={(next) => {
-                              field.onChange(next);
-                              if (next && next.trim())
-                                logoOriginalRef.current = next;
+                              const nonce = Date.now();
+                              setPreviewNonce(nonce);
+
+                              const cleanOriginal = stripQueryAndHash(next);
+                              if (cleanOriginal)
+                                logoOriginalRef.current = cleanOriginal;
+
+                              field.onChange(withCacheBust(next, nonce));
                             }}
                             publicId={`temp/teams/logos/${logoPublicId}`}
                             sizing="square"
@@ -488,6 +589,7 @@ export default function NewTeamPage() {
                       )}
                     />
                   </div>
+
                   <div className="min-w-0 text-center">
                     <p className="text-sm font-semibold">Logo</p>
                     <p className="mt-2 text-[11px] text-neutral-400">
@@ -564,12 +666,13 @@ export default function NewTeamPage() {
 
               <div className="flex justify-center">
                 <ConnectionProfileCard
+                  key={`team-live-${uiBanner}-${uiLogo}-${previewNonce}`}
                   href="#"
                   kind="team"
                   title={name?.trim() || "Team name"}
                   description={cardDescription}
-                  bannerUrl={banner?.trim() ? banner : undefined}
-                  iconUrl={logo?.trim() ? logo : undefined}
+                  bannerUrl={uiBanner?.trim() ? uiBanner : undefined}
+                  iconUrl={uiLogo?.trim() ? uiLogo : undefined}
                   totalMembers={undefined}
                   joinDateLabel="Draft"
                 />

@@ -68,6 +68,14 @@ function joinLabel(iso?: string) {
   }
 }
 
+function clampText(input: string, maxChars: number) {
+  const clean = String(input || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (clean.length <= maxChars) return clean;
+  return `${clean.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
 function initialsFromName(name: string) {
   const parts = String(name || "")
     .trim()
@@ -153,7 +161,6 @@ function Pagination({
 }
 
 /* ------------------------ Row card (List) ------------------------- */
-/** ✅ Match TeamsClient row design exactly */
 function OrganizationListRow({
   org,
   description,
@@ -167,14 +174,15 @@ function OrganizationListRow({
     <Link
       href={`/dashboard/organizations/${org._id}`}
       className={clsx(
-        "group flex w-full items-center justify-between gap-4",
+        "group relative flex w-full items-center justify-between gap-4",
         "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
         "hover:border-primary-500 hover:bg-white/7 transition-colors",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
       )}
     >
+      {/* Left (title + description) */}
       <div className="flex min-w-0 items-center gap-3">
-        <div className="relative h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
           {org.logo ? (
             <Image
               src={org.logo}
@@ -200,7 +208,8 @@ function OrganizationListRow({
         </div>
       </div>
 
-      <div className="hidden items-center gap-6 md:flex">
+      {/* ✅ True-centered meta (center of the whole row) */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex items-center gap-6">
         <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
             <Users className="h-4 w-4" />
@@ -211,14 +220,13 @@ function OrganizationListRow({
           <span className="text-neutral-400">members</span>
         </div>
 
-        {org.createdAt ? (
-          <div className="text-[12px] text-neutral-400">
-            {joinLabel(org.createdAt)}
-          </div>
-        ) : null}
+        <div className="text-[12px] text-neutral-400">
+          {joinLabel(org.createdAt)}
+        </div>
       </div>
 
-      <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
+      {/* Right (chevron) */}
+      <div className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
         <ChevronRight className="h-4 w-4" />
       </div>
     </Link>
@@ -348,11 +356,17 @@ export default function OrganizationsClient() {
             <div className="mt-4">
               {orgsLoading ? (
                 view === "grid" ? (
-                  <div className="flex flex-wrap gap-4">
+                  <div
+                    className={clsx(
+                      "grid gap-4",
+                      // ✅ Compact 240px cards, but let grid distribute leftover nicely (no ghost columns)
+                      "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
+                    )}
+                  >
                     {Array.from({ length: 10 }).map((_, i) => (
                       <Skeleton
                         key={`org-skel-${i}`}
-                        className="h-[224px] w-full sm:w-[264px] rounded-[12px]"
+                        className="h-[224px] w-full rounded-[12px]"
                       />
                     ))}
                   </div>
@@ -368,12 +382,20 @@ export default function OrganizationsClient() {
                 )
               ) : orgsSlice.length ? (
                 view === "grid" ? (
-                  <div className="flex flex-wrap gap-4">
+                  <div
+                    className={clsx(
+                      orgsSlice.length > 4 ? "grid" : "flex flex-wrap",
+                      "gap-4",
+                      "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
+                    )}
+                  >
                     {orgsSlice.map((o) => {
                       const site = domainFromUrl(o.website);
-                      const desc =
+                      const desc = clampText(
                         o.description?.trim() ||
-                        (site ? site : "Public profile");
+                          (site ? site : "Public profile"),
+                        52,
+                      );
 
                       return (
                         <ConnectionProfileCard
@@ -390,6 +412,9 @@ export default function OrganizationsClient() {
                           tiltMaxDeg={3.5}
                           tiltPerspective={1600}
                           tiltLiftPx={2}
+                          cardWidth={
+                            orgsSlice.length > 4 ? "compact" : "default"
+                          }
                         />
                       );
                     })}
@@ -398,9 +423,11 @@ export default function OrganizationsClient() {
                   <div className="space-y-3">
                     {orgsSlice.map((o) => {
                       const site = domainFromUrl(o.website);
-                      const desc =
+                      const desc = clampText(
                         o.description?.trim() ||
-                        (site ? site : "Public profile");
+                          (site ? site : "Public profile"),
+                        52,
+                      );
 
                       return (
                         <OrganizationListRow

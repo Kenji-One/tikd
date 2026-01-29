@@ -374,110 +374,158 @@ function FriendsCard({
       liftPx={2}
       className={clsx(
         // ✅ Match ConnectionProfileCard sizing
-        "group relative w-full sm:w-[264px]",
-        "overflow-hidden rounded-[12px] border border-white/10 hover:border-primary-500",
-        "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))]",
-        "transition-[transform,box-shadow,border-color] duration-200",
+        "group relative w-full",
         "will-change-transform",
-        "hover:shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
       )}
     >
-      <FriendActionsMenu
-        containerClassName="!absolute right-3 top-3 z-10"
-        onRemove={() => onRemove?.(friend.id)}
-      />
+      {/* Card surface (tilts) */}
+      <div
+        className={clsx(
+          "relative overflow-hidden rounded-[12px] border border-white/10",
+          "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03))]",
+          "transition-[box-shadow,border-color,filter] duration-200",
+          "group-hover:border-primary-500 group-hover:shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
+        )}
+      >
+        {/* Subtle inner wash (keeps the “Events page” vibe) */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-100"
+          style={{
+            background:
+              "radial-gradient(620px 260px at 30% -10%, rgba(154,70,255,0.14), transparent 60%), radial-gradient(520px 240px at 100% 18%, rgba(66,139,255,0.08), transparent 62%)",
+          }}
+        />
 
-      <div className={clsx("p-4", dense ? "pb-3" : "pb-4")}>
-        <div className="mx-auto flex w-full flex-col items-center">
-          <div className="relative">
-            <div
-              className={clsx(
-                "relative overflow-hidden",
-                // ✅ slightly smaller avatar block to feel like Team cards
-                "h-[58px] w-[58px] rounded-lg",
-                "bg-white/5 ring-1 ring-white/10",
-              )}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {friend.avatarUrl ? (
-                <img
-                  src={friend.avatarUrl}
-                  alt={friend.name}
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-[16px] font-semibold text-neutral-200">
-                  {badge}
+        {/* Foreground content (counter-rotated => crisp text at all angles) */}
+        <div
+          className="relative"
+          style={{
+            transform:
+              "rotateX(var(--tikd-tilt-rx-inv)) rotateY(var(--tikd-tilt-ry-inv)) translateZ(0.1px)",
+            transformStyle: "preserve-3d",
+            backfaceVisibility: "hidden",
+            WebkitFontSmoothing: "antialiased",
+          }}
+        >
+          <FriendActionsMenu
+            containerClassName="!absolute right-3 top-3 z-10"
+            onRemove={() => onRemove?.(friend.id)}
+          />
+
+          <div className={clsx("p-4", dense ? "pb-3" : "pb-4")}>
+            <div className={clsx("mx-auto flex w-full flex-col items-center")}>
+              <div className="relative">
+                <div
+                  className={clsx(
+                    "relative overflow-hidden",
+                    // ✅ slightly smaller avatar block to feel like Team cards
+                    "h-[58px] w-[58px] rounded-lg",
+                    "bg-white/5 ring-1 ring-white/10",
+                  )}
+                  style={{
+                    transform: "translateZ(0.1px)",
+                    backfaceVisibility: "hidden",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {friend.avatarUrl ? (
+                    <img
+                      src={friend.avatarUrl}
+                      alt={friend.name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[16px] font-semibold text-neutral-200">
+                      {badge}
+                    </div>
+                  )}
                 </div>
-              )}
+
+                <div
+                  className={clsx(
+                    "absolute -right-2 -bottom-2",
+                    // ✅ slightly smaller badge
+                    "h-7 w-7 rounded-[10px]",
+                    "border border-white/10",
+                    "bg-primary-500/90",
+                    "shadow-[0_12px_30px_rgba(154,70,255,0.25)]",
+                    "flex items-center justify-center",
+                  )}
+                  style={{
+                    transform: "translateZ(0.1px)",
+                    backfaceVisibility: "hidden",
+                  }}
+                >
+                  <span className="text-[11px] font-extrabold tracking-[-0.2px] text-neutral-0">
+                    {badge}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className="mt-3 text-center"
+                style={{
+                  transform: "translateZ(0.1px)",
+                  backfaceVisibility: "hidden",
+                }}
+              >
+                <div className="font-semibold tracking-[-0.25px] text-neutral-50">
+                  {friend.name}
+                </div>
+                <div className="mt-1 text-[12px] text-neutral-400">
+                  {friend.role}{" "}
+                  <Link
+                    href={friend.companyHref || "#"}
+                    className="font-semibold text-primary-300 hover:text-primary-200"
+                  >
+                    {friend.company}
+                  </Link>
+                </div>
+              </div>
             </div>
+
+            <div className="mt-4 h-px w-full bg-white/10" />
 
             <div
-              className={clsx(
-                "absolute -right-2 -bottom-2",
-                // ✅ slightly smaller badge
-                "h-7 w-7 rounded-[10px]",
-                "border border-white/10",
-                "bg-primary-500/90",
-                "shadow-[0_12px_30px_rgba(154,70,255,0.25)]",
-                "flex items-center justify-center",
-              )}
+              className="mt-4 space-y-2.5"
+              style={{
+                transform: "translateZ(0.1px)",
+                backfaceVisibility: "hidden",
+              }}
             >
-              <span className="text-[11px] font-extrabold tracking-[-0.2px] text-neutral-0">
-                {badge}
-              </span>
+              <div className="flex items-center gap-3">
+                <span
+                  className={clsx(
+                    // ✅ smaller icon tiles
+                    "inline-flex h-7 w-7 items-center justify-center rounded-md",
+                    "bg-primary-500/15 text-primary-300",
+                    "ring-1 ring-primary-500/20",
+                  )}
+                >
+                  <Phone className="h-4 w-4" />
+                </span>
+                <span className="text-[12px] font-medium text-neutral-100">
+                  {friend.phone}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span
+                  className={clsx(
+                    "inline-flex h-7 w-7 items-center justify-center rounded-md",
+                    "bg-primary-500/15 text-primary-300",
+                    "ring-1 ring-primary-500/20",
+                  )}
+                >
+                  <Mail className="h-4 w-4" />
+                </span>
+                <span className="text-[12px] font-medium text-neutral-100">
+                  {friend.email}
+                </span>
+              </div>
             </div>
-          </div>
-
-          <div className="mt-3 text-center">
-            <div className="font-semibold tracking-[-0.25px] text-neutral-50">
-              {friend.name}
-            </div>
-            <div className="mt-1 text-[12px] text-neutral-400">
-              {friend.role}{" "}
-              <Link
-                href={friend.companyHref || "#"}
-                className="font-semibold text-primary-300 hover:text-primary-200"
-              >
-                {friend.company}
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 h-px w-full bg-white/10" />
-
-        <div className="mt-4 space-y-2.5">
-          <div className="flex items-center gap-3">
-            <span
-              className={clsx(
-                // ✅ smaller icon tiles
-                "inline-flex h-7 w-7 items-center justify-center rounded-md",
-                "bg-primary-500/15 text-primary-300",
-                "ring-1 ring-primary-500/20",
-              )}
-            >
-              <Phone className="h-4 w-4" />
-            </span>
-            <span className="text-[12px] font-medium text-neutral-100">
-              {friend.phone}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span
-              className={clsx(
-                "inline-flex h-7 w-7 items-center justify-center rounded-md",
-                "bg-primary-500/15 text-primary-300",
-                "ring-1 ring-primary-500/20",
-              )}
-            >
-              <Mail className="h-4 w-4" />
-            </span>
-            <span className="text-[12px] font-medium text-neutral-100">
-              {friend.email}
-            </span>
           </div>
         </div>
       </div>
@@ -1407,20 +1455,6 @@ export default function FriendsClient() {
                                         </button>
                                       </div>
                                     </div>
-                                    {/* 
-                                    <button
-                                      type="button"
-                                      onClick={() => declineRequest(r.id)}
-                                      aria-label="Dismiss"
-                                      className={clsx(
-                                        "inline-flex h-9 w-9 items-center justify-center rounded-xl",
-                                        "border border-white/10 bg-white/5 text-neutral-200",
-                                        "hover:bg-white/10",
-                                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                                      )}
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </button> */}
                                   </div>
                                 );
                               })}
@@ -1437,7 +1471,13 @@ export default function FriendsClient() {
             {/* Friends Content */}
             <div className="mt-4">
               {friendsView === "grid" ? (
-                <div className="flex flex-wrap gap-4">
+                <div
+                  className={clsx(
+                    "grid gap-4",
+                    // ✅ Same grid rule in real data render
+                    "grid-cols-[repeat(auto-fit,minmax(264px,1fr))]",
+                  )}
+                >
                   {friendsSlice.map((f) => (
                     <FriendsCard
                       key={f.id}

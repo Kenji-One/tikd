@@ -101,7 +101,7 @@ function Avatar({
 
 /* ---------------------------- Component ---------------------------- */
 export default function MyTeamTable({
-  title = "My Team",
+  title = "My Members",
   members,
   defaultSortBy = "earned",
   defaultDirection = "desc",

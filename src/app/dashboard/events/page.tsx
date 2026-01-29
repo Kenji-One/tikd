@@ -8,7 +8,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   CalendarPlus,
@@ -16,7 +16,6 @@ import {
   X,
   CheckCircle2,
   Plus,
-  Menu,
   Search,
   ArrowDownNarrowWide,
   ArrowDownWideNarrow,
@@ -69,10 +68,39 @@ type SortField =
 type SortDir = "asc" | "desc";
 
 /* ---------------------------- Helpers ------------------------------ */
-async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
   if (!res.ok) {
     throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as T;
+}
+
+type JsonBody = Record<string, unknown> | unknown[] | null;
+
+async function fetchJSONWithBody<T>(
+  url: string,
+  init: Omit<RequestInit, "body"> & { body?: JsonBody | string },
+): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+    body:
+      init.body === undefined
+        ? undefined
+        : typeof init.body === "string"
+          ? init.body
+          : JSON.stringify(init.body),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(
+      `Request failed: ${res.status} ${res.statusText}${txt ? ` — ${txt}` : ""}`,
+    );
   }
   return (await res.json()) as T;
 }
@@ -132,6 +160,17 @@ function ticketsOf(e: MyEvent) {
 function viewsOf(e: MyEvent) {
   const raw = e.pageViews ?? e.views ?? 0;
   return typeof raw === "number" ? raw : 0;
+}
+
+function pinnedFirst(list: MyEvent[], pinnedIds: Set<string>) {
+  if (!pinnedIds.size) return list;
+  const pinned: MyEvent[] = [];
+  const rest: MyEvent[] = [];
+  for (const e of list) {
+    if (pinnedIds.has(String(e._id))) pinned.push(e);
+    else rest.push(e);
+  }
+  return [...pinned, ...rest];
 }
 
 /* ---------------------- Compact dropdown (Tikd style) -------------- */
@@ -285,35 +324,40 @@ function SortControls({
                 sortDir === "asc" ? "ascending" : "descending"
               }`
         }
+        data-open={open ? "1" : "0"}
+        data-active={sortField ? "1" : "0"}
         className={clsx(
-          "flex items-center justify-between gap-3",
-          "border border-white/10 outline-none",
-          "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
+          "tikd-sort-btn group inline-flex select-none items-center justify-center",
+          "h-[34px] w-[34px] rounded-[4px] border border-white/10",
+          "bg-neutral-700/90 text-neutral-100",
+          "shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45)]",
+          "transition-[transform,box-shadow,border-color,background-color] duration-150",
+          "hover:bg-neutral-700 hover:border-white/14",
+          "active:scale-[0.985]",
+          "focus:outline-none focus-visible:border-primary-500",
+          "focus-visible:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45),0_0_0_2px_rgba(154,81,255,0.35)]",
+          open && "border-primary-500/70",
           "cursor-pointer",
-          !sortField
-            ? "grid h-[30px] w-[38px] items-center justify-center rounded-md bg-neutral-700 text-white/80"
-            : [
-                "h-[30px] rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90",
-                "px-3 text-xs font-medium text-white/90",
-              ].join(" "),
         )}
       >
-        {!sortField ? (
-          <Menu className="h-4 w-4" />
-        ) : (
-          <>
-            <span className="max-w-[140px] truncate text-white/95">
-              {sortLabel}
-            </span>
-            <DirIcon className="h-4 w-4 opacity-85" aria-hidden="true" />
-            <ChevronDown
-              className={clsx(
-                "h-4 w-4 opacity-80 transition-transform",
-                open ? "rotate-180" : "",
-              )}
-            />
-          </>
-        )}
+        <span className="tikd-sort-bars" aria-hidden="true">
+          <span className="tikd-sort-bar tikd-sort-bar1">
+            <span className="tikd-sort-dot" />
+          </span>
+          <span className="tikd-sort-bar tikd-sort-bar2">
+            <span className="tikd-sort-dot" />
+          </span>
+          <span className="tikd-sort-bar tikd-sort-bar1">
+            <span className="tikd-sort-dot" />
+          </span>
+        </span>
+
+        {sortField ? (
+          <span
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white/20 bg-neutral-500 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+          />
+        ) : null}
       </button>
 
       {open && (
@@ -328,7 +372,6 @@ function SortControls({
                 dropdownWidthClass,
               )}
             >
-              {/* Sort fields */}
               <div role="listbox" aria-label="Sort" className="p-2">
                 {options.map((opt) => {
                   const active = opt.key === sortField;
@@ -359,10 +402,8 @@ function SortControls({
                 })}
               </div>
 
-              {/* Divider */}
               <div className="h-px w-full bg-white/10" />
 
-              {/* Asc/Desc toggle (merged into dropdown) */}
               <div className="p-2">
                 <div
                   className={clsx(
@@ -414,11 +455,75 @@ function SortControls({
                     Select a sort type first
                   </p>
                 ) : null}
+
+                {sortField ? (
+                  <div className="mt-2 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-950/25 px-3 py-2">
+                    <p className="truncate text-[11px] text-white/70">
+                      <span className="text-white/45">Sorting:</span>{" "}
+                      {sortLabel}
+                    </p>
+                    <DirIcon className="h-4 w-4 text-white/70" />
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .tikd-sort-bars {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+
+        .tikd-sort-bar {
+          width: 50%;
+          height: 1.5px;
+          background: rgba(229, 229, 229, 0.9);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          border-radius: 2px;
+        }
+
+        .tikd-sort-dot {
+          width: 4px;
+          height: 4px;
+          position: absolute;
+          border-radius: 999px;
+          border: 1.5px solid rgba(255, 255, 255, 0.92);
+          background: rgba(140, 140, 166, 0.95);
+          box-shadow: 0 0 6px rgba(255, 255, 255, 0.28);
+          transition: transform 0.3s ease;
+        }
+
+        .tikd-sort-bar1 .tikd-sort-dot {
+          transform: translateX(-4px);
+        }
+        .tikd-sort-bar2 .tikd-sort-dot {
+          transform: translateX(4px);
+        }
+
+        .tikd-sort-btn:hover .tikd-sort-bar1 .tikd-sort-dot {
+          transform: translateX(4px);
+        }
+        .tikd-sort-btn:hover .tikd-sort-bar2 .tikd-sort-dot {
+          transform: translateX(-4px);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .tikd-sort-dot {
+            transition: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -483,7 +588,6 @@ function OrgPickerModal({
         aria-hidden="true"
       />
 
-      {/* ✅ Taller, more vertical (portrait) modal like reference */}
       <div
         className={clsx(
           "relative z-10 w-[92vw] max-w-[480px]",
@@ -495,7 +599,6 @@ function OrgPickerModal({
         onClick={handlePanelClick}
       >
         <div className="flex h-full flex-col">
-          {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-neutral-0">
@@ -534,7 +637,6 @@ function OrgPickerModal({
               )}
             />
           </div>
-          {/* Body (scroll area) */}
           <div className="mt-4 flex-1 overflow-hidden">
             {loading ? (
               <div className="h-full space-y-3 overflow-y-auto pr-1">
@@ -639,7 +741,6 @@ function OrgPickerModal({
             )}
           </div>
 
-          {/* Footer */}
           {orgs.length > 0 ? (
             <div className="pt-8">
               <div className="flex justify-end">
@@ -676,51 +777,71 @@ function UpcomingEventsGridPanel({
   eventsLoading,
   emptyTitle,
   emptySub,
+  pinnedIds,
+  onTogglePin,
 }: {
   list: MyEvent[];
   eventsLoading: boolean;
   emptyTitle: string;
   emptySub: string;
+  pinnedIds: Set<string>;
+  onTogglePin: (id: string, nextPinned: boolean) => void;
 }) {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   function defaultDirFor(field: SortField): SortDir {
     if (field === "title") return "asc";
-    if (field === "eventDate") return "asc"; // soonest
-    return "desc"; // numeric: high first
+    if (field === "eventDate") return "asc";
+    return "desc";
   }
 
   const sorted = useMemo(() => {
     const arr = [...list];
 
-    // Default (no selection): soonest-first (upcoming)
     if (!sortField) {
-      return arr.sort(
+      const base = arr.sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
       );
+      return pinnedFirst(base, pinnedIds);
     }
 
     const dirMul = sortDir === "asc" ? 1 : -1;
 
     switch (sortField) {
       case "title":
-        return arr.sort((a, b) => a.title.localeCompare(b.title) * dirMul);
+        return pinnedFirst(
+          arr.sort((a, b) => a.title.localeCompare(b.title) * dirMul),
+          pinnedIds,
+        );
       case "pageViews":
-        return arr.sort((a, b) => (viewsOf(a) - viewsOf(b)) * dirMul);
+        return pinnedFirst(
+          arr.sort((a, b) => (viewsOf(a) - viewsOf(b)) * dirMul),
+          pinnedIds,
+        );
       case "ticketsSold":
-        return arr.sort((a, b) => (ticketsOf(a) - ticketsOf(b)) * dirMul);
+        return pinnedFirst(
+          arr.sort((a, b) => (ticketsOf(a) - ticketsOf(b)) * dirMul),
+          pinnedIds,
+        );
       case "revenue":
-        return arr.sort((a, b) => (revenueOf(a) - revenueOf(b)) * dirMul);
+        return pinnedFirst(
+          arr.sort((a, b) => (revenueOf(a) - revenueOf(b)) * dirMul),
+          pinnedIds,
+        );
       case "eventDate":
-        return arr.sort(
-          (a, b) =>
-            (new Date(a.date).getTime() - new Date(b.date).getTime()) * dirMul,
+        return pinnedFirst(
+          arr.sort(
+            (a, b) =>
+              (new Date(a.date).getTime() - new Date(b.date).getTime()) *
+              dirMul,
+          ),
+          pinnedIds,
         );
       default:
         return arr;
     }
-  }, [list, sortField, sortDir]);
+  }, [list, sortField, sortDir, pinnedIds]);
 
   const gridCols =
     "grid-cols-[repeat(auto-fill,minmax(170px,170px))] " +
@@ -782,19 +903,26 @@ function UpcomingEventsGridPanel({
               "justify-start content-start",
             )}
           >
-            {sorted.map((ev) => (
-              <EventCard
-                key={ev._id}
-                id={ev._id}
-                title={ev.title}
-                dateLabel={formatEventDate(ev.date)}
-                venue={ev.location ?? ""}
-                category={ev.category ?? ""}
-                img={ev.image ?? ""}
-                href={`/dashboard/events/${ev._id}`}
-                className="w-full"
-              />
-            ))}
+            {sorted.map((ev) => {
+              const isPinned = pinnedIds.has(String(ev._id));
+              return (
+                <EventCard
+                  key={ev._id}
+                  id={ev._id}
+                  title={ev.title}
+                  dateLabel={formatEventDate(ev.date)}
+                  venue={ev.location ?? ""}
+                  category={ev.category ?? ""}
+                  img={ev.image ?? ""}
+                  href={`/dashboard/events/${ev._id}`}
+                  className="w-full"
+                  pin={{
+                    pinned: isPinned,
+                    onToggle: () => onTogglePin(String(ev._id), !isPinned),
+                  }}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -819,14 +947,13 @@ function PastEventsListPanel({
 
   function defaultDirFor(field: SortField): SortDir {
     if (field === "title") return "asc";
-    if (field === "eventDate") return "desc"; // latest first for Past
-    return "desc"; // numeric: high first
+    if (field === "eventDate") return "desc";
+    return "desc";
   }
 
   const sorted = useMemo(() => {
     const arr = [...list];
 
-    // Default (no selection): latest-first (past)
     if (!sortField) {
       return arr.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
@@ -1011,14 +1138,13 @@ function DraftsListPanel({
 
   function defaultDirFor(field: SortField): SortDir {
     if (field === "title") return "asc";
-    if (field === "eventDate") return "desc"; // newest first in Drafts
+    if (field === "eventDate") return "desc";
     return "desc";
   }
 
   const sorted = useMemo(() => {
     const arr = [...list];
 
-    // Default (no selection): newest-first
     if (!sortField) {
       return arr.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
@@ -1188,6 +1314,7 @@ function DraftsListPanel({
 export default function DashboardEventsPage() {
   const router = useRouter();
   const { data: session } = useSession();
+  const queryClient = useQueryClient();
 
   const [view, setView] = useState<EventViewId>("upcoming");
 
@@ -1205,6 +1332,51 @@ export default function DashboardEventsPage() {
     queryFn: () => fetchJSON<MyEvent[]>("/api/events?owned=1"),
     enabled: !!session,
   });
+
+  const { data: pinnedIdsResp } = useQuery<{ ids: string[] }>({
+    queryKey: ["eventPins"],
+    // ✅ prevent browser/proxy caching from returning stale `{ ids: [] }`
+    queryFn: () =>
+      fetchJSON<{ ids: string[] }>("/api/events/pins", { cache: "no-store" }),
+    enabled: !!session,
+  });
+
+  const pinnedIds = useMemo(
+    () => new Set((pinnedIdsResp?.ids ?? []).map(String)),
+    [pinnedIdsResp],
+  );
+
+  const pinMutation = useMutation({
+    mutationFn: async (vars: { id: string; pinned: boolean }) => {
+      return fetchJSONWithBody<{ ok: true; pinned: boolean }>(
+        `/api/events/${vars.id}/pin`,
+        { method: "PUT", body: { pinned: vars.pinned } },
+      );
+    },
+    onMutate: async ({ id, pinned }) => {
+      await queryClient.cancelQueries({ queryKey: ["eventPins"] });
+
+      const prev = queryClient.getQueryData<{ ids: string[] }>(["eventPins"]);
+      const prevIds = (prev?.ids ?? []).map(String);
+
+      const nextIds = new Set(prevIds);
+      if (pinned) nextIds.add(String(id));
+      else nextIds.delete(String(id));
+
+      queryClient.setQueryData(["eventPins"], { ids: Array.from(nextIds) });
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["eventPins"], ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["eventPins"] });
+    },
+  });
+
+  function togglePin(id: string, nextPinned: boolean) {
+    pinMutation.mutate({ id, pinned: nextPinned });
+  }
 
   const orgsList = useMemo<Org[]>(() => orgs ?? [], [orgs]);
   const events = useMemo<MyEvent[]>(() => allEvents ?? [], [allEvents]);
@@ -1281,6 +1453,8 @@ export default function DashboardEventsPage() {
             eventsLoading={eventsLoading}
             emptyTitle="No upcoming events yet"
             emptySub="Create an event and it will appear here once scheduled."
+            pinnedIds={pinnedIds}
+            onTogglePin={togglePin}
           />
         ) : view === "past" ? (
           <PastEventsListPanel

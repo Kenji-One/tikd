@@ -80,6 +80,15 @@ function formatJoinDateLabel(createdAt?: string) {
   }
 }
 
+function clampText(input: string, maxChars: number) {
+  const clean = String(input || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (clean.length <= maxChars) return clean;
+  // keep room for ellipsis
+  return `${clean.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
 async function fetchMyTeams(): Promise<TeamApi[]> {
   const res = await fetch("/api/teams", {
     method: "GET",
@@ -262,7 +271,7 @@ export default function TeamsClient() {
       kind: "team",
       href: `/dashboard/teams/${t._id}`,
       title: t.name,
-      description: (t.description?.trim() || "Internal team") as string,
+      description: clampText(t.description?.trim() || "Internal team", 32),
       bannerUrl: t.banner || undefined,
       iconUrl: t.logo || undefined,
       totalMembers: typeof t.totalMembers === "number" ? t.totalMembers : 0,
@@ -404,7 +413,13 @@ export default function TeamsClient() {
                 </div>
               ) : teamsSlice.length ? (
                 teamsView === "grid" ? (
-                  <div className="flex flex-wrap gap-4">
+                  <div
+                    className={clsx(
+                      teamsSlice.length > 4 ? "grid" : "flex flex-wrap",
+                      "gap-4",
+                      "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
+                    )}
+                  >
                     {teamsSlice.map((item) => (
                       <ConnectionProfileCard
                         key={item.id}
@@ -420,6 +435,9 @@ export default function TeamsClient() {
                         tiltMaxDeg={4}
                         tiltPerspective={900}
                         tiltLiftPx={2}
+                        cardWidth={
+                          teamsSlice.length > 4 ? "compact" : "default"
+                        }
                       />
                     ))}
                   </div>

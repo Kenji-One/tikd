@@ -37,12 +37,14 @@ type FinanceTab = "withdrew" | "sent" | "received";
 type WithdrawRow = {
   id: string;
   provider: "PayPal" | "Bank" | "Payoneer" | "Wise";
+  invoice: string; // e.g. "02496"
   dateLabel: string; // "31 Oct, 11:00pm"
   amount: number; // positive number (we render as negative visually)
 };
 
 type TransferRow = {
   id: string;
+  invoice: string; // e.g. "02496"
   name: string; // person/org
   avatarUrl?: string | null;
   type: "in" | "out"; // Sent In / Sent Out
@@ -360,45 +362,92 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       {
         id: "w1",
         provider: "PayPal",
+        invoice: "02496",
         dateLabel: "31 Oct, 11:00pm",
         amount: 500,
       },
-      { id: "w2", provider: "Wise", dateLabel: "27 Sep, 10:40am", amount: 350 },
+      {
+        id: "w2",
+        provider: "Wise",
+        invoice: "02483",
+        dateLabel: "27 Sep, 10:40am",
+        amount: 350,
+      },
       {
         id: "w3",
         provider: "Payoneer",
+        invoice: "02411",
         dateLabel: "15 Aug, 08:00am",
         amount: 5000,
       },
-      { id: "w4", provider: "Bank", dateLabel: "11 Jun, 12:00pm", amount: 800 },
+      {
+        id: "w4",
+        provider: "Bank",
+        invoice: "02374",
+        dateLabel: "11 Jun, 12:00pm",
+        amount: 800,
+      },
       {
         id: "w5",
         provider: "Payoneer",
+        invoice: "02322",
         dateLabel: "31 Apr, 11:00am",
         amount: 1000,
       },
       {
         id: "w6",
         provider: "PayPal",
+        invoice: "02319",
         dateLabel: "31 Apr, 11:00am",
         amount: 800,
       },
       {
         id: "w7",
         provider: "PayPal",
-        dateLabel: "31 Apr, 11:00am",
+        invoice: "02307",
+        dateLabel: "28 Mar, 09:10am",
         amount: 250,
       },
       {
         id: "w8",
         provider: "PayPal",
-        dateLabel: "31 Apr, 11:00am",
+        invoice: "02298",
+        dateLabel: "19 Mar, 06:40pm",
         amount: 500,
+      },
+      {
+        id: "w9",
+        provider: "Wise",
+        invoice: "02271",
+        dateLabel: "02 Mar, 02:25pm",
+        amount: 420,
+      },
+      {
+        id: "w10",
+        provider: "Bank",
+        invoice: "02244",
+        dateLabel: "17 Feb, 01:05pm",
+        amount: 1200,
+      },
+      {
+        id: "w11",
+        provider: "Bank",
+        invoice: "0265",
+        dateLabel: "18 Feb, 01:05pm",
+        amount: 1450,
+      },
+      {
+        id: "w12",
+        provider: "Bank",
+        invoice: "0643",
+        dateLabel: "28 Feb, 01:05pm",
+        amount: 1970,
       },
     ],
     transfers: [
       {
         id: "t1",
+        invoice: "02496",
         name: "Mahfuzul Nabil",
         avatarUrl: avatarPlaceholderUrl("Mahfuzul Nabil"),
         type: "in",
@@ -409,6 +458,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t2",
+        invoice: "02471",
         name: "Adom Shafi",
         avatarUrl: avatarPlaceholderUrl("Adom Shafi"),
         type: "out",
@@ -419,6 +469,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t3",
+        invoice: "02440",
         name: "Sami Ahmed",
         avatarUrl: avatarPlaceholderUrl("Sami Ahmed"),
         type: "in",
@@ -429,6 +480,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t4",
+        invoice: "02412",
         name: "Sajib Rahman",
         avatarUrl: avatarPlaceholderUrl("Sajib Rahman"),
         type: "out",
@@ -439,6 +491,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t5",
+        invoice: "02388",
         name: "Saiful Islam R.",
         avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
         type: "in",
@@ -449,6 +502,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t6",
+        invoice: "02387",
         name: "Saiful Islam R.",
         avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
         type: "in",
@@ -459,6 +513,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t7",
+        invoice: "02361",
         name: "Sajib Rahman",
         avatarUrl: avatarPlaceholderUrl("Sajib Rahman"),
         type: "out",
@@ -469,6 +524,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t8",
+        invoice: "02352",
         name: "Saiful Islam R.",
         avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
         type: "in",
@@ -479,6 +535,7 @@ async function getFinanceOverviewDummy(): Promise<FinanceOverview> {
       },
       {
         id: "t9",
+        invoice: "02351",
         name: "Saiful Islam R.",
         avatarUrl: avatarPlaceholderUrl("Saiful Islam R."),
         type: "in",
@@ -637,7 +694,7 @@ export default function FinancesClient() {
     return formatUSD(sum);
   }, [chartTab, overview?.withdrawHistory, overview?.transfers, series]);
 
-  const ACTIVITY_MAX_ITEMS = 6;
+  const ACTIVITY_MAX_ITEMS = 10;
 
   const activityAll = overview?.withdrawHistory ?? [];
   const activityShown = activityAll.slice(0, ACTIVITY_MAX_ITEMS);
@@ -816,8 +873,12 @@ export default function FinancesClient() {
                           <div className="flex items-center gap-3">
                             <ProviderLogo provider={w.provider} />
                             <div>
+                              {/* ✅ Removed company name before Withdraw; added invoice to the right */}
                               <div className="text-[13px] font-semibold text-neutral-0">
-                                {w.provider} Withdraw
+                                Withdraw{" "}
+                                <span className="text-neutral-300 font-bold tabular-nums">
+                                  #{w.invoice}
+                                </span>
                               </div>
                               <div className="mt-1 text-[12px] text-neutral-400">
                                 {w.dateLabel}
@@ -941,14 +1002,17 @@ export default function FinancesClient() {
               </div>
 
               <div className="relative w-full overflow-x-auto">
-                <table className="w-full min-w-[980px] border-collapse font-medium leading-tight">
+                {/* ✅ table-fixed + rebalanced col widths for even spacing */}
+                <table className="w-full min-w-[1100px] table-fixed border-collapse font-medium leading-tight">
                   <colgroup>
-                    <col style={{ width: "32%" }} />
+                    <col style={{ width: "30%" }} />
                     <col style={{ width: "20%" }} />
-                    <col style={{ width: "16%" }} />
-                    <col style={{ width: "16%" }} />
-                    <col style={{ width: "16%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "11%" }} />
                   </colgroup>
+
                   <thead className="text-neutral-400">
                     <tr className="[&>th]:pb-3 [&>th]:pt-3 [&>th]:px-4">
                       <ThSort
@@ -977,6 +1041,14 @@ export default function FinancesClient() {
                         right
                         onClick={() => toggleSort("amount")}
                       />
+
+                      {/* ✅ New column between Amount and Date (centered values) */}
+                      <th className="px-4 text-center font-semibold select-none">
+                        <div className="inline-flex w-full items-center justify-center">
+                          Invoice #
+                        </div>
+                      </th>
+
                       <ThSort
                         label="Date"
                         active={sortBy === "date"}
@@ -1039,6 +1111,13 @@ export default function FinancesClient() {
                           </div>
                         </td>
 
+                        {/* ✅ Invoice # (centered) */}
+                        <td className="px-4 py-3 text-center">
+                          <div className="text-[13px] font-semibold tabular-nums text-neutral-200">
+                            #{t.invoice}
+                          </div>
+                        </td>
+
                         {/* Date */}
                         <td className="px-4 py-3 text-right">
                           <div className="text-[13px] text-neutral-200">
@@ -1051,7 +1130,7 @@ export default function FinancesClient() {
                     {!transfersSorted.length && (
                       <tr className="border-t border-neutral-800/60">
                         <td
-                          colSpan={5}
+                          colSpan={6}
                           className="px-4 py-8 text-center text-[13px] text-neutral-400"
                         >
                           No transfers yet.
@@ -1078,9 +1157,9 @@ function ProviderLogo({ provider }: { provider: WithdrawRow["provider"] }) {
   const showImg = !!src && !broken;
 
   return (
-    <div className="relative h-10 w-10 overflow-hidden rounded-full bg-white/7 ring-1 ring-white/10 backdrop-blur-xl">
+    <div className="relative h-9 w-9 overflow-hidden rounded-full bg-white/7 ring-1 ring-white/10 backdrop-blur-xl">
       {/* fallback */}
-      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-neutral-0">
+      <div className="absolute inset-0 flex items-center justify-center text-[12px] font-extrabold text-neutral-0">
         {provider === "PayPal"
           ? "P"
           : provider === "Wise"
@@ -1175,7 +1254,11 @@ function ThSort({
       <div
         className={clsx(
           "inline-flex items-center",
-          right ? "justify-end w-full" : "justify-start",
+          center
+            ? "justify-center w-full"
+            : right
+              ? "justify-end w-full"
+              : "justify-start",
         )}
       >
         {label}

@@ -6,17 +6,7 @@ import type { UseFormRegister, UseFormSetValue } from "react-hook-form";
 import { useRef, useState } from "react";
 
 import clsx from "clsx";
-import {
-  ChevronDown,
-  Globe,
-  Link2,
-  Lock,
-  Ticket,
-  ArrowDown,
-  ArrowUp,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { ChevronDown, Globe, Link2, Lock, Eye, EyeOff } from "lucide-react";
 
 import Checkbox from "@/components/ui/Checkbox";
 
@@ -512,8 +502,8 @@ export default function TicketTypeAvailabilityStep({
     </>
   );
 
-  const setAccessMode = (mode: string) => {
-    setValue("accessMode", mode as any, { shouldDirty: true });
+  const setAccessMode = (mode: TicketTypeFormValues["accessMode"]) => {
+    setValue("accessMode", mode, { shouldDirty: true });
   };
 
   return (

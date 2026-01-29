@@ -46,7 +46,7 @@ export type TicketTypeFormValues = {
   availabilityStatus: TicketAvailabilityStatus;
   salesStartAt: string | null;
   salesEndAt: string | null;
-  accessMode: "public" | "password";
+  accessMode: "public" | "password" | "restricted";
   password: string;
 
   // Checkout (mirrors design)

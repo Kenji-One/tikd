@@ -21,17 +21,27 @@ const bodySchema = z.object({
   pinned: z.boolean(),
 });
 
+type SessionLike =
+  | {
+      user?: {
+        id?: string | null;
+        email?: string | null;
+      } | null;
+    }
+  | null
+  | undefined;
+
 /**
  * Canonical resolver:
  * - Prefer email -> real Mongo user _id (most reliable)
  * - Only trust session.user.id if it exists as a User._id in Mongo
  */
-async function resolveMongoUserObjectId(session: any) {
+async function resolveMongoUserObjectId(session: SessionLike) {
   const email = session?.user?.email ? String(session.user.email) : "";
   if (email) {
     const u = await User.findOne({ email })
       .select("_id")
-      .lean<{ _id: unknown }>();
+      .lean<{ _id: unknown } | null>();
 
     if (u?._id) {
       const idStr = String(u._id);
@@ -56,21 +66,21 @@ async function resolveMongoUserObjectId(session: any) {
  */
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: { id: string } },
 ) {
-  const session = await auth();
+  const session = (await auth()) as SessionLike;
   const mongoUserId = await resolveMongoUserObjectId(session);
 
   if (!mongoUserId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
+  const { id } = params;
   if (!isObjectId(id)) {
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
   }
 
-  const json = await req.json().catch(() => null);
+  const json: unknown = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
@@ -78,9 +88,14 @@ export async function PUT(
 
   const { pinned } = parsed.data;
 
-  const event = await Event.findById(id).select(
-    "_id organizationId createdByUserId",
-  );
+  const event = await Event.findById(id)
+    .select("_id organizationId createdByUserId")
+    .lean<{
+      _id: unknown;
+      organizationId: unknown;
+      createdByUserId?: unknown;
+    } | null>();
+
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
@@ -88,11 +103,11 @@ export async function PUT(
   // ✅ Permission checks must use canonical Mongo user id
   const mongoUserIdStr = mongoUserId.toHexString();
 
-  const org = await Organization.findById(event.organizationId).select(
-    "_id ownerId",
-  );
+  const org = await Organization.findById(String(event.organizationId))
+    .select("_id ownerId")
+    .lean<{ _id: unknown; ownerId?: unknown } | null>();
 
-  const isOwner = !!org && String((org as any).ownerId) === mongoUserIdStr;
+  const isOwner = !!org && String(org.ownerId ?? "") === mongoUserIdStr;
 
   const isCreator =
     !!event.createdByUserId && String(event.createdByUserId) === mongoUserIdStr;
@@ -112,19 +127,19 @@ export async function PUT(
   if (pinned) {
     // 1) remove any legacy string pin for this user
     await Event.updateOne(
-      { _id: event._id },
+      { _id: id },
       { $pull: { pinnedByUserIds: mongoUserIdStr } },
     ).exec();
 
     // 2) add canonical ObjectId pin
     await Event.updateOne(
-      { _id: event._id },
+      { _id: id },
       { $addToSet: { pinnedByUserIds: mongoUserId } },
     ).exec();
   } else {
     // remove both possible representations
     await Event.updateOne(
-      { _id: event._id },
+      { _id: id },
       { $pull: { pinnedByUserIds: { $in: [mongoUserId, mongoUserIdStr] } } },
     ).exec();
   }

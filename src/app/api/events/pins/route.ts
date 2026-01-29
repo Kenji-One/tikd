@@ -12,17 +12,27 @@ import { Types } from "mongoose";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type SessionLike =
+  | {
+      user?: {
+        id?: string | null;
+        email?: string | null;
+      } | null;
+    }
+  | null
+  | undefined;
+
 /**
  * Canonical resolver:
  * - Prefer email -> real Mongo user _id (most reliable)
  * - Only trust session.user.id if it exists as a User._id in Mongo
  */
-async function resolveMongoUserObjectId(session: any) {
+async function resolveMongoUserObjectId(session: SessionLike) {
   const email = session?.user?.email ? String(session.user.email) : "";
   if (email) {
     const u = await User.findOne({ email })
       .select("_id")
-      .lean<{ _id: unknown }>();
+      .lean<{ _id: unknown } | null>();
 
     if (u?._id) {
       const idStr = String(u._id);
@@ -44,7 +54,7 @@ async function resolveMongoUserObjectId(session: any) {
  * Returns ids of events pinned by current user.
  */
 export async function GET() {
-  const session = await auth();
+  const session = (await auth()) as SessionLike;
   const mongoUserId = await resolveMongoUserObjectId(session);
 
   if (!mongoUserId) {

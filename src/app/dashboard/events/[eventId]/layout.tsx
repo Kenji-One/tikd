@@ -160,12 +160,16 @@ async function patchEventStatus(
   if (!res.ok) {
     let message = "Failed to update event status";
     try {
-      const j = (await res.json()) as any;
-      message =
-        j?.error ||
-        j?.message ||
-        (typeof j === "string" ? j : message) ||
-        message;
+      const j: unknown = await res.json();
+
+      if (typeof j === "string") {
+        message = j || message;
+      } else if (j && typeof j === "object") {
+        const obj = j as Record<string, unknown>;
+        const maybeError = typeof obj.error === "string" ? obj.error : "";
+        const maybeMsg = typeof obj.message === "string" ? obj.message : "";
+        message = maybeError || maybeMsg || message;
+      }
     } catch {
       // ignore
     }
@@ -405,7 +409,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
   // Clear pending state after route actually changes
   useEffect(() => {
     setPendingTab(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   // Track scroll to style the sticky header background when it becomes "stuck"

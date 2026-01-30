@@ -27,6 +27,21 @@ type FriendshipLean = {
   createdAt?: Date;
 };
 
+/**
+ * What we expect back from `.lean()` after populating requesterId/recipientId.
+ * `_id` can be string/ObjectId depending on mongoose + lean behavior.
+ */
+type RawFriendshipPopulated = {
+  _id: Types.ObjectId | string;
+  requesterId:
+    | (Omit<FriendUserLean, "_id"> & { _id: Types.ObjectId | string })
+    | null;
+  recipientId:
+    | (Omit<FriendUserLean, "_id"> & { _id: Types.ObjectId | string })
+    | null;
+  createdAt?: Date | string | null;
+};
+
 function displayName(u: {
   firstName?: string;
   lastName?: string;
@@ -47,23 +62,23 @@ export async function GET() {
 
   const meId = new Types.ObjectId(me);
 
-  const rawFriendships = await Friendship.find({
+  const rawFriendships = (await Friendship.find({
     status: "accepted",
     $or: [{ requesterId: meId }, { recipientId: meId }],
   })
     .populate("requesterId", "firstName lastName username email phone image")
     .populate("recipientId", "firstName lastName username email phone image")
-    .lean();
+    .lean()) as unknown as RawFriendshipPopulated[];
 
-  const friendships: FriendshipLean[] = rawFriendships.map((f: any) => ({
+  const friendships: FriendshipLean[] = rawFriendships.map((f) => ({
     _id: new Types.ObjectId(f._id),
     requesterId: {
-      ...f.requesterId,
-      _id: new Types.ObjectId(f.requesterId._id),
+      ...(f.requesterId ?? {}),
+      _id: new Types.ObjectId(f.requesterId?._id ?? new Types.ObjectId()),
     },
     recipientId: {
-      ...f.recipientId,
-      _id: new Types.ObjectId(f.recipientId._id),
+      ...(f.recipientId ?? {}),
+      _id: new Types.ObjectId(f.recipientId?._id ?? new Types.ObjectId()),
     },
     createdAt: f.createdAt ? new Date(f.createdAt) : undefined,
   }));

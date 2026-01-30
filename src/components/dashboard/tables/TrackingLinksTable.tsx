@@ -1588,6 +1588,16 @@ function TrackingLinkDialog({
   );
 }
 
+function getErrorMessage(e: unknown, fallback: string) {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object" && "message" in e) {
+    const msg = (e as { message?: unknown }).message;
+    if (typeof msg === "string") return msg;
+  }
+  return fallback;
+}
+
 /* ----------------------------- Component --------------------------- */
 export default function TrackingLinksTable() {
   const [data, setData] = useState<Row[]>([]);
@@ -1633,9 +1643,9 @@ export default function TrackingLinksTable() {
         })),
       );
       setLoading(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setLoading(false);
-      setLoadError(e?.message ? String(e.message) : "Failed to load data");
+      setLoadError(getErrorMessage(e, "Failed to load data"));
     }
 
     return () => ac.abort();
@@ -1666,9 +1676,9 @@ export default function TrackingLinksTable() {
           })),
         );
         setLoading(false);
-      } catch (e: any) {
+      } catch (e: unknown) {
         setLoading(false);
-        setLoadError(e?.message ? String(e.message) : "Failed to load data");
+        setLoadError(getErrorMessage(e, "Failed to load data"));
       }
     })();
     return () => ac.abort();

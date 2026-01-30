@@ -13,6 +13,49 @@ import TrackingLink from "@/models/TrackingLink";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type ObjectId = mongoose.Types.ObjectId;
+
+type DestinationKind = "Event" | "Organization";
+type LinkStatus = "Active" | "Paused" | "Disabled";
+
+type TrackingLinkLean = {
+  _id: ObjectId;
+  name: string;
+
+  organizationId: ObjectId;
+
+  destinationKind: DestinationKind;
+  destinationId: ObjectId;
+
+  code: string;
+  path: string;
+
+  status: LinkStatus;
+
+  iconKey?: string | null;
+  iconUrl?: string | null;
+
+  views?: number;
+  ticketsSold?: number;
+  revenue?: number;
+
+  archived?: boolean;
+
+  createdAt: Date;
+};
+
+type EventTitleLean = {
+  _id: ObjectId;
+  title?: string;
+};
+
+type OrgNameLean = {
+  _id: ObjectId;
+  name?: string;
+};
+
+type OwnedOrgLean = { _id: ObjectId };
+
 const isObjectId = (val: string) => mongoose.Types.ObjectId.isValid(val);
 
 function makeTrackingPath(code: string) {
@@ -28,7 +71,7 @@ function randomCode(len = 8) {
   return out;
 }
 
-async function generateUniqueCode(organizationId: mongoose.Types.ObjectId) {
+async function generateUniqueCode(organizationId: ObjectId) {
   for (let i = 0; i < 12; i++) {
     const code = randomCode(8);
     const exists = await TrackingLink.exists({ organizationId, code });
@@ -69,7 +112,7 @@ type UiRow = {
   id: string;
   name: string;
 
-  destinationKind: "Event" | "Organization";
+  destinationKind: DestinationKind;
   destinationId: string;
   destinationTitle: string;
 
@@ -80,23 +123,28 @@ type UiRow = {
   views: number;
   ticketsSold: number;
   revenue: number;
-  status: "Active" | "Paused" | "Disabled";
+  status: LinkStatus;
   created: string; // ISO
 };
 
-async function toUiRow(doc: any): Promise<UiRow> {
-  const destinationKind = doc.destinationKind as "Event" | "Organization";
+async function toUiRow(doc: TrackingLinkLean): Promise<UiRow> {
+  const destinationKind = doc.destinationKind;
 
   let destinationTitle = "";
+
   try {
     if (destinationKind === "Event") {
-      const e = await Event.findById(doc.destinationId).select("title").lean();
-      destinationTitle = (e as any)?.title ?? "";
+      const e = (await Event.findById(doc.destinationId)
+        .select("title")
+        .lean()) as EventTitleLean | null;
+
+      destinationTitle = e?.title ?? "";
     } else {
-      const o = await Organization.findById(doc.destinationId)
+      const o = (await Organization.findById(doc.destinationId)
         .select("name")
-        .lean();
-      destinationTitle = (o as any)?.name ?? "";
+        .lean()) as OrgNameLean | null;
+
+      destinationTitle = o?.name ?? "";
     }
   } catch {
     destinationTitle = "";
@@ -127,24 +175,24 @@ async function toUiRow(doc: any): Promise<UiRow> {
 /* GET /api/tracking-links                                            */
 /* - returns all non-archived links for orgs owned by this user        */
 /* ------------------------------------------------------------------ */
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const ownedOrgs = await Organization.find({ ownerId: session.user.id })
+  const ownedOrgs = (await Organization.find({ ownerId: session.user.id })
     .select("_id")
-    .lean();
+    .lean()) as OwnedOrgLean[];
 
-  const orgIds = ownedOrgs.map((o: any) => o._id);
+  const orgIds: ObjectId[] = ownedOrgs.map((o) => o._id);
 
-  const links = await TrackingLink.find({
+  const links = (await TrackingLink.find({
     organizationId: { $in: orgIds },
     archived: false,
   })
     .sort({ createdAt: -1 })
-    .lean();
+    .lean() as unknown) as TrackingLinkLean[];
 
   const rows = await Promise.all(links.map(toUiRow));
   return NextResponse.json({ rows });
@@ -160,7 +208,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const json = await req.json();
+  const json: unknown = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
@@ -172,8 +220,7 @@ export async function POST(req: NextRequest) {
   const destObjId = new mongoose.Types.ObjectId(destinationId);
 
   // Resolve organizationId + permission checks:
-  // NOTE: non-nullable because both branches either assign or return.
-  let organizationId: mongoose.Types.ObjectId;
+  let organizationId: ObjectId;
 
   if (destinationKind === "Organization") {
     const org = await Organization.findById(destObjId).select("_id ownerId");
@@ -186,7 +233,7 @@ export async function POST(req: NextRequest) {
     if (String(org.ownerId) !== String(session.user.id)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    organizationId = org._id;
+    organizationId = org._id as ObjectId;
   } else {
     const event = await Event.findById(destObjId).select("_id organizationId");
     if (!event) {
@@ -205,7 +252,7 @@ export async function POST(req: NextRequest) {
     if (String(org.ownerId) !== String(session.user.id)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    organizationId = org._id;
+    organizationId = org._id as ObjectId;
   }
 
   const code = await generateUniqueCode(organizationId);
@@ -224,7 +271,7 @@ export async function POST(req: NextRequest) {
     createdByUserId: new mongoose.Types.ObjectId(session.user.id),
   });
 
-  const lean = serialize(doc.toObject());
+  const lean = serialize(doc.toObject()) as TrackingLinkLean;
   const row = await toUiRow(lean);
 
   return NextResponse.json({ row });

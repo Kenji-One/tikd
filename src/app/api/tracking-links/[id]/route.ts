@@ -12,6 +12,8 @@ import TrackingLink from "@/models/TrackingLink";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+type ObjectId = mongoose.Types.ObjectId;
+
 const isObjectId = (val: string) => mongoose.Types.ObjectId.isValid(val);
 
 const patchSchema = z.object({
@@ -44,14 +46,25 @@ const patchSchema = z.object({
   iconUrl: z.string().url().nullable().optional(),
 });
 
-async function assertOwner(sessionUserId: string, organizationId: any) {
-  const org = await Organization.findById(organizationId).select("_id ownerId");
-  if (!org)
-    return { ok: false as const, status: 404, error: "Organization not found" };
-  if (String(org.ownerId) !== String(sessionUserId)) {
-    return { ok: false as const, status: 403, error: "Forbidden" };
+type AssertOwnerResult =
+  | { ok: true; org: { _id: ObjectId; ownerId: ObjectId } }
+  | { ok: false; status: number; error: string };
+
+async function assertOwner(
+  sessionUserId: string,
+  organizationId: ObjectId,
+): Promise<AssertOwnerResult> {
+  const org = (await Organization.findById(organizationId)
+    .select("_id ownerId")
+    .lean()) as { _id: ObjectId; ownerId: ObjectId } | null;
+
+  if (!org) {
+    return { ok: false, status: 404, error: "Organization not found" };
   }
-  return { ok: true as const, org };
+  if (String(org.ownerId) !== String(sessionUserId)) {
+    return { ok: false, status: 403, error: "Forbidden" };
+  }
+  return { ok: true, org };
 }
 
 export async function PATCH(
@@ -68,7 +81,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const json = await req.json();
+  const json: unknown = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
@@ -83,7 +96,10 @@ export async function PATCH(
   }
 
   // Must be owner of the organization that owns this link
-  const perm = await assertOwner(session.user.id, link.organizationId);
+  const perm = await assertOwner(
+    session.user.id,
+    link.organizationId as ObjectId,
+  );
   if (!perm.ok) {
     return NextResponse.json({ error: perm.error }, { status: perm.status });
   }
@@ -101,14 +117,16 @@ export async function PATCH(
       | "Event"
       | "Organization";
 
-    const nextId = data.destinationId
+    const nextId: ObjectId = data.destinationId
       ? new mongoose.Types.ObjectId(data.destinationId)
-      : (link.destinationId as any);
+      : (link.destinationId as ObjectId);
 
     // Verify destination exists + still owned
     if (nextKind === "Organization") {
-      const org =
-        await Organization.findById(nextId).select("_id ownerId name");
+      const org = (await Organization.findById(nextId)
+        .select("_id ownerId name")
+        .lean()) as { _id: ObjectId; ownerId: ObjectId; name?: string } | null;
+
       if (!org) {
         return NextResponse.json(
           { error: "Organization not found" },
@@ -118,19 +136,27 @@ export async function PATCH(
       if (String(org.ownerId) !== String(session.user.id)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
+
       link.destinationKind = "Organization";
-      link.destinationId = org._id as any;
-      link.organizationId = org._id as any; // keep aligned
+      link.destinationId = org._id;
+      link.organizationId = org._id; // keep aligned
     } else {
-      const event = await Event.findById(nextId).select(
-        "_id organizationId title",
-      );
+      const event = (await Event.findById(nextId)
+        .select("_id organizationId title")
+        .lean()) as {
+        _id: ObjectId;
+        organizationId: ObjectId;
+        title?: string;
+      } | null;
+
       if (!event) {
         return NextResponse.json({ error: "Event not found" }, { status: 404 });
       }
-      const org = await Organization.findById(event.organizationId).select(
-        "_id ownerId",
-      );
+
+      const org = (await Organization.findById(event.organizationId)
+        .select("_id ownerId")
+        .lean()) as { _id: ObjectId; ownerId: ObjectId } | null;
+
       if (!org) {
         return NextResponse.json(
           { error: "Organization not found" },
@@ -142,8 +168,8 @@ export async function PATCH(
       }
 
       link.destinationKind = "Event";
-      link.destinationId = event._id as any;
-      link.organizationId = org._id as any;
+      link.destinationId = event._id;
+      link.organizationId = org._id;
     }
   }
 
@@ -174,7 +200,10 @@ export async function DELETE(
     );
   }
 
-  const perm = await assertOwner(session.user.id, link.organizationId);
+  const perm = await assertOwner(
+    session.user.id,
+    link.organizationId as ObjectId,
+  );
   if (!perm.ok) {
     return NextResponse.json({ error: perm.error }, { status: perm.status });
   }

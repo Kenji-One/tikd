@@ -61,6 +61,25 @@ type FriendRequest = {
   createdAt?: string | null;
 };
 
+/* ---------------------------- Helpers ------------------------------ */
+const EMPTY_FRIENDS: Friend[] = [];
+const EMPTY_REQUESTS: FriendRequest[] = [];
+const EMPTY_CANDIDATES: AddCandidate[] = [];
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function getErrorMessage(err: unknown, fallback = "Something went wrong.") {
+  if (err instanceof Error) return err.message || fallback;
+  if (typeof err === "string") return err || fallback;
+  if (isRecord(err)) {
+    const msg = err.message;
+    if (typeof msg === "string" && msg) return msg;
+  }
+  return fallback;
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -71,21 +90,29 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    let body: any = null;
+    let body: unknown = null;
+
     try {
       body = await res.json();
     } catch {
       // ignore
     }
-    const msg =
-      body?.error ||
-      body?.message ||
-      (typeof body === "string" ? body : null) ||
-      `Request failed (${res.status})`;
-    throw new Error(msg);
+
+    let msg: string | null = null;
+
+    if (isRecord(body)) {
+      const err = body.error;
+      const m = body.message;
+      if (typeof err === "string" && err) msg = err;
+      else if (typeof m === "string" && m) msg = m;
+    } else if (typeof body === "string" && body) {
+      msg = body;
+    }
+
+    throw new Error(msg || `Request failed (${res.status})`);
   }
 
-  return res.json();
+  return res.json() as Promise<T>;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -286,14 +313,16 @@ function FriendsCard({
                     backfaceVisibility: "hidden",
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   {friend.avatarUrl ? (
-                    <img
-                      src={friend.avatarUrl}
-                      alt={friend.name}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={friend.avatarUrl}
+                        alt={friend.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </>
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-[16px] font-semibold text-neutral-200">
                       {badge}
@@ -409,14 +438,16 @@ function FriendsRow({
       <div className="flex min-w-0 items-center gap-3">
         <div className="relative">
           <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             {friend.avatarUrl ? (
-              <img
-                src={friend.avatarUrl}
-                alt={friend.name}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={friend.avatarUrl}
+                  alt={friend.name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </>
             ) : (
               <div className="flex h-full w-full items-center justify-center text-[12px] font-bold text-neutral-200">
                 {badge}
@@ -562,7 +593,7 @@ function AddFriendModal({
     },
   });
 
-  const candidates = candidatesQ.data ?? [];
+  const candidates = candidatesQ.data ?? EMPTY_CANDIDATES;
 
   useEffect(() => {
     if (!open) return;
@@ -628,16 +659,13 @@ function AddFriendModal({
 
   const selected = useMemo(() => {
     const map = new Map(candidates.map((c) => [c.id, c]));
-    // selected might include ids not in current candidates page (search changed)
-    // so we keep a "fallback" minimal object for chips until next fetch brings it.
     return selectedIds
       .map((id) => map.get(id) || null)
-      .filter(Boolean) as AddCandidate[];
+      .filter((v): v is AddCandidate => Boolean(v));
   }, [selectedIds, candidates]);
 
   const filtered = useMemo(() => {
-    const base = candidates.filter((c) => !selectedIds.includes(c.id));
-    return base;
+    return candidates.filter((c) => !selectedIds.includes(c.id));
   }, [candidates, selectedIds]);
 
   const canSend = selectedIds.length > 0;
@@ -660,11 +688,10 @@ function AddFriendModal({
     if (!canSend) return;
     setErrorMsg("");
 
-    // Build selected objects from current candidates list where possible
     const map = new Map(candidates.map((c) => [c.id, c]));
-    const sel: AddCandidate[] = selectedIds
+    const sel = selectedIds
       .map((id) => map.get(id))
-      .filter(Boolean) as AddCandidate[];
+      .filter((v): v is AddCandidate => Boolean(v));
 
     try {
       await onSend(sel.length ? sel : selected);
@@ -672,8 +699,8 @@ function AddFriendModal({
       setSelectedIds([]);
       setQuery("");
       candidatesQ.refetch();
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Failed to send requests.");
+    } catch (e: unknown) {
+      setErrorMsg(getErrorMessage(e, "Failed to send requests."));
     }
   }
 
@@ -766,7 +793,6 @@ function AddFriendModal({
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Chips */}
                   {selectedIds.map((id) => {
                     const found = candidates.find((c) => c.id === id);
                     const name = found?.name ?? "Selected";
@@ -937,14 +963,16 @@ function AddFriendModal({
                       >
                         <div className="relative">
                           <div className="h-11 w-11 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             {c.avatarUrl ? (
-                              <img
-                                src={c.avatarUrl}
-                                alt={c.name}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={c.avatarUrl}
+                                  alt={c.name}
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              </>
                             ) : (
                               <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
                                 {badge}
@@ -1049,7 +1077,7 @@ export default function FriendsClient() {
 
   const sendMut = useMutation({
     mutationFn: (toUserIds: string[]) =>
-      fetchJSON<{ ok: true; created: string[]; skipped: any[] }>(
+      fetchJSON<{ ok: true; created: string[]; skipped: unknown[] }>(
         "/api/friends/requests",
         { method: "POST", body: JSON.stringify({ toUserIds }) },
       ),
@@ -1121,8 +1149,8 @@ export default function FriendsClient() {
     declineMut.mutate(requestId);
   }
 
-  const friends = friendsQ.data ?? [];
-  const requestsRaw = requestsQ.data ?? [];
+  const friends = friendsQ.data ?? EMPTY_FRIENDS;
+  const requestsRaw = requestsQ.data ?? EMPTY_REQUESTS;
 
   const requests = useMemo(() => {
     return requestsRaw.map((r) => ({
@@ -1333,14 +1361,16 @@ export default function FriendsClient() {
                                   >
                                     <div className="relative">
                                       <div className="h-12 w-12 overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10">
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
                                         {r.avatarUrl ? (
-                                          <img
-                                            src={r.avatarUrl}
-                                            alt={r.name}
-                                            className="h-full w-full object-cover"
-                                            loading="lazy"
-                                          />
+                                          <>
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                            <img
+                                              src={r.avatarUrl}
+                                              alt={r.name}
+                                              className="h-full w-full object-cover"
+                                              loading="lazy"
+                                            />
+                                          </>
                                         ) : (
                                           <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
                                             {badge}

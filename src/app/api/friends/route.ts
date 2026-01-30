@@ -4,12 +4,28 @@ import { auth } from "@/lib/auth";
 import "@/lib/mongoose";
 import { Types } from "mongoose";
 import Friendship from "@/models/Friendship";
-import User from "@/models/User";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const isObjectId = (v: string) => /^[a-f\d]{24}$/i.test(v);
+
+type FriendUserLean = {
+  _id: Types.ObjectId;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  email?: string;
+  phone?: string;
+  image?: string;
+};
+
+type FriendshipLean = {
+  _id: Types.ObjectId;
+  requesterId: FriendUserLean;
+  recipientId: FriendUserLean;
+  createdAt?: Date;
+};
 
 function displayName(u: {
   firstName?: string;
@@ -31,7 +47,7 @@ export async function GET() {
 
   const meId = new Types.ObjectId(me);
 
-  const friendships = await Friendship.find({
+  const rawFriendships = await Friendship.find({
     status: "accepted",
     $or: [{ requesterId: meId }, { recipientId: meId }],
   })
@@ -39,10 +55,23 @@ export async function GET() {
     .populate("recipientId", "firstName lastName username email phone image")
     .lean();
 
+  const friendships: FriendshipLean[] = rawFriendships.map((f: any) => ({
+    _id: new Types.ObjectId(f._id),
+    requesterId: {
+      ...f.requesterId,
+      _id: new Types.ObjectId(f.requesterId._id),
+    },
+    recipientId: {
+      ...f.recipientId,
+      _id: new Types.ObjectId(f.recipientId._id),
+    },
+    createdAt: f.createdAt ? new Date(f.createdAt) : undefined,
+  }));
+
   const friends = friendships
     .map((f) => {
-      const requester = f.requesterId as any;
-      const recipient = f.recipientId as any;
+      const requester = f.requesterId;
+      const recipient = f.recipientId;
 
       const other =
         String(requester?._id) === String(meId) ? recipient : requester;
@@ -66,7 +95,7 @@ export async function GET() {
         createdAt: f.createdAt ? new Date(f.createdAt).toISOString() : null,
       };
     })
-    .filter(Boolean);
+    .filter((v): v is NonNullable<typeof v> => Boolean(v));
 
   return NextResponse.json(friends);
 }

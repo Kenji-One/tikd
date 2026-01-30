@@ -11,6 +11,21 @@ export const revalidate = 0;
 
 const isObjectId = (v: string) => /^[a-f\d]{24}$/i.test(v);
 
+type PopulatedUserLean = {
+  _id: Types.ObjectId;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  email?: string;
+  image?: string;
+};
+
+type IncomingRequestLean = {
+  _id: Types.ObjectId;
+  requesterId: PopulatedUserLean;
+  createdAt?: Date;
+};
+
 function displayName(u: {
   firstName?: string;
   lastName?: string;
@@ -35,20 +50,21 @@ export async function GET() {
 
   const meId = new Types.ObjectId(me);
 
-  const incoming = await Friendship.find({
+  const incoming = (await Friendship.find({
     recipientId: meId,
     status: "pending",
   })
     .populate("requesterId", "firstName lastName username email image")
     .sort({ createdAt: -1 })
-    .lean();
+    .lean()) as unknown as IncomingRequestLean[];
 
   const mapped = incoming.map((r) => {
-    const from = r.requesterId as any;
+    const from = r.requesterId;
+
     return {
       id: String(r._id), // request id (used for accept/decline)
-      fromUserId: String(from?._id ?? ""),
-      name: displayName(from),
+      fromUserId: from?._id ? String(from._id) : "",
+      name: displayName(from ?? {}),
       avatarUrl: from?.image ?? "",
       createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
     };
@@ -65,7 +81,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const json = await req.json().catch(() => null);
+  const json: unknown = await req.json().catch(() => null);
   const parsed = sendSchema.safeParse(json);
 
   if (!parsed.success) {

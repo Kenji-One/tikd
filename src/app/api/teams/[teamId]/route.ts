@@ -51,16 +51,19 @@ const updateTeamSchema = z
   })
   .strict();
 
-type RouteContext = { params: { teamId: string } };
+type RouteParams = { teamId: string };
 
 /* GET: get single team (owner-only for now) */
-export async function GET(_req: NextRequest, ctx: RouteContext) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<RouteParams> },
+) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teamId = ctx.params.teamId;
+  const { teamId } = await params;
   if (!teamId || !isObjectId(teamId)) {
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }
@@ -78,13 +81,16 @@ export async function GET(_req: NextRequest, ctx: RouteContext) {
 }
 
 /* PATCH: update team (owner-only) */
-export async function PATCH(req: NextRequest, ctx: RouteContext) {
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<RouteParams> },
+) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teamId = ctx.params.teamId;
+  const { teamId } = await params;
   if (!teamId || !isObjectId(teamId)) {
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }
@@ -109,13 +115,16 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
 }
 
 /* DELETE: delete team (owner-only) */
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<RouteParams> },
+) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const teamId = ctx.params.teamId;
+  const { teamId } = await params;
   if (!teamId || !isObjectId(teamId)) {
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }

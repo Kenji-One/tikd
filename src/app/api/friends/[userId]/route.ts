@@ -10,18 +10,12 @@ export const revalidate = 0;
 
 const isObjectId = (v: string) => /^[a-f\d]{24}$/i.test(v);
 
-type RouteContext = { params: Record<string, string | string[]> };
+type RouteParams = { userId: string };
 
-function getParam(
-  params: Record<string, string | string[]>,
-  key: string,
-): string | null {
-  const val = params[key];
-  if (!val) return null;
-  return Array.isArray(val) ? val[0] : val;
-}
-
-export async function DELETE(_req: NextRequest, ctx: RouteContext) {
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<RouteParams> },
+) {
   const session = await auth();
   const me = session?.user?.id;
 
@@ -29,7 +23,8 @@ export async function DELETE(_req: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = getParam(ctx.params, "userId");
+  const { userId } = await params;
+
   if (!userId || !isObjectId(userId)) {
     return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
   }

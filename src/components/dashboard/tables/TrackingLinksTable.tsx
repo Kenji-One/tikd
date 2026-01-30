@@ -14,11 +14,16 @@ import {
   X,
   Trash2,
   Search,
+  Ban,
+  Calendar,
+  Building2,
+  Ticket,
 } from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
 import CopyButton from "@/components/ui/CopyButton";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { Button } from "@/components/ui/Button";
+import Image from "next/image";
 
 /* ------------------------------- Types ------------------------------ */
 type DestinationKind = "Event" | "Organization";
@@ -27,7 +32,7 @@ type Status = "Active" | "Paused" | "Disabled";
 type PresetIconKey =
   | "instagram"
   | "facebook"
-  | "twitter"
+  | "x"
   | "linkedin"
   | "google"
   | "youtube"
@@ -60,6 +65,7 @@ type Row = {
 };
 
 /* ----------------------------- Mock Data --------------------------- */
+/** (Table demo rows only) */
 const MOCK_DESTINATIONS: Array<{
   kind: DestinationKind;
   id: string;
@@ -91,7 +97,7 @@ const INITIAL_ROWS: Row[] = new Array(7).fill(0).map((_, i) => {
     url: makeDestinationPath(pick.kind, pick.id),
 
     // keep existing “twitter icon everywhere” feel for the mock rows
-    iconKey: "twitter",
+    iconKey: "x",
     iconUrl: null,
 
     views: 2384,
@@ -144,6 +150,17 @@ function formatCreatedParts(label: string) {
   return { date, time };
 }
 
+function formatShortDate(isoOrNull: string | null) {
+  if (!isoOrNull) return "";
+  const ms = Date.parse(isoOrNull);
+  if (!Number.isFinite(ms)) return "";
+  return new Date(ms).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function makeId(prefix = "row") {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now()
     .toString(36)
@@ -171,64 +188,6 @@ function normalizePathInput(inputRaw: string) {
   return withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
 }
 
-/* Preset icon button glyphs (monochrome like current twitter) */
-function TwitterIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className={clsx("opacity-80", className)}
-    >
-      <path
-        fill="currentColor"
-        d="M21.5 6.2c-.7.3-1.4.5-2.2.6.8-.5 1.4-1.2 1.7-2.1-.7.4-1.6.8-2.4.9A3.7 3.7 0 0 0 12 8.2c0 .3 0 .7.1 1A10.4 10.4 0 0 1 3.3 5a3.8 3.8 0 0 0 1.2 5 3.6 3.6 0 0 1-1.7-.5v.1c0 1.8 1.3 3.4 3 3.7a3.8 3.8 0 0 1-1.7.1 3.8 3.8 0 0 0 3.5 2.6 7.4 7.4 0 0 1-5.5 1.5A10.4 10.4 0 0 0 8.2 19c6.8 0 10.6-5.8 10.6-10.8v-.5c.7-.5 1.4-1.2 1.7-1.9z"
-      />
-    </svg>
-  );
-}
-
-/**
- * For the rest of the presets we keep the same monochrome “chip glyph” style.
- * These are intentionally neutral + consistent (like your current twitter icon).
- */
-function LetterGlyph({
-  text,
-  className = "h-5 w-5",
-}: {
-  text: string;
-  className?: string;
-}) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className={clsx("opacity-80", className)}
-    >
-      <path
-        fill="currentColor"
-        d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4z"
-        opacity="0.18"
-      />
-      <path
-        fill="currentColor"
-        d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4z"
-        opacity="0.35"
-      />
-      <text
-        x="12"
-        y="13.2"
-        textAnchor="middle"
-        fontSize="9"
-        fontWeight="700"
-        fill="currentColor"
-        style={{ letterSpacing: "0.2px" }}
-      >
-        {text}
-      </text>
-    </svg>
-  );
-}
-
 function PresetIcon({
   iconKey,
   className = "h-5 w-5",
@@ -236,25 +195,28 @@ function PresetIcon({
   iconKey: PresetIconKey;
   className?: string;
 }) {
-  if (iconKey === "twitter") return <TwitterIcon className={className} />;
-
-  const map: Record<Exclude<PresetIconKey, "twitter">, string> = {
-    instagram: "IG",
-    facebook: "F",
-    linkedin: "in",
-    google: "G",
-    youtube: "YT",
-    snapchat: "S",
-    reddit: "R",
-    tiktok: "TT",
-    telegram: "TG",
-  };
+  const src = `/icons/social/${iconKey}.svg`;
 
   return (
-    <LetterGlyph
-      text={map[iconKey as Exclude<PresetIconKey, "twitter">]}
-      className={className}
-    />
+    <span
+      className={clsx(
+        "relative inline-flex items-center justify-center",
+        className,
+      )}
+      aria-hidden
+    >
+      <Image
+        src={src}
+        alt=""
+        fill
+        sizes="24px"
+        className={clsx(
+          "object-contain opacity-90",
+          "[filter:brightness(0)_saturate(100%)_invert(78%)_sepia(9%)_saturate(375%)_hue-rotate(200deg)_brightness(92%)_contrast(90%)]",
+        )}
+        draggable={false}
+      />
+    </span>
   );
 }
 
@@ -324,7 +286,6 @@ function formatMoneyUSD(amount: number) {
 }
 
 function fullTrackingUrl(pathOnly: string) {
-  // For demo we keep it local; swap to your real tracking domain if needed.
   if (!pathOnly) return "";
   return `${typeof window !== "undefined" ? window.location.origin : ""}${pathOnly}`;
 }
@@ -643,6 +604,155 @@ type TrackingLinkDraft = {
   iconUrl?: string | null; // custom upload (object URL)
 };
 
+/* ------------ Destination search (backend-driven) ------------------ */
+type SearchApiEvent = {
+  id: string;
+  type: "event";
+  title: string;
+  subtitle: string;
+  orgName: string | null;
+  date: string | null;
+  image: string | null;
+  href: string;
+};
+
+type SearchApiOrg = {
+  id: string;
+  type: "org";
+  title: string;
+  subtitle: string;
+  image: string | null;
+  href: string;
+};
+
+type SearchPayload = {
+  success: true;
+  results: {
+    events: SearchApiEvent[];
+    orgs: SearchApiOrg[];
+    teams: unknown[];
+    friends: unknown[];
+  };
+};
+
+type DestinationResult = {
+  kind: DestinationKind;
+  id: string;
+  title: string;
+  subtitle: string; // for Event: org/date line, for Org: city/descriptor
+  image: string | null;
+  date: string | null; // event date only
+  orgName: string | null; // event only
+};
+
+async function fetchDestinationsFromApi(
+  q: string,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<DestinationResult[]> {
+  const qs = new URLSearchParams();
+  qs.set("q", q);
+  qs.set("type", "all");
+  qs.set("limit", String(limit));
+
+  const res = await fetch(`/api/search?${qs.toString()}`, {
+    method: "GET",
+    signal,
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!res.ok) throw new Error("Search failed");
+  const json = (await res.json()) as SearchPayload;
+
+  const events = (json?.results?.events || []).map((e) => {
+    const d = formatShortDate(e.date);
+    const org = (e.orgName || e.subtitle || "").trim();
+    const line = [org, d].filter(Boolean).join(" • ");
+    return {
+      kind: "Event" as const,
+      id: e.id,
+      title: e.title,
+      subtitle: line || "Event",
+      image: e.image ?? null,
+      date: e.date ?? null,
+      orgName: e.orgName ?? null,
+    };
+  });
+
+  const orgs = (json?.results?.orgs || []).map((o) => {
+    const sub = (o.subtitle || "").trim();
+    return {
+      kind: "Organization" as const,
+      id: o.id,
+      title: o.title,
+      subtitle: sub || "Organization",
+      image: o.image ?? null,
+      date: null,
+      orgName: null,
+    };
+  });
+
+  // Merge: events first, then orgs (matches typical “Event search” expectation)
+  return [...events, ...orgs];
+}
+
+function DestinationThumb({
+  kind,
+  image,
+  title,
+}: {
+  kind: DestinationKind;
+  image: string | null;
+  title: string;
+}) {
+  if (image) {
+    return (
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
+        <Image
+          src={image}
+          alt={title || ""}
+          fill
+          sizes="48px"
+          className="object-cover"
+          draggable={false}
+        />
+      </div>
+    );
+  }
+
+  const Icon = kind === "Event" ? Ticket : Building2;
+
+  return (
+    <div
+      className={clsx(
+        "relative h-12 w-12 shrink-0 overflow-hidden rounded-xl",
+        "border border-white/10 bg-[radial-gradient(120%_120%_at_10%_0%,rgba(154,70,255,0.20)_0%,rgba(255,255,255,0.06)_45%,rgba(255,255,255,0.03)_100%)]",
+        "flex items-center justify-center",
+      )}
+      aria-hidden
+      title={title}
+    >
+      <Icon className="h-5 w-5 text-white/70" />
+    </div>
+  );
+}
+
+function KindBadge({ kind }: { kind: DestinationKind }) {
+  const label = kind === "Event" ? "EVENT" : "ORG";
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center justify-center",
+        "h-7 min-w-[64px] rounded-full px-3",
+        "border border-white/10 bg-white/5",
+        "text-[11px] font-semibold tracking-[0.12em] text-white/70",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
 function TrackingLinkDialog({
   open,
   mode,
@@ -673,11 +783,19 @@ function TrackingLinkDialog({
   // Destination search UI state
   const [destQuery, setDestQuery] = useState("");
   const [destOpen, setDestOpen] = useState(false);
+  const [destLoading, setDestLoading] = useState(false);
+  const [destError, setDestError] = useState<string | null>(null);
+  const [destResults, setDestResults] = useState<DestinationResult[]>([]);
   const destWrapRef = useRef<HTMLDivElement | null>(null);
+  const destAbortRef = useRef<AbortController | null>(null);
+  const destDebounceRef = useRef<number | null>(null);
 
   // Status dropdown state
   const [statusOpen, setStatusOpen] = useState(false);
   const statusWrapRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ Icon search state (new)
+  const [iconQuery, setIconQuery] = useState("");
 
   // Custom icon upload
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -687,9 +805,15 @@ function TrackingLinkDialog({
     if (!open) return;
 
     setTouched(false);
-    setDestQuery("");
+    setDestQuery(mode === "edit" && initial ? initial.destinationTitle : "");
     setDestOpen(false);
+    setDestLoading(false);
+    setDestError(null);
+    setDestResults([]);
     setStatusOpen(false);
+
+    // ✅ reset icon search on open
+    setIconQuery("");
 
     // cleanup any previous object url on open
     if (lastObjectUrlRef.current) {
@@ -761,6 +885,72 @@ function TrackingLinkDialog({
     }
   }, [open]);
 
+  // ✅ Backend search for destinations (debounced + abortable)
+  useEffect(() => {
+    if (!open) return;
+
+    // Only search when panel is open (so we don’t spam while closed)
+    if (!destOpen) return;
+
+    const q = destQuery.trim();
+
+    // Clear previous debounce
+    if (destDebounceRef.current) {
+      window.clearTimeout(destDebounceRef.current);
+      destDebounceRef.current = null;
+    }
+
+    // Abort previous request
+    if (destAbortRef.current) {
+      destAbortRef.current.abort();
+      destAbortRef.current = null;
+    }
+
+    // If empty query: show “type to search” state (no request)
+    if (!q) {
+      setDestLoading(false);
+      setDestError(null);
+      setDestResults([]);
+      return;
+    }
+
+    setDestLoading(true);
+    setDestError(null);
+
+    const ac = new AbortController();
+    destAbortRef.current = ac;
+
+    destDebounceRef.current = window.setTimeout(() => {
+      fetchDestinationsFromApi(q, 8, ac.signal)
+        .then((list) => {
+          // If aborted, ignore
+          if (ac.signal.aborted) return;
+          setDestResults(list);
+          setDestLoading(false);
+          setDestError(null);
+        })
+        .catch((err) => {
+          if (ac.signal.aborted) return;
+          setDestLoading(false);
+          setDestResults([]);
+          setDestError(
+            err?.message ? String(err.message) : "Search failed. Try again.",
+          );
+        });
+    }, 220);
+
+    return () => {
+      if (destDebounceRef.current) {
+        window.clearTimeout(destDebounceRef.current);
+        destDebounceRef.current = null;
+      }
+      if (destAbortRef.current) {
+        destAbortRef.current.abort();
+        destAbortRef.current = null;
+      }
+    };
+  }, [open, destOpen, destQuery]);
+
   const title =
     mode === "create" ? "Create Tracking Link" : "Edit Tracking Link";
 
@@ -773,7 +963,7 @@ function TrackingLinkDialog({
   const presetIcons: Array<{ key: PresetIconKey; label: string }> = [
     { key: "instagram", label: "Instagram" },
     { key: "facebook", label: "Facebook" },
-    { key: "twitter", label: "Twitter" },
+    { key: "x", label: "X" },
     { key: "linkedin", label: "LinkedIn" },
     { key: "google", label: "Google" },
     { key: "youtube", label: "YouTube" },
@@ -782,6 +972,13 @@ function TrackingLinkDialog({
     { key: "tiktok", label: "TikTok" },
     { key: "telegram", label: "Telegram" },
   ];
+
+  // ✅ filter icons for new search input
+  const filteredPresetIcons = useMemo(() => {
+    const q = iconQuery.trim().toLowerCase();
+    if (!q) return presetIcons;
+    return presetIcons.filter((p) => p.label.toLowerCase().includes(q));
+  }, [iconQuery]);
 
   const selectBtnCls = clsx(
     "mt-2 w-full rounded-lg border bg-neutral-900 px-4 py-3 text-base text-neutral-0 outline-none",
@@ -793,23 +990,17 @@ function TrackingLinkDialog({
   );
 
   const dropdownPanelCls = clsx(
-    "absolute left-0 right-0 z-[90] mt-2 overflow-hidden rounded-lg",
+    "absolute left-0 right-0 z-[90] mt-2 overflow-hidden rounded-xl",
     "border border-white/10 bg-neutral-900",
   );
 
   const optionBtnBase = clsx(
-    "w-full text-left px-4 py-3 transition flex items-start justify-between gap-3",
+    "w-full text-left transition flex items-center gap-3",
+    "px-4 py-3.5",
     "hover:bg-white/5 focus:bg-white/5 focus:outline-none",
   );
 
-  // Destination filtering
-  const filteredDestinations = useMemo(() => {
-    const q = destQuery.trim().toLowerCase();
-    const list = MOCK_DESTINATIONS;
-    if (!q) return list.slice(0, 8);
-
-    return list.filter((x) => x.title.toLowerCase().includes(q)).slice(0, 12);
-  }, [destQuery]);
+  const resultDivider = "border-b border-white/10";
 
   if (!open) return null;
 
@@ -830,11 +1021,7 @@ function TrackingLinkDialog({
       )
     : "";
 
-  const handlePickDestination = (d: {
-    kind: DestinationKind;
-    id: string;
-    title: string;
-  }) => {
+  const handlePickDestination = (d: DestinationResult) => {
     setDraft((prev) => ({
       ...prev,
       destinationKind: d.kind,
@@ -842,7 +1029,9 @@ function TrackingLinkDialog({
       destinationTitle: d.title,
     }));
     setDestOpen(false);
-    setDestQuery("");
+    // keep selected visible in the input
+    setDestQuery(d.title);
+    setDestError(null);
   };
 
   const handleUploadIcon = (file: File | null) => {
@@ -871,6 +1060,8 @@ function TrackingLinkDialog({
     }
     setDraft((prev) => ({ ...prev, iconUrl: null }));
   };
+
+  const hasNoIcon = !draft.iconKey && !draft.iconUrl;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
@@ -920,7 +1111,6 @@ function TrackingLinkDialog({
                   setDraft((d) => ({ ...d, name: e.target.value }))
                 }
                 onBlur={() => setTouched(true)}
-                // ✅ Client requirement
                 placeholder="Enter name."
                 size="lg"
                 variant="full"
@@ -938,36 +1128,71 @@ function TrackingLinkDialog({
               />
             </div>
 
-            {/* Icon selector (optional) */}
+            {/* ✅ Icon selector (optional) */}
             <div className="md:col-span-2">
               <label className="block leading-[90%] font-normal text-white mb-2">
                 Icon (optional)
               </label>
 
               <div className="rounded-lg border border-white/10 bg-neutral-900 p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* None */}
+                {/* Search input above icons */}
+                <div
+                  className={clsx(
+                    "relative w-full",
+                    "rounded-lg border border-white/10 bg-white/5 h-11",
+                  )}
+                >
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    value={iconQuery}
+                    onChange={(e) => setIconQuery(e.target.value)}
+                    placeholder="Search icons..."
+                    className={clsx(
+                      "h-11 w-full rounded-lg bg-transparent",
+                      "pl-10 pr-4 text-[12px] text-neutral-100",
+                      "placeholder:text-neutral-500",
+                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                    )}
+                  />
+                </div>
+
+                {/* Icon grid */}
+                <div className={clsx("mt-3 flex gap-3", "flex-wrap")}>
+                  {/* None (improved) */}
                   <button
                     type="button"
                     onClick={() => {
                       clearCustomIcon();
                       setDraft((d) => ({ ...d, iconKey: null, iconUrl: null }));
                     }}
+                    aria-label="No icon"
+                    aria-pressed={hasNoIcon}
+                    title="No icon"
                     className={clsx(
-                      "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                      "group inline-flex items-center justify-center shrink-0",
+                      "h-10 w-10 md:h-11 md:w-11 rounded-md border",
                       "transition cursor-pointer",
-                      !draft.iconKey && !draft.iconUrl
-                        ? "border-primary-500/40 bg-primary-500/10 text-neutral-0"
-                        : "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10",
+                      "focus:outline-none focus:ring-1 focus:ring-primary-500/40",
+                      hasNoIcon
+                        ? "border-primary-500/40 bg-primary-500/10"
+                        : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20",
                     )}
                   >
-                    <span className="h-5 w-5 rounded-[6px] bg-white/10" />
-                    None
+                    <Ban
+                      size={24}
+                      className={clsx(
+                        "transition",
+                        hasNoIcon
+                          ? "text-primary-300"
+                          : "text-neutral-400 group-hover:text-neutral-200",
+                      )}
+                    />
                   </button>
 
                   {/* Presets */}
-                  {presetIcons.map((p) => {
+                  {filteredPresetIcons.map((p) => {
                     const selected = draft.iconKey === p.key && !draft.iconUrl;
+
                     return (
                       <button
                         key={p.key}
@@ -980,24 +1205,29 @@ function TrackingLinkDialog({
                             iconUrl: null,
                           }));
                         }}
-                        className={clsx(
-                          "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                          "transition cursor-pointer",
-                          selected
-                            ? "border-primary-500/40 bg-primary-500/10 text-neutral-0"
-                            : "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10",
-                        )}
+                        aria-label={p.label}
+                        aria-pressed={selected}
                         title={p.label}
+                        className={clsx(
+                          "group inline-flex items-center justify-center shrink-0",
+                          "h-10 w-10 md:h-11 md:w-11 rounded-md border",
+                          "transition cursor-pointer",
+                          "focus:outline-none focus:ring-1 focus:ring-primary-500/40",
+                          selected
+                            ? "border-primary-500/40 bg-primary-500/10"
+                            : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20",
+                        )}
                       >
-                        <span className="text-neutral-400">
-                          <PresetIcon iconKey={p.key} className="h-5 w-5" />
+                        <span className="text-[#A7A7BC]">
+                          <PresetIcon iconKey={p.key} className="h-6 w-6" />
                         </span>
-                        {p.label}
                       </button>
                     );
                   })}
+                </div>
 
-                  {/* Upload */}
+                {/* Upload row (reserve height so modal doesn't jump) */}
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1022,37 +1252,55 @@ function TrackingLinkDialog({
                     Upload custom
                   </button>
 
-                  {draft.iconUrl ? (
-                    <button
-                      type="button"
-                      onClick={clearCustomIcon}
-                      className="ml-auto inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-300 hover:bg-white/10 transition cursor-pointer"
-                      title="Remove custom icon"
-                    >
-                      <X size={14} />
-                      Remove
-                    </button>
-                  ) : null}
+                  {/* Keep space reserved even when not visible */}
+                  <button
+                    type="button"
+                    onClick={clearCustomIcon}
+                    className={clsx(
+                      "ml-auto inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-300 hover:bg-white/10 transition cursor-pointer",
+                      "min-w-[116px] justify-center",
+                      draft.iconUrl ? "" : "opacity-0 pointer-events-none",
+                    )}
+                    title="Remove custom icon"
+                    aria-hidden={!draft.iconUrl}
+                    tabIndex={draft.iconUrl ? 0 : -1}
+                  >
+                    <X size={14} />
+                    Remove
+                  </button>
                 </div>
 
-                {draft.iconUrl ? (
-                  <div className="mt-3 flex items-center gap-3 text-sm text-neutral-400">
-                    <span className="text-neutral-300">Selected:</span>
-                    <TrackingIcon iconUrl={draft.iconUrl} className="h-6 w-6" />
-                    <span className="text-neutral-500">(custom upload)</span>
-                  </div>
-                ) : draft.iconKey ? (
-                  <div className="mt-3 flex items-center gap-3 text-sm text-neutral-400">
-                    <span className="text-neutral-300">Selected:</span>
-                    <span className="text-neutral-400">
-                      <PresetIcon iconKey={draft.iconKey} className="h-6 w-6" />
+                {/* Selected preview (always rendered => no height jump) */}
+                <div className="mt-3 flex items-center gap-3 text-sm text-neutral-400 min-h-[28px]">
+                  <span className="text-neutral-300">Selected:</span>
+
+                  {draft.iconUrl ? (
+                    <>
+                      <TrackingIcon
+                        iconUrl={draft.iconUrl}
+                        className="h-6 w-6"
+                      />
+                      <span className="text-neutral-500">(custom upload)</span>
+                    </>
+                  ) : draft.iconKey ? (
+                    <>
+                      <span className=" flex text-[#A7A7BC]">
+                        <PresetIcon
+                          iconKey={draft.iconKey}
+                          className="h-6 w-6"
+                        />
+                      </span>
+                      <span className="text-neutral-500">
+                        {presetIcons.find((x) => x.key === draft.iconKey)
+                          ?.label ?? ""}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-neutral-500 h-6 flex items-center">
+                      None
                     </span>
-                    <span className="text-neutral-500">
-                      {presetIcons.find((x) => x.key === draft.iconKey)
-                        ?.label ?? ""}
-                    </span>
-                  </div>
-                ) : null}
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1083,7 +1331,14 @@ function TrackingLinkDialog({
                       setDestQuery(e.target.value);
                       setDestOpen(true);
                     }}
-                    onFocus={() => setDestOpen(true)}
+                    onFocus={() => {
+                      setStatusOpen(false);
+                      setDestOpen(true);
+                      // If they click back into a selected value, let them type immediately
+                      if (destQuery === draft.destinationTitle) {
+                        setDestQuery("");
+                      }
+                    }}
                     onBlur={() => setTouched(true)}
                     placeholder="Search events or organizations…"
                     className={clsx(
@@ -1116,51 +1371,129 @@ function TrackingLinkDialog({
 
                 {destOpen ? (
                   <div className={dropdownPanelCls} role="listbox">
-                    <div className="max-h-64 overflow-auto">
-                      {filteredDestinations.map((opt) => {
-                        const selected =
-                          opt.id === draft.destinationId &&
-                          opt.kind === draft.destinationKind;
-
-                        return (
-                          <button
-                            key={`${opt.kind}-${opt.id}`}
-                            type="button"
-                            role="option"
-                            aria-selected={selected}
-                            className={clsx(
-                              optionBtnBase,
-                              selected && "bg-primary-500/10",
-                            )}
-                            onClick={() => handlePickDestination(opt)}
-                          >
-                            <span className="min-w-0">
-                              <span className="block text-sm font-semibold text-neutral-0">
-                                {opt.title}
-                              </span>
-                              <span className="mt-1 block text-xs text-neutral-400">
-                                {opt.kind}
-                              </span>
-                            </span>
-
-                            {selected ? (
-                              <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-primary-500/30 bg-primary-500/15 text-primary-200">
-                                <Check size={16} />
-                              </span>
-                            ) : (
-                              <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-white/5 text-transparent">
-                                <Check size={16} />
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-
-                      {filteredDestinations.length === 0 ? (
+                    <div className="max-h-[280px] overflow-auto">
+                      {/* Loading / Empty / Error */}
+                      {destLoading ? (
+                        <div className="px-4 py-4 text-sm text-neutral-400">
+                          Searching…
+                        </div>
+                      ) : destError ? (
+                        <div className="px-4 py-4 text-sm text-neutral-400">
+                          {destError}
+                        </div>
+                      ) : !destQuery.trim() ? (
+                        <div className="px-4 py-4 text-sm text-neutral-500">
+                          Type to search events or organizations.
+                        </div>
+                      ) : destResults.length === 0 ? (
                         <div className="px-4 py-4 text-sm text-neutral-400">
                           No matches.
                         </div>
-                      ) : null}
+                      ) : (
+                        <div className="px-2 py-2">
+                          {destResults.map((opt, idx) => {
+                            const selected =
+                              opt.id === draft.destinationId &&
+                              opt.kind === draft.destinationKind;
+
+                            const isLast = idx === destResults.length - 1;
+
+                            return (
+                              <button
+                                key={`${opt.kind}-${opt.id}`}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                onClick={() => handlePickDestination(opt)}
+                                className={clsx(
+                                  "group w-full text-left",
+                                  "rounded-2xl",
+                                  "transition cursor-pointer",
+                                  "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+                                  "hover:bg-white/5",
+                                  selected &&
+                                    "bg-primary-500/10 hover:bg-primary-500/10",
+                                  // mimic faint lines between items inside a card-list
+                                  "px-3",
+                                )}
+                              >
+                                <div
+                                  className={clsx(
+                                    optionBtnBase,
+                                    "px-0",
+                                    !isLast && resultDivider,
+                                    !isLast && "border-white/10",
+                                  )}
+                                >
+                                  {/* Thumb */}
+                                  <DestinationThumb
+                                    kind={opt.kind}
+                                    image={opt.image}
+                                    title={opt.title}
+                                  />
+
+                                  {/* Text */}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
+                                          {opt.title}
+                                        </p>
+
+                                        <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
+                                          {opt.kind === "Event" ? (
+                                            <>
+                                              <span className="truncate">
+                                                {opt.orgName || ""}
+                                              </span>
+                                              {(opt.orgName || "").trim() &&
+                                              opt.date ? (
+                                                <span className="text-neutral-500">
+                                                  •
+                                                </span>
+                                              ) : null}
+                                              {opt.date ? (
+                                                <span className="inline-flex items-center gap-1 text-neutral-400">
+                                                  <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                                                  <span>
+                                                    {formatShortDate(opt.date)}
+                                                  </span>
+                                                </span>
+                                              ) : null}
+                                            </>
+                                          ) : (
+                                            <span className="truncate">
+                                              {opt.subtitle}
+                                            </span>
+                                          )}
+                                        </p>
+                                      </div>
+
+                                      {/* Right badge */}
+                                      <div className="shrink-0 pt-0.5">
+                                        <KindBadge kind={opt.kind} />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* (Optional) subtle selected check without checkbox list */}
+                                  <div className="shrink-0">
+                                    {selected ? (
+                                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary-500/30 bg-primary-500/15 text-primary-200">
+                                        <Check size={16} />
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-transparent">
+                                        <Check size={16} />
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : null}
@@ -1231,7 +1564,8 @@ function TrackingLinkDialog({
                           role="option"
                           aria-selected={selected}
                           className={clsx(
-                            optionBtnBase,
+                            "w-full text-left px-4 py-3 transition flex items-start justify-between gap-3",
+                            "hover:bg-white/5 focus:bg-white/5 focus:outline-none",
                             selected && "bg-primary-500/10",
                           )}
                           onClick={() => {
@@ -1753,7 +2087,7 @@ export default function TrackingLinksTable() {
                     </div>
                   </td>
 
-                  {/* QR Code (pulled closer by narrower column + centered) */}
+                  {/* QR Code */}
                   <td className="px-4 py-3 text-center">
                     <button
                       type="button"
@@ -1783,21 +2117,6 @@ export default function TrackingLinksTable() {
                   {/* Views */}
                   <td className="px-4 py-3 text-center">
                     <span className="tabular-nums inline-flex items-center justify-center gap-1">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="12"
-                        height="12"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          clipRule="evenodd"
-                          d="M10.8749 6.00001L11.1862 5.84401V5.84251L11.1839 5.84026L11.1794 5.83126L11.1637 5.80126L11.1037 5.69326C11.0304 5.56696 10.9526 5.44338 10.8704 5.32276C10.596 4.91997 10.2806 4.54673 9.92916 4.20901C9.08467 3.39901 7.78491 2.57251 5.99992 2.57251C4.21642 2.57251 2.91592 3.39826 2.07142 4.20901C1.72001 4.54673 1.40457 4.91997 1.13017 5.32276C1.01882 5.48704 0.915692 5.65675 0.821166 5.83126L0.816666 5.84026L0.815166 5.84251V5.84326C0.815166 5.84326 0.814416 5.84401 1.12567 6.00001L0.814416 5.84326C0.790351 5.89188 0.777832 5.94539 0.777832 5.99963C0.777832 6.05388 0.790351 6.10739 0.814416 6.15601L0.813666 6.15751L0.815916 6.15976L0.820416 6.16876C0.843802 6.21562 0.868817 6.26165 0.895416 6.30676C1.21836 6.85232 1.61343 7.35182 2.06992 7.79176C2.91517 8.60176 4.21492 9.42676 5.99992 9.42676C7.78416 9.42676 9.08466 8.60176 9.92991 7.79101C10.2807 7.45289 10.5958 7.07969 10.8704 6.67726C10.9756 6.52242 11.0734 6.36275 11.1637 6.19876L11.1794 6.16876L11.1839 6.15976L11.1854 6.15751V6.15676C11.1854 6.15676 11.1862 6.15601 10.8749 6.00001ZM10.8749 6.00001L11.1862 6.15676C11.2102 6.10814 11.2227 6.05463 11.2227 6.00038C11.2227 5.94614 11.2102 5.89262 11.1862 5.84401L10.8749 6.00001ZM5.95492 4.84801C5.64939 4.84801 5.35637 4.96938 5.14033 5.18542C4.92429 5.40146 4.80292 5.69448 4.80292 6.00001C4.80292 6.30554 4.92429 6.59855 5.14033 6.8146C5.35637 7.03064 5.64939 7.15201 5.95492 7.15201C6.26044 7.15201 6.55346 7.03064 6.7695 6.8146C6.98554 6.59855 7.10691 6.30554 7.10691 6.00001C7.10691 5.69448 6.98554 5.40146 6.7695 5.18542C6.55346 4.96938 6.26044 4.84801 5.95492 4.84801ZM4.10842 6.00001C4.10842 5.50989 4.30311 5.03984 4.64968 4.69328C4.99625 4.34671 5.4663 4.15201 5.95642 4.15201C6.44654 4.15201 6.91658 4.34671 7.26315 4.69328C7.60972 5.03984 7.80442 5.50989 7.80442 6.00001C7.80442 6.49013 7.60972 6.96018 7.26315 7.30674C6.91658 7.65331 6.44654 7.84801 5.95642 7.84801C5.4663 7.84801 4.99625 7.65331 4.64968 7.30674C4.30311 6.96018 4.10842 6.49013 4.10842 6.00001Z"
-                          fill="#A7A7BC"
-                        />
-                      </svg>
                       {r.views}
                     </span>
                   </td>
@@ -1805,21 +2124,6 @@ export default function TrackingLinksTable() {
                   {/* Tickets Sold */}
                   <td className="px-4 py-3 text-center">
                     <span className="tabular-nums inline-flex items-center justify-center gap-1">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="12"
-                        height="12"
-                        viewBox="0 0 12 12"
-                        fill="none"
-                        className="h-4 w-4"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          clipRule="evenodd"
-                          d="M7.00413 9.5015L7.00713 8.5C7.00713 8.36706 7.05994 8.23957 7.15394 8.14556C7.24794 8.05156 7.37544 7.99875 7.50838 7.99875C7.64132 7.99875 7.76881 8.05156 7.86281 8.14556C7.95682 8.23957 8.00963 8.36706 8.00963 8.5V9.4885C8.00963 9.729 8.00963 9.8495 8.08663 9.9235C8.16413 9.997 8.28163 9.992 8.51813 9.982C9.44963 9.9425 10.0221 9.817 10.4251 9.414C10.8301 9.011 10.9556 8.4385 10.9951 7.5055C11.0026 7.3205 11.0066 7.2275 10.9721 7.166C10.9371 7.1045 10.7996 7.0275 10.5236 6.873C10.3682 6.78633 10.2387 6.65971 10.1485 6.50624C10.0584 6.35276 10.0108 6.17799 10.0108 6C10.0108 5.82201 10.0584 5.64724 10.1485 5.49376C10.2387 5.34029 10.3682 5.21367 10.5236 5.127C10.7996 4.973 10.9376 4.8955 10.9721 4.834C11.0066 4.7725 11.0026 4.68 10.9946 4.4945C10.9556 3.5615 10.8296 2.9895 10.4251 2.586C9.98663 2.148 9.34763 2.0375 8.26413 2.0095C8.23095 2.00863 8.19794 2.01442 8.16703 2.02652C8.13613 2.03862 8.10796 2.05678 8.08419 2.07995C8.06043 2.10311 8.04154 2.1308 8.02865 2.16138C8.01575 2.19196 8.00912 2.22481 8.00913 2.258V3.5C8.00913 3.63294 7.95632 3.76043 7.86232 3.85444C7.76831 3.94844 7.64082 4.00125 7.50788 4.00125C7.37494 4.00125 7.24744 3.94844 7.15344 3.85444C7.05944 3.76043 7.00663 3.63294 7.00663 3.5L7.00313 2.2495C7.003 2.18328 6.9766 2.11982 6.92973 2.07305C6.88286 2.02627 6.81934 2 6.75313 2H4.99713C3.10713 2 2.16213 2 1.57463 2.586C1.16963 2.989 1.04413 3.5615 1.00463 4.4945C0.997127 4.6795 0.993127 4.7725 1.02763 4.834C1.06263 4.8955 1.20013 4.973 1.47613 5.127C1.63159 5.21367 1.7611 5.34029 1.85125 5.49376C1.9414 5.64724 1.98893 5.82201 1.98893 6C1.98893 6.17799 1.9414 6.35276 1.85125 6.50624C1.7611 6.65971 1.63159 6.78633 1.47613 6.873C1.20013 7.0275 1.06213 7.1045 1.02763 7.166C0.993127 7.2275 0.997127 7.32 1.00513 7.505C1.04413 8.4385 1.17013 9.011 1.57463 9.414C2.16213 10 3.10713 10 4.99763 10H6.50263C6.73863 10 6.85613 10 6.92963 9.927C7.00313 9.854 7.00363 9.737 7.00413 9.5015ZM8.00913 6.5V5.5C8.00913 5.36706 7.95632 5.23957 7.86232 5.14556C7.76831 5.05156 7.64082 4.99875 7.50788 4.99875C7.37494 4.99875 7.24744 5.05156 7.15344 5.14556C7.05944 5.23957 7.00663 5.36706 7.00663 5.5V6.5C7.00663 6.63301 7.05946 6.76056 7.15351 6.85461C7.24756 6.94866 7.37512 7.0015 7.50813 7.0015C7.64113 7.0015 7.76869 6.94866 7.86274 6.85461C7.95679 6.76056 8.00913 6.63301 8.00913 6.5Z"
-                          fill="#A7A7BC"
-                        />
-                      </svg>{" "}
                       {r.ticketsSold}
                     </span>
                   </td>

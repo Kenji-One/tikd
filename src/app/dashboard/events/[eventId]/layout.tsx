@@ -35,6 +35,9 @@ import {
   Loader2,
 } from "lucide-react";
 
+import confetti from "canvas-confetti";
+import { gsap } from "gsap";
+
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 import { Button } from "@/components/ui/Button";
 
@@ -348,6 +351,17 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
   // Publish success popup
   const [publishSuccessOpen, setPublishSuccessOpen] = useState(false);
 
+  // --- NEW: refs for animation + confetti (keeps design intact) ---
+  const publishModalRef = useRef<HTMLDivElement | null>(null);
+  const publishIconRef = useRef<HTMLDivElement | null>(null);
+  const publishCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const confettiApiRef = useRef<ReturnType<typeof confetti.create> | null>(
+    null,
+  );
+  const confettiTimeoutRef = useRef<number | null>(null);
+  const hasFiredRef = useRef(false);
+
   const basePath = eventId ? `/dashboard/events/${eventId}` : "";
 
   const { data: event, isLoading } = useQuery<EventWithMeta>({
@@ -446,6 +460,150 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [publishSuccessOpen]);
+
+  // --- NEW: confetti + GSAP animation when modal opens ---
+  useEffect(() => {
+    if (!publishSuccessOpen) {
+      hasFiredRef.current = false;
+
+      // cleanup any pending confetti burst
+      if (confettiTimeoutRef.current != null) {
+        window.clearTimeout(confettiTimeoutRef.current);
+        confettiTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // Respect reduced motion
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (reduce) return;
+
+    // Build confetti instance bound to OUR canvas (fixes z-index issues)
+    const canvas = publishCanvasRef.current;
+    if (canvas) {
+      confettiApiRef.current = confetti.create(canvas, { resize: true });
+    } else {
+      confettiApiRef.current = null;
+    }
+
+    // Make sure canvas fills overlay immediately
+    const resizeCanvas = () => {
+      const c = publishCanvasRef.current;
+      if (!c) return;
+      // Canvas-confetti reads client sizes; ensure we have them
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      c.style.width = "100%";
+      c.style.height = "100%";
+      c.width = Math.floor(w * (window.devicePixelRatio || 1));
+      c.height = Math.floor(h * (window.devicePixelRatio || 1));
+    };
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    // Defer one frame so DOM is definitely painted before we animate
+    const raf = window.requestAnimationFrame(() => {
+      const modal = publishModalRef.current;
+      const icon = publishIconRef.current;
+
+      if (!modal) return;
+
+      // Animate content lines (title/subtext/button) without changing design classes
+      const lines = Array.from(
+        modal.querySelectorAll<HTMLElement>("[data-publish-anim='line']"),
+      );
+
+      if (icon) {
+        gsap.set(icon, { opacity: 0, scale: 0.75, y: -6 });
+      }
+      if (lines.length) {
+        gsap.set(lines, { opacity: 0, y: 10 });
+      }
+
+      const tl = gsap.timeline();
+
+      if (icon) {
+        tl.to(icon, {
+          opacity: 1,
+          scale: 1,
+          y: 0,
+          duration: 0.85,
+          ease: "elastic.out(1,0.45)",
+        });
+      }
+
+      if (lines.length) {
+        tl.to(
+          lines,
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.42,
+            ease: "power3.out",
+            stagger: 0.06,
+          },
+          0.18,
+        );
+      }
+
+      // Fire confetti once per open
+      if (!hasFiredRef.current) {
+        hasFiredRef.current = true;
+
+        const shoot = confettiApiRef.current;
+
+        if (shoot) {
+          // Tikd purple vibe
+          const colors = [
+            "#9A46FF",
+            "#C7A0FF",
+            "#FF5ADC",
+            "#7C3AED",
+            "#A855F7",
+          ];
+
+          // Burst 1
+          shoot({
+            particleCount: 95,
+            spread: 78,
+            startVelocity: 28,
+            gravity: 0.98,
+            scalar: 0.9,
+            ticks: 220,
+            origin: { x: 0.5, y: 0.34 },
+            colors,
+          });
+
+          // Burst 2 (follow-up “party” feel)
+          confettiTimeoutRef.current = window.setTimeout(() => {
+            shoot({
+              particleCount: 65,
+              spread: 118,
+              startVelocity: 20,
+              gravity: 1.05,
+              scalar: 0.78,
+              ticks: 200,
+              origin: { x: 0.5, y: 0.34 },
+              colors,
+            });
+          }, 130);
+        }
+      }
+    });
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resizeCanvas);
+
+      if (confettiTimeoutRef.current != null) {
+        window.clearTimeout(confettiTimeoutRef.current);
+        confettiTimeoutRef.current = null;
+      }
+    };
   }, [publishSuccessOpen]);
 
   const statusLabel = status === "draft" ? "Draft" : "Published";
@@ -565,7 +723,10 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       {/* Publish success modal */}
       {publishSuccessOpen && (
         <div
-          className="tikd-publish-modal-overlay"
+          className={clsx(
+            "tikd-publish-modal-overlay",
+            "tikd-publish-overlay-anim",
+          )}
           role="dialog"
           aria-modal="true"
           aria-label="Event published"
@@ -573,7 +734,23 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
             if (e.target === e.currentTarget) setPublishSuccessOpen(false);
           }}
         >
-          <div className="tikd-publish-modal">
+          {/* Confetti canvas pinned to overlay (ALWAYS visible above backdrop) */}
+          <canvas
+            ref={publishCanvasRef}
+            className="tikd-publish-confetti-canvas"
+            aria-hidden="true"
+          />
+
+          {/* Modal (design class unchanged; only adds animation + spacing helpers) */}
+          <div
+            ref={publishModalRef}
+            className={clsx(
+              "tikd-publish-modal",
+              "tikd-publish-modal-anim",
+              // spacing/sizing fix (no visual redesign; just less cramped)
+              "px-8 py-7 sm:px-10 sm:py-8",
+            )}
+          >
             <button
               type="button"
               className="tikd-publish-modal-close"
@@ -584,17 +761,30 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
               <X className="h-4 w-4" />
             </button>
 
-            <div className="tikd-publish-modal-icon">
+            {/* icon pop target (design class unchanged) */}
+            <div ref={publishIconRef} className="tikd-publish-modal-icon">
               <Check className="h-6 w-6" />
             </div>
 
-            <h3 className="tikd-publish-modal-title">Event Published!</h3>
-            <p className="tikd-publish-modal-subtext">
-              Your event is now live and visible to users. You can manage
-              details, tickets, and settings at any time.
-            </p>
+            {/* spacing + stagger targets */}
+            <div className="mt-5 space-y-2 text-center">
+              <h3 data-publish-anim="line" className="tikd-publish-modal-title">
+                Event Published!
+              </h3>
 
-            <div className="mt-5 flex items-center justify-center">
+              <p
+                data-publish-anim="line"
+                className="tikd-publish-modal-subtext"
+              >
+                Your event is now live and visible to users. You can manage
+                details, tickets, and settings at any time.
+              </p>
+            </div>
+
+            <div
+              data-publish-anim="line"
+              className="mt-6 flex items-center justify-center"
+            >
               <button
                 type="button"
                 className="tikd-publish-modal-btn"
@@ -604,6 +794,55 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
               </button>
             </div>
           </div>
+
+          {/* Local-only CSS for the animation + canvas layering (does not touch your design system) */}
+          <style jsx global>{`
+            .tikd-publish-overlay-anim {
+              animation: tikdPublishFadeIn 220ms ease-out both;
+            }
+            .tikd-publish-modal-anim {
+              animation: tikdPublishPopIn 280ms cubic-bezier(0.2, 0.9, 0.2, 1)
+                both;
+            }
+            @keyframes tikdPublishFadeIn {
+              from {
+                opacity: 0;
+              }
+              to {
+                opacity: 1;
+              }
+            }
+            @keyframes tikdPublishPopIn {
+              from {
+                opacity: 0;
+                transform: translate3d(0, 10px, 0) scale(0.985);
+              }
+              to {
+                opacity: 1;
+                transform: translate3d(0, 0, 0) scale(1);
+              }
+            }
+
+            /* Confetti must sit above overlay/backdrop but below the modal */
+            .tikd-publish-confetti-canvas {
+              position: fixed;
+              inset: 0;
+              width: 100%;
+              height: 100%;
+              pointer-events: none;
+              z-index: 2;
+            }
+
+            /* Ensure modal appears above confetti canvas even if overlay has weird stacking */
+            .tikd-publish-modal {
+              position: relative;
+              z-index: 1;
+            }
+
+            .tikd-publish-modal-close {
+              z-index: 3;
+            }
+          `}</style>
         </div>
       )}
 

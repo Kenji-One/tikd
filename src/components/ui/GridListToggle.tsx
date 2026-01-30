@@ -34,6 +34,9 @@ export default function GridListToggle({
   // Flip-flop class to restart CSS animation every click (no RAF/timeout).
   const [animFlip, setAnimFlip] = useState(0);
 
+  // ✅ Prevent animation on initial mount (only animate after user interaction)
+  const [hasInteracted, setHasInteracted] = useState(false);
+
   useEffect(() => setVisual(value), [value]);
 
   const toggle = () => {
@@ -43,12 +46,21 @@ export default function GridListToggle({
     setVisual(next);
     onChange(next);
 
+    // ✅ Enable animations only after the first user interaction
+    if (!hasInteracted) setHasInteracted(true);
+
     // Force animation restart (alternate class => different keyframe names)
     setAnimFlip((n) => n + 1);
   };
 
   const isList = visual === "list";
-  const animClass = animFlip % 2 === 0 ? "anim-a" : "anim-b";
+
+  // ✅ No anim class until user interacts => no mount animation
+  const animClass = hasInteracted
+    ? animFlip % 2 === 0
+      ? "anim-a"
+      : "anim-b"
+    : "";
 
   return (
     <>
@@ -232,16 +244,16 @@ export default function GridListToggle({
 
         /* ------------------------------------------------------------
            Animation plumbing: slower + smoother
+           ✅ animation-name is only applied when anim-a/anim-b exists
         ------------------------------------------------------------ */
         .tikd-grid-list-btn .dots i,
         .tikd-grid-list-btn .lines i {
-          animation-duration: 0.56s; /* was 0.34s */
+          animation-duration: 0.56s;
           animation-fill-mode: forwards;
           animation-direction: reverse;
-
-          /* smoother easing (less "snappy") */
           animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
         }
+
         .tikd-grid-list-btn.list .dots i,
         .tikd-grid-list-btn.list .lines i {
           animation-direction: normal;
@@ -249,7 +261,6 @@ export default function GridListToggle({
 
         /* ------------------------------------------------------------
            Restartable animations: anim-a / anim-b use DIFFERENT keyframes
-           so every click triggers cleanly (no RAF, no timeout).
         ------------------------------------------------------------ */
 
         /* Dots */

@@ -307,17 +307,15 @@ function AvatarWithInstagramFollowers({
   const has = followers != null;
 
   return (
-    <div className="relative h-10 w-10 shrink-0">
-      <div className="">
-        <CircularAvatar
-          name={name}
-          src={src}
-          className="h-9 w-9 rounded-full object-cover ring-1 ring-white/10"
-        />
-      </div>
+    <div className="relative h-9 w-9 shrink-0">
+      <CircularAvatar
+        name={name}
+        src={src}
+        className="h-9 w-9 rounded-full object-cover ring-1 ring-white/10"
+      />
 
       {has ? (
-        <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-[4px]">
+        <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-[8px]">
           <span
             className={clsx(
               "tikd-chip tikd-chip-primary rounded-md",

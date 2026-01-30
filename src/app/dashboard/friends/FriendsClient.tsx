@@ -23,21 +23,26 @@ import {
   Clock,
   UserX,
 } from "lucide-react";
-import GridListToggle from "@/components/ui/GridListToggle";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import GridListToggle from "@/components/ui/GridListToggle";
 import { Button } from "@/components/ui/Button";
 import { Tilt3d } from "@/components/ui/Tilt3d";
 
 /* ------------------------------ Types ------------------------------ */
 type Friend = {
-  id: string;
+  id: string; // other user id
+  friendshipId: string;
+
   name: string;
   role: string;
   company: string;
   companyHref?: string;
+
   phone: string;
   email: string;
   avatarUrl?: string;
+  createdAt?: string | null;
 };
 
 type AddCandidate = {
@@ -49,28 +54,39 @@ type AddCandidate = {
 };
 
 type FriendRequest = {
-  id: string;
+  id: string; // request id
+  fromUserId: string;
   name: string;
   avatarUrl?: string;
-  createdLabel: string; // e.g. "5 min ago"
+  createdAt?: string | null;
 };
 
-const DEMO_REQUESTS: FriendRequest[] = [
-  {
-    id: "r-1",
-    name: "Mirza Lutfi",
-    createdLabel: "5 min ago",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "r-2",
-    name: "Adil Anas",
-    createdLabel: "12 min ago",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1525134479668-1bee5c7c6845?auto=format&fit=crop&w=256&q=80",
-  },
-];
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  if (!res.ok) {
+    let body: any = null;
+    try {
+      body = await res.json();
+    } catch {
+      // ignore
+    }
+    const msg =
+      body?.error ||
+      body?.message ||
+      (typeof body === "string" ? body : null) ||
+      `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+
+  return res.json();
+}
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -90,180 +106,30 @@ function initialsFromName(name: string) {
   return two || "FR";
 }
 
-/* -------------------------- Friends (dummy) ------------------------- */
-const DEMO_FRIENDS: Friend[] = [
-  {
-    id: "f-1",
-    name: "Angela Moss",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "angelamoss@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-2",
-    name: "Ahmad Zayn",
-    role: "Photographer at",
-    company: "Audio Video Teams",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "ahmadzayn@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1525134479668-1bee5c7c6845?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-3",
-    name: "Brian Connor",
-    role: "Designer at",
-    company: "Crimzon Guards Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "brianconnor@mail.com",
-  },
-  {
-    id: "f-4",
-    name: "Courtney Hawkins",
-    role: "Programmer at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "courtneyhawk@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-5",
-    name: "Chyntia Smilee",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "chyntia@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-6",
-    name: "David Here",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "davidhere@mail.com",
-  },
-  {
-    id: "f-7",
-    name: "Dennise Lee",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "dennislee@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-8",
-    name: "Erbatov Axie",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "erbatovaxie@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-9",
-    name: "Evan Khan",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "evankhan@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-10",
-    name: "Fanny Humble",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "fannyhumble@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-11",
-    name: "Franklin Jr.",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "franklinjr@mail.com",
-  },
-  {
-    id: "f-12",
-    name: "Gandalf Hoos",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "gandalfhoos@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1525134479668-1bee5c7c6845?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-13",
-    name: "Gabriella",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "gabriella@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-14",
-    name: "Hanny Shella",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "hannyshella@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?auto=format&fit=crop&w=256&q=80",
-  },
-  {
-    id: "f-15",
-    name: "Ivankov",
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: "ivankov123@mail.com",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80",
-  },
-  // Pad to 46 like reference footer
-  ...Array.from({ length: 31 }).map((_, i) => ({
-    id: `f-x-${i + 16}`,
-    name: `Friend ${i + 16}`,
-    role: "Marketing Manager at",
-    company: "Highspeed Studios",
-    companyHref: "#",
-    phone: "+12 345 6789 0",
-    email: `friend${i + 16}@mail.com`,
-  })),
-];
+function formatRelative(iso?: string | null) {
+  if (!iso) return "—";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "—";
 
-/* ------------------------ Friends UI pieces ------------------------- */
+  const now = Date.now();
+  const diff = Math.max(0, now - t);
+
+  const sec = Math.floor(diff / 1000);
+  if (sec < 10) return "just now";
+  if (sec < 60) return `${sec}s ago`;
+
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hr ago`;
+
+  const day = Math.floor(hr / 24);
+  if (day === 1) return "yesterday";
+  return `${day} days ago`;
+}
+
+/* ------------------------ Friends UI pieces ------------------------ */
 function FriendActionsMenu({
   onRemove,
   containerClassName,
@@ -372,13 +238,8 @@ function FriendsCard({
       maxDeg={4}
       perspective={900}
       liftPx={2}
-      className={clsx(
-        // ✅ Match ConnectionProfileCard sizing
-        "group relative w-full",
-        "will-change-transform",
-      )}
+      className={clsx("group relative w-full", "will-change-transform")}
     >
-      {/* Card surface (tilts) */}
       <div
         className={clsx(
           "relative overflow-hidden rounded-[12px] border border-white/10",
@@ -387,7 +248,6 @@ function FriendsCard({
           "group-hover:border-primary-500 group-hover:shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
         )}
       >
-        {/* Subtle inner wash (keeps the “Events page” vibe) */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 opacity-100"
@@ -397,7 +257,6 @@ function FriendsCard({
           }}
         />
 
-        {/* Foreground content (counter-rotated => crisp text at all angles) */}
         <div
           className="relative"
           style={{
@@ -419,7 +278,6 @@ function FriendsCard({
                 <div
                   className={clsx(
                     "relative overflow-hidden",
-                    // ✅ slightly smaller avatar block to feel like Team cards
                     "h-[58px] w-[58px] rounded-lg",
                     "bg-white/5 ring-1 ring-white/10",
                   )}
@@ -446,7 +304,6 @@ function FriendsCard({
                 <div
                   className={clsx(
                     "absolute -right-2 -bottom-2",
-                    // ✅ slightly smaller badge
                     "h-7 w-7 rounded-[10px]",
                     "border border-white/10",
                     "bg-primary-500/90",
@@ -498,7 +355,6 @@ function FriendsCard({
               <div className="flex items-center gap-3">
                 <span
                   className={clsx(
-                    // ✅ smaller icon tiles
                     "inline-flex h-7 w-7 items-center justify-center rounded-md",
                     "bg-primary-500/15 text-primary-300",
                     "ring-1 ring-primary-500/20",
@@ -507,7 +363,7 @@ function FriendsCard({
                   <Phone className="h-4 w-4" />
                 </span>
                 <span className="text-[12px] font-medium text-neutral-100">
-                  {friend.phone}
+                  {friend.phone || "—"}
                 </span>
               </div>
 
@@ -522,7 +378,7 @@ function FriendsCard({
                   <Mail className="h-4 w-4" />
                 </span>
                 <span className="text-[12px] font-medium text-neutral-100">
-                  {friend.email}
+                  {friend.email || "—"}
                 </span>
               </div>
             </div>
@@ -541,6 +397,7 @@ function FriendsRow({
   onRemove?: (id: string) => void;
 }) {
   const badge = initialsFromName(friend.name);
+
   return (
     <div
       className={clsx(
@@ -589,13 +446,13 @@ function FriendsRow({
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
             <Phone className="h-4 w-4" />
           </span>
-          {friend.phone}
+          {friend.phone || "—"}
         </div>
         <div className="flex items-center gap-2 text-[12px] text-neutral-200">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
             <Mail className="h-4 w-4" />
           </span>
-          {friend.email}
+          {friend.email || "—"}
         </div>
       </div>
 
@@ -678,21 +535,34 @@ function Pagination({
 function AddFriendModal({
   open,
   onClose,
-  candidates,
   onSend,
 }: {
   open: boolean;
   onClose: () => void;
-  candidates: AddCandidate[];
-  onSend: (selected: AddCandidate[]) => void;
+  onSend: (selected: AddCandidate[]) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sent, setSent] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string>("");
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastActiveElRef = useRef<HTMLElement | null>(null);
+
+  const candidatesQ = useQuery({
+    queryKey: ["friends-candidates", open ? query : "", open],
+    enabled: open,
+    queryFn: async () => {
+      const q = query.trim();
+      const url = q
+        ? `/api/friends/candidates?q=${encodeURIComponent(q)}`
+        : `/api/friends/candidates`;
+      return fetchJSON<AddCandidate[]>(url);
+    },
+  });
+
+  const candidates = candidatesQ.data ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -700,7 +570,6 @@ function AddFriendModal({
     lastActiveElRef.current = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
 
-    // focus input after paint
     const t = window.setTimeout(() => {
       inputRef.current?.focus();
     }, 0);
@@ -718,7 +587,6 @@ function AddFriendModal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
 
-      // simple focus trap
       if (e.key === "Tab") {
         const root = panelRef.current;
         if (!root) return;
@@ -754,47 +622,59 @@ function AddFriendModal({
       setQuery("");
       setSelectedIds([]);
       setSent(false);
+      setErrorMsg("");
     }
   }, [open]);
 
   const selected = useMemo(() => {
     const map = new Map(candidates.map((c) => [c.id, c]));
+    // selected might include ids not in current candidates page (search changed)
+    // so we keep a "fallback" minimal object for chips until next fetch brings it.
     return selectedIds
-      .map((id) => map.get(id))
+      .map((id) => map.get(id) || null)
       .filter(Boolean) as AddCandidate[];
   }, [selectedIds, candidates]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-
     const base = candidates.filter((c) => !selectedIds.includes(c.id));
-    if (!q) return base;
+    return base;
+  }, [candidates, selectedIds]);
 
-    return base.filter((c) => {
-      const hay = `${c.name} ${c.email} ${c.phone ?? ""}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [query, candidates, selectedIds]);
-
-  const canSend = selected.length > 0;
+  const canSend = selectedIds.length > 0;
 
   function togglePick(id: string) {
     setSent(false);
+    setErrorMsg("");
     setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    // keep input active for fast multi-add
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   function removePick(id: string) {
     setSent(false);
+    setErrorMsg("");
     setSelectedIds((prev) => prev.filter((x) => x !== id));
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  function sendNow() {
+  async function sendNow() {
     if (!canSend) return;
-    onSend(selected);
-    setSent(true);
+    setErrorMsg("");
+
+    // Build selected objects from current candidates list where possible
+    const map = new Map(candidates.map((c) => [c.id, c]));
+    const sel: AddCandidate[] = selectedIds
+      .map((id) => map.get(id))
+      .filter(Boolean) as AddCandidate[];
+
+    try {
+      await onSend(sel.length ? sel : selected);
+      setSent(true);
+      setSelectedIds([]);
+      setQuery("");
+      candidatesQ.refetch();
+    } catch (e: any) {
+      setErrorMsg(e?.message || "Failed to send requests.");
+    }
   }
 
   if (!open) return null;
@@ -806,7 +686,6 @@ function AddFriendModal({
       aria-modal="true"
       aria-label="Add friends"
     >
-      {/* Backdrop */}
       <button
         type="button"
         aria-label="Close"
@@ -818,7 +697,6 @@ function AddFriendModal({
         )}
       />
 
-      {/* Panel */}
       <div
         ref={panelRef}
         className={clsx(
@@ -827,7 +705,6 @@ function AddFriendModal({
           "shadow-[0_30px_120px_rgba(0,0,0,0.75)]",
         )}
       >
-        {/* Background wash */}
         <div
           className="pointer-events-none absolute inset-0 opacity-100"
           style={{
@@ -836,7 +713,6 @@ function AddFriendModal({
           }}
         />
 
-        {/* Header */}
         <div className="relative flex items-center justify-between p-5">
           <div className="flex items-center gap-3">
             <div
@@ -872,7 +748,6 @@ function AddFriendModal({
         </div>
 
         <div className="relative px-5 pb-5 md:pb-6">
-          {/* Search + chips row */}
           <div
             className={clsx(
               "rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5",
@@ -884,7 +759,6 @@ function AddFriendModal({
             </div>
 
             <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
-              {/* Input + chips container */}
               <div
                 className={clsx(
                   "min-h-[52px] w-full rounded-xl border border-white/10 bg-neutral-950/35 px-3 py-2",
@@ -892,11 +766,15 @@ function AddFriendModal({
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  {selected.map((c) => {
-                    const badge = initialsFromName(c.name);
+                  {/* Chips */}
+                  {selectedIds.map((id) => {
+                    const found = candidates.find((c) => c.id === id);
+                    const name = found?.name ?? "Selected";
+                    const badge = initialsFromName(name);
+
                     return (
                       <span
-                        key={c.id}
+                        key={id}
                         className={clsx(
                           "inline-flex items-center gap-2 rounded-full",
                           "border border-white/10 bg-white/5 px-1 py-1",
@@ -912,11 +790,11 @@ function AddFriendModal({
                         >
                           {badge}
                         </span>
-                        <span className="max-w-[180px] truncate">{c.name}</span>
+                        <span className="max-w-[180px] truncate">{name}</span>
                         <button
                           type="button"
-                          onClick={() => removePick(c.id)}
-                          aria-label={`Remove ${c.name}`}
+                          onClick={() => removePick(id)}
+                          aria-label={`Remove ${name}`}
                           className={clsx(
                             "inline-flex h-6 w-6 items-center justify-center rounded-full",
                             "bg-white/0 text-neutral-300 hover:bg-white/10 hover:text-neutral-0",
@@ -957,7 +835,6 @@ function AddFriendModal({
                 </div>
               </div>
 
-              {/* Send button */}
               <div className="flex justify-stretch md:justify-end">
                 <button
                   type="button"
@@ -991,12 +868,22 @@ function AddFriendModal({
                   "text-[12px] text-success-300",
                 )}
               >
-                Requests sent (demo).
+                Requests sent.
+              </div>
+            ) : null}
+
+            {errorMsg ? (
+              <div
+                className={clsx(
+                  "mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2",
+                  "text-[12px] text-red-200",
+                )}
+              >
+                {errorMsg}
               </div>
             ) : null}
           </div>
 
-          {/* Results */}
           <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
             <div
               className={clsx(
@@ -1013,7 +900,24 @@ function AddFriendModal({
             </div>
 
             <div className="max-h-[340px] overflow-auto p-2 no-scrollbar md:max-h-[420px]">
-              {filtered.length ? (
+              {candidatesQ.isLoading ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                  <div
+                    className={clsx(
+                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                    )}
+                  >
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-100">
+                    Loading…
+                  </div>
+                  <div className="text-[12px] text-neutral-500">
+                    Searching users directory.
+                  </div>
+                </div>
+              ) : filtered.length ? (
                 <div className="space-y-2">
                   {filtered.map((c) => {
                     const badge = initialsFromName(c.name);
@@ -1111,19 +1015,70 @@ function AddFriendModal({
 
 /* ------------------------------ Page ------------------------------- */
 export default function FriendsClient() {
+  const qc = useQueryClient();
+
   const [friendsQuery, setFriendsQuery] = useState("");
   const [friendsView, setFriendsView] = useState<"grid" | "list">("grid");
   const [friendsPage, setFriendsPage] = useState(1);
 
-  const [friends, setFriends] = useState<Friend[]>(DEMO_FRIENDS);
-
   const [addOpen, setAddOpen] = useState(false);
 
   const [requestsOpen, setRequestsOpen] = useState(false);
-  const [requests, setRequests] = useState<FriendRequest[]>(DEMO_REQUESTS);
-
   const requestsBtnRef = useRef<HTMLButtonElement | null>(null);
   const requestsPanelRef = useRef<HTMLDivElement | null>(null);
+
+  const friendsQ = useQuery({
+    queryKey: ["friends"],
+    queryFn: () => fetchJSON<Friend[]>("/api/friends"),
+  });
+
+  const requestsQ = useQuery({
+    queryKey: ["friend-requests"],
+    queryFn: () => fetchJSON<FriendRequest[]>("/api/friends/requests"),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (friendUserId: string) =>
+      fetchJSON<{ ok: true }>(`/api/friends/${friendUserId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["friends"] });
+    },
+  });
+
+  const sendMut = useMutation({
+    mutationFn: (toUserIds: string[]) =>
+      fetchJSON<{ ok: true; created: string[]; skipped: any[] }>(
+        "/api/friends/requests",
+        { method: "POST", body: JSON.stringify({ toUserIds }) },
+      ),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["friend-requests"] });
+      await qc.invalidateQueries({ queryKey: ["friends"] });
+    },
+  });
+
+  const acceptMut = useMutation({
+    mutationFn: (requestId: string) =>
+      fetchJSON<{ ok: true }>(`/api/friends/requests/${requestId}/accept`, {
+        method: "POST",
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["friend-requests"] });
+      await qc.invalidateQueries({ queryKey: ["friends"] });
+    },
+  });
+
+  const declineMut = useMutation({
+    mutationFn: (requestId: string) =>
+      fetchJSON<{ ok: true }>(`/api/friends/requests/${requestId}/decline`, {
+        method: "POST",
+      }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["friend-requests"] });
+    },
+  });
 
   useEffect(() => {
     if (!requestsOpen) return;
@@ -1139,9 +1094,7 @@ export default function FriendsClient() {
       const btn = requestsBtnRef.current;
       const panel = requestsPanelRef.current;
 
-      // click inside button OR panel => ignore
       if (btn?.contains(t) || panel?.contains(t)) return;
-
       setRequestsOpen(false);
     };
 
@@ -1157,22 +1110,33 @@ export default function FriendsClient() {
   }, [requestsOpen]);
 
   function removeFriend(id: string) {
-    setFriends((prev) => prev.filter((f) => f.id !== id));
+    removeMut.mutate(id);
   }
 
-  function acceptRequest(id: string) {
-    setRequests((prev) => prev.filter((r) => r.id !== id));
+  function acceptRequest(requestId: string) {
+    acceptMut.mutate(requestId);
   }
-  function declineRequest(id: string) {
-    setRequests((prev) => prev.filter((r) => r.id !== id));
+
+  function declineRequest(requestId: string) {
+    declineMut.mutate(requestId);
   }
+
+  const friends = friendsQ.data ?? [];
+  const requestsRaw = requestsQ.data ?? [];
+
+  const requests = useMemo(() => {
+    return requestsRaw.map((r) => ({
+      ...r,
+      createdLabel: formatRelative(r.createdAt),
+    }));
+  }, [requestsRaw]);
 
   const friendsPageSize = 10;
 
   const friendsFiltered = useMemo(() => {
     const q = friendsQuery.trim().toLowerCase();
-
     if (!q) return friends;
+
     return friends.filter((f) => {
       const hay =
         `${f.name} ${f.role} ${f.company} ${f.email} ${f.phone}`.toLowerCase();
@@ -1208,41 +1172,7 @@ export default function FriendsClient() {
     return `Showing ${start}-${end} from ${friendsTotal} data`;
   }, [friendsTotal, friendsPageSafe]);
 
-  const addCandidates: AddCandidate[] = useMemo(() => {
-    // Using friend list as “directory suggestions” for now (UI-only).
-    // When backend exists, replace with search endpoint results.
-    const unique = new Map<string, AddCandidate>();
-
-    for (const f of DEMO_FRIENDS.slice(0, 22)) {
-      unique.set(f.id, {
-        id: f.id,
-        name: f.name,
-        email: f.email,
-        phone: f.phone,
-        avatarUrl: f.avatarUrl,
-      });
-    }
-
-    // Add a couple “reference-style” names to make it feel realistic.
-    unique.set("c-1", {
-      id: "c-1",
-      name: "Sara Cruz",
-      email: "sara.cruz@example.com",
-      phone: "+1 415 204 8831",
-      avatarUrl:
-        "https://images.unsplash.com/photo-1524502397800-2eeaad7c3fe5?auto=format&fit=crop&w=256&q=80",
-    });
-    unique.set("c-2", {
-      id: "c-2",
-      name: "Sebastian Graham",
-      email: "sebastian.graham@example.com",
-      phone: "+1 212 555 0174",
-      avatarUrl:
-        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=256&q=80",
-    });
-
-    return Array.from(unique.values());
-  }, []);
+  const hasPending = requests.length > 0;
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
@@ -1259,7 +1189,6 @@ export default function FriendsClient() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* Friends Header */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300">
@@ -1308,7 +1237,6 @@ export default function FriendsClient() {
                     Add Friend
                   </Button>
 
-                  {/* Friend Requests button */}
                   <div className="relative">
                     <button
                       ref={requestsBtnRef}
@@ -1327,8 +1255,7 @@ export default function FriendsClient() {
                     >
                       <Users2 className="h-4 w-4" />
 
-                      {/* Red dot if pending */}
-                      {requests.length > 0 ? (
+                      {hasPending ? (
                         <span
                           className={clsx(
                             "absolute right-2 top-2 h-2 w-2 rounded-full",
@@ -1338,7 +1265,6 @@ export default function FriendsClient() {
                       ) : null}
                     </button>
 
-                    {/* Dropdown */}
                     {requestsOpen ? (
                       <div
                         ref={requestsPanelRef}
@@ -1354,7 +1280,24 @@ export default function FriendsClient() {
                           </div>
                         </div>
 
-                        {requests.length === 0 ? (
+                        {requestsQ.isLoading ? (
+                          <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                            <div
+                              className={clsx(
+                                "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                                "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                              )}
+                            >
+                              <Users2 className="h-5 w-5" />
+                            </div>
+                            <div className="text-[13px] font-semibold text-neutral-100">
+                              Loading requests…
+                            </div>
+                            <div className="text-[12px] text-neutral-500">
+                              Checking your inbox.
+                            </div>
+                          </div>
+                        ) : requests.length === 0 ? (
                           <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
                             <div
                               className={clsx(
@@ -1376,6 +1319,8 @@ export default function FriendsClient() {
                             <div className="space-y-2">
                               {requests.map((r) => {
                                 const badge = initialsFromName(r.name);
+                                const pendingAny =
+                                  acceptMut.isPending || declineMut.isPending;
 
                                 return (
                                   <div
@@ -1414,7 +1359,7 @@ export default function FriendsClient() {
                                         </div>
                                         <div className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
                                           <Clock className="h-3.5 w-3.5" />
-                                          {r.createdLabel}
+                                          {formatRelative(r.createdAt)}
                                         </div>
                                       </div>
                                       <div className="mt-1 text-[12px] text-neutral-400">
@@ -1425,10 +1370,12 @@ export default function FriendsClient() {
                                         <button
                                           type="button"
                                           onClick={() => acceptRequest(r.id)}
+                                          disabled={pendingAny}
                                           className={clsx(
                                             "inline-flex h-7 flex-1 items-center justify-center gap-2 rounded-lg px-3",
                                             "border border-white/10 bg-primary-500/15 text-primary-200",
                                             "hover:bg-primary-500/20 transition-colors",
+                                            "disabled:opacity-60",
                                             "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                                           )}
                                         >
@@ -1441,10 +1388,12 @@ export default function FriendsClient() {
                                         <button
                                           type="button"
                                           onClick={() => declineRequest(r.id)}
+                                          disabled={pendingAny}
                                           className={clsx(
                                             "inline-flex h-7 flex-1 items-center justify-center gap-2 rounded-lg px-3",
                                             "border border-white/10 bg-white/5 text-neutral-200",
                                             "hover:bg-white/10 transition-colors",
+                                            "disabled:opacity-60",
                                             "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                                           )}
                                         >
@@ -1468,19 +1417,51 @@ export default function FriendsClient() {
               </div>
             </div>
 
-            {/* Friends Content */}
             <div className="mt-4">
-              {friendsView === "grid" ? (
+              {friendsQ.isLoading ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                  <div
+                    className={clsx(
+                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                    )}
+                  >
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-100">
+                    Loading friends…
+                  </div>
+                  <div className="text-[12px] text-neutral-500">
+                    Syncing your contacts list.
+                  </div>
+                </div>
+              ) : friendsFiltered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+                  <div
+                    className={clsx(
+                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                    )}
+                  >
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-100">
+                    No friends found
+                  </div>
+                  <div className="text-[12px] text-neutral-500">
+                    Try searching, or add a new friend.
+                  </div>
+                </div>
+              ) : friendsView === "grid" ? (
                 <div
                   className={clsx(
                     "grid gap-4",
-                    // ✅ Same grid rule in real data render
-                    "grid-cols-[repeat(auto-fit,minmax(264px,1fr))]",
+                    "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
                   )}
                 >
                   {friendsSlice.map((f) => (
                     <FriendsCard
-                      key={f.id}
+                      key={f.friendshipId}
                       friend={f}
                       onRemove={removeFriend}
                     />
@@ -1489,7 +1470,11 @@ export default function FriendsClient() {
               ) : (
                 <div className="space-y-3">
                   {friendsSlice.map((f) => (
-                    <FriendsRow key={f.id} friend={f} onRemove={removeFriend} />
+                    <FriendsRow
+                      key={f.friendshipId}
+                      friend={f}
+                      onRemove={removeFriend}
+                    />
                   ))}
                 </div>
               )}
@@ -1509,16 +1494,13 @@ export default function FriendsClient() {
         </section>
       </section>
 
-      {/* Add Friend Modal */}
       <AddFriendModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        candidates={addCandidates}
-        onSend={(sel) => {
-          // UI-only placeholder:
-          // later: POST /api/friends/requests { toUserIds: sel.map(s=>s.id) }
-          // Keep it silent for now (modal shows “sent” state).
-          void sel;
+        onSend={async (sel) => {
+          const toUserIds = sel.map((s) => s.id);
+          if (!toUserIds.length) return;
+          await sendMut.mutateAsync(toUserIds);
         }}
       />
     </div>

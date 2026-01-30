@@ -21,7 +21,7 @@ import {
 /* ────────────────────────────────────────────────────────────────
    Types
    ──────────────────────────────────────────────────────────────── */
-type Filter = "event" | "org" | "team" | "friend";
+type Filter = "all" | "event" | "org" | "team" | "friend";
 
 type ItemType = "event" | "org" | "team" | "friend";
 
@@ -44,6 +44,7 @@ type Results = {
 };
 
 const FILTER_LABEL: Record<Filter, string> = {
+  all: "All",
   event: "Events",
   org: "Organizations",
   team: "Teams",
@@ -117,6 +118,10 @@ function formatDate(iso?: string | null) {
   }
 }
 
+function itemKey(item: Item) {
+  return `${item.type}:${item.id}`;
+}
+
 /* ────────────────────────────────────────────────────────────────
    Component
    ──────────────────────────────────────────────────────────────── */
@@ -132,7 +137,7 @@ export default function SearchModal({
   const cardRef = useRef<HTMLDivElement | null>(null); // ⬅️ modal card ref
 
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("event");
+  const [filter, setFilter] = useState<Filter>("all"); // ✅ default to All
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Results>({
     events: [],
@@ -144,6 +149,14 @@ export default function SearchModal({
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const flatResults: Item[] = useMemo(() => {
+    if (filter === "all") {
+      return [
+        ...(results.events ?? []),
+        ...(results.orgs ?? []),
+        ...(results.teams ?? []),
+        ...(results.friends ?? []),
+      ];
+    }
     if (filter === "event") return results.events ?? [];
     if (filter === "org") return results.orgs ?? [];
     if (filter === "team") return results.teams ?? [];
@@ -171,6 +184,14 @@ export default function SearchModal({
     }
   }
 
+  /* When opening modal, keep "All" as the default selection */
+  useEffect(() => {
+    if (!open) return;
+    setFilter("all");
+    setDropdownOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   /* key handling + focus */
   useEffect(() => {
     if (!open) return;
@@ -178,15 +199,15 @@ export default function SearchModal({
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        const idx = flatResults.findIndex((i) => i.id === active);
+        const idx = flatResults.findIndex((i) => itemKey(i) === active);
         const nextIdx =
           e.key === "ArrowDown"
             ? Math.min(idx + 1, flatResults.length - 1)
             : Math.max(idx - 1, 0);
-        setActive(flatResults[nextIdx]?.id ?? null);
+        setActive(flatResults[nextIdx] ? itemKey(flatResults[nextIdx]) : null);
       }
       if (e.key === "Enter") {
-        const target = flatResults.find((i) => i.id === active);
+        const target = flatResults.find((i) => itemKey(i) === active);
         if (target) {
           pushRecent(query);
           onClose();
@@ -216,10 +237,12 @@ export default function SearchModal({
     const ac = new AbortController();
     const t = setTimeout(async () => {
       try {
+        // ✅ if filter=all, omit type (or you can send type=all if your API supports it)
+        const typeParam =
+          filter === "all" ? "" : `&type=${encodeURIComponent(filter)}`;
+
         const res = await fetch(
-          `/api/search?q=${encodeURIComponent(q)}&type=${encodeURIComponent(
-            filter,
-          )}&limit=8`,
+          `/api/search?q=${encodeURIComponent(q)}${typeParam}&limit=8`,
           { signal: ac.signal, cache: "no-store" },
         );
         const data: { results?: Results } = await res.json();
@@ -233,13 +256,19 @@ export default function SearchModal({
         setResults(safe);
 
         const first =
-          (filter === "event" ? safe.events?.[0] : null) ||
-          (filter === "org" ? safe.orgs?.[0] : null) ||
-          (filter === "team" ? safe.teams?.[0] : null) ||
-          (filter === "friend" ? safe.friends?.[0] : null) ||
-          null;
+          filter === "all"
+            ? safe.events?.[0] ||
+              safe.orgs?.[0] ||
+              safe.teams?.[0] ||
+              safe.friends?.[0] ||
+              null
+            : (filter === "event" ? safe.events?.[0] : null) ||
+              (filter === "org" ? safe.orgs?.[0] : null) ||
+              (filter === "team" ? safe.teams?.[0] : null) ||
+              (filter === "friend" ? safe.friends?.[0] : null) ||
+              null;
 
-        setActive(first?.id ?? null);
+        setActive(first ? itemKey(first) : null);
       } catch (err) {
         if (!(err instanceof DOMException && err.name === "AbortError")) {
           console.error("search error", err);
@@ -295,6 +324,11 @@ export default function SearchModal({
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onPointerDown={() => {
+                  // ✅ requirement: default to "All" when clicking the search box
+                  if (filter !== "all") setFilter("all");
+                  setDropdownOpen(false);
+                }}
                 placeholder="Search events, organizations, teams, friends…"
                 aria-label="Search"
                 inputMode="search"
@@ -333,6 +367,26 @@ export default function SearchModal({
                     )}
                     onPointerDown={(e) => e.stopPropagation()} // prevent outside-close when interacting the menu
                   >
+                    {/* ✅ All (above Events) */}
+                    <button
+                      role="option"
+                      aria-selected={filter === "all"}
+                      onClick={() => {
+                        setFilter("all");
+                        setDropdownOpen(false);
+                        inputRef.current?.focus();
+                      }}
+                      className={clsx(
+                        "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none",
+                        filter === "all" ? "bg-white/7" : "bg-transparent",
+                      )}
+                    >
+                      <Search className="h-4 w-4 opacity-80" />
+                      <span>{FILTER_LABEL.all}</span>
+                    </button>
+
+                    <div className="h-px w-full bg-white/8" />
+
                     {(["event", "org", "team", "friend"] as Filter[]).map(
                       (f) => (
                         <button
@@ -441,15 +495,16 @@ export default function SearchModal({
               {query.trim() && !loading && flatResults.length > 0 && (
                 <ul role="listbox" className="divide-y divide-white/5">
                   {flatResults.map((item) => {
-                    const activeNow = active === item.id;
+                    const key = itemKey(item);
+                    const activeNow = active === key;
 
                     if (item.type === "event") {
                       return (
-                        <li key={item.id}>
+                        <li key={key}>
                           <button
                             role="option"
                             aria-selected={activeNow}
-                            onMouseEnter={() => setActive(item.id)}
+                            onMouseEnter={() => setActive(key)}
                             onClick={() => {
                               pushRecent(query);
                               onClose();
@@ -508,11 +563,11 @@ export default function SearchModal({
 
                     // Orgs / Teams / Friends
                     return (
-                      <li key={item.id}>
+                      <li key={key}>
                         <button
                           role="option"
                           aria-selected={activeNow}
-                          onMouseEnter={() => setActive(item.id)}
+                          onMouseEnter={() => setActive(key)}
                           onClick={() => {
                             pushRecent(query);
                             onClose();
@@ -599,6 +654,7 @@ export default function SearchModal({
                     organizations, teams, or friends.
                   </p>
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                    <Chip onClick={() => setFilter("all")}>All</Chip>
                     <Chip onClick={() => setFilter("event")}>Events</Chip>
                     <Chip onClick={() => setFilter("org")}>Organizations</Chip>
                     <Chip onClick={() => setFilter("team")}>Teams</Chip>

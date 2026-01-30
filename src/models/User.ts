@@ -40,6 +40,11 @@ export interface IUser extends Document {
   zip?: string;
   defaultAddress?: boolean;
 
+  /** ✅ NEW (for Friends UI) */
+  jobTitle?: string; // e.g. "Marketing Manager"
+  company?: string; // e.g. "Highspeed Studios"
+  companyHref?: string; // e.g. "https://highspeed.com"
+
   // Security audit
   passwordUpdatedAt?: Date;
 
@@ -57,7 +62,7 @@ const ChannelSchema = new Schema<ChannelPrefs>(
     email: { type: Boolean, default: true },
     sms: { type: Boolean, default: false },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const NotificationsSchema = new Schema<UserNotifications>(
@@ -75,7 +80,7 @@ const NotificationsSchema = new Schema<UserNotifications>(
       outlet: { type: Boolean, default: true },
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 /* ───────── User schema ───────── */
@@ -116,13 +121,18 @@ const UserSchema = new Schema<IUser>(
     zip: { type: String, trim: true, default: "" },
     defaultAddress: { type: Boolean, default: false },
 
+    /** ✅ NEW (for Friends UI) */
+    jobTitle: { type: String, trim: true, default: "" },
+    company: { type: String, trim: true, default: "" },
+    companyHref: { type: String, trim: true, default: "" },
+
     // Security audit
     passwordUpdatedAt: { type: Date },
 
     // Notifications (with safe defaults)
     notifications: { type: NotificationsSchema, default: () => ({}) },
   },
-  { timestamps: true, strict: true }
+  { timestamps: true, strict: true },
 );
 
 const User: Model<IUser> = models.User || model<IUser>("User", UserSchema);

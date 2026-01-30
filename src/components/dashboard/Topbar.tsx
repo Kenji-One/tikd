@@ -190,7 +190,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                 >
                   <SearchIcon className="h-4 w-4 opacity-70" />
                   <span className="flex-1 truncate text-white/70">
-                    Search events, orgs, artists…
+                    Search events, organizations, teams…
                   </span>
                 </button>
               </div>

@@ -694,6 +694,29 @@ export default function TicketTypesPage() {
     onVis?: () => void;
   }>({ attached: false });
 
+  const closeCreate = useCallback(() => {
+    setMode("list");
+  }, []);
+
+  // ✅ close on ESC + lock body scroll while modal open
+  useEffect(() => {
+    if (mode !== "create") return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeCreate();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [mode, closeCreate]);
+
   // Fetch ticket types
   const {
     data: ticketTypes,
@@ -804,7 +827,6 @@ export default function TicketTypesPage() {
     setDropEdge("before");
 
     document.body.style.userSelect = "";
-
     document.body.style.webkitUserSelect = "";
     document.body.style.cursor = "";
 
@@ -1202,16 +1224,29 @@ export default function TicketTypesPage() {
       )}
 
       {mode === "create" && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Create ticket type"
+          // ✅ close if the pointer down happened OUTSIDE the modal shell
+          onPointerDownCapture={(e) => {
+            const target = e.target as HTMLElement | null;
+            if (!target) return;
+
+            // if click is not inside the modal shell => close
+            if (!target.closest(".tikd-ttw-modalShell")) closeCreate();
+          }}
+        >
           <div className="flex min-h-full items-start justify-center px-3 py-10">
             <div className="tikd-ttw-modalShell w-full max-w-[664px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950">
               <TicketTypeWizard
                 eventId={eventId}
                 event={event}
-                onCancel={() => setMode("list")}
+                onCancel={closeCreate}
                 onCreated={async () => {
                   await refetch();
-                  setMode("list");
+                  closeCreate();
                 }}
               />
             </div>

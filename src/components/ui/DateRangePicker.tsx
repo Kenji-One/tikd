@@ -275,7 +275,7 @@ export default function DateRangePicker({
       !effMin ||
       !isBefore(
         prevMonthStart,
-        startOfMonth(effMin.getFullYear(), effMin.getMonth())
+        startOfMonth(effMin.getFullYear(), effMin.getMonth()),
       )
     );
   }, [viewYear, viewMonth, effMin]);
@@ -286,7 +286,7 @@ export default function DateRangePicker({
       !effMax ||
       !isAfter(
         nextMonthEnd,
-        endOfMonth(effMax.getFullYear(), effMax.getMonth())
+        endOfMonth(effMax.getFullYear(), effMax.getMonth()),
       )
     );
   }, [viewYear, viewMonth, effMax]);
@@ -399,7 +399,7 @@ export default function DateRangePicker({
     "absolute z-30 mt-2 rounded-xl border border-white/10 bg-neutral-950/92 p-2.5 backdrop-blur-md",
     variant === "compact" ? "w-[min(420px,calc(100vw-24px))]" : "w-[292px]",
     align === "right" ? "right-0" : "left-0",
-    popoverClassName
+    popoverClassName,
   );
 
   const compactBtn =
@@ -409,7 +409,7 @@ export default function DateRangePicker({
     "w-full rounded-lg border bg-neutral-950/60 px-4 py-3 transition",
     "flex items-center justify-between gap-3",
     open ? "border-primary-500" : "border-white/10 hover:border-white/15",
-    error && "border-error-500/70 ring-2 ring-error-500/10"
+    error && "border-error-500/70 ring-2 ring-error-500/10",
   );
 
   const sidebarBtn = (active: boolean) =>
@@ -417,7 +417,7 @@ export default function DateRangePicker({
       "w-full rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold leading-none transition",
       active
         ? "bg-primary-500/15 text-primary-300"
-        : "text-white/80 hover:bg-white/5 hover:text-white"
+        : "text-white/80 hover:bg-white/5 hover:text-white",
     );
 
   const showSidebar = variant === "compact";
@@ -465,7 +465,7 @@ export default function DateRangePicker({
             size={13}
             className={clsx(
               "ml-auto opacity-70 transition-transform",
-              open && "rotate-180"
+              open && "rotate-180",
             )}
           />
         </button>
@@ -494,7 +494,7 @@ export default function DateRangePicker({
             <ChevronDown
               className={clsx(
                 "h-5 w-5 text-white/50 transition-transform",
-                open && "rotate-180"
+                open && "rotate-180",
               )}
             />
           </div>
@@ -506,7 +506,7 @@ export default function DateRangePicker({
           <div
             className={clsx(
               "gap-2.5",
-              showSidebar ? "grid grid-cols-[124px_1fr]" : "grid grid-cols-1"
+              showSidebar ? "grid grid-cols-[124px_1fr]" : "grid grid-cols-1",
             )}
           >
             {/* ✅ Sidebar ONLY for compact variant (presets + year quick ranges) */}
@@ -514,7 +514,7 @@ export default function DateRangePicker({
               <div className="rounded-xl border border-white/10 bg-neutral-900/60 p-1.5">
                 <div
                   className={clsx(
-                    "tikd-scroll max-h-[250px] overflow-auto pr-1"
+                    "tikd-scroll max-h-[250px] overflow-auto pr-1",
                   )}
                 >
                   <div className="space-y-1">
@@ -563,7 +563,7 @@ export default function DateRangePicker({
                   onClick={() => canPrev && moveMonth(-1)}
                   className={clsx(
                     "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white",
-                    !canPrev && "opacity-40 pointer-events-none"
+                    !canPrev && "opacity-40 pointer-events-none",
                   )}
                   aria-label="Previous month"
                 >
@@ -580,7 +580,7 @@ export default function DateRangePicker({
                     }}
                     className={clsx(
                       "inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-semibold text-white/90",
-                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
                     )}
                     aria-expanded={monthOpen}
                     aria-haspopup="listbox"
@@ -590,7 +590,7 @@ export default function DateRangePicker({
                       size={13}
                       className={clsx(
                         "opacity-70 transition-transform",
-                        monthOpen && "rotate-180"
+                        monthOpen && "rotate-180",
                       )}
                     />
                   </button>
@@ -604,7 +604,7 @@ export default function DateRangePicker({
                     }}
                     className={clsx(
                       "inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-semibold text-white/90",
-                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
                     )}
                     aria-expanded={yearOpen}
                     aria-haspopup="listbox"
@@ -614,7 +614,7 @@ export default function DateRangePicker({
                       size={13}
                       className={clsx(
                         "opacity-70 transition-transform",
-                        yearOpen && "rotate-180"
+                        yearOpen && "rotate-180",
                       )}
                     />
                   </button>
@@ -627,7 +627,7 @@ export default function DateRangePicker({
                     >
                       <div
                         className={clsx(
-                          "tikd-scroll max-h-[207px] overflow-auto p-1"
+                          "tikd-scroll max-h-[207px] overflow-auto p-1",
                         )}
                       >
                         {MONTHS.map((m, i) => (
@@ -642,7 +642,7 @@ export default function DateRangePicker({
                               "w-full rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition",
                               i === viewMonth
                                 ? "bg-primary-500/15 text-primary-300"
-                                : "text-white/80 hover:bg-white/5 hover:text-white"
+                                : "text-white/80 hover:bg-white/5 hover:text-white",
                             )}
                             role="option"
                             aria-selected={i === viewMonth}
@@ -662,7 +662,7 @@ export default function DateRangePicker({
                     >
                       <div
                         className={clsx(
-                          "tikd-scroll max-h-[207px] overflow-auto p-1"
+                          "tikd-scroll max-h-[207px] overflow-auto p-1",
                         )}
                       >
                         {years.map((y) => (
@@ -677,7 +677,7 @@ export default function DateRangePicker({
                               "w-full rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold transition",
                               y === viewYear
                                 ? "bg-primary-500/15 text-primary-300"
-                                : "text-white/80 hover:bg-white/5 hover:text-white"
+                                : "text-white/80 hover:bg-white/5 hover:text-white",
                             )}
                             role="option"
                             aria-selected={y === viewYear}
@@ -695,7 +695,7 @@ export default function DateRangePicker({
                   onClick={() => canNext && moveMonth(1)}
                   className={clsx(
                     "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white",
-                    !canNext && "opacity-40 pointer-events-none"
+                    !canNext && "opacity-40 pointer-events-none",
                   )}
                   aria-label="Next month"
                 >
@@ -748,15 +748,17 @@ export default function DateRangePicker({
                       className={clsx(
                         "h-8 rounded-lg text-[11px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
                         disabled
-                          ? "text-white/25"
+                          ? "cursor-not-allowed text-white/20 opacity-45"
                           : "text-white/85 hover:bg-white/5",
-                        between && "bg-primary-500/12 text-white",
+                        between && !disabled && "bg-primary-500/12 text-white",
                         (isStart || isEnd) &&
+                          !disabled &&
                           "bg-primary-500 text-white shadow-[0_10px_24px_rgba(154,70,255,0.26)]",
                         isToday &&
+                          !disabled &&
                           !isStart &&
                           !isEnd &&
-                          "border border-white/10"
+                          "border border-white/10",
                       )}
                       aria-label={d.toLocaleDateString(undefined, {
                         weekday: "long",

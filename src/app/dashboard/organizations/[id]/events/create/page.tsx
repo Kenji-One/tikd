@@ -419,6 +419,8 @@ export default function NewEventPage() {
   const params = useParams() as { id?: string };
   const orgIdFromRoute = params?.id ?? "";
 
+  const minSelectableDate = useMemo(() => clampToDay(new Date()), []);
+
   const posterUploadRef = useRef<HTMLDivElement | null>(null);
   const openPosterPicker = () => {
     const root = posterUploadRef.current;
@@ -779,6 +781,7 @@ export default function NewEventPage() {
                           variant="field"
                           align="left"
                           error={!!errors.dateRange?.start}
+                          minDate={minSelectableDate}
                         />
                       )}
                     />
@@ -1284,17 +1287,7 @@ export default function NewEventPage() {
               Cancel
             </Button>
 
-            <div className="flex gap-3 flex-wrap">
-              {/* ✅ Optional: allow instant publish */}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleSubmit(submitImpl("published"))}
-              >
-                Publish Now
-              </Button>
-
-              {/* ✅ Default action: create Unpublished (draft) */}
+            <div className="">
               <Button
                 type="submit"
                 variant="primary"

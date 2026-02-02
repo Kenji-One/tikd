@@ -10,7 +10,7 @@ import clsx from "clsx";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Users, ChevronRight } from "lucide-react";
+import { Search, Plus, Users, ChevronRight, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -32,6 +32,11 @@ type Org = {
   createdAt?: string;
 
   website?: string;
+
+  /** ✅ user’s role in this org (backend can return any of these) */
+  myRole?: string;
+  role?: string;
+  userRole?: string;
 };
 
 /* ---------------------------- Helpers ------------------------------ */
@@ -88,6 +93,22 @@ function initialsFromName(name: string) {
   const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
   const two = `${a}${b}`.toUpperCase();
   return two || "OR";
+}
+
+function formatMembers(n?: number) {
+  if (!n || n <= 0) return "0";
+  try {
+    return new Intl.NumberFormat(undefined).format(n);
+  } catch {
+    return String(n);
+  }
+}
+
+function roleLabelFromOrg(org: Org): string {
+  const raw = (org.myRole || org.userRole || org.role || "").trim();
+  if (!raw) return "Member";
+  // Make it look nice (Admin, Promoter, etc.)
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function Pagination({
@@ -169,6 +190,7 @@ function OrganizationListRow({
   description: string;
 }) {
   const badge = initialsFromName(org.name);
+  const roleLabel = roleLabelFromOrg(org);
 
   return (
     <Link
@@ -210,18 +232,28 @@ function OrganizationListRow({
 
       {/* ✅ True-centered meta (center of the whole row) */}
       <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex items-center gap-6">
+        {/* ✅ Role (replaces the old “X Total Members” slot idea for list view too) */}
+        <div
+          className={clsx(
+            "inline-flex items-center gap-1.5 rounded-full",
+            "border border-primary-500/22 bg-primary-500/10",
+            "px-2.5 py-1 text-[11px] font-semibold text-primary-200",
+            "shadow-[0_10px_28px_rgba(154,70,255,0.10)]",
+          )}
+        >
+          <ShieldCheck className="h-3.5 w-3.5 text-primary-300" />
+          <span className="max-w-[120px] truncate">{roleLabel}</span>
+        </div>
+
+        {/* ✅ Total Members (replaces old Created [date]) */}
         <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
             <Users className="h-4 w-4" />
           </span>
           <span className="font-semibold text-neutral-100">
-            {typeof org.totalMembers === "number" ? org.totalMembers : 0}
+            {formatMembers(org.totalMembers)}
           </span>
-          <span className="text-neutral-400">members</span>
-        </div>
-
-        <div className="text-[12px] text-neutral-400">
-          {joinLabel(org.createdAt)}
+          <span className="text-neutral-400">Total Members</span>
         </div>
       </div>
 
@@ -408,6 +440,7 @@ export default function OrganizationsClient() {
                           iconUrl={o.logo}
                           totalMembers={o.totalMembers}
                           joinDateLabel={joinLabel(o.createdAt)}
+                          userRoleLabel={roleLabelFromOrg(o)}
                           tilt
                           tiltMaxDeg={3.5}
                           tiltPerspective={1600}

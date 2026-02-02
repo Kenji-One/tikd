@@ -3,7 +3,8 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,9 @@ import {
   ArrowDownNarrowWide,
   ArrowDownWideNarrow,
   ChevronRight,
+  Eye,
+  Ticket,
+  DollarSign,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/Input";
@@ -59,6 +63,11 @@ type MyEvent = {
   // Optional: clients requested sort options
   pageViews?: number;
   views?: number;
+
+  // Optional org payloads (different backends name these differently)
+  organization?: Org;
+  org?: Org;
+  organizationId?: string;
 };
 
 type EventViewId = "upcoming" | "past" | "drafts";
@@ -364,20 +373,89 @@ function SortControls({
   dropdownWidthClass?: string;
 }) {
   const [open, setOpen] = useState(false);
+
+  // wrapper still holds the button (used for outside click)
   const ref = useRef<HTMLDivElement>(null);
+
+  // portal panel ref (because it won't be inside `ref` anymore)
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const sortLabel = useMemo(() => {
     if (!sortField) return "";
     return options.find((o) => o.key === sortField)?.label ?? "Sort";
   }, [options, sortField]);
 
+  const [pos, setPos] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
+
+  const inferWidthFallback = useCallback(() => {
+    // best-effort parse: "w-[220px]" => 220
+    const m = /w-\[(\d+)px\]/.exec(dropdownWidthClass);
+    const n = m?.[1] ? Number(m[1]) : NaN;
+    return Number.isFinite(n) ? n : 220;
+  }, [dropdownWidthClass]);
+
+  const recalc = useCallback(() => {
+    const btnEl = ref.current;
+    if (!btnEl) return;
+
+    // button is the first child inside wrapper
+    const button = btnEl.querySelector("button");
+    if (!button) return;
+
+    const r = button.getBoundingClientRect();
+    const vw = window.innerWidth;
+
+    const panelW =
+      panelRef.current?.getBoundingClientRect().width ?? inferWidthFallback();
+
+    // align dropdown to the button's right edge (like before)
+    let left = r.right - panelW;
+    const top = r.bottom + 8;
+
+    // clamp into viewport so it never goes off-screen
+    left = Math.max(12, Math.min(left, vw - 12 - panelW));
+
+    setPos({ top, left });
+  }, [inferWidthFallback]);
+
   useEffect(() => {
     function onDoc(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+
+      const inButton = !!ref.current?.contains(t);
+      const inPanel = !!panelRef.current?.contains(t);
+
+      if (!inButton && !inPanel) setOpen(false);
     }
+
     if (open) document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    // position immediately + after the panel measures itself
+    recalc();
+    const raf = requestAnimationFrame(recalc);
+
+    const onScrollOrResize = () => recalc();
+
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, true);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+    };
+  }, [open, recalc]);
 
   function apply(field: SortField) {
     // Clicking the active option again clears sorting (back to default state)
@@ -396,6 +474,120 @@ function SortControls({
   }
 
   const DirIcon = sortDir === "asc" ? ArrowDownNarrowWide : ArrowDownWideNarrow;
+
+  const dropdown = (
+    <div
+      ref={panelRef}
+      className="fixed z-[99999]"
+      style={{ top: pos.top, left: pos.left }}
+    >
+      <div className="relative">
+        <span className="pointer-events-none absolute -top-1 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
+        <div
+          className={clsx(
+            "overflow-hidden rounded-2xl border border-white/10",
+            "bg-[#121420] backdrop-blur",
+            "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
+            dropdownWidthClass,
+          )}
+        >
+          <div role="listbox" aria-label="Sort" className="p-2">
+            {options.map((opt) => {
+              const active = opt.key === sortField;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => apply(opt.key)}
+                  title={active ? "Click again to clear sort" : undefined}
+                  className={clsx(
+                    "flex w-full items-center justify-between",
+                    "rounded-lg px-3 py-2.5",
+                    "text-left text-sm outline-none",
+                    "hover:bg-white/5 focus:bg-white/5",
+                    active ? "bg-white/5 text-white" : "text-white/90",
+                  )}
+                >
+                  <span className="truncate">{opt.label}</span>
+                  {active ? (
+                    <span className="text-xs font-semibold text-white/80">
+                      ✓
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-px w-full bg-white/10" />
+
+          <div className="p-2">
+            <div
+              className={clsx(
+                "grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35",
+                !sortField && "opacity-60",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setDir("asc")}
+                disabled={!sortField}
+                className={clsx(
+                  "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
+                  "outline-none transition",
+                  "hover:bg-white/6 focus-visible:bg-white/6",
+                  sortField && sortDir === "asc"
+                    ? "bg-white/8 text-white"
+                    : "text-white/80",
+                  "disabled:cursor-not-allowed",
+                )}
+                aria-label="Ascending"
+              >
+                <ArrowDownNarrowWide className="h-4 w-4 opacity-90" />
+                Asc
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDir("desc")}
+                disabled={!sortField}
+                className={clsx(
+                  "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
+                  "outline-none transition",
+                  "hover:bg-white/6 focus-visible:bg-white/6",
+                  sortField && sortDir === "desc"
+                    ? "bg-white/8 text-white"
+                    : "text-white/80",
+                  "disabled:cursor-not-allowed",
+                )}
+                aria-label="Descending"
+              >
+                <ArrowDownWideNarrow className="h-4 w-4 opacity-90" />
+                Desc
+              </button>
+            </div>
+
+            {!sortField ? (
+              <p className="mt-2 px-1 text-[11px] text-white/45">
+                Select a sort type first
+              </p>
+            ) : null}
+
+            {sortField ? (
+              <div className="mt-2 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-950/25 px-3 py-2">
+                <p className="truncate text-[11px] text-white/70">
+                  <span className="text-white/45">Sorting:</span> {sortLabel}
+                </p>
+                <DirIcon className="h-4 w-4 text-white/70" />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div ref={ref} className="relative">
@@ -447,116 +639,8 @@ function SortControls({
         ) : null}
       </button>
 
-      {open && (
-        <div className="absolute right-0 z-50 mt-2">
-          <div className="relative">
-            <span className="pointer-events-none absolute -top-1 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
-            <div
-              className={clsx(
-                "overflow-hidden rounded-2xl border border-white/10",
-                "bg-[#121420] backdrop-blur",
-                "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
-                dropdownWidthClass,
-              )}
-            >
-              <div role="listbox" aria-label="Sort" className="p-2">
-                {options.map((opt) => {
-                  const active = opt.key === sortField;
-                  return (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      onClick={() => apply(opt.key)}
-                      title={active ? "Click again to clear sort" : undefined}
-                      className={clsx(
-                        "flex w-full items-center justify-between",
-                        "rounded-lg px-3 py-2.5",
-                        "text-left text-sm outline-none",
-                        "hover:bg-white/5 focus:bg-white/5",
-                        active ? "bg-white/5 text-white" : "text-white/90",
-                      )}
-                    >
-                      <span className="truncate">{opt.label}</span>
-                      {active ? (
-                        <span className="text-xs font-semibold text-white/80">
-                          ✓
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="h-px w-full bg-white/10" />
-
-              <div className="p-2">
-                <div
-                  className={clsx(
-                    "grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35",
-                    !sortField && "opacity-60",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setDir("asc")}
-                    disabled={!sortField}
-                    className={clsx(
-                      "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
-                      "outline-none transition",
-                      "hover:bg-white/6 focus-visible:bg-white/6",
-                      sortField && sortDir === "asc"
-                        ? "bg-white/8 text-white"
-                        : "text-white/80",
-                      "disabled:cursor-not-allowed",
-                    )}
-                    aria-label="Ascending"
-                  >
-                    <ArrowDownNarrowWide className="h-4 w-4 opacity-90" />
-                    Asc
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setDir("desc")}
-                    disabled={!sortField}
-                    className={clsx(
-                      "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
-                      "outline-none transition",
-                      "hover:bg-white/6 focus-visible:bg-white/6",
-                      sortField && sortDir === "desc"
-                        ? "bg-white/8 text-white"
-                        : "text-white/80",
-                      "disabled:cursor-not-allowed",
-                    )}
-                    aria-label="Descending"
-                  >
-                    <ArrowDownWideNarrow className="h-4 w-4 opacity-90" />
-                    Desc
-                  </button>
-                </div>
-
-                {!sortField ? (
-                  <p className="mt-2 px-1 text-[11px] text-white/45">
-                    Select a sort type first
-                  </p>
-                ) : null}
-
-                {sortField ? (
-                  <div className="mt-2 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-950/25 px-3 py-2">
-                    <p className="truncate text-[11px] text-white/70">
-                      <span className="text-white/45">Sorting:</span>{" "}
-                      {sortLabel}
-                    </p>
-                    <DirIcon className="h-4 w-4 text-white/70" />
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ✅ Portal dropdown so parent overflow can’t clip it */}
+      {mounted && open ? createPortal(dropdown, document.body) : null}
 
       <style jsx>{`
         .tikd-sort-bars {
@@ -611,6 +695,460 @@ function SortControls({
           }
         }
       `}</style>
+    </div>
+  );
+}
+
+/* ---------------------- Info Tooltip (NEW) ------------------------- */
+
+function InfoIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={clsx(
+        "h-[15px] w-[15px]",
+        "duration-500 will-change-transform",
+        "group-hover/info-btn:rotate-[360deg] group-hover/info-btn:scale-110",
+        className,
+      )}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 22c-5.518 0-10-4.482-10-10s4.482-10 10-10 10 4.482 10 10-4.482 10-10 10zm-1-16h2v6h-2zm0 8h2v2h-2z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function StatChip({
+  label,
+  value,
+  icon,
+  divider = false,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  divider?: boolean;
+}) {
+  return (
+    <div
+      title={label}
+      aria-label={`${label}: ${value}`}
+      className={clsx(
+        "group relative flex min-w-0 flex-1 items-center justify-center px-1 py-2",
+        "transition-colors duration-150 hover:bg-white/[0.03]",
+        divider &&
+          "after:pointer-events-none after:absolute after:right-0 after:top-2 after:bottom-2 after:w-px after:bg-white/10",
+      )}
+    >
+      <div className="inline-flex items-center gap-2">
+        <span
+          className={clsx(
+            "grid h-6 w-6 place-items-center rounded-[4px]",
+            "bg-white/[0.03] text-primary-200",
+            "ring-1 ring-inset ring-white/10",
+            "shadow-[0_10px_18px_rgba(0,0,0,0.22),0_0_16px_rgba(154,70,255,0.10)]",
+            "transition-transform duration-150 group-hover:scale-[1.02]",
+          )}
+          aria-hidden="true"
+        >
+          {icon}
+        </span>
+
+        <span className="truncate text-[13px] font-semibold leading-none text-white">
+          {value}
+        </span>
+
+        <span className="sr-only">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function EventInfoTooltip({ ev }: { ev: MyEvent }) {
+  const org = ev.organization ?? ev.org;
+  const orgName = org?.name ?? "Organization";
+  const orgLogo = org?.logo;
+
+  const revenue = revenueOf(ev);
+  const tickets = ticketsOf(ev);
+  const views = viewsOf(ev);
+
+  function initialsFromName(name: string) {
+    const parts = String(name || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if (!parts.length) return "OR";
+
+    const a = parts[0]?.[0] ?? "";
+    const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
+    const two = `${a}${b}`.toUpperCase();
+    return two || "OR";
+  }
+
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+
+  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
+  const openRef = useRef(false);
+
+  // track for hover/tilt motion
+  const trackRafRef = useRef<number | null>(null);
+  const trackUntilRef = useRef<number>(0);
+
+  const closeTimer = useRef<number | null>(null);
+
+  // cache tooltip height just to decide top/bottom (NOT for positioning)
+  const heightCacheRef = useRef<number>(170);
+
+  const [pos, setPos] = useState<{
+    top: number;
+    left: number;
+    placement: "top" | "bottom";
+    arrowLeft: number; // px inside tooltip
+  }>({ top: 0, left: 0, placement: "top", arrowLeft: 146 });
+
+  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  const recalc = useCallback(() => {
+    const btn = btnRef.current;
+    if (!btn) return;
+
+    const r = btn.getBoundingClientRect();
+
+    const tooltipW = 222; // keep as-is
+    const gap = 10; // a touch more breathing room (tweak if you want)
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // update cached height when we can (only used to choose top/bottom)
+    const measuredH =
+      tipRef.current?.getBoundingClientRect().height ?? heightCacheRef.current;
+    heightCacheRef.current = measuredH;
+
+    const clamp = (n: number, min: number, max: number) =>
+      Math.max(min, Math.min(max, n));
+
+    const centerX = r.left + r.width / 2;
+
+    // clamp CENTER, because we will use translateX(-50%)
+    const minCenter = 12 + tooltipW / 2;
+    const maxCenter = vw - 12 - tooltipW / 2;
+    const clampedCenterX = clamp(centerX, minCenter, maxCenter);
+
+    // decide top/bottom (only decision uses height; position does NOT)
+    const spaceTop = r.top;
+    const spaceBottom = vh - r.bottom;
+
+    const wantTop = spaceTop >= measuredH + gap + 12;
+    const placement: "top" | "bottom" =
+      wantTop || spaceTop > spaceBottom ? "top" : "bottom";
+
+    // KEY FIX:
+    // We anchor the tooltip to the icon and let CSS transform handle "above"
+    const top = placement === "top" ? r.top - gap : r.bottom + gap;
+    const left = clampedCenterX;
+
+    // arrow inside tooltip should point to the REAL icon center,
+    // even if the tooltip is clamped horizontally.
+    // tooltip left edge (because transformX(-50%)) = left - tooltipW/2
+    const tooltipLeftEdge = left - tooltipW / 2;
+    const arrowLeftRaw = centerX - tooltipLeftEdge;
+    const arrowLeft = clamp(arrowLeftRaw, 18, tooltipW - 18);
+
+    setPos({ top, left, placement, arrowLeft });
+  }, []);
+
+  const stopTracking = useCallback(() => {
+    if (trackRafRef.current) {
+      cancelAnimationFrame(trackRafRef.current);
+      trackRafRef.current = null;
+    }
+  }, []);
+
+  const startTracking = useCallback(
+    (ms: number) => {
+      trackUntilRef.current = performance.now() + ms;
+
+      const tick = () => {
+        if (!openRef.current) {
+          trackRafRef.current = null;
+          return;
+        }
+
+        recalc();
+
+        if (performance.now() < trackUntilRef.current) {
+          trackRafRef.current = requestAnimationFrame(tick);
+        } else {
+          trackRafRef.current = null;
+        }
+      };
+
+      stopTracking();
+      trackRafRef.current = requestAnimationFrame(tick);
+    },
+    [recalc, stopTracking],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onScrollOrResize = () => {
+      recalc();
+      startTracking(180);
+    };
+
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, true);
+
+    return () => {
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+    };
+  }, [open, recalc, startTracking]);
+
+  const openNow = () => {
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+
+    setOpen(true);
+
+    // do a couple of immediate syncs: first frame + a bit of tracking
+    requestAnimationFrame(() => {
+      recalc();
+      startTracking(520);
+    });
+  };
+
+  const closeSoon = () => {
+    stopTracking();
+
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setOpen(false), 120);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopTracking();
+      if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    };
+  }, [stopTracking]);
+
+  const tooltip = (
+    <div
+      ref={tipRef}
+      onMouseEnter={openNow}
+      onMouseLeave={closeSoon}
+      className={clsx(
+        "fixed z-[9999] w-[222px]",
+        "transition-opacity duration-150 ease-out",
+        open ? "opacity-100" : "pointer-events-none opacity-0",
+      )}
+      // ✅ Anchor to icon and pull above using transform — no height math.
+      style={{
+        top: pos.top,
+        left: pos.left,
+        transform:
+          pos.placement === "top"
+            ? "translate(-50%, -100%)"
+            : "translate(-50%, 0%)",
+      }}
+      role="tooltip"
+    >
+      {/* We animate a tiny inner nudge, WITHOUT touching the outer transform */}
+      <div
+        className={clsx(
+          "transition-transform duration-150 ease-out",
+          open ? "translate-y-0" : "translate-y-1",
+        )}
+      >
+        {/* Border / shell */}
+        <div
+          className={clsx(
+            "relative isolate rounded-[12px] p-[1px]",
+            "bg-[linear-gradient(135deg,rgba(154,70,255,0.60),rgba(66,139,255,0.28),rgba(255,255,255,0.10))]",
+            "shadow-[0_22px_80px_rgba(0,0,0,0.72),0_0_34px_rgba(154,70,255,0.14)]",
+          )}
+        >
+          <div className="pointer-events-none absolute inset-0 rounded-[12px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" />
+
+          <div
+            className={clsx(
+              "relative overflow-hidden rounded-[12px]",
+              "bg-[linear-gradient(135deg,rgba(18,18,32,0.92),rgba(10,10,18,0.90))]",
+              "backdrop-blur-2xl",
+            )}
+          >
+            <div
+              className={clsx(
+                "pointer-events-none absolute inset-0",
+                "bg-[linear-gradient(90deg,rgba(154,70,255,0.18),rgba(66,139,255,0.12),rgba(154,70,255,0.10))]",
+                "blur-2xl opacity-70",
+              )}
+            />
+            <div
+              className={clsx(
+                "pointer-events-none absolute inset-0 opacity-95",
+                "bg-[radial-gradient(280px_150px_at_18%_-10%,rgba(154,70,255,0.26),transparent_62%),radial-gradient(260px_150px_at_92%_120%,rgba(66,139,255,0.18),transparent_60%)]",
+              )}
+            />
+            <div
+              className={clsx(
+                "pointer-events-none absolute inset-0",
+                "bg-[linear-gradient(180deg,rgba(255,255,255,0.14),transparent_42%)]",
+                "opacity-60",
+              )}
+            />
+            <div className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" />
+
+            <div className="relative z-10 p-3.5">
+              <div className="flex items-center gap-3">
+                <div
+                  className={clsx(
+                    "relative h-9 w-9 shrink-0 overflow-hidden rounded-full",
+                    "ring-1 ring-inset ring-white/12",
+                    "bg-white/[0.04]",
+                  )}
+                >
+                  {orgLogo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={orgLogo}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      className={clsx(
+                        "grid h-full w-full place-items-center",
+                        "bg-[conic-gradient(from_220deg_at_50%_50%,rgba(154,70,255,0.92),rgba(102,0,183,0.90),rgba(17,24,39,0.90))]",
+                      )}
+                    >
+                      <span className="text-[11px] font-extrabold text-white">
+                        {initialsFromName(orgName)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-semibold text-white">
+                    {orgName}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-white/55">
+                    {clampText(ev.title ?? "", 40)}
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={clsx(
+                  "mt-3 overflow-hidden rounded-[8px]",
+                  "border border-white/10",
+                  "bg-white/[0.03]",
+                  "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]",
+                )}
+              >
+                <div className="flex">
+                  <StatChip
+                    label="Tickets"
+                    value={tickets.toLocaleString()}
+                    icon={<Ticket className="h-3.5 w-3.5" />}
+                    divider
+                  />
+                  <StatChip
+                    label="Views"
+                    value={views.toLocaleString()}
+                    icon={<Eye className="h-3.5 w-3.5" />}
+                    divider
+                  />
+                  <StatChip
+                    label="Revenue"
+                    value={money(revenue)}
+                    icon={<DollarSign className="h-3.5 w-3.5" />}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <div
+            className={clsx(
+              "pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 rotate-45",
+              "shadow-[0_14px_28px_rgba(0,0,0,0.55)]",
+              pos.placement === "top" ? "bottom-[-7px]" : "top-[-7px]",
+            )}
+            style={{ left: pos.arrowLeft }}
+          >
+            <div
+              className={clsx(
+                "absolute inset-0 rounded-[2px]",
+                "bg-[linear-gradient(135deg,rgba(154,70,255,0.60),rgba(66,139,255,0.28),rgba(255,255,255,0.10))]",
+              )}
+            />
+            <div
+              className={clsx(
+                "absolute inset-[1px] rounded-[2px]",
+                "bg-[linear-gradient(135deg,rgba(18,18,32,0.92),rgba(10,10,18,0.90))]",
+              )}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={btnRef}
+        type="button"
+        onMouseEnter={openNow}
+        onMouseLeave={closeSoon}
+        onFocus={openNow}
+        onBlur={closeSoon}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (open) setOpen(false);
+          else openNow();
+        }}
+        className={clsx(
+          "group/info-btn relative z-10",
+          "inline-flex h-8 w-8 items-center justify-center rounded-lg",
+          "border border-white/10 bg-neutral-950/45 backdrop-blur-md",
+          "text-neutral-200",
+          "shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_22px_rgba(0,0,0,0.40)]",
+          "transition-[background-color,border-color,transform,color] duration-150",
+          "hover:bg-white/8 hover:border-primary-500/45 hover:text-primary-200",
+          "active:scale-[0.97]",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+          "cursor-pointer",
+        )}
+        aria-label="Event information"
+        aria-expanded={open}
+      >
+        <InfoIcon />
+      </button>
+
+      {mounted && open ? createPortal(tooltip, document.body) : null}
     </div>
   );
 }
@@ -909,7 +1447,7 @@ function PinOverlayButton({
         onToggle();
       }}
       className={clsx(
-        "absolute right-3 top-3 z-20",
+        "z-20",
         "inline-flex items-center gap-2 cursor-pointer",
         pinned
           ? clsx(
@@ -1042,6 +1580,13 @@ export default function DashboardEventsPage() {
   // ✅ layout view (grid/list) like Organizations page
   const [layout, setLayout] = useState<GridListValue>("grid");
 
+  // ✅ remember what the user last chose for Upcoming view
+  const [lastUpcomingLayout, setLastUpcomingLayout] =
+    useState<GridListValue>("grid");
+
+  // ✅ track transitions between tabs
+  const prevViewRef = useRef<EventViewId>("upcoming");
+
   // ✅ header search (events)
   const [eventsQuery, setEventsQuery] = useState("");
 
@@ -1110,7 +1655,24 @@ export default function DashboardEventsPage() {
   }
 
   const orgsList = useMemo<Org[]>(() => orgs ?? [], [orgs]);
-  const events = useMemo<MyEvent[]>(() => allEvents ?? [], [allEvents]);
+
+  // Defensive fallback: if API doesn't send `organization/org`, attach it from orgsList via organizationId
+  const events = useMemo<MyEvent[]>(() => {
+    const list = (allEvents ?? []) as MyEvent[];
+    if (!list.length) return list;
+    if (!orgsList.length) return list;
+
+    const byId = new Map<string, Org>();
+    for (const o of orgsList) byId.set(String(o._id), o);
+
+    return list.map((e) => {
+      if (e.organization || e.org) return e;
+      const org = e.organizationId
+        ? byId.get(String(e.organizationId))
+        : undefined;
+      return org ? { ...e, organization: org } : e;
+    });
+  }, [allEvents, orgsList]);
 
   const now = useMemo(() => Date.now(), []);
 
@@ -1133,10 +1695,22 @@ export default function DashboardEventsPage() {
     [events],
   );
 
-  // ✅ If the user switches to Past/Drafts, force list layout (these views are row-based).
   useEffect(() => {
-    if (view !== "upcoming") setLayout("list");
-  }, [view]);
+    const prev = prevViewRef.current;
+
+    // Leaving Upcoming → remember the user's chosen layout, then force list for Past/Drafts
+    if (prev === "upcoming" && view !== "upcoming") {
+      setLastUpcomingLayout(layout);
+      setLayout("list");
+    }
+
+    // Returning to Upcoming → restore the user's previous layout (grid/list)
+    if (prev !== "upcoming" && view === "upcoming") {
+      setLayout(lastUpcomingLayout);
+    }
+
+    prevViewRef.current = view;
+  }, [view, layout, lastUpcomingLayout]);
 
   // ✅ Reset to page-appropriate default sort direction when choosing a new field.
   const defaultDirFor = useMemo(() => {
@@ -1247,8 +1821,7 @@ export default function DashboardEventsPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* ✅ Header layout (left → right) exactly like Organizations:
-                Events title + subtitle | Search | Grid/List | Sort | Upcoming dropdown | Create button */}
+            {/* ✅ Header layout */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300">
@@ -1291,7 +1864,6 @@ export default function DashboardEventsPage() {
                     ariaLabel="Layout view toggle"
                   />
 
-                  {/* ✅ Sort button immediately to the right of Grid/List */}
                   <SortControls
                     options={SORT_FIELDS}
                     sortField={sortField}
@@ -1302,7 +1874,6 @@ export default function DashboardEventsPage() {
                     dropdownWidthClass="w-[220px]"
                   />
 
-                  {/* Upcoming dropdown (view selector) */}
                   <MiniSelect
                     value={view}
                     onChange={setView}
@@ -1310,7 +1881,6 @@ export default function DashboardEventsPage() {
                     btnClassName="h-10"
                   />
 
-                  {/* Create Event button */}
                   <Button
                     onClick={openOrgPicker}
                     type="button"
@@ -1372,8 +1942,9 @@ export default function DashboardEventsPage() {
                   >
                     {upcomingSorted.map((ev) => {
                       const isPinned = pinnedIds.has(String(ev._id));
+
                       return (
-                        <div key={ev._id} className="relative">
+                        <div key={ev._id} className="relative group">
                           <EventCard
                             id={ev._id}
                             title={ev.title}
@@ -1385,12 +1956,40 @@ export default function DashboardEventsPage() {
                             className="w-full"
                           />
 
-                          <PinOverlayButton
-                            pinned={isPinned}
-                            onToggle={() =>
-                              togglePin(String(ev._id), !isPinned)
-                            }
-                          />
+                          {/* ✅ Info icon appears ONLY when hovering the card */}
+                          <div
+                            className={clsx(
+                              "absolute left-3 top-3 z-30",
+                              "opacity-0 transition-opacity duration-200",
+                              "group-hover:opacity-100 group-focus-within:opacity-100",
+                            )}
+                          >
+                            <EventInfoTooltip ev={ev} />
+                          </div>
+
+                          <div
+                            className={clsx(
+                              "absolute right-3 top-3 z-30",
+                              "transition-opacity duration-200",
+
+                              isPinned
+                                ? "opacity-100 pointer-events-auto"
+                                : clsx(
+                                    "opacity-0 pointer-events-none",
+                                    "[@media(hover:hover)]:group-hover:opacity-100",
+                                    "[@media(hover:hover)]:group-hover:pointer-events-auto",
+                                    "[@media(hover:hover)]:group-focus-within:opacity-100",
+                                    "[@media(hover:hover)]:group-focus-within:pointer-events-auto",
+                                  ),
+                            )}
+                          >
+                            <PinOverlayButton
+                              pinned={isPinned}
+                              onToggle={() =>
+                                togglePin(String(ev._id), !isPinned)
+                              }
+                            />
+                          </div>
                         </div>
                       );
                     })}

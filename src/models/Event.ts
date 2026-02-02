@@ -1,4 +1,3 @@
-// src/models/Event.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 export interface IEvent extends Document {
@@ -23,6 +22,9 @@ export interface IEvent extends Document {
   promotionalTeamEmails: string[];
   promoters: string[];
   message?: string;
+
+  /** ✅ Internal (admin/team-only) notes */
+  internalNotes?: string;
 
   organizationId: Types.ObjectId;
   createdByUserId: Types.ObjectId;
@@ -54,6 +56,8 @@ const EventSchema = new Schema<IEvent>(
     promotionalTeamEmails: { type: [String], default: [] },
     promoters: { type: [String], default: [] },
     message: { type: String, default: "" },
+
+    internalNotes: { type: String, default: "" },
 
     organizationId: {
       type: Schema.Types.ObjectId,

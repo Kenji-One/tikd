@@ -11,6 +11,8 @@ import Event, { IEvent } from "@/models/Event";
 import Artist, { IArtist } from "@/models/Artist";
 import Organization, { IOrganization } from "@/models/Organization";
 import Ticket from "@/models/Ticket";
+import OrgTeam from "@/models/OrgTeam";
+import EventTeam from "@/models/EventTeam";
 import type { HydratedDocument, Types } from "mongoose";
 
 /* ------------------------------------------------------------------ */
@@ -20,7 +22,10 @@ const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
 
 /** Lean shape after populating artists + organization */
 type EventLean = Omit<IEvent, "organizationId" | "artists"> & {
-  organizationId: Pick<IOrganization, "_id" | "name" | "logo" | "website">;
+  organizationId: Pick<
+    IOrganization,
+    "_id" | "name" | "logo" | "website" | "ownerId"
+  >;
   artists: Pick<IArtist, "_id" | "stageName" | "avatar" | "isVerified">[];
   _id: Types.ObjectId;
 };
@@ -28,6 +33,123 @@ type EventLean = Omit<IEvent, "organizationId" | "artists"> & {
 type EventDoc = HydratedDocument<IEvent> & {
   internalNotes?: string;
 };
+
+async function assertCanManageEvent(eventId: string, userId: string) {
+  // Creator can manage
+  const created = await Event.findOne({ _id: eventId, createdByUserId: userId })
+    .select("_id organizationId createdByUserId")
+    .lean<{
+      _id: Types.ObjectId;
+      organizationId: Types.ObjectId;
+      createdByUserId: Types.ObjectId;
+    } | null>();
+
+  if (created) return { ok: true as const };
+
+  const event = await Event.findById(eventId)
+    .select("_id organizationId createdByUserId")
+    .lean<{
+      _id: Types.ObjectId;
+      organizationId: Types.ObjectId;
+      createdByUserId: Types.ObjectId;
+    } | null>();
+
+  if (!event) {
+    return {
+      ok: false as const,
+      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
+    };
+  }
+
+  // Org owner can manage
+  const org = await Organization.findById(event.organizationId)
+    .select("_id ownerId")
+    .lean<{ _id: Types.ObjectId; ownerId: Types.ObjectId } | null>();
+
+  if (org && String(org.ownerId) === String(userId))
+    return { ok: true as const };
+
+  // Org admin can manage
+  const orgAdmin = await OrgTeam.findOne({
+    organizationId: event.organizationId,
+    userId,
+    role: "admin",
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+
+  if (orgAdmin) return { ok: true as const };
+
+  // Event admin can manage
+  const eventAdmin = await EventTeam.findOne({
+    eventId: event._id,
+    userId,
+    role: "admin",
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+
+  if (eventAdmin) return { ok: true as const };
+
+  return {
+    ok: false as const,
+    res: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+  };
+}
+
+async function assertCanViewDraft(eventId: string, userId: string) {
+  // Allow: org owner/admin OR event creator OR event team (any active)
+  const event = await Event.findById(eventId)
+    .select("_id organizationId createdByUserId")
+    .lean<{
+      _id: Types.ObjectId;
+      organizationId: Types.ObjectId;
+      createdByUserId: Types.ObjectId;
+    } | null>();
+
+  if (!event) {
+    return {
+      ok: false as const,
+      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
+    };
+  }
+
+  if (String(event.createdByUserId) === String(userId))
+    return { ok: true as const };
+
+  const org = await Organization.findById(event.organizationId)
+    .select("_id ownerId")
+    .lean<{ _id: Types.ObjectId; ownerId: Types.ObjectId } | null>();
+
+  if (org && String(org.ownerId) === String(userId))
+    return { ok: true as const };
+
+  const orgAdmin = await OrgTeam.findOne({
+    organizationId: event.organizationId,
+    userId,
+    role: "admin",
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+  if (orgAdmin) return { ok: true as const };
+
+  const anyEventTeam = await EventTeam.findOne({
+    eventId: event._id,
+    userId,
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+  if (anyEventTeam) return { ok: true as const };
+
+  return {
+    ok: false as const,
+    res: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /*  GET /api/events/:id                                               */
@@ -43,6 +165,9 @@ export async function GET(
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
   }
 
+  // We might need auth only for drafts
+  const session = await auth();
+
   /* -------- fetch & populate related docs ------------------------- */
   const event = await Event.findById(id)
     .populate({
@@ -53,12 +178,25 @@ export async function GET(
     .populate({
       path: "organizationId",
       model: Organization,
-      select: "name logo website",
+      // include ownerId to allow draft permission checks without extra query
+      select: "name logo website ownerId",
     })
     .lean<EventLean>();
 
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  }
+
+  // ✅ Draft protection: only visible to org owner/admin, creator, or event team
+  if (event.status === "draft") {
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const canView = await assertCanViewDraft(
+      String(event._id),
+      session.user.id,
+    );
+    if (!canView.ok) return canView.res;
   }
 
   /* -------- derive attending count (paid tickets) ----------------- */
@@ -139,6 +277,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
   }
 
+  // ✅ Role-based permission: org owner/admin OR event creator OR event admin
+  const can = await assertCanManageEvent(id, session.user.id);
+  if (!can.ok) return can.res;
+
   const json = await req.json();
   const parsed = patchSchema.safeParse(json);
   if (!parsed.success) {
@@ -148,21 +290,6 @@ export async function PATCH(
   const event = (await Event.findById(id).exec()) as EventDoc | null;
   if (!event) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
-  }
-
-  // Permission: org owner or event creator can edit
-  const org = await Organization.findById(event.organizationId).select(
-    "_id ownerId",
-  );
-
-  const isOwner = !!org && String(org.ownerId) === String(session.user.id);
-
-  const isCreator =
-    !!event.createdByUserId &&
-    String(event.createdByUserId) === String(session.user.id);
-
-  if (!isOwner && !isCreator) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const data = parsed.data;

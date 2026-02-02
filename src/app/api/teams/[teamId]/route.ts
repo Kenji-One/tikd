@@ -6,6 +6,7 @@ import { Types } from "mongoose";
 import { auth } from "@/lib/auth";
 import "@/lib/mongoose";
 import Team from "@/models/Team";
+import TeamMember from "@/models/TeamMember";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,7 +54,54 @@ const updateTeamSchema = z
 
 type RouteParams = { teamId: string };
 
-/* GET: get single team (owner-only for now) */
+async function assertCanViewTeam(teamId: string, userId: string) {
+  const team = await Team.findById(teamId).select("_id ownerId").lean<{
+    _id: Types.ObjectId;
+    ownerId: Types.ObjectId;
+  } | null>();
+
+  if (!team) return { ok: false as const, status: 404 };
+
+  if (String(team.ownerId) === String(userId)) return { ok: true as const };
+
+  const member = await TeamMember.findOne({
+    teamId,
+    userId,
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+
+  if (member) return { ok: true as const };
+
+  return { ok: false as const, status: 403 };
+}
+
+async function assertCanManageTeam(teamId: string, userId: string) {
+  const team = await Team.findById(teamId).select("_id ownerId").lean<{
+    _id: Types.ObjectId;
+    ownerId: Types.ObjectId;
+  } | null>();
+
+  if (!team) return { ok: false as const, status: 404 };
+
+  if (String(team.ownerId) === String(userId)) return { ok: true as const };
+
+  const admin = await TeamMember.findOne({
+    teamId,
+    userId,
+    role: "admin",
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+
+  if (admin) return { ok: true as const };
+
+  return { ok: false as const, status: 403 };
+}
+
+/* GET: get single team (owner OR active member) */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<RouteParams> },
@@ -68,11 +116,15 @@ export async function GET(
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }
 
-  const team = await Team.findOne({
-    _id: new Types.ObjectId(teamId),
-    ownerId: session.user.id,
-  }).lean();
+  const can = await assertCanViewTeam(teamId, session.user.id);
+  if (!can.ok) {
+    return NextResponse.json(
+      { error: can.status === 404 ? "Team not found" : "Forbidden" },
+      { status: can.status },
+    );
+  }
 
+  const team = await Team.findById(new Types.ObjectId(teamId)).lean();
   if (!team) {
     return NextResponse.json({ error: "Team not found" }, { status: 404 });
   }
@@ -80,7 +132,7 @@ export async function GET(
   return NextResponse.json(team);
 }
 
-/* PATCH: update team (owner-only) */
+/* PATCH: update team (owner OR active admin) */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<RouteParams> },
@@ -95,6 +147,14 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }
 
+  const can = await assertCanManageTeam(teamId, session.user.id);
+  if (!can.ok) {
+    return NextResponse.json(
+      { error: can.status === 404 ? "Team not found" : "Forbidden" },
+      { status: can.status },
+    );
+  }
+
   const json = await req.json();
   const parsed = updateTeamSchema.safeParse(json);
   if (!parsed.success) {
@@ -102,7 +162,7 @@ export async function PATCH(
   }
 
   const updated = await Team.findOneAndUpdate(
-    { _id: new Types.ObjectId(teamId), ownerId: session.user.id },
+    { _id: new Types.ObjectId(teamId) },
     { $set: parsed.data },
     { new: true, lean: true },
   );

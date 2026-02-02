@@ -1,4 +1,3 @@
-// src/app/api/organizations/[id]/team/route.ts
 /* ------------------------------------------------------------------ */
 /*  /api/organizations/[id]/team – List & Invite org team members     */
 /* ------------------------------------------------------------------ */
@@ -19,7 +18,7 @@ const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
 /* ------------------------------ Zod ------------------------------- */
 const inviteSchema = z.object({
   email: z.string().email(),
-  role: z.enum(["admin", "promoter", "scanner", "collaborator"]),
+  role: z.enum(["admin", "promoter", "scanner", "collaborator", "member"]),
   temporaryAccess: z.boolean().optional().default(false),
   expiresAt: z.coerce.date().optional(), // required if temporaryAccess=true
   applyTo: z
@@ -28,19 +27,17 @@ const inviteSchema = z.object({
       future: z.boolean().optional().default(false),
     })
     .optional()
-    .default({ existing: false, future: false }), // kept for compatibility with InviteTeamModal
+    .default({ existing: false, future: false }),
 });
 
 /* ----------------------- Permission helpers ----------------------- */
 async function assertCanManageOrg(orgId: string, userId: string) {
-  // Owner of org
   const owner = await Organization.findOne({
     _id: orgId,
     ownerId: userId,
   }).lean();
   if (owner) return true;
 
-  // Or active org admin
   const admin = await OrgTeam.findOne({
     organizationId: orgId,
     userId,
@@ -62,7 +59,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   if (!isObjectId(id)) {
     return NextResponse.json(
       { error: "Invalid organization id" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -71,7 +68,6 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Mark expired on the fly
   await OrgTeam.updateMany(
     {
       organizationId: id,
@@ -79,7 +75,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       expiresAt: { $lt: new Date() },
       status: { $ne: "revoked" },
     },
-    { $set: { status: "expired" } }
+    { $set: { status: "expired" } },
   );
 
   const members = await OrgTeam.find({ organizationId: id }).lean<IOrgTeam[]>();
@@ -97,7 +93,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!isObjectId(id)) {
     return NextResponse.json(
       { error: "Invalid organization id" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -105,7 +101,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!org) {
     return NextResponse.json(
       { error: "Organization not found" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -125,12 +121,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (temporaryAccess && !expiresAt) {
     return NextResponse.json(
       { error: "expiresAt is required for temporary access" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  // Link user if exists (for avatar/name + future permissions)
-  const existingUser = await User.findOne({ email })
+  const emailLower = email.trim().toLowerCase();
+
+  const existingUser = await User.findOne({ email: emailLower })
     .select("_id firstName lastName username")
     .lean();
 
@@ -142,7 +139,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const inviteToken = crypto.randomBytes(20).toString("hex");
 
   const member = await OrgTeam.findOneAndUpdate(
-    { organizationId: id, email: email.toLowerCase() },
+    { organizationId: id, email: emailLower },
     {
       $set: {
         role,
@@ -155,9 +152,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         status: "invited",
       },
     },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { new: true, upsert: true, setDefaultsOnInsert: true },
   );
 
-  // NOTE: applyTo.existing / future are ignored at org-level right now.
   return NextResponse.json({ member }, { status: 201 });
 }

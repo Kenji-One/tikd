@@ -386,8 +386,6 @@ export default function EventSummaryPage() {
 
   /* ---------- ✅ Dummy demographics: always non-zero (until real analytics exists) ---------- */
   const breakdownTotal = useMemo(() => {
-    // If later you get a real metric, you can swap this line.
-    // For now: stable per-event dummy number that "feels" like the mock.
     return stableDummyTotal(eventId ?? "no-event");
   }, [eventId]);
 
@@ -395,9 +393,9 @@ export default function EventSummaryPage() {
     const total = breakdownTotal;
     const [male, female, other] = splitByPercent(total, [66, 23, 11]);
     return [
-      { label: "Male", value: male, color: "#9A46FF" },
-      { label: "Female", value: female, color: "#FF7A45" },
-      { label: "Other", value: other, color: "#45FF79" },
+      { label: "Male", value: male, color: "#3B82F6" }, // Blue
+      { label: "Female", value: female, color: "#EC4899" }, // Pink
+      { label: "Other", value: other, color: "#9CA3AF" }, // Gray
     ];
   }, [breakdownTotal]);
 
@@ -545,7 +543,8 @@ export default function EventSummaryPage() {
         />
       </section>
 
-      <TrackingLinksTable />
+      {/* ✅ Scoped to this event */}
+      <TrackingLinksTable scope="event" eventId={eventId} showViewAll />
     </div>
   );
 }

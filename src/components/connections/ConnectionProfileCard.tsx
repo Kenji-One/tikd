@@ -5,7 +5,13 @@
 
 import Link from "next/link";
 import clsx from "clsx";
-import { Building2, Landmark, Users2, type LucideIcon } from "lucide-react";
+import {
+  Building2,
+  Landmark,
+  Users2,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { Tilt3d } from "@/components/ui/Tilt3d";
 
 export type ConnectionProfileKind = "establishment" | "organization" | "team";
@@ -27,7 +33,10 @@ export type ConnectionProfileCardProps = {
 
   /** Footer */
   totalMembers?: number;
-  joinDateLabel?: string; // e.g. "Joined Jan 2026"
+  joinDateLabel?: string; // kept for backwards compatibility (establishment etc.)
+
+  /** ✅ NEW: user role pill label (Admin, Promoter, etc.) */
+  userRoleLabel?: string;
 
   /** Optional: enable 3D hover (used by Organizations page) */
   tilt?: boolean;
@@ -54,6 +63,12 @@ function formatMembers(n?: number) {
   }
 }
 
+function niceRoleLabel(raw?: string) {
+  const v = String(raw || "").trim();
+  if (!v) return "Member";
+  return v.charAt(0).toUpperCase() + v.slice(1);
+}
+
 export default function ConnectionProfileCard({
   href,
   kind,
@@ -63,6 +78,7 @@ export default function ConnectionProfileCard({
   iconUrl,
   totalMembers,
   joinDateLabel,
+  userRoleLabel,
   tilt = false,
   tiltMaxDeg = 4,
   tiltPerspective = 900,
@@ -148,6 +164,23 @@ export default function ConnectionProfileCard({
     </div>
   );
 
+  const roleLabel = niceRoleLabel(userRoleLabel);
+
+  // ✅ Per-client request:
+  // - bottom-right: show “X Total Members” (replaces “Created …”)
+  // - where “X Total Members” used to be: show user role
+  const showMembers = typeof totalMembers === "number";
+  const rightText = showMembers ? (
+    <>
+      <span className="font-semibold text-neutral-100 mr-1">
+        {formatMembers(totalMembers)}
+      </span>
+      <span className="text-neutral-400">Total Members</span>
+    </>
+  ) : (
+    <span className="truncate text-neutral-400">{joinDateLabel ?? "—"}</span>
+  );
+
   const CardInner = (
     <>
       {Banner}
@@ -180,25 +213,29 @@ export default function ConnectionProfileCard({
 
         {/* Footer */}
         <div className="mt-3 flex items-center justify-between gap-2.5 text-[12px] text-neutral-300/90">
-          <div className="inline-flex items-center gap-2">
+          {/* ✅ LEFT: Role pill (replaces old “Total Members” slot) */}
+          <div className="inline-flex items-center gap-2 min-w-0">
             <span
-              className="h-2 w-2 rounded-full bg-primary-500/90"
-              aria-hidden="true"
-            />
-            <div className="">
-              <span className="font-semibold text-neutral-100 mr-1">
-                {formatMembers(totalMembers)}
-              </span>
-              <span className="text-neutral-400">Total members</span>
-            </div>
+              className={clsx(
+                "inline-flex items-center gap-1 rounded-full",
+                "border border-primary-500/22 bg-primary-500/10",
+                "px-1.5 pr-2 py-1 text-[11px] font-semibold text-primary-200",
+                "shadow-[0_10px_28px_rgba(154,70,255,0.10)]",
+              )}
+              title={roleLabel}
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-primary-300" />
+              <span className="max-w-[120px] truncate">{roleLabel}</span>
+            </span>
           </div>
 
+          {/* ✅ RIGHT: X Total Members (replaces Created [date]) */}
           <div className="inline-flex items-center gap-2 text-neutral-400">
             <span
               className="h-2 w-2 rounded-full bg-neutral-700"
               aria-hidden="true"
             />
-            <span className="truncate">{joinDateLabel ?? "—"}</span>
+            <span className="truncate">{rightText}</span>
           </div>
         </div>
       </div>

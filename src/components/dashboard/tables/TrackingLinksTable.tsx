@@ -19,7 +19,6 @@ import {
   Plus,
   Pencil,
   X,
-  Trash2,
   Search,
   Ban,
   Calendar,
@@ -35,6 +34,16 @@ import Image from "next/image";
 /* ------------------------------- Types ------------------------------ */
 type DestinationKind = "Event" | "Organization";
 type Status = "Active" | "Paused" | "Disabled";
+
+type TrackingLinksScope = "all" | "organization" | "event";
+
+type TrackingLinksTableProps = {
+  scope?: TrackingLinksScope;
+  organizationId?: string;
+  eventId?: string;
+  showViewAll?: boolean;
+  viewAllHref?: string;
+};
 
 /**
  * IMPORTANT: Backend expects "twitter" (not "x") in iconKey enums.
@@ -56,62 +65,178 @@ type Row = {
   id: string;
   name: string;
 
+  // ✅ NEW: owning org of this tracking link
+  organizationId: string;
+
   destinationKind: DestinationKind;
   destinationId: string;
   destinationTitle: string;
 
-  /**
-   * This is the tracking path stored in DB (e.g. /t/Ab3Kp9xQ/)
-   * NOT the destination public route.
-   */
   url: string;
 
   iconKey?: PresetIconKey | null;
-  iconUrl?: string | null; // should be a persistent URL (http/s). blob: is not persisted
+  iconUrl?: string | null;
 
   views: number;
   ticketsSold: number;
   revenue: number;
   status: Status;
-
-  /** ISO string from API */
   created: string;
 };
 
 /* ----------------------------- Helpers ----------------------------- */
-type ApiDestination = { kind: DestinationKind; id: string; title: string };
+type ApiSearchItemEvent = {
+  id: string;
+  type: "event";
+  title: string;
+  subtitle: string;
+  orgName: string | null;
+  date: string | null;
+  image: string | null;
+  href: string;
+};
+
+type ApiSearchItemOrg = {
+  id: string;
+  type: "org";
+  title: string;
+  subtitle: string;
+  image: string | null;
+  href: string;
+};
+
+type ApiSearchPayload = {
+  success: boolean;
+  results?: {
+    events?: ApiSearchItemEvent[];
+    orgs?: ApiSearchItemOrg[];
+    teams?: unknown[];
+    friends?: unknown[];
+  };
+};
+
+async function fetchDestinations(q: string, signal?: AbortSignal) {
+  // Use the global search API because it already returns:
+  // - events[].image (event poster)
+  // - orgs[].image (org logo)
+  // - events[].orgName + events[].date (nice subtitle row)
+  const res = await fetch(
+    `/api/search?q=${encodeURIComponent(q || "")}&type=all&limit=8`,
+    { method: "GET", signal },
+  );
+  if (!res.ok) return [];
+
+  const json = (await res.json()) as ApiSearchPayload;
+  const events = Array.isArray(json.results?.events)
+    ? json.results!.events!
+    : [];
+  const orgs = Array.isArray(json.results?.orgs) ? json.results!.orgs! : [];
+
+  const mappedEvents: DestinationResult[] = events.map((e) => ({
+    kind: "Event",
+    id: e.id,
+    title: e.title,
+    subtitle: "Event",
+    image: e.image ?? null,
+    date: e.date ?? null,
+    orgName: e.orgName ?? null,
+  }));
+
+  const mappedOrgs: DestinationResult[] = orgs.map((o) => ({
+    kind: "Organization",
+    id: o.id,
+    title: o.title,
+    subtitle: "Organization",
+    image: o.image ?? null, // org logo
+    date: null,
+    orgName: null,
+  }));
+
+  // Events first, then orgs (matches how users think when searching)
+  return [...mappedEvents, ...mappedOrgs];
+}
+
+type DestinationsApiResponse = {
+  results: DestinationResult[];
+};
+
+async function fetchOrgScopedDestinations(
+  organizationId: string,
+  signal?: AbortSignal,
+) {
+  const res = await fetch(
+    `/api/tracking-links/destinations?scope=organization&organizationId=${encodeURIComponent(
+      organizationId,
+    )}`,
+    { method: "GET", signal },
+  );
+  if (!res.ok) return [];
+  const json = (await res.json()) as DestinationsApiResponse;
+  return Array.isArray(json.results) ? json.results : [];
+}
 
 type ApiRow = {
   id: string;
   name: string;
+
+  // ✅ NEW (backend now returns it)
+  organizationId: string;
+
   destinationKind: DestinationKind;
   destinationId: string;
   destinationTitle: string;
-  url: string; // /t/:code/
+
+  url: string;
+
   iconKey?: PresetIconKey | null;
   iconUrl?: string | null;
+
   views: number;
   ticketsSold: number;
   revenue: number;
   status: Status;
-  created: string; // ISO string
+  created: string;
 };
 
-async function fetchDestinations(q: string, signal?: AbortSignal) {
-  const res = await fetch(
-    `/api/tracking-links/destinations?q=${encodeURIComponent(q || "")}`,
-    { method: "GET", signal },
-  );
-  if (!res.ok) return [];
-  const json = (await res.json()) as { destinations?: ApiDestination[] };
-  return Array.isArray(json.destinations) ? json.destinations : [];
-}
+async function fetchTrackingLinks(opts?: {
+  scope?: TrackingLinksScope;
+  organizationId?: string;
+  eventId?: string;
+  signal?: AbortSignal;
+}) {
+  const params = new URLSearchParams();
 
-async function fetchTrackingLinks(signal?: AbortSignal): Promise<ApiRow[]> {
-  const res = await fetch("/api/tracking-links", { method: "GET", signal });
-  if (!res.ok) throw new Error("Failed to load tracking links");
-  const json = (await res.json()) as { rows?: ApiRow[] };
-  return Array.isArray(json.rows) ? json.rows : [];
+  if (opts?.scope === "organization" && opts.organizationId) {
+    params.set("scope", "organization");
+    params.set("organizationId", opts.organizationId);
+  } else if (opts?.scope === "event" && opts.eventId) {
+    params.set("scope", "event");
+    params.set("eventId", opts.eventId);
+  }
+
+  const qs = params.toString();
+  const url = qs ? `/api/tracking-links?${qs}` : "/api/tracking-links";
+
+  const res = await fetch(url, { signal: opts?.signal, cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch tracking links (${res.status})`);
+  }
+
+  const json = (await res.json().catch(() => null)) as {
+    rows?: ApiRow[];
+    data?: ApiRow[];
+    trackingLinks?: ApiRow[];
+    links?: ApiRow[];
+  } | null;
+
+  const rows =
+    (Array.isArray(json?.rows) ? json?.rows : null) ??
+    (Array.isArray(json?.data) ? json?.data : null) ??
+    (Array.isArray(json?.trackingLinks) ? json?.trackingLinks : null) ??
+    (Array.isArray(json?.links) ? json?.links : null) ??
+    [];
+
+  return rows;
 }
 
 async function createTrackingLink(payload: {
@@ -292,6 +417,63 @@ function TrackingIcon({
   return null;
 }
 
+function TikdEditIcon() {
+  return (
+    <svg
+      className="tikdEditSvg"
+      height="1em"
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+    >
+      <path d="M410.3 231l11.3-11.3-33.9-33.9-62.1-62.1L291.7 89.8l-11.3 11.3-22.6 22.6L58.6 322.9c-10.4 10.4-18 23.3-22.2 37.4L1 480.7c-2.5 8.4-.2 17.5 6.1 23.7s15.3 8.5 23.7 6.1l120.3-35.4c14.1-4.2 27-11.8 37.4-22.2L387.7 253.7 410.3 231zM160 399.4l-9.1 22.7c-4 3.1-8.5 5.4-13.3 6.9L59.4 452l23-78.1c1.4-4.9 3.8-9.4 6.9-13.3l22.7-9.1v32c0 8.8 7.2 16 16 16h32zM362.7 18.7L348.3 33.2 325.7 55.8 314.3 67.1l33.9 33.9 62.1 62.1 33.9 33.9 11.3-11.3 22.6-22.6 14.5-14.5c25-25 25-65.5 0-90.5L453.3 18.7c-25-25-65.5-25-90.5 0zm-47.4 168l-144 144c-6.2 6.2-16.4 6.2-22.6 0s-6.2-16.4 0-22.6l144-144c6.2-6.2 16.4-6.2 22.6 0s6.2 16.4 0 22.6z"></path>
+    </svg>
+  );
+}
+
+function TikdTrashIcon() {
+  return (
+    <span className="tikdTrashWrap" aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 69 14"
+        className="svgIcon bin-top"
+      >
+        <g clipPath="url(#clip0_35_24)">
+          <path
+            fill="black"
+            d="M20.8232 2.62734L19.9948 4.21304C19.8224 4.54309 19.4808 4.75 19.1085 4.75H4.92857C2.20246 4.75 0 6.87266 0 9.5C0 12.1273 2.20246 14.25 4.92857 14.25H64.0714C66.7975 14.25 69 12.1273 69 9.5C69 6.87266 66.7975 4.75 64.0714 4.75H49.8915C49.5192 4.75 49.1776 4.54309 49.0052 4.21305L48.1768 2.62734C47.3451 1.00938 45.6355 0 43.7719 0H25.2281C23.3645 0 21.6549 1.00938 20.8232 2.62734ZM64.0023 20.0648C64.0397 19.4882 63.5822 19 63.0044 19H5.99556C5.4178 19 4.96025 19.4882 4.99766 20.0648L8.19375 69.3203C8.44018 73.0758 11.6746 76 15.5712 76H53.4288C57.3254 76 60.5598 73.0758 60.8062 69.3203L64.0023 20.0648Z"
+          ></path>
+        </g>
+        <defs>
+          <clipPath id="clip0_35_24">
+            <rect fill="white" height="14" width="69"></rect>
+          </clipPath>
+        </defs>
+      </svg>
+
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 69 57"
+        className="svgIcon bin-bottom"
+      >
+        <g clipPath="url(#clip0_35_22)">
+          <path
+            fill="black"
+            d="M20.8232 -16.3727L19.9948 -14.787C19.8224 -14.4569 19.4808 -14.25 19.1085 -14.25H4.92857C2.20246 -14.25 0 -12.1273 0 -9.5C0 -6.8727 2.20246 -4.75 4.92857 -4.75H64.0714C66.7975 -4.75 69 -6.8727 69 -9.5C69 -12.1273 66.7975 -14.25 64.0714 -14.25H49.8915C49.5192 -14.25 49.1776 -14.4569 49.0052 -14.787L48.1768 -16.3727C47.3451 -17.9906 45.6355 -19 43.7719 -19H25.2281C23.3645 -19 21.6549 -17.9906 20.8232 -16.3727ZM64.0023 1.0648C64.0397 0.4882 63.5822 0 63.0044 0H5.99556C5.4178 0 4.96025 0.4882 4.99766 1.0648L8.19375 50.3203C8.44018 54.0758 11.6746 57 15.5712 57H53.4288C57.3254 57 60.5598 54.0758 60.8062 50.3203L64.0023 1.0648Z"
+          ></path>
+        </g>
+        <defs>
+          <clipPath id="clip0_35_22">
+            <rect fill="white" height="57" width="69"></rect>
+          </clipPath>
+        </defs>
+      </svg>
+    </span>
+  );
+}
+
 function Chip({
   children,
   color = "primary",
@@ -336,7 +518,7 @@ function ArchiveLinkDialog({
   if (!open || !row) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={loading ? undefined : onClose}
@@ -674,17 +856,23 @@ function DestinationThumb({
   );
 }
 
+// ✅ Replace your existing KindBadge with this one
 function KindBadge({ kind }: { kind: DestinationKind }) {
-  const label = kind === "Event" ? "EVENT" : "ORG";
+  const isEvent = kind === "Event";
+  const Icon = isEvent ? Ticket : Building2;
+  const label = isEvent ? "EVENT" : "ORG";
+
   return (
     <span
       className={clsx(
-        "inline-flex items-center justify-center",
-        "h-7 min-w-[64px] rounded-full px-3",
-        "border border-white/10 bg-white/5",
-        "text-[11px] font-semibold tracking-[0.12em] text-white/70",
+        "inline-flex items-center gap-1.5",
+        "h-7 rounded-full px-2.5",
+        "border border-white/10 bg-neutral-950/40",
+        "text-[11px] font-semibold tracking-[0.14em] text-white/70",
+        "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
       )}
     >
+      <Icon className="h-3.5 w-3.5 text-white/55" />
       {label}
     </span>
   );
@@ -697,6 +885,9 @@ function TrackingLinkDialog({
   onClose,
   onSave,
   saving,
+  scope,
+  organizationId,
+  eventId,
 }: {
   open: boolean;
   mode: "create" | "edit";
@@ -704,8 +895,15 @@ function TrackingLinkDialog({
   onClose: () => void;
   onSave: (draft: TrackingLinkDraft) => void;
   saving?: boolean;
+
+  scope: TrackingLinksScope;
+  organizationId?: string;
+  eventId?: string;
 }) {
   useEscapeToClose(open, onClose);
+
+  const isEventScope = scope === "event" && !!eventId;
+  const isOrgScope = scope === "organization" && !!organizationId;
 
   const [draft, setDraft] = useState<TrackingLinkDraft>({
     name: "",
@@ -725,9 +923,20 @@ function TrackingLinkDialog({
   const [destLoading, setDestLoading] = useState(false);
   const [destError, setDestError] = useState<string | null>(null);
   const [destResults, setDestResults] = useState<DestinationResult[]>([]);
+  const [selectedDestMeta, setSelectedDestMeta] =
+    useState<DestinationResult | null>(null);
+
   const destWrapRef = useRef<HTMLDivElement | null>(null);
   const destAbortRef = useRef<AbortController | null>(null);
   const destDebounceRef = useRef<number | null>(null);
+
+  // Org-scope preloaded list (org + its events)
+  const [orgScopeList, setOrgScopeList] = useState<DestinationResult[] | null>(
+    null,
+  );
+  const [orgScopeLoading, setOrgScopeLoading] = useState(false);
+  const [orgScopeError, setOrgScopeError] = useState<string | null>(null);
+  const orgScopeAbortRef = useRef<AbortController | null>(null);
 
   // Status dropdown state
   const [statusOpen, setStatusOpen] = useState(false);
@@ -740,11 +949,86 @@ function TrackingLinkDialog({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastObjectUrlRef = useRef<string | null>(null);
 
+  const dropdownPanelOverlayCls = clsx(
+    "absolute left-0 right-0 z-[90] mt-2 overflow-hidden rounded-xl",
+    "border border-white/10 bg-neutral-900",
+    "shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
+  );
+
+  const dropdownPanelFlowCls = clsx(
+    "relative z-[90] mt-2 overflow-hidden rounded-xl",
+    "border border-white/10 bg-neutral-900",
+    "shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
+  );
+
+  // ✅ Clear destination (unselect)
+  const clearDestination = useCallback(() => {
+    setDraft((prev) => ({
+      ...prev,
+      destinationKind: null,
+      destinationId: "",
+      destinationTitle: "",
+    }));
+    setSelectedDestMeta(null);
+    setDestQuery("");
+    setDestError(null);
+    setDestResults([]);
+  }, []);
+
+  // -------------------------------------------------------------------
+  // 1) Preload org-scope destinations (IMPORTANT: for CREATE mode too)
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!open) return;
+    if (!isOrgScope || !organizationId) return;
+
+    if (orgScopeAbortRef.current) {
+      orgScopeAbortRef.current.abort();
+      orgScopeAbortRef.current = null;
+    }
+
+    const ac = new AbortController();
+    orgScopeAbortRef.current = ac;
+
+    setOrgScopeLoading(true);
+    setOrgScopeError(null);
+
+    fetchOrgScopedDestinations(organizationId, ac.signal)
+      .then((list) => {
+        if (ac.signal.aborted) return;
+        setOrgScopeList(list);
+        setOrgScopeLoading(false);
+        setOrgScopeError(null);
+      })
+      .catch((e) => {
+        if (ac.signal.aborted) return;
+        setOrgScopeList([]);
+        setOrgScopeLoading(false);
+        setOrgScopeError(getErrorMessage(e, "Failed to load destinations."));
+      });
+
+    return () => {
+      ac.abort();
+    };
+  }, [open, isOrgScope, organizationId]);
+
+  // -------------------------------------------------------------------
+  // 2) Reset dialog state on open + apply edit/create defaults
+  // -------------------------------------------------------------------
   useEffect(() => {
     if (!open) return;
 
+    // cancel destination search timers/requests (prevents late setState)
+    if (destDebounceRef.current) {
+      window.clearTimeout(destDebounceRef.current);
+      destDebounceRef.current = null;
+    }
+    if (destAbortRef.current) {
+      destAbortRef.current.abort();
+      destAbortRef.current = null;
+    }
+
     setTouched(false);
-    setDestQuery(mode === "edit" && initial ? initial.destinationTitle : "");
     setDestOpen(false);
     setDestLoading(false);
     setDestError(null);
@@ -768,6 +1052,20 @@ function TrackingLinkDialog({
         iconKey: initial.iconKey ?? null,
         iconUrl: initial.iconUrl ?? null,
       });
+
+      const meta: DestinationResult = {
+        kind: initial.destinationKind,
+        id: initial.destinationId,
+        title: initial.destinationTitle,
+        subtitle:
+          initial.destinationKind === "Event" ? "Event" : "Organization",
+        image: null,
+        date: null,
+        orgName: null,
+      };
+
+      setSelectedDestMeta(meta);
+      setDestQuery(initial.destinationTitle || "");
     } else {
       setDraft({
         name: "",
@@ -778,6 +1076,36 @@ function TrackingLinkDialog({
         iconKey: null,
         iconUrl: null,
       });
+      setSelectedDestMeta(null);
+      setDestQuery("");
+    }
+
+    // Scope locks:
+    // - Event scope => lock destination to current event (no real picker)
+    if (isEventScope && eventId) {
+      const lockedTitle =
+        mode === "edit" && initial?.destinationTitle
+          ? initial.destinationTitle
+          : "Current Event";
+
+      setDraft((prev) => ({
+        ...prev,
+        destinationKind: "Event",
+        destinationId: eventId,
+        destinationTitle: lockedTitle,
+      }));
+
+      setSelectedDestMeta({
+        kind: "Event",
+        id: eventId,
+        title: lockedTitle,
+        subtitle: "Event",
+        image: null,
+        date: null,
+        orgName: null,
+      });
+
+      setDestQuery(lockedTitle);
     }
 
     const t = window.setTimeout(() => {
@@ -786,7 +1114,36 @@ function TrackingLinkDialog({
     }, 0);
 
     return () => window.clearTimeout(t);
-  }, [open, mode, initial]);
+  }, [open, mode, initial, isEventScope, eventId]);
+
+  // -------------------------------------------------------------------
+  // 3) Org-scope auto-select (only if CREATE, and only if exactly 1 option)
+  // -------------------------------------------------------------------
+  useEffect(() => {
+    if (!open) return;
+    if (mode !== "create") return;
+    if (!isOrgScope) return;
+    if (isEventScope) return; // event scope wins
+    if (!orgScopeList) return;
+    if (orgScopeLoading) return;
+    if (orgScopeList.length !== 1) return;
+
+    const only = orgScopeList[0];
+
+    // only auto-select if user hasn’t already selected something
+    setDraft((prev) => {
+      if (prev.destinationId) return prev;
+      return {
+        ...prev,
+        destinationKind: only.kind,
+        destinationId: only.id,
+        destinationTitle: only.title,
+      };
+    });
+
+    setSelectedDestMeta((prev) => prev ?? only);
+    setDestQuery((prev) => (prev ? prev : only.title));
+  }, [open, mode, isOrgScope, isEventScope, orgScopeList, orgScopeLoading]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -820,10 +1177,15 @@ function TrackingLinkDialog({
     }
   }, [open]);
 
-  // Backend destination search (debounced + abortable)
+  // -------------------------------------------------------------------
+  // 4) Destination search (debounced + abortable)
+  // - All scope: no default suggestions (only selected item)
+  // - Org scope: default list is orgScopeList (org + events)
+  // -------------------------------------------------------------------
   useEffect(() => {
     if (!open) return;
     if (!destOpen) return;
+    if (isEventScope) return;
 
     const q = destQuery.trim();
 
@@ -836,10 +1198,20 @@ function TrackingLinkDialog({
       destAbortRef.current = null;
     }
 
+    // When empty query:
     if (!q) {
+      if (isOrgScope) {
+        // show org+events list (or loading state)
+        setDestLoading(orgScopeLoading);
+        setDestError(orgScopeError);
+        setDestResults(orgScopeList ?? []);
+        return;
+      }
+
+      // all scope: NO default suggestions
       setDestLoading(false);
       setDestError(null);
-      setDestResults([]);
+      setDestResults(selectedDestMeta ? [selectedDestMeta] : []);
       return;
     }
 
@@ -853,26 +1225,29 @@ function TrackingLinkDialog({
       fetchDestinations(q, ac.signal)
         .then((list) => {
           if (ac.signal.aborted) return;
-          const mapped: DestinationResult[] = list.map((d) => ({
-            kind: d.kind,
-            id: d.id,
-            title: d.title,
-            subtitle: d.kind === "Event" ? "Event" : "Organization",
-            image: null,
-            date: null,
-            orgName: null,
-          }));
-          setDestResults(mapped);
+
+          const pinned = selectedDestMeta
+            ? [
+                selectedDestMeta,
+                ...list.filter(
+                  (x) =>
+                    !(
+                      x.kind === selectedDestMeta.kind &&
+                      x.id === selectedDestMeta.id
+                    ),
+                ),
+              ]
+            : list;
+
+          setDestResults(pinned);
           setDestLoading(false);
           setDestError(null);
         })
-        .catch((err) => {
+        .catch((e) => {
           if (ac.signal.aborted) return;
           setDestLoading(false);
-          setDestResults([]);
-          setDestError(
-            err?.message ? String(err.message) : "Search failed. Try again.",
-          );
+          setDestResults(selectedDestMeta ? [selectedDestMeta] : []);
+          setDestError(getErrorMessage(e, "Search failed. Try again."));
         });
     }, 220);
 
@@ -886,7 +1261,17 @@ function TrackingLinkDialog({
         destAbortRef.current = null;
       }
     };
-  }, [open, destOpen, destQuery]);
+  }, [
+    open,
+    destOpen,
+    destQuery,
+    isEventScope,
+    isOrgScope,
+    orgScopeList,
+    orgScopeLoading,
+    orgScopeError,
+    selectedDestMeta,
+  ]);
 
   const title =
     mode === "create" ? "Create Tracking Link" : "Edit Tracking Link";
@@ -916,40 +1301,27 @@ function TrackingLinkDialog({
     return presetIcons.filter((p) => p.label.toLowerCase().includes(q));
   }, [iconQuery]);
 
-  const dropdownPanelCls = clsx(
-    "absolute left-0 right-0 z-[90] mt-2 overflow-hidden rounded-xl",
-    "border border-white/10 bg-neutral-900",
-  );
-
-  const optionBtnBase = clsx(
-    "w-full text-left transition flex items-center gap-3",
-    "px-4 py-3.5",
-    "hover:bg-white/5 focus:bg-white/5 focus:outline-none",
-  );
-
-  const resultDivider = "border-b border-white/10";
-
-  if (!open) return null;
-
-  const destinationOk = !!draft.destinationKind && !!draft.destinationId;
-  const nameOk = draft.name.trim().length >= 2;
-  const statusOk = !!draft.status;
-
-  const canSave = nameOk && destinationOk && statusOk && !saving;
-
-  const errName = !nameOk && touched;
-  const errDest = !destinationOk && touched;
-
+  // ✅ Pick destination (click again to unselect)
   const handlePickDestination = (d: DestinationResult) => {
+    const isSame =
+      draft.destinationKind === d.kind && draft.destinationId === d.id;
+
+    if (isSame) {
+      clearDestination();
+      setDestOpen(false);
+      return;
+    }
+
     setDraft((prev) => ({
       ...prev,
       destinationKind: d.kind,
       destinationId: d.id,
       destinationTitle: d.title,
     }));
-    setDestOpen(false);
+    setSelectedDestMeta(d);
     setDestQuery(d.title);
     setDestError(null);
+    setDestOpen(false);
   };
 
   const handleUploadIcon = (file: File | null) => {
@@ -977,6 +1349,17 @@ function TrackingLinkDialog({
     }
     setDraft((prev) => ({ ...prev, iconUrl: null }));
   };
+
+  if (!open) return null;
+
+  const destinationOk = !!draft.destinationKind && !!draft.destinationId;
+  const nameOk = draft.name.trim().length >= 2;
+  const statusOk = !!draft.status;
+
+  const canSave = nameOk && destinationOk && statusOk && !saving;
+
+  const errName = !nameOk && touched;
+  const errDest = !destinationOk && touched;
 
   const hasNoIcon = !draft.iconKey && !draft.iconUrl;
 
@@ -1261,15 +1644,20 @@ function TrackingLinkDialog({
                       setDestQuery(e.target.value);
                       setDestOpen(true);
                     }}
-                    onFocus={() => {
+                    onFocus={(e) => {
                       setStatusOpen(false);
                       setDestOpen(true);
-                      if (destQuery === draft.destinationTitle)
-                        setDestQuery("");
+                      window.setTimeout(() => {
+                        try {
+                          (e.target as HTMLInputElement).select();
+                        } catch {
+                          // ignore
+                        }
+                      }, 0);
                     }}
                     onBlur={() => setTouched(true)}
                     placeholder="Search events or organizations…"
-                    disabled={saving}
+                    disabled={saving || isEventScope}
                     className={clsx(
                       "h-12 w-full rounded-lg bg-transparent",
                       "pl-10 pr-10 text-[12px] text-neutral-100",
@@ -1279,54 +1667,63 @@ function TrackingLinkDialog({
                     )}
                   />
 
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => {
-                      setStatusOpen(false);
-                      setDestOpen((v) => !v);
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center rounded-md border border-white/10 bg-white/5 p-2 text-neutral-300 hover:bg-white/10 transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-                    aria-haspopup="listbox"
-                    aria-expanded={destOpen}
-                    title="Open search"
-                  >
-                    <ChevronDown
-                      size={16}
+                  {/* Clear/unselect button */}
+                  {(destinationOk || destQuery.trim()) &&
+                  !saving &&
+                  !isEventScope ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        clearDestination();
+                        setDestOpen(true);
+                      }}
                       className={clsx(
-                        destOpen && "rotate-180 text-neutral-200",
+                        "absolute right-2 top-1/2 -translate-y-1/2",
+                        "inline-flex h-8 w-8 items-center justify-center",
+                        "rounded-md border border-white/10 bg-white/5",
+                        "text-white/60 hover:text-white hover:bg-white/10 hover:border-white/20",
+                        "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+                        "transition cursor-pointer",
                       )}
-                    />
-                  </button>
+                      title="Clear selection"
+                      aria-label="Clear selection"
+                    >
+                      <X size={14} />
+                    </button>
+                  ) : null}
                 </div>
 
-                {destOpen ? (
-                  <div className={dropdownPanelCls} role="listbox">
-                    <div className="max-h-[280px] overflow-auto">
+                {destOpen && !isEventScope ? (
+                  <div className={dropdownPanelOverlayCls} role="listbox">
+                    <div className="max-h-[320px] overflow-auto p-2">
                       {destLoading ? (
-                        <div className="px-4 py-4 text-sm text-neutral-400">
-                          Searching…
+                        <div className="px-3 py-3 text-sm text-neutral-400">
+                          {isOrgScope && !destQuery.trim()
+                            ? "Loading destinations…"
+                            : "Searching…"}
                         </div>
                       ) : destError ? (
-                        <div className="px-4 py-4 text-sm text-neutral-400">
+                        <div className="px-3 py-3 text-sm text-neutral-400">
                           {destError}
                         </div>
-                      ) : !destQuery.trim() ? (
-                        <div className="px-4 py-4 text-sm text-neutral-500">
+                      ) : !destQuery.trim() &&
+                        !selectedDestMeta &&
+                        !isOrgScope ? (
+                        <div className="px-3 py-3 text-sm text-neutral-500">
                           Type to search events or organizations.
                         </div>
                       ) : destResults.length === 0 ? (
-                        <div className="px-4 py-4 text-sm text-neutral-400">
+                        <div className="px-3 py-3 text-sm text-neutral-400">
                           No matches.
                         </div>
                       ) : (
-                        <div className="px-2 py-2">
-                          {destResults.map((opt, idx) => {
+                        <div className="space-y-2">
+                          {destResults.map((opt) => {
                             const selected =
                               opt.id === draft.destinationId &&
                               opt.kind === draft.destinationKind;
-
-                            const isLast = idx === destResults.length - 1;
 
                             return (
                               <button
@@ -1336,24 +1733,17 @@ function TrackingLinkDialog({
                                 aria-selected={selected}
                                 onClick={() => handlePickDestination(opt)}
                                 className={clsx(
-                                  "group w-full text-left",
-                                  "rounded-2xl",
+                                  "w-full text-left",
+                                  "rounded-xl border",
+                                  "px-3 py-3",
                                   "transition cursor-pointer",
                                   "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
-                                  "hover:bg-white/5",
-                                  selected &&
-                                    "bg-primary-500/10 hover:bg-primary-500/10",
-                                  "px-3",
+                                  selected
+                                    ? "border-primary-500/25 bg-primary-500/12"
+                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15",
                                 )}
                               >
-                                <div
-                                  className={clsx(
-                                    optionBtnBase,
-                                    "px-0",
-                                    !isLast && resultDivider,
-                                    !isLast && "border-white/10",
-                                  )}
-                                >
+                                <div className="flex items-center gap-3">
                                   <DestinationThumb
                                     kind={opt.kind}
                                     image={opt.image}
@@ -1375,7 +1765,7 @@ function TrackingLinkDialog({
                                               </span>
                                               {opt.date ? (
                                                 <>
-                                                  <span className="text-neutral-500">
+                                                  <span className="text-neutral-600">
                                                     •
                                                   </span>
                                                   <span className="inline-flex items-center gap-1 text-neutral-400">
@@ -1404,17 +1794,25 @@ function TrackingLinkDialog({
                                   </div>
 
                                   <div className="shrink-0">
-                                    {selected ? (
-                                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-primary-500/30 bg-primary-500/15 text-primary-200">
-                                        <Check size={16} />
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-transparent">
-                                        <Check size={16} />
-                                      </span>
-                                    )}
+                                    <span
+                                      className={clsx(
+                                        "inline-flex h-9 w-9 items-center justify-center rounded-xl border",
+                                        "transition",
+                                        selected
+                                          ? "border-primary-500/30 bg-primary-500/15 text-primary-200"
+                                          : "border-white/10 bg-white/5 text-white/20",
+                                      )}
+                                    >
+                                      <Check size={16} />
+                                    </span>
                                   </div>
                                 </div>
+
+                                {selected ? (
+                                  <div className="mt-2 text-[12px] text-primary-200/80">
+                                    Selected — click again to unselect
+                                  </div>
+                                ) : null}
                               </button>
                             );
                           })}
@@ -1462,7 +1860,7 @@ function TrackingLinkDialog({
               </button>
 
               {statusOpen ? (
-                <div className={dropdownPanelCls} role="listbox">
+                <div className={dropdownPanelFlowCls} role="listbox">
                   <div className="max-h-64 overflow-auto">
                     {statusOptions.map((opt) => {
                       const selected = opt.value === draft.status;
@@ -1599,7 +1997,13 @@ function getErrorMessage(e: unknown, fallback: string) {
 }
 
 /* ----------------------------- Component --------------------------- */
-export default function TrackingLinksTable() {
+export default function TrackingLinksTable({
+  scope = "all",
+  organizationId,
+  eventId,
+  showViewAll = true,
+  viewAllHref,
+}: TrackingLinksTableProps) {
   const [data, setData] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1618,71 +2022,135 @@ export default function TrackingLinksTable() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [savingArchive, setSavingArchive] = useState(false);
 
+  const effectiveScope: TrackingLinksScope =
+    scope === "event" && eventId
+      ? "event"
+      : scope === "organization" && organizationId
+        ? "organization"
+        : "all";
+
+  const computedViewAllHref =
+    viewAllHref ??
+    (effectiveScope === "event" && eventId
+      ? `/dashboard/events/${eventId}/tracking-links`
+      : effectiveScope === "organization" && organizationId
+        ? `/dashboard/organizations/${organizationId}/tracking-links`
+        : "/dashboard/tracking-links");
+
+  const matchesScope = useCallback(
+    (r: {
+      destinationKind: DestinationKind;
+      destinationId: string;
+      organizationId: string;
+    }) => {
+      if (effectiveScope === "event") {
+        return r.destinationKind === "Event" && r.destinationId === eventId;
+      }
+      if (effectiveScope === "organization") {
+        return r.organizationId === organizationId;
+      }
+      return true;
+    },
+    [effectiveScope, eventId, organizationId],
+  );
+
   const reload = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
 
-    const ac = new AbortController();
     try {
-      const rows = await fetchTrackingLinks(ac.signal);
+      const rows = await fetchTrackingLinks({
+        scope: effectiveScope,
+        organizationId,
+        eventId,
+      });
+
       setData(
-        rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          destinationKind: r.destinationKind,
-          destinationId: r.destinationId,
-          destinationTitle: r.destinationTitle,
-          url: r.url,
-          iconKey: r.iconKey ?? null,
-          iconUrl: r.iconUrl ?? null,
-          views: r.views ?? 0,
-          ticketsSold: r.ticketsSold ?? 0,
-          revenue: r.revenue ?? 0,
-          status: r.status,
-          created: r.created,
-        })),
-      );
-      setLoading(false);
-    } catch (e: unknown) {
-      setLoading(false);
-      setLoadError(getErrorMessage(e, "Failed to load data"));
-    }
-
-    return () => ac.abort();
-  }, []);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    (async () => {
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const rows = await fetchTrackingLinks(ac.signal);
-        setData(
-          rows.map((r) => ({
+        rows
+          .filter((r) => matchesScope(r))
+          .map((r) => ({
             id: r.id,
             name: r.name,
+
+            organizationId: r.organizationId,
+
             destinationKind: r.destinationKind,
             destinationId: r.destinationId,
-            destinationTitle: r.destinationTitle,
+            destinationTitle: r.destinationTitle || "—",
             url: r.url,
+
             iconKey: r.iconKey ?? null,
             iconUrl: r.iconUrl ?? null,
+
             views: r.views ?? 0,
             ticketsSold: r.ticketsSold ?? 0,
             revenue: r.revenue ?? 0,
             status: r.status,
             created: r.created,
           })),
+      );
+
+      setLoading(false);
+      setLoadError(null);
+    } catch (e) {
+      setLoading(false);
+      setLoadError(getErrorMessage(e, "Failed to load data"));
+    }
+  }, [effectiveScope, organizationId, eventId, matchesScope]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const rows = await fetchTrackingLinks({
+          scope: effectiveScope,
+          organizationId,
+          eventId,
+          signal: ac.signal,
+        });
+
+        if (ac.signal.aborted) return;
+
+        setData(
+          rows
+            .filter((r) => matchesScope(r))
+            .map((r) => ({
+              id: r.id,
+              name: r.name,
+
+              organizationId: r.organizationId,
+
+              destinationKind: r.destinationKind,
+              destinationId: r.destinationId,
+              destinationTitle: r.destinationTitle || "—",
+              url: r.url,
+
+              iconKey: r.iconKey ?? null,
+              iconUrl: r.iconUrl ?? null,
+
+              views: r.views ?? 0,
+              ticketsSold: r.ticketsSold ?? 0,
+              revenue: r.revenue ?? 0,
+              status: r.status,
+              created: r.created,
+            })),
         );
+
         setLoading(false);
-      } catch (e: unknown) {
+        setLoadError(null);
+      } catch (e) {
+        if (ac.signal.aborted) return;
         setLoading(false);
         setLoadError(getErrorMessage(e, "Failed to load data"));
       }
     })();
+
     return () => ac.abort();
-  }, []);
+  }, [effectiveScope, organizationId, eventId, matchesScope]);
 
   const sorted = useMemo(() => {
     const arr = [...data];
@@ -1731,20 +2199,42 @@ export default function TrackingLinksTable() {
   /* Clamp + fade like MyTeamTable/RecentSalesTable */
   const clipRef = useRef<HTMLDivElement | null>(null);
   const [isClamped, setIsClamped] = useState(false);
+  const [showBottomFade, setShowBottomFade] = useState(false);
   const MAX = 458;
 
   useEffect(() => {
     if (!clipRef.current) return;
+
     const el = clipRef.current;
-    const recompute = () => setIsClamped(el.scrollHeight > MAX + 0.5);
+
+    const recompute = () => {
+      // 1) whether we should clamp height
+      const clamped = el.scrollHeight > MAX + 0.5;
+      setIsClamped(clamped);
+
+      // 2) whether it can actually scroll (overflow)
+      const canScroll = el.scrollHeight > el.clientHeight + 1;
+
+      // 3) whether user is at bottom (hide fade if at bottom)
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+      setShowBottomFade(canScroll && !atBottom);
+    };
+
+    const onScroll = () => recompute();
+
     recompute();
+
     const ro = new ResizeObserver(recompute);
     ro.observe(el);
-    const onResize = () => recompute();
-    window.addEventListener("resize", onResize);
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", recompute);
+
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", onResize);
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", recompute);
     };
   }, [sorted.length]);
 
@@ -1813,26 +2303,33 @@ export default function TrackingLinksTable() {
   };
 
   const handleCreate = async (draft: TrackingLinkDraft) => {
-    if (!draft.destinationKind) return;
+    const kind = draft.destinationKind;
+    if (!kind) return;
 
     setSavingCreate(true);
     try {
       const row = await createTrackingLink({
         name: draft.name.trim(),
-        destinationKind: draft.destinationKind,
+        destinationKind: kind, // ✅
         destinationId: draft.destinationId,
         status: draft.status,
         iconKey: draft.iconKey ?? null,
         iconUrl: sanitizeIconUrlForApi(draft.iconUrl),
       });
 
+      if (!matchesScope(row)) {
+        setCreateOpen(false);
+        return;
+      }
+
       setData((prev) => [
         {
           id: row.id,
           name: row.name,
+          organizationId: row.organizationId,
           destinationKind: row.destinationKind,
           destinationId: row.destinationId,
-          destinationTitle: row.destinationTitle,
+          destinationTitle: row.destinationTitle || "—",
           url: row.url,
           iconKey: row.iconKey ?? null,
           iconUrl: row.iconUrl ?? null,
@@ -1855,38 +2352,43 @@ export default function TrackingLinksTable() {
 
   const handleEdit = async (draft: TrackingLinkDraft) => {
     if (!activeRow) return;
-    if (!draft.destinationKind) return;
+
+    const kind = draft.destinationKind; // ✅ narrow once
+    if (!kind) return;
 
     setSavingEdit(true);
     try {
       await updateTrackingLink(activeRow.id, {
         name: draft.name.trim(),
-        destinationKind: draft.destinationKind,
+        destinationKind: kind, // ✅ use narrowed value
         destinationId: draft.destinationId,
         status: draft.status,
         iconKey: draft.iconKey ?? null,
         iconUrl: sanitizeIconUrlForApi(draft.iconUrl),
       });
 
-      // IMPORTANT: tracking URL (/t/:code/) does not change on edit
-      setData((prev) =>
-        prev.map((r) =>
-          r.id === activeRow.id
-            ? {
-                ...r,
-                name: draft.name.trim(),
-                destinationKind: draft.destinationKind ?? r.destinationKind,
-                destinationId: draft.destinationId,
-                destinationTitle: draft.destinationTitle,
-                status: draft.status,
-                iconKey: draft.iconKey ?? null,
-                // keep blob preview locally if user picked one, but API won't persist it
-                iconUrl:
-                  sanitizeIconUrlForApi(draft.iconUrl) ?? draft.iconUrl ?? null,
-              }
-            : r,
-        ),
-      );
+      setData((prev) => {
+        const next = prev.map((r) => {
+          if (r.id !== activeRow.id) return r;
+
+          const nextOrgId =
+            kind === "Organization" ? draft.destinationId : r.organizationId;
+
+          return {
+            ...r,
+            name: draft.name,
+            status: draft.status,
+            iconKey: draft.iconKey ?? null,
+            iconUrl: draft.iconUrl ?? null,
+            destinationKind: kind, // ✅ not nullable anymore
+            destinationId: draft.destinationId,
+            destinationTitle: draft.destinationTitle || "—",
+            organizationId: nextOrgId,
+          };
+        });
+
+        return next.filter((r) => matchesScope(r));
+      });
 
       setEditOpen(false);
       setActiveRow(null);
@@ -1906,6 +2408,131 @@ export default function TrackingLinksTable() {
 
   return (
     <div className="relative rounded-lg border border-neutral-700 bg-neutral-900 pt-2">
+      <style jsx>{`
+        /* -----------------------------------------------------------
+   * Animation-only hooks (keep YOUR button box styles in JSX)
+   * ----------------------------------------------------------- */
+
+        :global(.tikdIconBtn) {
+          position: relative;
+          overflow: hidden;
+        }
+
+        /* ---------- Edit hover effect (EXACT Uiverse behavior) ---------- */
+        :global(.tikdIconBtn--edit) {
+          /* keeps z-index layering predictable inside your button */
+          isolation: isolate;
+        }
+
+        :global(.tikdIconBtn--edit::before) {
+          content: "";
+          position: absolute;
+          inset: -60%;
+          border-radius: 999px;
+          background: rgba(154, 70, 255, 0.22);
+          filter: blur(12px);
+          transform: scale(0);
+          transition: transform 0.28s ease;
+          z-index: 1;
+          pointer-events: none;
+        }
+
+        :global(.tikdIconBtn--edit:hover::before) {
+          transform: scale(1);
+        }
+
+        :global(.tikdEditMotion) {
+          position: relative;
+          z-index: 3;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+
+          transition: transform 0.2s;
+          transform-origin: bottom;
+          will-change: transform;
+        }
+
+        /* the “written line” is now anchored to the pencil */
+        :global(.tikdEditMotion::after) {
+          content: "";
+          position: absolute;
+
+          width: 30px;
+          height: 1px;
+
+          /* tune these 2 to match the pencil tip perfectly */
+          bottom: 0px;
+          right: 14px;
+
+          background: rgba(255, 255, 255, 0.9);
+          border-radius: 2px;
+          pointer-events: none;
+
+          transform: scaleX(0);
+          transform-origin: right; /* grows LEFT from pencil */
+          transition: transform 0.5s ease-out;
+        }
+
+        :global(.tikdIconBtn--edit:hover .tikdEditMotion) {
+          transform: translateX(6px); /* move pencil + line together */
+        }
+
+        :global(.tikdIconBtn--edit:hover .tikdEditMotion::after) {
+          transform: scaleX(1);
+        }
+
+        :global(.tikdIconBtn--edit .tikdEditSvg) {
+          height: 15px; /* smaller icon */
+          fill: rgba(255, 255, 255, 0.92);
+
+          /* use layout nudge (NOT transform) so hover transform matches reference */
+          position: relative;
+          top: -1px;
+
+          z-index: 3;
+          transition: all 0.2s; /* match reference */
+          transform-origin: bottom; /* match reference */
+          will-change: transform;
+          display: block; /* avoid baseline jiggle */
+        }
+
+        :global(.tikdIconBtn--edit:hover .tikdEditSvg) {
+          transform: rotate(-15deg);
+        }
+
+        /* ---------- Trash hover effect (bin lid flip only) ---------- */
+        :global(.tikdTrashWrap) {
+          display: inline-flex;
+          flex-direction: column;
+          gap: 2px;
+          position: relative;
+          z-index: 2;
+        }
+
+        :global(.tikdIconBtn--trash .svgIcon) {
+          width: 11px; /* smaller */
+          transition: transform 0.3s ease;
+        }
+
+        :global(.tikdIconBtn--trash .svgIcon path) {
+          fill: rgba(255, 255, 255, 0.9);
+        }
+
+        :global(.tikdIconBtn--trash .bin-top) {
+          transform-origin: bottom right;
+        }
+
+        :global(.tikdIconBtn--trash:hover .bin-top) {
+          transition-duration: 0.5s;
+          transform: rotate(160deg);
+        }
+
+        :global(.tikdTrashWrap) {
+          gap: 1px; /* was 2px */
+        }
+      `}</style>
+
       {/* Header */}
       <div className="mb-2 pb-2 border-b border-neutral-700 flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
@@ -1932,7 +2559,7 @@ export default function TrackingLinksTable() {
           <button
             type="button"
             onClick={openCreate}
-            disabled={loading || !!loadError}
+            disabled={loading}
             className={clsx(
               "inline-flex items-center justify-center",
               "h-8 w-8 rounded-md",
@@ -1976,7 +2603,10 @@ export default function TrackingLinksTable() {
           {/* Table */}
           <div
             ref={clipRef}
-            className="relative overflow-hidden rounded-lg"
+            className={clsx(
+              "relative rounded-lg",
+              isClamped ? "overflow-auto" : "overflow-hidden",
+            )}
             style={{ height: isClamped ? `${MAX}px` : "auto" }}
           >
             <table className="w-full table-fixed border-collapse font-medium">
@@ -2276,22 +2906,45 @@ export default function TrackingLinksTable() {
 
                       {/* Actions */}
                       <td className="px-4 py-3 text-right">
-                        <div className="inline-flex items-center gap-1.5">
+                        <div className="inline-flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => openEdit(r)}
-                            className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20 cursor-pointer"
                             title="Edit"
+                            aria-label="Edit"
+                            className={clsx(
+                              // ✅ your box design (keep consistent with your UI)
+                              "inline-flex items-center justify-center",
+                              "h-9 w-9 rounded-md border border-white/10 bg-white/5",
+                              "text-white/80 hover:bg-white/10 hover:border-white/20",
+                              "focus:outline-none focus:ring-1 focus:ring-primary-600/35",
+                              "transition cursor-pointer",
+                              // ✅ animation-only hook
+                              "tikdIconBtn tikdIconBtn--edit",
+                            )}
                           >
-                            <Pencil size={14} />
+                            <span className="tikdEditMotion" aria-hidden="true">
+                              <TikdEditIcon />
+                            </span>
                           </button>
+
                           <button
                             type="button"
                             onClick={() => openArchive(r)}
-                            className="rounded-md border border-white/10 p-1.5 text-white/70 hover:text-white hover:border-white/20 cursor-pointer"
                             title="Archive"
+                            aria-label="Archive"
+                            className={clsx(
+                              // ✅ same box design
+                              "inline-flex items-center justify-center",
+                              "h-9 w-9 rounded-md border border-white/10 bg-white/5",
+                              "text-white/80 hover:bg-error-500/15 hover:border-error-500/35",
+                              "focus:outline-none focus:ring-1 focus:ring-primary-600/35",
+                              "transition cursor-pointer",
+                              // ✅ animation-only hook
+                              "tikdIconBtn tikdIconBtn--trash",
+                            )}
                           >
-                            <Trash2 size={14} />
+                            <TikdTrashIcon />
                           </button>
                         </div>
                       </td>
@@ -2315,17 +2968,24 @@ export default function TrackingLinksTable() {
               </tbody>
             </table>
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
+            {showBottomFade && showViewAll && computedViewAllHref ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
+            ) : null}
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-            <Link
-              href="/dashboard/tracking"
-              className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              View All
-            </Link>
-          </div>
+          {showViewAll && computedViewAllHref ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+              <Button asChild variant="viewAction" size="sm">
+                <Link
+                  href={computedViewAllHref}
+                  title="View all tracking links"
+                  aria-label="View all tracking links"
+                >
+                  View All
+                </Link>
+              </Button>
+            </div>
+          ) : null}
         </>
       )}
 
@@ -2345,6 +3005,9 @@ export default function TrackingLinksTable() {
         onClose={closeCreate}
         onSave={handleCreate}
         saving={savingCreate}
+        scope={effectiveScope}
+        organizationId={organizationId}
+        eventId={eventId}
       />
 
       {/* Edit */}
@@ -2355,6 +3018,9 @@ export default function TrackingLinksTable() {
         onClose={closeEdit}
         onSave={handleEdit}
         saving={savingEdit}
+        scope={effectiveScope}
+        organizationId={organizationId}
+        eventId={eventId}
       />
     </div>
   );

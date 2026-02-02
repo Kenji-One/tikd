@@ -306,7 +306,6 @@ function FriendsCard({
                   className={clsx(
                     "relative overflow-hidden",
                     "h-[58px] w-[58px] rounded-lg",
-                    "bg-white/5 ring-1 ring-white/10",
                   )}
                   style={{
                     transform: "translateZ(0.1px)",
@@ -573,7 +572,7 @@ function AddFriendModal({
   onSend: (selected: AddCandidate[]) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selected, setSelected] = useState<AddCandidate[]>([]);
   const [sent, setSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -581,14 +580,15 @@ function AddFriendModal({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastActiveElRef = useRef<HTMLElement | null>(null);
 
+  const qTrim = query.trim();
+  const hasSearch = qTrim.length > 0;
+
+  // ✅ Only fetch when user is actually searching (no default suggestions).
   const candidatesQ = useQuery({
-    queryKey: ["friends-candidates", open ? query : "", open],
-    enabled: open,
+    queryKey: ["friends-candidates", hasSearch ? qTrim : "", open],
+    enabled: open && hasSearch,
     queryFn: async () => {
-      const q = query.trim();
-      const url = q
-        ? `/api/friends/candidates?q=${encodeURIComponent(q)}`
-        : `/api/friends/candidates`;
+      const url = `/api/friends/candidates?q=${encodeURIComponent(qTrim)}`;
       return fetchJSON<AddCandidate[]>(url);
     },
   });
@@ -651,36 +651,35 @@ function AddFriendModal({
   useEffect(() => {
     if (!open) {
       setQuery("");
-      setSelectedIds([]);
+      setSelected([]);
       setSent(false);
       setErrorMsg("");
     }
   }, [open]);
 
-  const selected = useMemo(() => {
-    const map = new Map(candidates.map((c) => [c.id, c]));
-    return selectedIds
-      .map((id) => map.get(id) || null)
-      .filter((v): v is AddCandidate => Boolean(v));
-  }, [selectedIds, candidates]);
+  const selectedIds = useMemo(() => selected.map((s) => s.id), [selected]);
 
-  const filtered = useMemo(() => {
+  const results = useMemo(() => {
+    // Show results excluding already selected users
+    if (!hasSearch) return EMPTY_CANDIDATES;
     return candidates.filter((c) => !selectedIds.includes(c.id));
-  }, [candidates, selectedIds]);
+  }, [candidates, selectedIds, hasSearch]);
 
-  const canSend = selectedIds.length > 0;
+  const canSend = selected.length > 0;
 
-  function togglePick(id: string) {
+  function togglePick(candidate: AddCandidate) {
     setSent(false);
     setErrorMsg("");
-    setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setSelected((prev) =>
+      prev.some((p) => p.id === candidate.id) ? prev : [...prev, candidate],
+    );
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   function removePick(id: string) {
     setSent(false);
     setErrorMsg("");
-    setSelectedIds((prev) => prev.filter((x) => x !== id));
+    setSelected((prev) => prev.filter((x) => x.id !== id));
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
@@ -688,17 +687,11 @@ function AddFriendModal({
     if (!canSend) return;
     setErrorMsg("");
 
-    const map = new Map(candidates.map((c) => [c.id, c]));
-    const sel = selectedIds
-      .map((id) => map.get(id))
-      .filter((v): v is AddCandidate => Boolean(v));
-
     try {
-      await onSend(sel.length ? sel : selected);
+      await onSend(selected);
       setSent(true);
-      setSelectedIds([]);
+      setSelected([]);
       setQuery("");
-      candidatesQ.refetch();
     } catch (e: unknown) {
       setErrorMsg(getErrorMessage(e, "Failed to send requests."));
     }
@@ -793,14 +786,13 @@ function AddFriendModal({
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  {selectedIds.map((id) => {
-                    const found = candidates.find((c) => c.id === id);
-                    const name = found?.name ?? "Selected";
+                  {selected.map((c) => {
+                    const name = c.name ?? "Selected";
                     const badge = initialsFromName(name);
 
                     return (
                       <span
-                        key={id}
+                        key={c.id}
                         className={clsx(
                           "inline-flex items-center gap-2 rounded-full",
                           "border border-white/10 bg-white/5 px-1 py-1",
@@ -819,7 +811,7 @@ function AddFriendModal({
                         <span className="max-w-[180px] truncate">{name}</span>
                         <button
                           type="button"
-                          onClick={() => removePick(id)}
+                          onClick={() => removePick(c.id)}
                           aria-label={`Remove ${name}`}
                           className={clsx(
                             "inline-flex h-6 w-6 items-center justify-center rounded-full",
@@ -910,130 +902,147 @@ function AddFriendModal({
             ) : null}
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-            <div
-              className={clsx(
-                "flex items-center justify-between px-4 py-3 md:px-5",
-                "border-b border-white/10",
-              )}
-            >
-              <div className="text-[13px] font-semibold text-neutral-200">
-                Suggestions
-              </div>
-              <div className="text-[11px] text-neutral-500">
-                {filtered.length} result{filtered.length === 1 ? "" : "s"}
-              </div>
-            </div>
-
-            <div className="max-h-[340px] overflow-auto p-2 no-scrollbar md:max-h-[420px]">
-              {candidatesQ.isLoading ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                  <div
-                    className={clsx(
-                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
-                    )}
-                  >
-                    <Users className="h-5 w-5" />
-                  </div>
-                  <div className="text-[13px] font-semibold text-neutral-100">
-                    Loading…
-                  </div>
-                  <div className="text-[12px] text-neutral-500">
-                    Searching users directory.
-                  </div>
+          {/* ✅ Results section ONLY when searching (no default suggestions) */}
+          {hasSearch ? (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+              <div
+                className={clsx(
+                  "flex items-center justify-between px-4 py-3 md:px-5",
+                  "border-b border-white/10",
+                )}
+              >
+                <div className="text-[13px] font-semibold text-neutral-200">
+                  Results
                 </div>
-              ) : filtered.length ? (
-                <div className="space-y-2">
-                  {filtered.map((c) => {
-                    const badge = initialsFromName(c.name);
+                <div className="text-[11px] text-neutral-500">
+                  {candidatesQ.isLoading
+                    ? "Searching…"
+                    : `${results.length} result${results.length === 1 ? "" : "s"}`}
+                </div>
+              </div>
 
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => togglePick(c.id)}
-                        className={clsx(
-                          "w-full text-left",
-                          "flex items-center gap-3 rounded-2xl px-3 py-3",
-                          "border border-white/10 bg-neutral-950/25 hover:bg-neutral-900/35",
-                          "transition-colors",
-                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                        )}
-                      >
-                        <div className="relative">
-                          <div className="h-11 w-11 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
-                            {c.avatarUrl ? (
-                              <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
+              <div className="max-h-[340px] overflow-auto p-2 no-scrollbar md:max-h-[420px]">
+                {candidatesQ.isLoading ? (
+                  <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                    <div
+                      className={clsx(
+                        "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                        "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                      )}
+                    >
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="text-[13px] font-semibold text-neutral-100">
+                      Searching…
+                    </div>
+                    <div className="text-[12px] text-neutral-500">
+                      Looking up users matching your query.
+                    </div>
+                  </div>
+                ) : results.length ? (
+                  <div className="space-y-2">
+                    {results.map((c) => {
+                      const badge = initialsFromName(c.name);
+
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => togglePick(c)}
+                          className={clsx(
+                            "w-full text-left",
+                            "flex items-center gap-3 rounded-2xl px-3 py-3",
+                            "border border-white/10 bg-neutral-950/25 hover:bg-neutral-900/35",
+                            "transition-colors",
+                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                          )}
+                        >
+                          <div className="relative">
+                            <div className="h-11 w-11 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
+                              {c.avatarUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={c.avatarUrl}
                                   alt={c.name}
                                   className="h-full w-full object-cover"
                                   loading="lazy"
                                 />
-                              </>
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
-                                {badge}
-                              </div>
-                            )}
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+                                  {badge}
+                                </div>
+                              )}
+                            </div>
+                            <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
+                              {badge}
+                            </div>
                           </div>
-                          <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-                            {badge}
-                          </div>
-                        </div>
 
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-semibold text-neutral-0">
-                            {c.name}
-                          </div>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-neutral-400">
-                            <span className="inline-flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-primary-300" />
-                              <span className="truncate">{c.email}</span>
-                            </span>
-                            {c.phone ? (
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-semibold text-neutral-0">
+                              {c.name}
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-neutral-400">
                               <span className="inline-flex items-center gap-2">
-                                <Phone className="h-4 w-4 text-primary-300" />
-                                <span className="truncate">{c.phone}</span>
+                                <Mail className="h-4 w-4 text-primary-300" />
+                                <span className="truncate">{c.email}</span>
                               </span>
-                            ) : null}
+                              {c.phone ? (
+                                <span className="inline-flex items-center gap-2">
+                                  <Phone className="h-4 w-4 text-primary-300" />
+                                  <span className="truncate">{c.phone}</span>
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
 
-                        <span
-                          className={clsx(
-                            "inline-flex h-9 items-center justify-center rounded-xl px-3",
-                            "border border-white/10 bg-white/5 text-[12px] font-semibold",
-                            "text-neutral-100 hover:border-primary-500/40",
-                          )}
-                        >
-                          Add
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                  <div
-                    className={clsx(
-                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
-                    )}
-                  >
-                    <Users className="h-5 w-5" />
+                          <span
+                            className={clsx(
+                              "inline-flex h-9 items-center justify-center rounded-xl px-3",
+                              "border border-white/10 bg-white/5 text-[12px] font-semibold",
+                              "text-neutral-100 hover:border-primary-500/40",
+                            )}
+                          >
+                            Add
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="text-[13px] font-semibold text-neutral-100">
-                    No matches found
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                    <div
+                      className={clsx(
+                        "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                        "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                      )}
+                    >
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="text-[13px] font-semibold text-neutral-100">
+                      No matches found
+                    </div>
+                    <div className="text-[12px] text-neutral-500">
+                      Try searching by email, phone, or name.
+                    </div>
                   </div>
-                  <div className="text-[12px] text-neutral-500">
-                    Try searching by email, phone, or name.
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
+          ) : null}
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className={clsx(
+                "inline-flex h-10 items-center justify-center rounded-xl px-4",
+                "border border-white/10 bg-white/5 text-[12px] font-semibold text-neutral-200",
+                "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+              )}
+            >
+              Done
+            </button>
           </div>
         </div>
       </div>
@@ -1274,7 +1283,7 @@ export default function FriendsClient() {
                       aria-expanded={requestsOpen}
                       className={clsx(
                         "relative inline-flex h-10 w-10 items-center justify-center rounded-lg",
-                        "border border-white/10",
+                        "border border-white/10 cursor-pointer",
                         requestsOpen
                           ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
                           : "bg-white/5 text-neutral-200 hover:bg-white/8",
@@ -1360,7 +1369,7 @@ export default function FriendsClient() {
                                     )}
                                   >
                                     <div className="relative">
-                                      <div className="h-12 w-12 overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10">
+                                      <div className="h-12 w-12 overflow-hidden rounded-lg">
                                         {r.avatarUrl ? (
                                           <>
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1486,7 +1495,8 @@ export default function FriendsClient() {
                 <div
                   className={clsx(
                     "grid gap-4",
-                    "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
+                    // ✅ keep fixed card tracks even if there are only 1–2 items (no stretching)
+                    "grid-cols-[repeat(auto-fill,minmax(240px,1fr))]",
                   )}
                 >
                   {friendsSlice.map((f) => (

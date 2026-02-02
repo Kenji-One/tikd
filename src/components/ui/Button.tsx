@@ -13,7 +13,8 @@ type InnerVariants =
   | "destructive"
   | "brand"
   | "social"
-  | "default";
+  | "default"
+  | "viewAction";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -25,7 +26,8 @@ export interface ButtonProps
     | "brand"
     | "social"
     | "default"
-    | "electric";
+    | "electric"
+    | "viewAction";
   size?: "sm" | "md" | "lg" | "xs" | "icon";
   loading?: boolean;
   asChild?: boolean;
@@ -54,7 +56,9 @@ export interface ButtonProps
 /* ─────────── style maps ─────────── */
 
 const base =
-  "inline-flex items-center justify-center gap-1 text-sm leading-[90%] font-medium tracking-[-0.28px] rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
+  "inline-flex items-center justify-center gap-1 text-sm leading-[90%] font-medium tracking-[-0.28px] rounded-full " +
+  "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 " +
+  "disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
 
 const variants: Record<
   Exclude<NonNullable<ButtonProps["variant"]>, "electric">,
@@ -70,6 +74,18 @@ const variants: Record<
   social:
     "bg-neutral-800 text-white border border-white/10 hover:border-primary-500 hover:bg-neutral-700/40",
   default: "bg-button-primary text-white ",
+
+  /**
+   * Used for all "View All" / "Detailed View" actions
+   * - hover: scale + slight rotate
+   * - active: scale down + rotate back + border pulse animation
+   */
+  viewAction:
+    "pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white " +
+    "transition-[transform,background-color,color,border-color] duration-300 " +
+    "hover:cursor-pointer hover:scale-[1.05] hover:rotate-[3deg] hover:border-white " +
+    "active:scale-[0.90] active:rotate-[-3deg] active:bg-black active:text-primary-500 active:border-primary-600 " +
+    "active:animate-[tikdBorderMove_500ms_forwards]",
 };
 
 const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -84,7 +100,6 @@ const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
 const electricDefaultInner =
   "text-neutral-0 bg-neutral-900/60 hover:bg-neutral-900/80 " +
   "backdrop-blur-md ring-1 ring-white/10 " +
-  // subtle inset highlight so the neon border feels integrated
   "shadow-[inset_0_0_0_1px_rgba(154,81,255,0.25),0_0_18px_rgba(154,81,255,0.18)]";
 
 /* ─────────── animation helpers ─────────── */
@@ -95,7 +110,6 @@ type NonElectricVariant = Exclude<
 >;
 
 function sweepBase(duration: string) {
-  // Important: Tailwind needs content set for pseudo elements to render.
   return clsx(
     "relative overflow-hidden",
     "before:pointer-events-none before:absolute before:inset-0 before:content-['']",
@@ -106,7 +120,6 @@ function sweepBase(duration: string) {
 }
 
 const variantSweep: Record<NonElectricVariant, string> = {
-  // Keep these subtle; each one is distinct (tint/duration) but still on-brand.
   primary: clsx(
     sweepBase("before:duration-700"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent",
@@ -120,9 +133,7 @@ const variantSweep: Record<NonElectricVariant, string> = {
     "before:bg-gradient-to-r before:from-transparent before:via-error-200/22 before:to-transparent",
   ),
   secondary: clsx(
-    // slightly quicker, more “premium”
     sweepBase("before:duration-700"),
-    // thinner, crisper shine + a faint glow edge so it feels alive on transparent bg
     "before:bg-gradient-to-r before:from-transparent before:via-white/22 before:to-transparent " +
       "before:opacity-0 before:transition-opacity hover:before:opacity-100 " +
       "before:blur-[0.5px]",
@@ -139,6 +150,12 @@ const variantSweep: Record<NonElectricVariant, string> = {
     sweepBase("before:duration-850"),
     "before:bg-gradient-to-r before:from-transparent before:via-primary-500/16 before:to-transparent",
   ),
+
+  // If you ever enable `animation` on viewAction, keep it subtle.
+  viewAction: clsx(
+    sweepBase("before:duration-850"),
+    "before:bg-gradient-to-r before:from-transparent before:via-white/14 before:to-transparent",
+  ),
 };
 
 function getSweepClasses(
@@ -146,9 +163,7 @@ function getSweepClasses(
   electricInner?: InnerVariants,
 ) {
   if (variant === "electric") {
-    // If electric reuses an inner variant, match that animation.
     if (electricInner) return variantSweep[electricInner];
-    // Otherwise, give electric its own slightly “neon” sweep.
     return clsx(
       sweepBase("before:duration-900"),
       "before:bg-gradient-to-r before:from-transparent before:via-primary-952/22 before:to-transparent",
@@ -177,7 +192,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       electricChaos = 0.5,
       electricThickness = 2,
       electricRadius,
-      electricInner, // undefined -> use electricDefaultInner
+      electricInner,
       ...props
     },
     ref,
@@ -208,11 +223,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       </svg>
     );
 
-    // Decide inner classes
     const innerClasses =
       variant === "electric"
-        ? // when electricInner is provided, reuse that variant's visuals; otherwise use our unique electric look
-          electricInner
+        ? electricInner
           ? variants[electricInner]
           : electricDefaultInner
         : variants[variant];
@@ -247,7 +260,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     if (variant !== "electric") return buttonEl;
 
-    // Wrap with ElectricBorder when variant="electric"
     return (
       <ElectricBorder
         color={electricColor}

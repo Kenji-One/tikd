@@ -1,11 +1,12 @@
+// src/models/Ticket.ts
 import {
   Schema,
   models,
   model,
   Types,
   Document,
-  type Model,
-  type HydratedDocument,
+  Model,
+  HydratedDocument,
 } from "mongoose";
 
 export interface ITicket extends Document {
@@ -14,30 +15,31 @@ export interface ITicket extends Document {
   ownerId: Types.ObjectId;
 
   orderId?: Types.ObjectId | null;
-  orderNumber?: number | null; // snapshot (optional but recommended)
 
   /**
-   * Legacy field (kept for backward compatibility).
-   * With TicketType, prefer `ticketTypeId` + `ticketTypeLabel`.
+   * Legacy enum (kept for backward compatibility).
+   * Prefer using `ticketTypeId` + `ticketTypeLabel` for UI display.
    */
-  ticketType: string;
+  ticketType: "general" | "vip" | "backstage";
 
+  /** ✅ New (optional) - links to configured ticket type */
   ticketTypeId?: Types.ObjectId | null;
+
+  /** ✅ New (optional) - snapshot label for UI ("General Admission - Tier 1") */
   ticketTypeLabel?: string;
 
   price: number;
-  currency: string;
-
-  status: "reserved" | "paid" | "scanned" | "cancelled" | "refunded";
-
-  scannedAt?: Date | null;
-
+  currency: string; // ISO-4217, e.g. "USD"
+  status: "reserved" | "paid" | "scanned" | "cancelled";
   seat?: { section: string; row: string; number: string } | null;
-  qrCode?: string;
-
+  qrCode?: string; // Cloudinary URL
   createdAt: Date;
   updatedAt: Date;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Schema                                                                    */
+/* -------------------------------------------------------------------------- */
 
 const SeatSchema = new Schema(
   {
@@ -62,24 +64,19 @@ const TicketSchema = new Schema<ITicket>(
       required: true,
       index: true,
     },
-
     orderId: {
       type: Schema.Types.ObjectId,
       ref: "Order",
       default: null,
-      index: true,
     },
 
-    // optional denormalized snapshot so listing guests is cheap
-    orderNumber: { type: Number, default: null, index: true },
-
-    // legacy, no enum restriction (you now have TicketType)
     ticketType: {
       type: String,
+      enum: ["general", "vip", "backstage"],
       default: "general",
-      index: true,
     },
 
+    // ✅ new optional refs/snapshots
     ticketTypeId: {
       type: Schema.Types.ObjectId,
       ref: "TicketType",
@@ -89,35 +86,27 @@ const TicketSchema = new Schema<ITicket>(
     ticketTypeLabel: { type: String, default: "" },
 
     price: { type: Number, required: true, min: 0 },
-
-    currency: {
-      type: String,
-      required: true,
-      uppercase: true,
-      trim: true,
-      minlength: 3,
-      maxlength: 3,
-    },
-
+    currency: { type: String, required: true, length: 3, uppercase: true },
     status: {
       type: String,
-      enum: ["reserved", "paid", "scanned", "cancelled", "refunded"],
+      enum: ["reserved", "paid", "scanned", "cancelled"],
       default: "reserved",
       index: true,
     },
-
-    scannedAt: { type: Date, default: null },
-
     seat: { type: SeatSchema, default: null },
     qrCode: { type: String, default: "" },
   },
   { timestamps: true },
 );
 
-// Helpful indexes for your routes
-TicketSchema.index({ eventId: 1, ownerId: 1, status: 1 });
-TicketSchema.index({ eventId: 1, orderId: 1 });
-TicketSchema.index({ eventId: 1, ticketTypeId: 1 });
+/* -------------------------------------------------------------------------- */
+/*  Indexes & virtuals                                                        */
+/* -------------------------------------------------------------------------- */
+
+TicketSchema.index(
+  { orderId: 1, ticketType: 1 },
+  { unique: false, partialFilterExpression: { orderId: { $exists: true } } },
+);
 
 TicketSchema.virtual("isGA").get(function (this: HydratedDocument<ITicket>) {
   return this.seat == null;

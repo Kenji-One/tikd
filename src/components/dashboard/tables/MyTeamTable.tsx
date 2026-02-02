@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { Eye, ChevronDown } from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
+import { Button } from "@/components/ui/Button";
 
 /* ------------------------------ Types ------------------------------ */
 export type TeamMember = {
@@ -381,13 +382,14 @@ export default function MyTeamTable({
 
       {/* Bottom pill */}
       <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-        <button
+        <Button
           type="button"
           onClick={onDetailedView}
-          className="pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+          variant="viewAction"
+          size="sm"
         >
           Detailed View
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -47,6 +47,7 @@ type TrackingLinkLean = {
 type EventTitleLean = {
   _id: ObjectId;
   title?: string;
+  organizationId: ObjectId;
 };
 
 type OrgNameLean = {
@@ -112,6 +113,9 @@ type UiRow = {
   id: string;
   name: string;
 
+  // ✅ NEW: lets the frontend filter “org page = this org + its events”
+  organizationId: string;
+
   destinationKind: DestinationKind;
   destinationId: string;
   destinationTitle: string;
@@ -154,6 +158,8 @@ async function toUiRow(doc: TrackingLinkLean): Promise<UiRow> {
     id: String(doc._id),
     name: doc.name,
 
+    organizationId: String(doc.organizationId),
+
     destinationKind,
     destinationId: String(doc.destinationId),
     destinationTitle,
@@ -173,26 +179,84 @@ async function toUiRow(doc: TrackingLinkLean): Promise<UiRow> {
 
 /* ------------------------------------------------------------------ */
 /* GET /api/tracking-links                                            */
-/* - returns all non-archived links for orgs owned by this user        */
+/* - default: all non-archived links for orgs owned by this user       */
+/* - scope=event&eventId=... : only links for that event               */
+/* - scope=organization&organizationId=... : links for that org + its  */
+/*   events (since links store organizationId)                         */
 /* ------------------------------------------------------------------ */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const scope = (req.nextUrl.searchParams.get("scope") || "").trim();
+  const organizationIdParam = (
+    req.nextUrl.searchParams.get("organizationId") || ""
+  ).trim();
+  const eventIdParam = (req.nextUrl.searchParams.get("eventId") || "").trim();
+
   const ownedOrgs = (await Organization.find({ ownerId: session.user.id })
     .select("_id")
     .lean()) as OwnedOrgLean[];
 
-  const orgIds: ObjectId[] = ownedOrgs.map((o) => o._id);
+  const ownedOrgIds: ObjectId[] = ownedOrgs.map((o) => o._id);
 
-  const links = (await TrackingLink.find({
-    organizationId: { $in: orgIds },
+  // Base permissions: only within orgs user owns
+  const baseFilter: Record<string, unknown> = {
+    organizationId: { $in: ownedOrgIds },
     archived: false,
-  })
+  };
+
+  // ✅ Scoped filters
+  if (scope === "organization") {
+    if (!isObjectId(organizationIdParam)) {
+      return NextResponse.json(
+        { error: "Invalid organizationId" },
+        { status: 400 },
+      );
+    }
+
+    const orgObjId = new mongoose.Types.ObjectId(organizationIdParam);
+
+    const isOwned = ownedOrgIds.some((id) => String(id) === String(orgObjId));
+    if (!isOwned) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    baseFilter.organizationId = orgObjId;
+  }
+
+  if (scope === "event") {
+    if (!isObjectId(eventIdParam)) {
+      return NextResponse.json({ error: "Invalid eventId" }, { status: 400 });
+    }
+
+    const eventObjId = new mongoose.Types.ObjectId(eventIdParam);
+
+    const ev = (await Event.findById(eventObjId)
+      .select("_id organizationId")
+      .lean()) as { _id: ObjectId; organizationId: ObjectId } | null;
+
+    if (!ev) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+
+    const isOwned = ownedOrgIds.some(
+      (id) => String(id) === String(ev.organizationId),
+    );
+    if (!isOwned) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    baseFilter.organizationId = ev.organizationId;
+    baseFilter.destinationKind = "Event";
+    baseFilter.destinationId = ev._id;
+  }
+
+  const links = (await TrackingLink.find(baseFilter)
     .sort({ createdAt: -1 })
-    .lean() as unknown) as TrackingLinkLean[];
+    .lean()) as unknown as TrackingLinkLean[];
 
   const rows = await Promise.all(links.map(toUiRow));
   return NextResponse.json({ rows });

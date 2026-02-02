@@ -1,11 +1,148 @@
-// src/app/api/events/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { Types } from "mongoose";
+
 import Event from "@/models/Event";
 import Organization from "@/models/Organization";
 import Artist from "@/models/Artist";
+import User from "@/models/User";
+import OrgTeam from "@/models/OrgTeam";
+import EventTeam from "@/models/EventTeam";
+
+/* ------------------------- Helpers ------------------------- */
+const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
+
+type SessionLike = {
+  user?: {
+    id?: string | null;
+    email?: string | null;
+    name?: string | null;
+  } | null;
+} | null;
+
+type SessionIdentity = {
+  userId: string;
+  email: string;
+  name: string;
+};
+
+type OrgHydrated = {
+  _id: string;
+  name: string;
+  logo?: string;
+  website?: string;
+};
+
+function getOrgIdFromEventLike(e: unknown): string | null {
+  if (!e || typeof e !== "object") return null;
+  const obj = e as Record<string, unknown>;
+  const v = obj.organizationId;
+
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    const maybe = v as { toString?: () => string };
+    if (typeof maybe.toString === "function") return maybe.toString();
+  }
+
+  return null;
+}
+
+function hasOrganizationPayload(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const obj = e as Record<string, unknown>;
+  return Boolean(obj.organization || obj.org);
+}
+
+async function getSessionIdentity(
+  session: SessionLike,
+): Promise<SessionIdentity> {
+  const userId = String(session?.user?.id || "");
+
+  let email = String(session?.user?.email || "")
+    .trim()
+    .toLowerCase();
+
+  // Prefer a friendly name for team rows
+  const sessionName = String(session?.user?.name || "").trim();
+
+  if (!email) {
+    const u = await User.findById(userId)
+      .select("email firstName lastName username")
+      .lean<{
+        email?: string;
+        firstName?: string;
+        lastName?: string;
+        username?: string;
+      } | null>();
+
+    email = String(u?.email || "")
+      .trim()
+      .toLowerCase();
+
+    const derivedName =
+      (u?.firstName || u?.lastName
+        ? `${u?.firstName ?? ""} ${u?.lastName ?? ""}`.trim()
+        : u?.username || "") || "";
+
+    return {
+      userId,
+      email,
+      name: sessionName || derivedName || "",
+    };
+  }
+
+  return {
+    userId,
+    email,
+    name: sessionName || "",
+  };
+}
+
+async function assertCanCreateEventForOrg(
+  organizationId: string,
+  userId: string,
+): Promise<{ ok: true; isOwner: boolean } | { ok: false; res: NextResponse }> {
+  const org = await Organization.findById(organizationId)
+    .select("_id ownerId")
+    .lean<{ _id: Types.ObjectId; ownerId: Types.ObjectId } | null>();
+
+  if (!org) {
+    return {
+      ok: false,
+      res: NextResponse.json(
+        { error: "Organization not found" },
+        { status: 404 },
+      ),
+    };
+  }
+
+  const isOwner = String(org.ownerId) === String(userId);
+  if (isOwner) return { ok: true, isOwner: true };
+
+  // ✅ Only org admins can create events (active admins)
+  const admin = await OrgTeam.findOne({
+    organizationId: org._id,
+    userId,
+    role: "admin",
+    status: "active",
+  })
+    .select("_id")
+    .lean();
+
+  if (!admin) {
+    return {
+      ok: false,
+      res: NextResponse.json(
+        { error: "Forbidden: only organization admins can create events" },
+        { status: 403 },
+      ),
+    };
+  }
+
+  return { ok: true, isOwner: false };
+}
 
 /* ------------------------- Schemas ------------------------- */
 const artistInputSchema = z.object({
@@ -49,7 +186,7 @@ const bodySchema = z.object({
 
 /* --------------------------- GET --------------------------- */
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  const session = (await auth()) as SessionLike;
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -57,48 +194,180 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const owned = searchParams.get("owned");
 
+  // ✅ If "owned=1", include:
+  // - events created by me
+  // - events where I’m active on EventTeam
+  // - events inside orgs where I’m an active org admin
+  if (owned === "1") {
+    const me = String(session.user.id);
+
+    const [eventTeamRows, orgAdminRows] = await Promise.all([
+      EventTeam.find({ userId: me, status: "active" })
+        .select("eventId")
+        .lean<Array<{ eventId: Types.ObjectId }>>(),
+      OrgTeam.find({ userId: me, role: "admin", status: "active" })
+        .select("organizationId")
+        .lean<Array<{ organizationId: Types.ObjectId }>>(),
+    ]);
+
+    const eventIds = eventTeamRows.map((r) => r.eventId);
+    const orgIds = orgAdminRows.map((r) => r.organizationId);
+
+    const filter = {
+      $or: [
+        { createdByUserId: me },
+        ...(eventIds.length ? [{ _id: { $in: eventIds } }] : []),
+        ...(orgIds.length ? [{ organizationId: { $in: orgIds } }] : []),
+      ],
+    };
+
+    const events = await Event.find(filter).lean<unknown[]>();
+
+    // hydrate org payload
+    const orgIdsHydrate = Array.from(
+      new Set(
+        events.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean),
+      ),
+    );
+
+    let orgById = new Map<string, OrgHydrated>();
+
+    if (orgIdsHydrate.length) {
+      const orgs = await Organization.find({ _id: { $in: orgIdsHydrate } })
+        .select("name logo website")
+        .lean<
+          Array<{
+            _id: Types.ObjectId;
+            name?: string;
+            logo?: string;
+            website?: string;
+          }>
+        >();
+
+      orgById = new Map(
+        orgs.map((o) => [
+          String(o._id),
+          {
+            _id: String(o._id),
+            name: o?.name ?? "Organization",
+            logo: o?.logo || undefined,
+            website: o?.website || undefined,
+          },
+        ]),
+      );
+    }
+
+    const hydrated = events.map((e) => {
+      if (hasOrganizationPayload(e)) return e;
+
+      const orgId = getOrgIdFromEventLike(e);
+      const org = orgId ? orgById.get(orgId) : undefined;
+
+      if (e && typeof e === "object") {
+        return { ...(e as Record<string, unknown>), organization: org };
+      }
+      return e;
+    });
+
+    return NextResponse.json(hydrated);
+  }
+
+  // Default: published & upcoming/ongoing
   const now = new Date();
 
-  const filter =
-    owned === "1"
-      ? { createdByUserId: session.user.id }
-      : {
-          status: "published",
-          $or: [
-            // multi-day / has endDate: show if still ongoing
-            { endDate: { $gte: now } },
-            // single-day / no endDate: show if starts in future
-            { endDate: { $exists: false }, date: { $gte: now } },
-            { endDate: null as unknown as undefined, date: { $gte: now } },
-          ],
-        };
+  const filter = {
+    status: "published",
+    $or: [
+      // Ongoing multi-day event
+      { endDate: { $gte: now } },
 
-  const events = await Event.find(filter).lean();
-  return NextResponse.json(events);
+      // Single-day event: endDate missing OR explicitly null, and start date in future
+      { endDate: { $exists: false }, date: { $gte: now } },
+      { endDate: null, date: { $gte: now } },
+    ],
+  };
+
+  const events = await Event.find(filter).lean<unknown[]>();
+
+  // hydrate org payload
+  const orgIds = Array.from(
+    new Set(events.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean)),
+  );
+
+  let orgById = new Map<string, OrgHydrated>();
+
+  if (orgIds.length) {
+    const orgs = await Organization.find({ _id: { $in: orgIds } })
+      .select("name logo website")
+      .lean<
+        Array<{
+          _id: Types.ObjectId;
+          name?: string;
+          logo?: string;
+          website?: string;
+        }>
+      >();
+
+    orgById = new Map(
+      orgs.map((o) => [
+        String(o._id),
+        {
+          _id: String(o._id),
+          name: o?.name ?? "Organization",
+          logo: o?.logo || undefined,
+          website: o?.website || undefined,
+        },
+      ]),
+    );
+  }
+
+  const hydrated = events.map((e) => {
+    if (hasOrganizationPayload(e)) return e;
+
+    const orgId = getOrgIdFromEventLike(e);
+    const org = orgId ? orgById.get(orgId) : undefined;
+
+    if (e && typeof e === "object") {
+      return { ...(e as Record<string, unknown>), organization: org };
+    }
+    return e;
+  });
+
+  return NextResponse.json(hydrated);
 }
 
 /* --------------------------- POST -------------------------- */
 export async function POST(req: Request) {
-  const session = await auth();
+  const session = (await auth()) as SessionLike;
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const json = await req.json();
+  const json: unknown = await req.json();
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
 
-  // Ensure org belongs to user
-  const org = await Organization.findOne({
-    _id: parsed.data.organizationId,
-    ownerId: session.user.id,
-  });
-  if (!org) {
+  if (!isObjectId(parsed.data.organizationId)) {
     return NextResponse.json(
-      { error: "Organization not found or not yours" },
-      { status: 403 },
+      { error: "Invalid organizationId" },
+      { status: 400 },
+    );
+  }
+
+  // ✅ Permission: Org Owner OR Org Admin (active)
+  const perm = await assertCanCreateEventForOrg(
+    parsed.data.organizationId,
+    String(session.user.id),
+  );
+  if (!perm.ok) return perm.res;
+
+  const identity = await getSessionIdentity(session);
+  if (!identity.email) {
+    return NextResponse.json(
+      { error: "User email is required to create event team membership" },
+      { status: 400 },
     );
   }
 
@@ -114,7 +383,6 @@ export async function POST(req: Request) {
   );
 
   // Duration minutes:
-  // Prefer endDate if present; otherwise use legacy duration ("HH:MM") if provided.
   const durationMinutes = (() => {
     if (parsed.data.endDate) {
       const ms = parsed.data.endDate.getTime() - parsed.data.date.getTime();
@@ -154,9 +422,30 @@ export async function POST(req: Request) {
     artists: artistIds,
     createdByUserId: session.user.id,
 
-    // ✅ Unpublished by default unless explicitly "published"
     status: parsed.data.status,
   });
+
+  // ✅ Auto-add creator to EventTeam as ADMIN + ACTIVE
+  // Use $unset so re-creating doesn't leave old expiresAt/inviteToken hanging around.
+  await EventTeam.findOneAndUpdate(
+    { eventId: event._id, email: identity.email },
+    {
+      $set: {
+        email: identity.email,
+        userId: identity.userId,
+        name: identity.name,
+        role: "admin",
+        status: "active",
+        temporaryAccess: false,
+        invitedBy: identity.userId,
+      },
+      $unset: {
+        expiresAt: "",
+        inviteToken: "",
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
 
   return NextResponse.json({ _id: event._id }, { status: 201 });
 }

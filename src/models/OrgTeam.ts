@@ -1,8 +1,13 @@
-// src/models/OrgTeam.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 /* ----------------------------- Types ----------------------------- */
-export type OrgTeamRole = "admin" | "promoter" | "scanner" | "collaborator";
+export type OrgTeamRole =
+  | "admin"
+  | "promoter"
+  | "scanner"
+  | "collaborator"
+  | "member";
+
 export type OrgTeamStatus = "invited" | "active" | "revoked" | "expired";
 
 export interface IOrgTeam extends Document {
@@ -45,7 +50,7 @@ const OrgTeamSchema = new Schema<IOrgTeam>(
 
     role: {
       type: String,
-      enum: ["admin", "promoter", "scanner", "collaborator"],
+      enum: ["admin", "promoter", "scanner", "collaborator", "member"],
       required: true,
     },
 
@@ -62,15 +67,19 @@ const OrgTeamSchema = new Schema<IOrgTeam>(
     invitedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     inviteToken: { type: String, default: undefined },
   },
-  { timestamps: true, strict: true }
+  { timestamps: true, strict: true },
 );
 
 /** Ensure uniqueness per organization+email */
 OrgTeamSchema.index({ organizationId: 1, email: 1 }, { unique: true });
 
-/** Keep status in sync when expired */
+/** Invite token lookups */
+OrgTeamSchema.index({ inviteToken: 1 }, { unique: true, sparse: true });
+
+/** Keep status in sync when expired (but never override revoked) */
 OrgTeamSchema.pre("save", function (next) {
   if (
+    this.status !== "revoked" &&
     this.temporaryAccess &&
     this.expiresAt &&
     this.expiresAt.getTime() < Date.now()

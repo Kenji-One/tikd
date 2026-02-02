@@ -3,18 +3,54 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useParams } from "next/navigation";
 import clsx from "clsx";
 import {
   Search,
-  Download,
   MoreVertical,
   Instagram,
   Check,
   Clock,
+  UserPlus,
+  X,
+  Send,
+  Mail,
+  Phone,
+  Users,
+  Loader2,
 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+
+/* ----------------------------- Fetch helpers ----------------------------- */
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  if (!res.ok) {
+    let msg = `Request failed (${res.status})`;
+    try {
+      const j = (await res.json()) as any;
+      msg = j?.error || j?.message || msg;
+    } catch {
+      // ignore
+    }
+    throw new Error(msg);
+  }
+
+  return (await res.json()) as T;
+}
+
+function getErrorMessage(e: unknown, fallback: string) {
+  return e instanceof Error ? e.message : fallback;
+}
 
 /* ----------------------------- Types ----------------------------- */
 type GuestsView = "guest" | "order";
@@ -41,44 +77,19 @@ type GuestRow = {
   referrer?: string;
   quantity?: number;
   dateTimeISO?: string; // includes date + time
+
+  // meta
+  source: "ticket" | "manual";
+  canRemove?: boolean;
 };
 
-const MOCK_GUESTS: GuestRow[] = [
-  {
-    id: "1",
-    orderNumber: "#1527",
-    fullName: "Jacob Antilety",
-    handle: "@jacobantilety",
-    igFollowers: 131,
-    gender: "Male",
-    age: 24,
-    phone: "+1 (305) 555-0188",
-    email: "jacob@demo.com",
-    amount: 0,
-    ticketType: "Free RSVP",
-    status: "pending_arrival",
-    referrer: "IG - @astrohospitality",
-    quantity: 2,
-    dateTimeISO: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    orderNumber: "#1528",
-    fullName: "Sam Yalvac",
-    handle: "@samyalvac",
-    igFollowers: 4820,
-    gender: "Female",
-    age: 28,
-    phone: "+1 (647) 555-0114",
-    email: "sam@demo.com",
-    amount: 45,
-    ticketType: "General Admission - Tier 1",
-    status: "checked_in",
-    referrer: "Promoter Link - Alex",
-    quantity: 1,
-    dateTimeISO: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
-  },
-];
+type AddCandidate = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  avatarUrl?: string;
+};
 
 /* ---------------------------- Helpers ---------------------------- */
 function clamp(n: number, min: number, max: number) {
@@ -138,6 +149,13 @@ function useFluidTabIndicator(
 }
 
 /* ----------------------------- UI bits --------------------------- */
+const ICON_BTN_40 = clsx(
+  "inline-flex h-10 w-10 items-center justify-center rounded-full",
+  "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
+  "opacity-90 hover:opacity-100",
+  "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+);
+
 function StatusPill({ status }: { status: GuestStatus }) {
   const map: Record<GuestStatus, string> = {
     checked_in:
@@ -183,8 +201,550 @@ function TicketPill({ label }: { label: string }) {
   );
 }
 
+/* ---------------------------- Add Guest Modal ---------------------------- */
+function AddGuestModal({
+  open,
+  onClose,
+  eventId,
+  onAdded,
+}: {
+  open: boolean;
+  onClose: () => void;
+  eventId: string;
+  onAdded: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  // ✅ store selected users so chips keep name/email even when results are empty
+  const [selectedUsers, setSelectedUsers] = useState<AddCandidate[]>([]);
+  const [sent, setSent] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string>("");
+
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastActiveElRef = useRef<HTMLElement | null>(null);
+
+  const hasQuery = query.trim().length > 0;
+
+  const selectedIds = useMemo(
+    () => selectedUsers.map((u) => u.id),
+    [selectedUsers],
+  );
+
+  const candidatesQ = useQuery({
+    queryKey: [
+      "event-guests-candidates",
+      eventId,
+      open,
+      hasQuery ? query.trim() : "",
+    ],
+    // ✅ no query -> no fetch (removes "Suggestions" feature)
+    enabled: open && Boolean(eventId) && hasQuery,
+    queryFn: async () => {
+      const q = query.trim();
+      const url = `/api/events/${eventId}/guests/candidates?q=${encodeURIComponent(q)}`;
+      return fetchJSON<AddCandidate[]>(url);
+    },
+  });
+
+  const candidates = candidatesQ.data ?? [];
+
+  useEffect(() => {
+    if (!open) return;
+
+    lastActiveElRef.current = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = "hidden";
+
+    const t = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(t);
+      document.body.style.overflow = "";
+      lastActiveElRef.current?.focus?.();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+
+      if (e.key === "Tab") {
+        const root = panelRef.current;
+        if (!root) return;
+        const focusable = Array.from(
+          root.querySelectorAll<HTMLElement>(
+            'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((el) => !el.hasAttribute("disabled") && !el.ariaDisabled);
+
+        if (!focusable.length) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        const active = document.activeElement as HTMLElement | null;
+
+        if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setSelectedUsers([]);
+      setSent(false);
+      setErrorMsg("");
+    }
+  }, [open]);
+
+  // ✅ results only when user is searching (no suggestions)
+  const results = useMemo(() => {
+    if (!hasQuery) return [];
+    const selectedSet = new Set(selectedIds);
+    return candidates.filter((c) => !selectedSet.has(c.id));
+  }, [candidates, selectedIds, hasQuery]);
+
+  const canSend = selectedUsers.length > 0;
+
+  function togglePick(c: AddCandidate) {
+    setSent(false);
+    setErrorMsg("");
+    setSelectedUsers((prev) => {
+      if (prev.some((x) => x.id === c.id)) return prev;
+      return [...prev, c];
+    });
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function removePick(id: string) {
+    setSent(false);
+    setErrorMsg("");
+    setSelectedUsers((prev) => prev.filter((x) => x.id !== id));
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  const addMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      return fetchJSON<{ ok: true }>(`/api/events/${eventId}/guests`, {
+        method: "POST",
+        body: JSON.stringify({ userIds }),
+      });
+    },
+    onSuccess: () => {
+      setSent(true);
+      setSelectedUsers([]);
+      setQuery("");
+      onAdded();
+    },
+    onError: (e: unknown) => {
+      setErrorMsg(getErrorMessage(e, "Failed to add guests."));
+    },
+  });
+
+  async function sendNow() {
+    if (!canSend || addMutation.isPending) return;
+    setErrorMsg("");
+
+    const ids = selectedUsers.map((s) => s.id);
+    if (!ids.length) return;
+
+    addMutation.mutate(ids);
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center px-3 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add guests"
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className={clsx(
+          "absolute inset-0",
+          "bg-black/60",
+          "backdrop-blur-[10px]",
+        )}
+      />
+
+      <div
+        ref={panelRef}
+        className={clsx(
+          "relative w-full max-w-[780px] overflow-hidden rounded-2xl",
+          "border border-white/10 bg-neutral-950/80",
+          "shadow-[0_30px_120px_rgba(0,0,0,0.75)]",
+        )}
+      >
+        <div
+          className="pointer-events-none absolute inset-0 opacity-100"
+          style={{
+            background:
+              "radial-gradient(1100px 520px at 18% -10%, rgba(154,70,255,0.20), transparent 60%), radial-gradient(900px 520px at 100% 20%, rgba(66,139,255,0.10), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+          }}
+        />
+
+        <div className="relative flex items-center justify-between p-5">
+          <div className="flex items-center gap-3">
+            <div
+              className={clsx(
+                "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20",
+              )}
+            >
+              <UserPlus className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-[16px] font-semibold tracking-[-0.2px] text-neutral-0">
+                Add Guests
+              </div>
+              <div className="mt-1 text-[12px] text-neutral-400">
+                Search by email, phone or name — pick multiple — add to this
+                event.
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className={ICON_BTN_40}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="relative px-5 pb-5 md:pb-6">
+          <div
+            className={clsx(
+              "rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5",
+              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+            )}
+          >
+            <div className="text-[12px] font-medium text-neutral-300">
+              Search by Email / Phone Number / Name
+            </div>
+
+            <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
+              <div
+                className={clsx(
+                  "min-h-[52px] w-full rounded-xl border border-white/10 bg-neutral-950/35 px-3 py-2",
+                  "focus-within:ring-2 focus-within:ring-primary-500/35",
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedUsers.map((u) => {
+                    const name = u.name ?? "Selected";
+                    const badge = initialsFromName(name);
+
+                    return (
+                      <span
+                        key={u.id}
+                        className={clsx(
+                          "inline-flex items-center gap-2 rounded-full",
+                          "border border-white/10 bg-white/5 px-1 py-1",
+                          "text-[12px] font-semibold text-neutral-100",
+                        )}
+                      >
+                        <span
+                          className={clsx(
+                            "inline-flex h-6 w-6 items-center justify-center rounded-full",
+                            "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/20",
+                            "text-[11px] font-extrabold",
+                          )}
+                        >
+                          {badge}
+                        </span>
+                        <span className="max-w-[180px] truncate">{name}</span>
+                        <button
+                          type="button"
+                          onClick={() => removePick(u.id)}
+                          aria-label={`Remove ${name}`}
+                          className={clsx(
+                            "inline-flex h-6 w-6 items-center justify-center rounded-full",
+                            "bg-white/0 text-neutral-300 hover:bg-white/10 hover:text-neutral-0",
+                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                          )}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    );
+                  })}
+
+                  <div
+                    className={clsx(
+                      "relative w-full",
+                      "min-w-[220px] flex-1",
+                      "rounded-lg border border-white/10 bg-white/5 h-10",
+                    )}
+                  >
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
+                    <input
+                      ref={inputRef}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Type email, phone, or name…"
+                      className={clsx(
+                        "h-10 w-full rounded-lg bg-transparent",
+                        "pl-10 pr-4 text-[12px] text-neutral-100",
+                        "placeholder:text-neutral-500",
+                        "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-2 text-[11px] text-neutral-500">
+                  Tip: select multiple guests, then add them in one go.
+                </div>
+              </div>
+
+              <div className="flex justify-stretch md:justify-end">
+                <button
+                  type="button"
+                  onClick={sendNow}
+                  disabled={!canSend || addMutation.isPending}
+                  className={clsx(
+                    "w-full md:w-auto",
+                    "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl px-5",
+                    "border border-white/10",
+                    canSend && !addMutation.isPending
+                      ? "bg-[linear-gradient(90deg,rgba(134,0,238,0.35),rgba(154,70,255,0.55),rgba(170,115,255,0.35))] text-neutral-0 shadow-[0_18px_54px_rgba(154,81,255,0.22)]"
+                      : "bg-white/5 text-neutral-400 opacity-70",
+                    "transition-[transform,filter,box-shadow] duration-200",
+                    canSend &&
+                      !addMutation.isPending &&
+                      "hover:filter hover:brightness-[1.06] active:scale-[0.99]",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                  )}
+                >
+                  <span className="text-[13px] font-semibold tracking-[-0.2px]">
+                    {addMutation.isPending ? "Adding…" : "Add Guests"}
+                  </span>
+                  {addMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {sent ? (
+              <div
+                className={clsx(
+                  "mt-3 rounded-xl border border-success-700/30 bg-success-900/25 px-3 py-2",
+                  "text-[12px] text-success-300",
+                )}
+              >
+                Guests added.
+              </div>
+            ) : null}
+
+            {errorMsg ? (
+              <div
+                className={clsx(
+                  "mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2",
+                  "text-[12px] text-red-200",
+                )}
+              >
+                {errorMsg}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+            <div
+              className={clsx(
+                "flex items-center justify-between px-4 py-3 md:px-5",
+                "border-b border-white/10",
+              )}
+            >
+              <div className="text-[13px] font-semibold text-neutral-200">
+                Results
+              </div>
+              <div className="text-[11px] text-neutral-500">
+                {hasQuery
+                  ? `${results.length} result${results.length === 1 ? "" : "s"}`
+                  : "Type to search"}
+              </div>
+            </div>
+
+            <div className="max-h-[340px] overflow-auto p-2 no-scrollbar md:max-h-[420px]">
+              {!hasQuery ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                  <div
+                    className={clsx(
+                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                    )}
+                  >
+                    <Search className="h-5 w-5" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-100">
+                    Start typing to search
+                  </div>
+                  <div className="text-[12px] text-neutral-500">
+                    Enter an email, phone, or name to see results.
+                  </div>
+                </div>
+              ) : candidatesQ.isLoading ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                  <div
+                    className={clsx(
+                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                    )}
+                  >
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-100">
+                    Loading…
+                  </div>
+                  <div className="text-[12px] text-neutral-500">
+                    Searching users directory.
+                  </div>
+                </div>
+              ) : results.length ? (
+                <div className="space-y-2">
+                  {results.map((c) => {
+                    const badge = initialsFromName(c.name);
+
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => togglePick(c)}
+                        className={clsx(
+                          "w-full text-left",
+                          "flex items-center gap-3 rounded-2xl px-3 py-3",
+                          "border border-white/10 bg-neutral-950/25 hover:bg-neutral-900/35",
+                          "transition-colors",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                        )}
+                      >
+                        <div className="relative">
+                          <div className="h-11 w-11 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
+                            {c.avatarUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={c.avatarUrl}
+                                alt={c.name}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+                                {badge}
+                              </div>
+                            )}
+                          </div>
+                          <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
+                            {badge}
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-semibold text-neutral-0">
+                            {c.name}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-neutral-400">
+                            <span className="inline-flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-primary-300" />
+                              <span className="truncate">{c.email}</span>
+                            </span>
+                            {c.phone ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Phone className="h-4 w-4 text-primary-300" />
+                                <span className="truncate">{c.phone}</span>
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <span
+                          className={clsx(
+                            "inline-flex h-10 items-center justify-center rounded-xl px-3",
+                            "border border-white/10 bg-white/5 text-[12px] font-semibold",
+                            "text-neutral-100 hover:border-primary-500/40",
+                          )}
+                        >
+                          Add
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+                  <div
+                    className={clsx(
+                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
+                    )}
+                  >
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-neutral-100">
+                    No matches found
+                  </div>
+                  <div className="text-[12px] text-neutral-500">
+                    Try searching by email, phone, or name.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className={clsx(
+                "inline-flex h-10 items-center justify-center rounded-xl px-4",
+                "border border-white/10 bg-white/5 text-[12px] font-semibold text-neutral-200",
+                "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+              )}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ----------------------- Actions menu (3 dots) --------------------- */
-function GuestActionsMenu({ guest }: { guest: GuestRow }) {
+function GuestActionsMenu({
+  guest,
+  onMarkCheckedIn,
+  onMarkPending,
+  onRemove,
+}: {
+  guest: GuestRow;
+  onMarkCheckedIn: () => void;
+  onMarkPending: () => void;
+  onRemove: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -267,14 +827,7 @@ function GuestActionsMenu({ guest }: { guest: GuestRow }) {
     };
   }, [open]);
 
-  const action = (name: string) => {
-    // eslint-disable-next-line no-console
-    console.log(`[Guests] ${name}`, {
-      guestId: guest.id,
-      order: guest.orderNumber,
-    });
-    setOpen(false);
-  };
+  const canRemove = Boolean(guest.canRemove);
 
   return (
     <div className="relative">
@@ -284,13 +837,7 @@ function GuestActionsMenu({ guest }: { guest: GuestRow }) {
         aria-label="Edit guest"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={clsx(
-          "inline-flex h-9 w-9 items-center justify-center rounded-full",
-          "bg-white/5 text-neutral-200 hover:bg-white/10",
-          "border border-white/10",
-          "opacity-90 hover:opacity-100",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-        )}
+        className={ICON_BTN_40}
       >
         <MoreVertical className="h-4 w-4" />
       </button>
@@ -308,57 +855,84 @@ function GuestActionsMenu({ guest }: { guest: GuestRow }) {
             >
               <div className="px-3 py-2.5 border-b border-white/10">
                 <div className="text-[12px] font-semibold text-neutral-200">
-                  Edit
+                  Guest Actions
                 </div>
                 <div className="mt-0.5 text-[11px] text-neutral-500">
                   Order{" "}
                   <span className="text-neutral-300 font-semibold">
                     {guest.orderNumber}
+                  </span>{" "}
+                  •{" "}
+                  <span className="text-neutral-300 font-semibold">
+                    {guest.source === "ticket" ? "Ticket Buyer" : "Manual"}
                   </span>
                 </div>
               </div>
 
               <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
                 <div className="p-2 space-y-1">
-                  {[
-                    { label: "Approve", tone: "neutral" },
-                    { label: "Decline", tone: "neutral" },
-                    { label: "Suspend", tone: "neutral" },
-                    { label: "Refund", tone: "warn" },
-                  ].map((it) => (
+                  {guest.status !== "checked_in" ? (
                     <button
-                      key={it.label}
                       type="button"
-                      onClick={() => action(it.label)}
+                      onClick={() => {
+                        onMarkCheckedIn();
+                        setOpen(false);
+                      }}
                       className={clsx(
                         "w-full px-2.5 py-2 rounded-lg text-left",
                         "flex items-center gap-2",
-                        "border border-white/10",
-                        it.tone === "warn"
-                          ? "bg-warning-500/10 text-warning-200 hover:bg-warning-500/14"
-                          : "bg-white/5 text-neutral-200 hover:bg-white/10",
+                        "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                       )}
                     >
                       <span className="text-[12px] font-semibold">
-                        {it.label}
+                        Mark Checked-In
                       </span>
                     </button>
-                  ))}
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onMarkPending();
+                        setOpen(false);
+                      }}
+                      className={clsx(
+                        "w-full px-2.5 py-2 rounded-lg text-left",
+                        "flex items-center gap-2",
+                        "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
+                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                      )}
+                    >
+                      <span className="text-[12px] font-semibold">
+                        Mark Pending Arrival
+                      </span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="border-t border-white/10">
                   <button
                     type="button"
-                    onClick={() => action("Remove")}
+                    onClick={() => {
+                      if (!canRemove) return;
+                      onRemove();
+                      setOpen(false);
+                    }}
+                    disabled={!canRemove}
                     className={clsx(
                       "w-full px-3 py-2.5 text-left",
                       "flex items-center gap-2",
                       "text-[12px] font-semibold",
-                      "text-red-300 hover:text-red-200",
-                      "hover:bg-red-500/10",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
+                      canRemove
+                        ? "text-red-300 hover:text-red-200 hover:bg-red-500/10 cursor-pointer"
+                        : "text-neutral-500 cursor-not-allowed",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                     )}
+                    title={
+                      canRemove
+                        ? "Remove manual guest"
+                        : "Ticket buyers can't be removed here"
+                    }
                   >
                     Remove
                   </button>
@@ -445,44 +1019,75 @@ function Pagination({
 
 /* ------------------------------ Page ------------------------------ */
 export default function GuestsPage() {
+  const params = useParams<{ eventId: string }>();
+  const eventId = params?.eventId;
+
+  const qc = useQueryClient();
+
   const [view, setView] = useState<GuestsView>("guest");
   const [query, setQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const tabBarRef = useRef<HTMLDivElement | null>(null);
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   useFluidTabIndicator(tabBarRef, indicatorRef, view);
 
+  const guestsQ = useQuery({
+    queryKey: ["event-guests", eventId],
+    enabled: Boolean(eventId),
+    queryFn: async () => {
+      return fetchJSON<GuestRow[]>(`/api/events/${eventId}/guests`);
+    },
+  });
+
+  const guests = guestsQ.data ?? [];
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async (p: { guestId: string; status: GuestStatus }) => {
+      return fetchJSON<{ ok: true }>(
+        `/api/events/${eventId}/guests/${p.guestId}`,
+        { method: "PATCH", body: JSON.stringify({ status: p.status }) },
+      );
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["event-guests", eventId] });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async (guestId: string) => {
+      return fetchJSON<{ ok: true }>(
+        `/api/events/${eventId}/guests/${guestId}`,
+        {
+          method: "DELETE",
+        },
+      );
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["event-guests", eventId] });
+    },
+  });
+
   /* ------------------------------------------------------------------
      ✅ Real responsive table (NO horizontal scroll)
-     Strategy:
-     - md shows essential columns only
-     - lg reveals more
-     - xl reveals all
-     - all flexible tracks use minmax(0, ...) so they can shrink and truncate
   ------------------------------------------------------------------ */
   const GRID_GUEST =
     "md:grid md:items-center md:gap-4 " +
-    // md: Order | Name | Amount | Ticket | Status | Edit
-    "md:[grid-template-columns:88px_minmax(0,2.6fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_64px] " +
-    // lg: + Gender | Age (Contact still hidden)
-    "lg:[grid-template-columns:88px_minmax(0,2.4fr)_88px_60px_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_64px] " +
-    // xl: + Contact (full)
-    "xl:[grid-template-columns:88px_minmax(0,2.2fr)_88px_60px_minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_64px]";
+    "md:[grid-template-columns:88px_minmax(0,2.6fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_72px] " +
+    "lg:[grid-template-columns:88px_minmax(0,2.4fr)_88px_60px_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_72px] " +
+    "xl:[grid-template-columns:88px_minmax(0,2.2fr)_88px_60px_minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_72px]";
 
   const GRID_ORDER =
     "md:grid md:items-center md:gap-4 " +
-    // md: Order | Name | Amount | Date | Status | Edit
-    "md:[grid-template-columns:88px_minmax(0,2.7fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_64px] " +
-    // lg: + Referrer | Qty (Gender still hidden)
-    "lg:[grid-template-columns:88px_minmax(0,2.2fr)_minmax(0,1.8fr)_80px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_64px] " +
-    // xl: + Gender (full)
-    "xl:[grid-template-columns:88px_minmax(0,2.0fr)_88px_minmax(0,1.8fr)_80px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_64px]";
+    "md:[grid-template-columns:88px_minmax(0,2.7fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_72px] " +
+    "lg:[grid-template-columns:88px_minmax(0,2.2fr)_minmax(0,1.8fr)_80px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_72px] " +
+    "xl:[grid-template-columns:88px_minmax(0,2.0fr)_88px_minmax(0,1.8fr)_80px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_72px]";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return MOCK_GUESTS;
+    if (!q) return guests;
 
-    return MOCK_GUESTS.filter((g) => {
+    return guests.filter((g) => {
       const hay = [
         g.orderNumber,
         g.fullName,
@@ -496,7 +1101,7 @@ export default function GuestsPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [query]);
+  }, [query, guests]);
 
   /* --------------------------- Pagination --------------------------- */
   const [page, setPage] = useState(1);
@@ -526,10 +1131,19 @@ export default function GuestsPage() {
     return `Showing ${start}-${end} from ${total} data`;
   }, [total, pageSafe]);
 
-  const isLoading = false;
+  const isLoading = guestsQ.isLoading;
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0 px-4 md:px-6 lg:px-8">
+      <AddGuestModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        eventId={eventId}
+        onAdded={() => {
+          qc.invalidateQueries({ queryKey: ["event-guests", eventId] });
+        }}
+      />
+
       <section className="pb-16">
         <section
           className={clsx(
@@ -579,14 +1193,12 @@ export default function GuestsPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
-                    variant="secondary"
-                    icon={<Download className="h-4 w-4" />}
-                    onClick={() => {
-                      // eslint-disable-next-line no-console
-                      console.log("[Guests] Export CSV");
-                    }}
+                    variant="primary"
+                    icon={<UserPlus className="h-4 w-4" />}
+                    onClick={() => setAddOpen(true)}
+                    animation
                   >
-                    Export CSV
+                    Add Guest
                   </Button>
                 </div>
               </div>
@@ -652,7 +1264,6 @@ export default function GuestsPage() {
                 <div>Order</div>
                 <div>Name</div>
 
-                {/* Guest-only columns (progressive) */}
                 {view === "guest" ? (
                   <>
                     <div className="hidden lg:block">Gender</div>
@@ -797,7 +1408,22 @@ export default function GuestsPage() {
 
                                 {/* Edit */}
                                 <div className="flex justify-end">
-                                  <GuestActionsMenu guest={g} />
+                                  <GuestActionsMenu
+                                    guest={g}
+                                    onMarkCheckedIn={() =>
+                                      updateStatusMutation.mutate({
+                                        guestId: g.id,
+                                        status: "checked_in",
+                                      })
+                                    }
+                                    onMarkPending={() =>
+                                      updateStatusMutation.mutate({
+                                        guestId: g.id,
+                                        status: "pending_arrival",
+                                      })
+                                    }
+                                    onRemove={() => removeMutation.mutate(g.id)}
+                                  />
                                 </div>
                               </>
                             ) : (
@@ -846,14 +1472,29 @@ export default function GuestsPage() {
 
                                 {/* Edit */}
                                 <div className="flex justify-end">
-                                  <GuestActionsMenu guest={g} />
+                                  <GuestActionsMenu
+                                    guest={g}
+                                    onMarkCheckedIn={() =>
+                                      updateStatusMutation.mutate({
+                                        guestId: g.id,
+                                        status: "checked_in",
+                                      })
+                                    }
+                                    onMarkPending={() =>
+                                      updateStatusMutation.mutate({
+                                        guestId: g.id,
+                                        status: "pending_arrival",
+                                      })
+                                    }
+                                    onRemove={() => removeMutation.mutate(g.id)}
+                                  />
                                 </div>
                               </>
                             )}
                           </div>
                         </div>
 
-                        {/* Mobile stacked (unchanged) */}
+                        {/* Mobile stacked */}
                         <div className="md:hidden">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-3">
@@ -887,7 +1528,22 @@ export default function GuestsPage() {
 
                             <div className="flex items-center gap-2">
                               <StatusPill status={g.status} />
-                              <GuestActionsMenu guest={g} />
+                              <GuestActionsMenu
+                                guest={g}
+                                onMarkCheckedIn={() =>
+                                  updateStatusMutation.mutate({
+                                    guestId: g.id,
+                                    status: "checked_in",
+                                  })
+                                }
+                                onMarkPending={() =>
+                                  updateStatusMutation.mutate({
+                                    guestId: g.id,
+                                    status: "pending_arrival",
+                                  })
+                                }
+                                onRemove={() => removeMutation.mutate(g.id)}
+                              />
                             </div>
                           </div>
 

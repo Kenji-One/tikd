@@ -18,6 +18,7 @@ import {
   UsersRound,
   PencilLine,
   Settings,
+  Link as LinkIcon,
 } from "lucide-react";
 
 type OrgShellProps = {
@@ -38,7 +39,14 @@ type OrgShellProps = {
   };
 };
 
-type OrgTabId = "summary" | "events" | "members" | "edit" | "settings";
+type OrgTabId =
+  | "summary"
+  | "events"
+  | "tracking-links"
+  | "members"
+  | "edit"
+  | "settings";
+
 type OrgTabIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
 type OrgTab = {
@@ -84,6 +92,14 @@ export default function OrgDashboardShell({
         href: (b) => `${b}/events`,
         matchSegments: ["events"],
       },
+      {
+        id: "tracking-links",
+        label: "Tracking Links",
+        Icon: LinkIcon,
+        href: (b) => `${b}/tracking-links`,
+        matchSegments: ["tracking-links"],
+      },
+
       {
         // NOTE: existing routes in your org dashboard used `team`
         id: "members",

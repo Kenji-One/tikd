@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { Instagram } from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
+import { Button } from "@/components/ui/Button";
 
 /* ------------------------------ Types ------------------------------ */
 type Sale = {
@@ -608,13 +609,16 @@ export default function RecentSalesTable() {
       </div>
 
       {/* Bottom center pill */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-        <button
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center z-10">
+        <Button
           type="button"
-          className="pointer-events-auto cursor-pointer rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white disabled:cursor-not-allowed disabled:opacity-50"
+          // onClick={onDetailedView}
+          onClick={() => {}}
+          variant="viewAction"
+          size="sm"
         >
           View All
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -441,9 +441,9 @@ export default function TeamSummaryClient({ teamId }: { teamId: string }) {
   const genderSegments = useMemo(() => {
     const [male, female, other] = splitByPercent(breakdownTotal, [66, 23, 11]);
     return [
-      { label: "Male", value: male, color: "#9A46FF" },
-      { label: "Female", value: female, color: "#FF7A45" },
-      { label: "Other", value: other, color: "#45FF79" },
+      { label: "Male", value: male, color: "#3B82F6" }, // Blue
+      { label: "Female", value: female, color: "#EC4899" }, // Pink
+      { label: "Other", value: other, color: "#9CA3AF" }, // Gray
     ];
   }, [breakdownTotal]);
 

@@ -1,11 +1,9 @@
-/* ------------------------------------------------------------------ */
-/*  src/components/dashboard/cards/KpiCard.tsx                        */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import type { PropsWithChildren, ReactNode } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import { Button } from "@/components/ui/Button";
 
 type Props = PropsWithChildren<{
   title: string;
@@ -90,29 +88,32 @@ export default function KpiCard({
   const FooterAction = () => {
     if (hideDetails) return null;
 
-    const cls =
-      "pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white transition duration-200 hover:border-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50";
-
+    // Reusable + consistent everywhere
     if (detailsHref) {
       return (
-        <Link href={detailsHref} className={cls}>
-          {detailsLabel}
-        </Link>
+        <Button asChild variant="viewAction" size="sm">
+          <Link href={detailsHref}>{detailsLabel}</Link>
+        </Button>
       );
     }
 
     if (onDetailedView) {
       return (
-        <button type="button" onClick={onDetailedView} className={cls}>
+        <Button
+          type="button"
+          onClick={onDetailedView}
+          variant="viewAction"
+          size="sm"
+        >
           {detailsLabel}
-        </button>
+        </Button>
       );
     }
 
     return (
-      <button type="button" className={clsx(cls, "opacity-60")} disabled>
+      <Button type="button" variant="viewAction" size="sm" disabled>
         {detailsLabel}
-      </button>
+      </Button>
     );
   };
 
@@ -145,7 +146,7 @@ export default function KpiCard({
                     className={clsx(
                       "flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[12px] font-semibold leading-none",
                       "border",
-                      deltaColor
+                      deltaColor,
                     )}
                     aria-label={`Change ${deltaText}${
                       isNegative ? " decrease" : " increase"

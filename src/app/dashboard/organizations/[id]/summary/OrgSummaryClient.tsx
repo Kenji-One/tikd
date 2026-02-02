@@ -1,3 +1,4 @@
+// src/app/dashboard/organizations/[id]/summary/OrgSummaryClient.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -443,9 +444,9 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
   const genderSegments = useMemo(() => {
     const [male, female, other] = splitByPercent(breakdownTotal, [66, 23, 11]);
     return [
-      { label: "Male", value: male, color: "#9A46FF" },
-      { label: "Female", value: female, color: "#FF7A45" },
-      { label: "Other", value: other, color: "#45FF79" },
+      { label: "Male", value: male, color: "#3B82F6" }, // Blue
+      { label: "Female", value: female, color: "#EC4899" }, // Pink
+      { label: "Other", value: other, color: "#9CA3AF" }, // Gray
     ];
   }, [breakdownTotal]);
 
@@ -587,8 +588,12 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         />
       </section>
 
-      {/* BOTTOM: tracking links (same as Event summary) */}
-      <TrackingLinksTable />
+      {/* ✅ Scoped to this org (includes its events) */}
+      <TrackingLinksTable
+        scope="organization"
+        organizationId={orgId}
+        showViewAll
+      />
     </div>
   );
 }

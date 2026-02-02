@@ -27,6 +27,8 @@ import {
   ContactRound,
 } from "lucide-react";
 
+import FeedbackBugModal from "@/components/ui/FeedbackBugModal";
+
 /* ------------------------------- Icons ----------------------------- */
 /**
  * NOTE:
@@ -205,165 +207,6 @@ function ReportBugIcon({ className }: IconProps): ReactElement {
     </svg>
   );
 }
-function OrgHomeIcon({ className }: IconProps): ReactElement {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <path
-        d="M10 13H3C2.73478 13 2.48043 13.1054 2.29289 13.2929C2.10536 13.4804 2 13.7348 2 14V21C2 21.2652 2.10536 21.5196 2.29289 21.7071C2.48043 21.8946 2.73478 22 3 22H10C10.2652 22 10.5196 21.8946 10.7071 21.7071C10.8946 21.5196 11 21.2652 11 21V14C11 13.7348 10.8946 13.4804 10.7071 13.2929C10.5196 13.1054 10.2652 13 10 13ZM9 20H4V15H9V20ZM21 2H14C13.7348 2 13.4804 2.10536 13.2929 2.29289C13.1054 2.48043 13 2.73478 13 3V10C13 10.2652 13.1054 10.5196 13.2929 10.7071C13.4804 10.8946 13.7348 11 14 11H21C21.2652 11 21.5196 10.8946 21.7071 10.7071C21.8946 10.5196 22 10.2652 22 10V3C22 2.73478 21.8946 2.48043 21.7071 2.29289C21.5196 2.10536 21.2652 2 21 2ZM20 9H15V4H20V9ZM21 13H14C13.7348 13 13.4804 13.1054 13.2929 13.2929C13.1054 13.4804 13 13.7348 13 14V21C13 21.2652 13.1054 21.5196 13.2929 21.7071C13.4804 21.8946 13.7348 22 14 22H21C21.2652 22 21.5196 21.8946 21.7071 21.7071C21.8946 21.5196 22 21.2652 22 21V14C22 13.7348 21.8946 13.4804 21.7071 13.2929C21.5196 13.1054 21.2652 13 21 13ZM20 20H15V15H20V20ZM10 2H3C2.73478 2 2.48043 2.10536 2.29289 2.29289C2.10536 2.48043 2 2.73478 2 3V10C2 10.2652 2.10536 10.5196 2.29289 10.7071C2.48043 10.8946 2.73478 11 3 11H10C10.2652 11 10.5196 10.8946 10.7071 10.7071C10.8946 10.5196 11 10.2652 11 10V3C11 2.73478 10.8946 2.48043 10.7071 2.29289C10.5196 2.10536 10.2652 2 10 2ZM9 9H4V4H9V9Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-function OrgEventsIcon({ className }: IconProps): ReactElement {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <path
-        d="M9 10C8.73478 10 8.48043 10.1054 8.29289 10.2929C8.10536 10.4804 8 10.7348 8 11V13C8 13.2652 8.10536 13.5196 8.29289 13.7071C8.48043 13.8946 8.73478 14 9 14C9.26522 14 9.51957 13.8946 9.70711 13.7071C9.89464 13.5196 10 13.2652 10 13V11C10 10.7348 9.89464 10.4804 9.70711 10.2929C9.51957 10.1054 9.26522 10 9 10ZM21 11C21.2652 11 21.5196 10.8946 21.7071 10.7071C21.8946 10.5196 22 10.2652 22 10V6C22 5.73478 21.8946 5.48043 21.7071 5.29289C21.5196 5.10536 21.2652 5 21 5H3C2.73478 5 2.48043 5.10536 2.29289 5.29289C2.10536 5.48043 2 5.73478 2 6V10C2 10.2652 2.10536 10.5196 2.29289 10.7071C2.48043 10.8946 2.73478 11 3 11C3.26522 11 3.51957 11.1054 3.70711 11.2929C3.89464 11.4804 4 11.7348 4 12C4 12.2652 3.89464 12.5196 3.70711 12.7071C3.51957 12.8946 3.26522 13 3 13C2.73478 13 2.48043 13.1054 2.29289 13.2929C2.10536 13.4804 2 13.7348 2 14V18C2 18.2652 2.10536 18.5196 2.29289 18.7071C2.48043 18.8946 2.73478 19 3 19H21C21.2652 19 21.5196 18.8946 21.7071 18.7071C21.8946 18.5196 22 18.2652 22 18V14C22 13.7348 21.8946 13.4804 21.7071 13.2929C21.5196 13.1054 21.2652 13 21 13C20.7348 13 20.4804 12.8946 20.2929 12.7071C20.1054 12.5196 20 12.2652 20 12C20 11.7348 20.1054 11.4804 20.2929 11.2929C20.4804 11.1054 20.7348 11 21 11ZM20 9.18C19.4208 9.3902 18.9205 9.77363 18.5668 10.2782C18.2132 10.7827 18.0235 11.3839 18.0235 12C18.0235 12.6161 18.2132 13.2173 18.5668 13.7218C18.9205 14.2264 19.4208 14.6098 20 14.82V17H10C10 16.7348 9.89464 16.4804 9.70711 16.2929C9.51957 16.1054 9.26522 16 9 16C8.73478 16 8.48043 16.1054 8.29289 16.2929C8.10536 16.4804 8 16.7348 8 17H4V14.82C4.57915 14.6098 5.07954 14.2264 5.43316 13.7218C5.78678 13.2173 5.97648 12.6161 5.97648 12C5.97648 11.3839 5.78678 10.7827 5.43316 10.2782C5.07954 9.77363 4.57915 9.3902 4 9.18V7H8C8 7.26522 8.10536 7.51957 8.29289 7.70711C8.48043 7.89464 8.73478 8 9 8C9.26522 8 9.51957 7.89464 9.70711 7.70711C9.89464 7.51957 10 7.26522 10 7H20V9.18Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-function OrgEditIcon({ className }: IconProps): ReactElement {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <path
-        d="M22 7.24002C22.0008 7.10841 21.9756 6.97795 21.9258 6.85611C21.876 6.73427 21.8027 6.62346 21.71 6.53002L17.47 2.29002C17.3766 2.19734 17.2658 2.12401 17.1439 2.07425C17.0221 2.02448 16.8916 1.99926 16.76 2.00002C16.6284 1.99926 16.4979 2.02448 16.3761 2.07425C16.2543 2.12401 16.1435 2.19734 16.05 2.29002L13.22 5.12002L2.29002 16.05C2.19734 16.1435 2.12401 16.2543 2.07425 16.3761C2.02448 16.4979 1.99926 16.6284 2.00002 16.76V21C2.00002 21.2652 2.10537 21.5196 2.29291 21.7071C2.48045 21.8947 2.7348 22 3.00002 22H7.24002C7.37994 22.0076 7.51991 21.9857 7.65084 21.9358C7.78176 21.8858 7.90073 21.8089 8.00002 21.71L18.87 10.78L21.71 8.00002C21.8013 7.9031 21.8757 7.79155 21.93 7.67002C21.9397 7.59031 21.9397 7.50973 21.93 7.43002C21.9347 7.38347 21.9347 7.33657 21.93 7.29002L22 7.24002ZM6.83002 20H4.00002V17.17L13.93 7.24002L16.76 10.07L6.83002 20ZM18.17 8.66002L15.34 5.83002L16.76 4.42002L19.58 7.24002L18.17 8.66002Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-function OrgTeamIcon({ className }: IconProps): ReactElement {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <path
-        d="M12.3 12.22C12.8336 11.7581 13.2616 11.1869 13.5549 10.545C13.8482 9.90316 14 9.20571 14 8.5C14 7.17392 13.4732 5.90215 12.5355 4.96447C11.5979 4.02678 10.3261 3.5 9 3.5C7.67392 3.5 6.40215 4.02678 5.46447 4.96447C4.52678 5.90215 4 7.17392 4 8.5C3.99999 9.20571 4.1518 9.90316 4.44513 10.545C4.73845 11.1869 5.16642 11.7581 5.7 12.22C4.30014 12.8539 3.11247 13.8775 2.27898 15.1685C1.4455 16.4596 1.00147 17.9633 1 19.5C1 19.7652 1.10536 20.0196 1.29289 20.2071C1.48043 20.3946 1.73478 20.5 2 20.5C2.26522 20.5 2.51957 20.3946 2.70711 20.2071C2.89464 20.0196 3 19.7652 3 19.5C3 17.9087 3.63214 16.3826 4.75736 15.2574C5.88258 14.1321 7.4087 13.5 9 13.5C10.5913 13.5 12.1174 14.1321 13.2426 15.2574C14.3679 16.3826 15 17.9087 15 19.5C15 19.7652 15.1054 20.0196 15.2929 20.2071C15.4804 20.3946 15.7348 20.5 16 20.5C16.2652 20.5 16.5196 20.3946 16.7071 20.2071C16.8946 20.0196 17 19.7652 17 19.5C16.9985 17.9633 16.5545 16.4596 15.721 15.1685C14.8875 13.8775 13.6999 12.8539 12.3 12.22ZM9 11.5C8.40666 11.5 7.82664 11.3241 7.33329 10.9944C6.83994 10.6648 6.45542 10.1962 6.22836 9.64805C6.0013 9.09987 5.94189 8.49667 6.05764 7.91473C6.1734 7.33279 6.45912 6.79824 6.87868 6.37868C7.29824 5.95912 7.83279 5.6734 8.41473 5.55764C8.99667 5.44189 9.59987 5.5013 10.1481 5.72836C10.6962 5.95542 11.1648 6.33994 11.4944 6.83329C11.8241 7.32664 12 7.90666 12 8.5C12 9.29565 11.6839 10.0587 11.1213 10.6213C10.5587 11.1839 9.79565 11.5 9 11.5ZM18.74 11.82C19.38 11.0993 19.798 10.2091 19.9438 9.25634C20.0896 8.30362 19.9569 7.32907 19.5618 6.45C19.1666 5.57093 18.5258 4.8248 17.7165 4.30142C16.9071 3.77805 15.9638 3.49974 15 3.5C14.7348 3.5 14.4804 3.60536 14.2929 3.79289C14.1054 3.98043 14 4.23478 14 4.5C14 4.76522 14.1054 5.01957 14.2929 5.20711C14.4804 5.39464 14.7348 5.5 15 5.5C15.7956 5.5 16.5587 5.81607 17.1213 6.37868C17.6839 6.94129 18 7.70435 18 8.5C17.9986 9.02524 17.8593 9.5409 17.5961 9.99542C17.3328 10.4499 16.9549 10.8274 16.5 11.09C16.3517 11.1755 16.2279 11.2977 16.1404 11.4447C16.0528 11.5918 16.0045 11.7589 16 11.93C15.9958 12.0998 16.0349 12.2678 16.1137 12.4183C16.1924 12.5687 16.3081 12.6967 16.45 12.79L16.84 13.05L16.97 13.12C18.1754 13.6917 19.1923 14.596 19.901 15.7263C20.6096 16.8566 20.9805 18.1659 20.97 19.5C20.97 19.7652 21.0754 20.0196 21.2629 20.2071C21.4504 20.3946 21.7048 20.5 21.97 20.5C22.2352 20.5 22.4896 20.3946 22.6771 20.2071C22.8646 20.0196 22.97 19.7652 22.97 19.5C22.9782 17.9654 22.5938 16.4543 21.8535 15.1101C21.1131 13.7659 20.0413 12.6333 18.74 11.82Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-function OrgFinanceIcon({ className }: IconProps): ReactElement {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      className={className}
-    >
-      <path
-        d="M9.00001 12.0001H7.00001C6.73479 12.0001 6.48044 12.1054 6.2929 12.293C6.10537 12.4805 6.00001 12.7349 6.00001 13.0001C6.00001 13.2653 6.10537 13.5196 6.2929 13.7072C6.48044 13.8947 6.73479 14.0001 7.00001 14.0001H9.00001C9.26522 14.0001 9.51958 13.8947 9.70711 13.7072C9.89465 13.5196 10 13.2653 10 13.0001C10 12.7349 9.89465 12.4805 9.70711 12.293C9.51958 12.1054 9.26522 12.0001 9.00001 12.0001ZM8.00001 10.0001H12C12.2652 10.0001 12.5196 9.89471 12.7071 9.70717C12.8947 9.51964 13 9.26528 13 9.00007C13 8.73485 12.8947 8.4805 12.7071 8.29296C12.5196 8.10543 12.2652 8.00007 12 8.00007H8.00001C7.73479 8.00007 7.48044 8.10543 7.2929 8.29296C7.10537 8.4805 7.00001 8.73485 7.00001 9.00007C7.00001 9.26528 7.10537 9.51964 7.2929 9.70717C7.48044 9.89471 7.73479 10.0001 8.00001 10.0001ZM9.00001 16.0001H7.00001C6.73479 16.0001 6.48044 16.1054 6.2929 16.293C6.10537 16.4805 6.00001 16.7349 6.00001 17.0001C6.00001 17.2653 6.10537 17.5196 6.2929 17.7072C6.48044 17.8947 6.73479 18.0001 7.00001 18.0001H9.00001C9.26522 18.0001 9.51958 17.8947 9.70711 17.7072C9.89465 17.5196 10 17.2653 10 17.0001C10 16.7349 9.89465 16.4805 9.70711 16.293C9.51958 16.1054 9.26522 16.0001 9.00001 16.0001ZM21 12.0001H18V3.00007C18.0007 2.82386 17.9548 2.65059 17.867 2.49781C17.7792 2.34504 17.6526 2.21817 17.5 2.13007C17.348 2.0423 17.1755 1.99609 17 1.99609C16.8245 1.99609 16.652 2.0423 16.5 2.13007L13.5 3.85007L10.5 2.13007C10.348 2.0423 10.1755 1.99609 10 1.99609C9.82447 1.99609 9.65203 2.0423 9.50001 2.13007L6.50001 3.85007L3.50001 2.13007C3.34799 2.0423 3.17554 1.99609 3.00001 1.99609C2.82447 1.99609 2.65203 2.0423 2.50001 2.13007C2.3474 2.21817 2.22079 2.34504 2.13299 2.49781C2.04518 2.65059 1.99931 2.82386 2.00001 3.00007V19.0001C2.00001 19.7957 2.31608 20.5588 2.87869 21.1214C3.4413 21.684 4.20436 22.0001 5.00001 22.0001H19C19.7957 22.0001 20.5587 21.684 21.1213 21.1214C21.6839 20.5588 22 19.7957 22 19.0001V13.0001C22 12.7349 21.8947 12.4805 21.7071 12.293C21.5196 12.1054 21.2652 12.0001 21 12.0001ZM5.00001 20.0001C4.73479 20.0001 4.48044 19.8947 4.2929 19.7072C4.10536 19.5196 4.00001 19.2653 4.00001 19.0001V4.73007L6.00001 5.87007C6.15435 5.95068 6.32589 5.99278 6.50001 5.99278C6.67413 5.99278 6.84567 5.95068 7.00001 5.87007L10 4.15007L13 5.87007C13.1543 5.95068 13.3259 5.99278 13.5 5.99278C13.6741 5.99278 13.8457 5.95068 14 5.87007L16 4.73007V19.0001C16.0027 19.3412 16.0636 19.6794 16.18 20.0001H5.00001ZM20 19.0001C20 19.2653 19.8947 19.5196 19.7071 19.7072C19.5196 19.8947 19.2652 20.0001 19 20.0001C18.7348 20.0001 18.4804 19.8947 18.2929 19.7072C18.1054 19.5196 18 19.2653 18 19.0001V14.0001H20V19.0001ZM13.56 16.1701C13.5043 16.1322 13.4437 16.102 13.38 16.0801C13.3205 16.0496 13.2562 16.0293 13.19 16.0201C13.0294 15.9879 12.8633 15.9957 12.7063 16.0428C12.5494 16.0899 12.4064 16.1748 12.29 16.2901C12.1073 16.4817 12.0037 16.7353 12 17.0001C11.9984 17.1301 12.0222 17.2592 12.07 17.3801C12.1244 17.5016 12.1987 17.6131 12.29 17.7101C12.3872 17.7984 12.4988 17.8694 12.62 17.9201C12.7397 17.973 12.8691 18.0003 13 18.0003C13.1309 18.0003 13.2603 17.973 13.38 17.9201C13.5012 17.8694 13.6128 17.7984 13.71 17.7101C13.8027 17.6166 13.876 17.5058 13.9258 17.384C13.9755 17.2621 14.0008 17.1317 14 17.0001C13.9963 16.7353 13.8927 16.4817 13.71 16.2901C13.6625 16.2471 13.6124 16.207 13.56 16.1701ZM13.7 12.2901C13.5832 12.1764 13.4404 12.0929 13.2841 12.047C13.1277 12.0011 12.9624 11.9941 12.8027 12.0266C12.643 12.0591 12.4937 12.1302 12.3677 12.2337C12.2418 12.3371 12.143 12.4697 12.08 12.6201C12.0178 12.7716 11.9937 12.936 12.0099 13.099C12.0261 13.262 12.0821 13.4185 12.1729 13.5548C12.2638 13.6911 12.3867 13.8029 12.5309 13.8806C12.6751 13.9582 12.8362 13.9993 13 14.0001C13.2652 14.0001 13.5196 13.8947 13.7071 13.7072C13.8947 13.5196 14 13.2653 14 13.0001C13.9984 12.8694 13.9712 12.7403 13.92 12.6201C13.8718 12.4952 13.7967 12.3826 13.7 12.2901Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-function CampaignIcon({ className }: IconProps): ReactElement {
-  return (
-    <svg
-      className={className}
-      version="1.0"
-      xmlns="http://www.w3.org/2000/svg"
-      width="563.000000pt"
-      height="513.000000pt"
-      viewBox="0 0 563.000000 513.000000"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      <g
-        transform="translate(0.000000,513.000000) scale(0.100000,-0.100000)"
-        fill="currentColor"
-        stroke="none"
-      >
-        <path
-          d="M4278 5031 c-14 -11 -65 -73 -114 -138 -49 -65 -139 -183 -200 -263
--140 -184 -150 -201 -135 -251 21 -71 93 -100 153 -61 16 9 125 145 243 301
-195 257 215 288 215 323 0 50 -13 74 -50 93 -40 20 -82 19 -112 -4z"
-        />
-        <path
-          d="M2682 4565 c-56 -25 -92 -55 -113 -98 -34 -65 -28 -117 23 -227 60
--127 162 -346 415 -890 53 -113 160 -342 238 -510 201 -430 343 -735 375 -805
-213 -462 217 -467 303 -480 138 -21 257 69 257 194 0 40 -125 318 -521 1159
--27 57 -49 105 -49 107 0 2 -26 59 -59 126 -32 68 -70 149 -83 179 -14 30 -57
-123 -96 205 -86 184 -111 239 -247 530 -59 127 -127 272 -151 324 -24 51 -44
-95 -44 98 0 3 -10 19 -22 35 -42 60 -152 85 -226 53z"
-        />
-        <path
-          d="M2452 4102 c-244 -545 -648 -1013 -1127 -1304 -60 -36 -109 -70 -108
--75 1 -4 22 -51 46 -103 57 -122 246 -527 368 -788 70 -152 98 -202 109 -198
-8 3 56 19 105 36 134 47 251 77 414 106 122 22 188 27 396 31 269 6 424 -4
-615 -38 127 -22 274 -58 362 -87 32 -11 59 -17 62 -15 2 3 -20 55 -49 116 -29
-62 -98 210 -154 330 -56 119 -146 313 -200 430 -55 116 -192 412 -306 657
--114 245 -219 472 -235 505 -179 385 -233 501 -239 507 -3 4 -30 -46 -59 -110z"
-        />
-        <path
-          d="M5020 3956 c-41 -19 -190 -88 -330 -154 -214 -100 -259 -125 -278
--153 -29 -41 -23 -91 14 -129 41 -42 97 -34 234 32 63 30 201 95 305 143 105
-49 200 95 212 103 33 21 49 82 33 123 -14 34 -63 69 -95 69 -11 0 -54 -16 -95
--34z"
-        />
-        <path
-          d="M3487 3630 c-27 -5 -51 -11 -54 -14 -7 -6 13 -52 129 -301 44 -93 86
--183 93 -200 101 -218 165 -350 173 -353 5 -1 37 28 72 65 149 159 176 348 79
-543 -69 138 -206 238 -357 260 -75 11 -69 11 -135 0z"
-        />
-        <path
-          d="M4664 2706 c-24 -24 -34 -43 -34 -65 0 -44 24 -86 57 -100 30 -12
-240 -26 558 -37 l200 -7 31 27 c55 45 50 128 -9 164 -29 18 -69 22 -387 36
--195 9 -361 16 -368 16 -8 0 -29 -15 -48 -34z"
-        />
-        <path
-          d="M1115 2692 c-6 -5 -51 -27 -101 -50 -50 -22 -142 -65 -205 -95 -63
--30 -166 -78 -229 -107 -432 -198 -450 -210 -468 -296 -40 -187 123 -607 341
--883 72 -90 117 -121 180 -121 50 0 122 29 457 188 183 87 433 203 497 233
-l63 28 -29 63 c-45 100 -80 175 -137 296 -30 63 -54 115 -54 117 0 2 -26 59
--58 126 -32 68 -96 205 -142 304 -88 190 -100 210 -115 197z"
-        />
-        <path
-          d="M1490 1424 c-23 -13 -165 -80 -295 -139 -136 -62 -265 -126 -265
--132 0 -12 715 -957 761 -1005 60 -64 93 -64 221 -4 110 51 139 78 145 138 4
-40 -16 87 -254 598 -157 335 -265 556 -274 557 -7 1 -25 -5 -39 -13z"
-        />
-        <path
-          d="M1717 1313 c-14 -14 -6 -44 39 -140 25 -54 57 -122 70 -151 12 -29
-29 -55 37 -57 7 -3 39 6 70 20 41 19 57 32 57 46 0 16 -82 113 -214 254 -33
-35 -47 41 -59 28z"
-        />
-      </g>
-    </svg>
-  );
-}
 
 /* ------------------------------- Data ------------------------------ */
 type SidebarVariant = "dashboard" | "organization";
@@ -450,7 +293,7 @@ const DASH_ITEMS: DashNavItem[] = [
 
 const DASH_COMING_SOON: Array<{ label: string; icon: IconLike }> = [
   { label: "Tixsy AI (Coming Soon)", icon: Sparkles },
-  { label: "Text Blaster (Coming Soon)", icon: CampaignIcon },
+  { label: "Text Blaster (Coming Soon)", icon: TypeIcon },
 ];
 
 const DASH_GROUPS: DashGroup[] = [
@@ -525,37 +368,13 @@ const orgItems: OrgNavItem[] = [
   {
     href: ".", // /dashboard/organizations/:id
     label: "Home",
-    icon: OrgHomeIcon,
+    icon: DashboardIcon,
     match: (pathname) => {
       const sections = ["/events", "/edit", "/team", "/finance", "/settings"];
       return !sections.some(
         (seg) => pathname.endsWith(seg) || pathname.includes(`${seg}/`),
       );
     },
-  },
-  {
-    href: "events",
-    label: "Events",
-    icon: OrgEventsIcon,
-    match: (pathname) => pathname.includes("/events"),
-  },
-  {
-    href: "edit",
-    label: "Edit",
-    icon: OrgEditIcon,
-    match: (pathname) => pathname.includes("/edit"),
-  },
-  {
-    href: "team",
-    label: "Team",
-    icon: OrgTeamIcon,
-    match: (pathname) => pathname.includes("/team"),
-  },
-  {
-    href: "finances",
-    label: "Finance",
-    icon: OrgFinanceIcon,
-    match: (pathname) => pathname.includes("/finance"),
   },
 ];
 
@@ -615,6 +434,7 @@ function NavRow({
   collapsed,
   disabled,
   motion,
+  onClick,
 }: {
   href?: string;
   label: string;
@@ -623,6 +443,7 @@ function NavRow({
   collapsed: boolean;
   disabled?: boolean;
   motion: MotionClasses;
+  onClick?: () => void;
 }) {
   const IconComp = Icon as ElementType<{ className?: string }>;
 
@@ -682,6 +503,15 @@ function NavRow({
       )}
     </>
   );
+
+  // Clickable button-row (for modals)
+  if (onClick && !disabled) {
+    return (
+      <button type="button" onClick={onClick} className={base}>
+        {content}
+      </button>
+    );
+  }
 
   if (disabled || !href) return <div className={base}>{content}</div>;
 
@@ -879,128 +709,6 @@ function GroupRow({
         )}
       </button>
 
-      {/* Expanded accordion */}
-      {!collapsed && (
-        <div
-          className={clsx(
-            "overflow-hidden transition-[max-height,opacity]",
-            motion.label,
-            EASE_OUT,
-            open ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0",
-          )}
-        >
-          <div className="mt-2 pb-1">
-            <div className="rounded-lg bg-neutral-950/20 px-2">
-              {/* REAL TREE: left column is the tree, right column is the rows */}
-              <ul
-                role="tree"
-                aria-label={`${group.label} navigation`}
-                className="relative grid grid-cols-[44px,1fr]"
-              >
-                {/* One continuous spine */}
-                <span
-                  aria-hidden="true"
-                  className={clsx(
-                    "pointer-events-none absolute",
-                    "left-[16px] top-[18px] bottom-[18px]",
-                    "w-[2px] -translate-x-1/2 rounded-full",
-                    "bg-neutral-800/55",
-                  )}
-                />
-
-                {group.items.map((sub, idx) => {
-                  const SubIcon = sub.icon as ElementType<{
-                    className?: string;
-                  }>;
-                  const isActive = sub.match
-                    ? sub.match(pathname)
-                    : pathname === sub.href;
-                  const isLast = idx === group.items.length - 1;
-
-                  return (
-                    <li
-                      key={sub.href}
-                      role="treeitem"
-                      className="contents flex items-center gap-10"
-                    >
-                      {/* LEFT: tree connectors */}
-                      <div className="relative h-11">
-                        {/* Cut the spine after the last node (so it doesn't run forever) */}
-                        {isLast && (
-                          <span
-                            aria-hidden="true"
-                            className={clsx(
-                              "pointer-events-none absolute",
-                              "left-[16px] top-1/2 bottom-0",
-                              "w-[10px] -translate-x-1/2",
-                              // match container bg to “erase” the spine under the last node
-                              "bg-neutral-950/20",
-                            )}
-                          />
-                        )}
-
-                        {/* Node dot */}
-                        <span
-                          aria-hidden="true"
-                          className={clsx(
-                            "pointer-events-none absolute left-[16px] top-1/2",
-                            "h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full",
-                            isActive ? "bg-primary-500" : "bg-neutral-600/70",
-                          )}
-                        />
-
-                        {/* Horizontal stub into the row */}
-                        <span
-                          aria-hidden="true"
-                          className={clsx(
-                            "pointer-events-none absolute left-[25px] top-1/2",
-                            "h-[2px] w-[14px] -translate-y-1/2 rounded-full",
-                            isActive
-                              ? "bg-neutral-400/60"
-                              : "bg-neutral-800/50",
-                          )}
-                        />
-                      </div>
-
-                      {/* RIGHT: nav row */}
-                      <Link
-                        href={sub.href}
-                        className={clsx(
-                          "group flex min-w-0 items-center gap-3",
-                          "h-10 rounded-lg px-2.5",
-                          "transition-[background-color,color] duration-200",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
-                          isActive
-                            ? "bg-neutral-800/60 text-primary-300"
-                            : "bg-transparent text-neutral-200 hover:bg-neutral-800/35 hover:text-neutral-0",
-                        )}
-                      >
-                        <SubIcon
-                          className={clsx(
-                            "h-5 w-5 shrink-0 transition-colors",
-                            isActive
-                              ? "text-primary-300"
-                              : "text-neutral-500 group-hover:text-neutral-100",
-                          )}
-                        />
-
-                        <span className="min-w-0 truncate text-[14px] font-semibold">
-                          {sub.label}
-                        </span>
-
-                        {isActive && (
-                          <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500/90" />
-                        )}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Collapsed popover */}
       {collapsed && isPopoverOpen && (
         <CollapsedGroupPopover
@@ -1025,8 +733,11 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
   const pathnameRaw = usePathname();
   const pathname = pathnameRaw || "";
 
+  // Modal state for the 2 tasks
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [bugOpen, setBugOpen] = useState(false);
+
   const isOrg = variant === "organization";
-  const isDashboard = variant === "dashboard";
 
   // Figure out /dashboard/organizations/:id base from the current URL
   let orgBase: string | null = null;
@@ -1070,7 +781,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     if (motionPhase === "opening") {
       return {
         shellWidth: "duration-700",
-        // reveal after width begins moving (feels “controlled” instead of chaotic)
         label: "duration-450 delay-150",
         logo: "duration-450 delay-120",
         chevron: "duration-450",
@@ -1078,9 +788,7 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     }
     if (motionPhase === "closing") {
       return {
-        // shell closes faster than open, still smooth
         shellWidth: "duration-420",
-        // content collapses super fast (user shouldn't see the chaos)
         label: "duration-100",
         logo: "duration-120",
         chevron: "duration-150",
@@ -1143,7 +851,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
 
   const isOverlayPinned = isExpandedOverlay || pinOverlayDuringClose;
 
-  // hover open/close helpers (collapsed popover)
   function cancelHoverClose() {
     if (hoverCloseTimer.current) {
       window.clearTimeout(hoverCloseTimer.current);
@@ -1161,21 +868,18 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     hoverCloseTimer.current = window.setTimeout(() => {
       setHoveredGroup(null);
       hoverCloseTimer.current = null;
-    }, 180); // small grace period to move the mouse into the popover
+    }, 180);
   }
 
-  // collapse / expand with different animation behavior
   function toggleCollapsed() {
     const next = !collapsed;
 
-    // manage phase
     if (motionTimer.current) {
       window.clearTimeout(motionTimer.current);
       motionTimer.current = null;
     }
     setMotionPhase(next ? "closing" : "opening");
 
-    // clear phase after animation finishes
     motionTimer.current = window.setTimeout(
       () => {
         setMotionPhase(null);
@@ -1184,7 +888,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
       next ? 520 : 860,
     );
 
-    // close any hover popovers immediately when toggling
     setHoveredGroup(null);
     cancelHoverClose();
 
@@ -1204,7 +907,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     const prevOverflow = body.style.overflow;
     const prevPaddingRight = body.style.paddingRight;
 
-    // ✅ Prevent layout shift when scrollbar disappears
     const sbw = window.innerWidth - document.documentElement.clientWidth;
 
     body.style.overflow = "hidden";
@@ -1219,6 +921,18 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
 
   return (
     <>
+      {/* Modals for the two tasks */}
+      <FeedbackBugModal
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        variant="feedback"
+      />
+      <FeedbackBugModal
+        open={bugOpen}
+        onClose={() => setBugOpen(false)}
+        variant="bug"
+      />
+
       {isOverlayPinned && (
         <div aria-hidden="true" className="relative h-full w-[84px] shrink-0" />
       )}
@@ -1260,7 +974,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
               href="/dashboard"
               className={clsx("flex items-center h-10", collapsed && "mx-auto")}
             >
-              {/* keep stable layout (Image size constant), animate with transform */}
               <div
                 className={clsx(
                   "origin-left transition",
@@ -1344,25 +1057,29 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
               />
             ))}
           </div>
+
           <Divider collapsed={collapsed} />
 
-          {/* Bottom Settings link */}
-          <div className={clsx("mt-auto pb-1", collapsed ? "px-0" : "px-2")}>
+          {/* Bottom actions */}
+          <div
+            className={clsx(
+              "mt-auto pb-1 space-y-2",
+              collapsed ? "px-0" : "px-2",
+            )}
+          >
             <NavRow
-              href={"/dashboard/give-feedback"}
               label="Give Feedback"
               Icon={FeedbackIcon}
-              active={pathname.includes("/feedback")}
               collapsed={collapsed}
               motion={motion}
+              onClick={() => setFeedbackOpen(true)}
             />
             <NavRow
-              href={"/dashboard/report"}
               label="Report Bug"
               Icon={ReportBugIcon}
-              active={pathname.includes("/report")}
               collapsed={collapsed}
               motion={motion}
+              onClick={() => setBugOpen(true)}
             />
           </div>
         </nav>

@@ -1,17 +1,24 @@
 import { Schema, model, models, Document, Types } from "mongoose";
 
 /* ----------------------------- Types ----------------------------- */
-export type EventTeamRole = "admin" | "promoter" | "scanner" | "collaborator";
-export type EventTeamStatus = "invited" | "active" | "revoked" | "expired";
+export type TeamMemberRole =
+  | "admin"
+  | "promoter"
+  | "scanner"
+  | "collaborator"
+  | "member";
 
-export interface IEventTeam extends Document {
-  eventId: Types.ObjectId;
+export type TeamMemberStatus = "invited" | "active" | "revoked" | "expired";
+
+export interface ITeamMember extends Document {
+  teamId: Types.ObjectId;
+
   email: string;
   userId?: Types.ObjectId | null;
   name?: string;
 
-  role: EventTeamRole;
-  status: EventTeamStatus;
+  role: TeamMemberRole;
+  status: TeamMemberStatus;
 
   temporaryAccess: boolean;
   expiresAt?: Date;
@@ -24,11 +31,11 @@ export interface IEventTeam extends Document {
 }
 
 /* ----------------------------- Schema ---------------------------- */
-const EventTeamSchema = new Schema<IEventTeam>(
+const TeamMemberSchema = new Schema<ITeamMember>(
   {
-    eventId: {
+    teamId: {
       type: Schema.Types.ObjectId,
-      ref: "Event",
+      ref: "Team",
       required: true,
       index: true,
     },
@@ -44,7 +51,7 @@ const EventTeamSchema = new Schema<IEventTeam>(
 
     role: {
       type: String,
-      enum: ["admin", "promoter", "scanner", "collaborator"],
+      enum: ["admin", "promoter", "scanner", "collaborator", "member"],
       required: true,
     },
 
@@ -64,14 +71,14 @@ const EventTeamSchema = new Schema<IEventTeam>(
   { timestamps: true, strict: true },
 );
 
-/** Ensure uniqueness per event+email */
-EventTeamSchema.index({ eventId: 1, email: 1 }, { unique: true });
+/** Ensure uniqueness per team+email */
+TeamMemberSchema.index({ teamId: 1, email: 1 }, { unique: true });
 
-/** Invite token lookups */
-EventTeamSchema.index({ inviteToken: 1 }, { unique: true, sparse: true });
+/** Invite token lookups (accept-invite flows, etc.) */
+TeamMemberSchema.index({ inviteToken: 1 }, { unique: true, sparse: true });
 
 /** Keep status in sync when expired (but never override revoked) */
-EventTeamSchema.pre("save", function (next) {
+TeamMemberSchema.pre("save", function (next) {
   if (
     this.status !== "revoked" &&
     this.temporaryAccess &&
@@ -83,7 +90,7 @@ EventTeamSchema.pre("save", function (next) {
   next();
 });
 
-const EventTeam =
-  models.EventTeam || model<IEventTeam>("EventTeam", EventTeamSchema);
+const TeamMember =
+  models.TeamMember || model<ITeamMember>("TeamMember", TeamMemberSchema);
 
-export default EventTeam;
+export default TeamMember;

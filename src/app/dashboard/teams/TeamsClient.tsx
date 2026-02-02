@@ -7,7 +7,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Plus, Users, Search, RefreshCw, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  Users,
+  Search,
+  RefreshCw,
+  ChevronRight,
+  ShieldCheck,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -30,6 +37,9 @@ type CardRow = {
   iconUrl?: string;
   totalMembers?: number;
   joinDateLabel?: string;
+
+  /** ✅ user’s role in this team */
+  roleLabel?: string;
 };
 
 type TeamApi = {
@@ -44,6 +54,11 @@ type TeamApi = {
   totalMembers?: number;
   createdAt?: string;
   updatedAt?: string;
+
+  /** ✅ backend can return any of these */
+  myRole?: string;
+  role?: string;
+  userRole?: string;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -87,6 +102,21 @@ function clampText(input: string, maxChars: number) {
   if (clean.length <= maxChars) return clean;
   // keep room for ellipsis
   return `${clean.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
+function formatMembers(n?: number) {
+  if (!n || n <= 0) return "0";
+  try {
+    return new Intl.NumberFormat(undefined).format(n);
+  } catch {
+    return String(n);
+  }
+}
+
+function roleLabelFromTeam(t: TeamApi): string {
+  const raw = (t.myRole || t.userRole || t.role || "").trim();
+  if (!raw) return "Member";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 async function fetchMyTeams(): Promise<TeamApi[]> {
@@ -178,6 +208,7 @@ function Pagination({
 
 function TeamListRow({ item }: { item: CardRow }) {
   const badge = initialsFromName(item.title);
+  const roleLabel = (item.roleLabel || "Member").trim() || "Member";
 
   return (
     <Link
@@ -216,22 +247,31 @@ function TeamListRow({ item }: { item: CardRow }) {
         </div>
       </div>
 
+      {/* ✅ List meta updated to match card behavior */}
       <div className="hidden items-center gap-6 md:flex">
+        {/* Role pill (replaces the old “members” slot in list view too) */}
+        <div
+          className={clsx(
+            "inline-flex items-center gap-1.5 rounded-full",
+            "border border-primary-500/22 bg-primary-500/10",
+            "px-2.5 py-1 text-[11px] font-semibold text-primary-200",
+            "shadow-[0_10px_28px_rgba(154,70,255,0.10)]",
+          )}
+        >
+          <ShieldCheck className="h-3.5 w-3.5 text-primary-300" />
+          <span className="max-w-[120px] truncate">{roleLabel}</span>
+        </div>
+
+        {/* Total Members (replaces old Created [date]) */}
         <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
             <Users className="h-4 w-4" />
           </span>
           <span className="font-semibold text-neutral-100">
-            {typeof item.totalMembers === "number" ? item.totalMembers : 0}
+            {formatMembers(item.totalMembers)}
           </span>
-          <span className="text-neutral-400">members</span>
+          <span className="text-neutral-400">Total Members</span>
         </div>
-
-        {item.joinDateLabel ? (
-          <div className="text-[12px] text-neutral-400">
-            {item.joinDateLabel}
-          </div>
-        ) : null}
       </div>
 
       <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
@@ -276,6 +316,7 @@ export default function TeamsClient() {
       iconUrl: t.logo || undefined,
       totalMembers: typeof t.totalMembers === "number" ? t.totalMembers : 0,
       joinDateLabel: formatJoinDateLabel(t.createdAt),
+      roleLabel: roleLabelFromTeam(t),
     }));
   }, [teams]);
 
@@ -431,6 +472,7 @@ export default function TeamsClient() {
                         iconUrl={item.iconUrl}
                         totalMembers={item.totalMembers}
                         joinDateLabel={item.joinDateLabel}
+                        userRoleLabel={item.roleLabel}
                         tilt
                         tiltMaxDeg={4}
                         tiltPerspective={900}

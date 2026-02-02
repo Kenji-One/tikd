@@ -24,6 +24,7 @@ export interface TextAreaProps extends NativeTA {
   maxWidth?: number | string;
   iconClassName?: string;
   className?: string;
+  textareaClassName?: string;
 }
 
 interface WrapperProps extends ComponentPropsWithoutRef<"div"> {
@@ -63,6 +64,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
   (
     {
       className,
+      textareaClassName,
       iconClassName,
       variant = "transparent",
       shape = "default",
@@ -71,7 +73,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
       maxWidth,
       ...props
     },
-    ref
+    ref,
   ) => {
     const padding = icon ? paddingMap[size].iconLeft : paddingMap[size].base;
 
@@ -119,7 +121,8 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           variantMap[variant],
           shapeMap[shape],
           padding,
-          className
+          className,
+          textareaClassName,
         )}
         {...props}
       />
@@ -134,7 +137,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
           <span
             className={clsx(
               "pointer-events-none absolute left-6 top-4 flex items-center justify-center text-white",
-              iconClassName
+              iconClassName,
             )}
           >
             {icon}
@@ -152,7 +155,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
         {taElement}
       </Wrapper>
     );
-  }
+  },
 );
 
 TextArea.displayName = "TextArea";

@@ -33,6 +33,7 @@ import {
   Rocket,
   X,
   Loader2,
+  Link as LinkIcon,
 } from "lucide-react";
 
 import confetti from "canvas-confetti";
@@ -40,6 +41,7 @@ import { gsap } from "gsap";
 
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 import { Button } from "@/components/ui/Button";
+import DownloadCsvModal from "@/components/dashboard/data/DownloadCsvModal";
 
 type EventLayoutProps = {
   children: ReactNode;
@@ -49,6 +51,7 @@ type EventTabId =
   | "summary"
   | "ticket-types"
   | "promo-codes"
+  | "tracking-links"
   | "guests"
   | "team"
   | "edit"
@@ -66,6 +69,7 @@ const EVENT_TABS: EventTab[] = [
   { id: "summary", label: "Summary", Icon: LayoutDashboard },
   { id: "ticket-types", label: "Ticket Types", Icon: Ticket },
   { id: "promo-codes", label: "Promo Codes", Icon: Percent },
+  { id: "tracking-links", label: "Tracking Links", Icon: LinkIcon },
   { id: "guests", label: "Guests", Icon: UsersRound },
   { id: "team", label: "Team", Icon: UserRoundCog },
   { id: "edit", label: "Edit", Icon: PencilLine },
@@ -351,6 +355,9 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
   // Publish success popup
   const [publishSuccessOpen, setPublishSuccessOpen] = useState(false);
 
+  // Download CSV modal
+  const [downloadOpen, setDownloadOpen] = useState(false);
+
   // --- NEW: refs for animation + confetti (keeps design intact) ---
   const publishModalRef = useRef<HTMLDivElement | null>(null);
   const publishIconRef = useRef<HTMLDivElement | null>(null);
@@ -392,7 +399,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     return (
       pathname === `${basePath}/summary` ||
       activeTab === "summary" ||
-      activeTab === "guests"
+      activeTab === "guests" ||
+      activeTab === "tracking-links"
     );
   }, [activeTab, basePath, pathname]);
 
@@ -461,6 +469,18 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [publishSuccessOpen]);
+
+  // Close download modal on ESC (since it uses a fixed overlay)
+  useEffect(() => {
+    if (!downloadOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDownloadOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [downloadOpen]);
 
   // --- NEW: confetti + GSAP animation when modal opens ---
   useEffect(() => {
@@ -720,6 +740,13 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
+      {/* Download CSV modal */}
+      <DownloadCsvModal
+        open={downloadOpen}
+        onOpenChange={setDownloadOpen}
+        eventName={event?.title ?? ""}
+      />
+
       {/* Publish success modal */}
       {publishSuccessOpen && (
         <div
@@ -794,55 +821,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
               </button>
             </div>
           </div>
-
-          {/* Local-only CSS for the animation + canvas layering (does not touch your design system) */}
-          <style jsx global>{`
-            .tikd-publish-overlay-anim {
-              animation: tikdPublishFadeIn 220ms ease-out both;
-            }
-            .tikd-publish-modal-anim {
-              animation: tikdPublishPopIn 280ms cubic-bezier(0.2, 0.9, 0.2, 1)
-                both;
-            }
-            @keyframes tikdPublishFadeIn {
-              from {
-                opacity: 0;
-              }
-              to {
-                opacity: 1;
-              }
-            }
-            @keyframes tikdPublishPopIn {
-              from {
-                opacity: 0;
-                transform: translate3d(0, 10px, 0) scale(0.985);
-              }
-              to {
-                opacity: 1;
-                transform: translate3d(0, 0, 0) scale(1);
-              }
-            }
-
-            /* Confetti must sit above overlay/backdrop but below the modal */
-            .tikd-publish-confetti-canvas {
-              position: fixed;
-              inset: 0;
-              width: 100%;
-              height: 100%;
-              pointer-events: none;
-              z-index: 2;
-            }
-
-            /* Ensure modal appears above confetti canvas even if overlay has weird stacking */
-            .tikd-publish-modal {
-              position: relative;
-              z-index: 1;
-            }
-
-            .tikd-publish-modal-close {
-              z-index: 3;
-            }
-          `}</style>
         </div>
       )}
 
@@ -935,6 +913,40 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
                 {/* Actions */}
                 <div className="flex shrink-0 items-center gap-2">
+                  {/* Download button (Uiverse-inspired) */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    asChild
+                    className="tikd-action-icon tikdDownloadWrap"
+                    title="Download CSV"
+                    aria-label="Download CSV"
+                  >
+                    <button
+                      type="button"
+                      className="tikdDownloadBtn"
+                      onClick={() => setDownloadOpen(true)}
+                    >
+                      <svg
+                        className="tikdDownloadBtn__svgIcon"
+                        viewBox="0 0 384 512"
+                        width="16"
+                        height="16"
+                        xmlns="http://www.w3.org/2000/svg"
+                        aria-hidden="true"
+                        focusable="false"
+                      >
+                        <path d="M169.4 470.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 370.8 224 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 306.7L54.6 265.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z" />
+                      </svg>
+                      <span
+                        className="tikdDownloadBtn__icon2"
+                        aria-hidden="true"
+                      />
+                      <span className="tikdDownloadBtn__tooltip">Download</span>
+                    </button>
+                  </Button>
+
                   <Button
                     type="button"
                     variant="ghost"
@@ -1081,6 +1093,191 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           )}
         </div>
       </section>
+
+      {/* Always-on CSS for the Uiverse download button (scoped to classnames) */}
+      <style jsx global>{`
+        /* From Uiverse.io by vinodjangid07 (adapted to Tikd tokens) */
+        .tikdDownloadBtn {
+          width: 100%;
+          height: 100%;
+          border: none;
+          border-radius: 999px;
+          background-color: rgba(24, 24, 40, 0.86);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          position: relative;
+          transition-duration: 0.3s;
+          box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.11);
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+          padding: 0px;
+        }
+
+        .tikdDownloadBtn:focus-visible {
+          outline: none;
+          box-shadow:
+            0 0 0 2px rgba(154, 70, 255, 0.35),
+            2px 2px 10px rgba(0, 0, 0, 0.11);
+        }
+
+        .tikdDownloadBtn__svgIcon {
+          fill: var(--color-primary-200);
+          width: 16px;
+          height: 16px;
+          display: block;
+        }
+
+        .tikdDownloadBtn__icon2 {
+          width: 16px;
+          height: 5px;
+          border-bottom: 2px solid var(--color-primary-300);
+          border-left: 2px solid var(--color-primary-300);
+          border-right: 2px solid var(--color-primary-300);
+          margin-top: 2px;
+        }
+
+        /* Tooltip appears to the LEFT (we're on the right side of the header) */
+        .tikdDownloadBtn__tooltip {
+          position: absolute;
+          right: calc(100% + 12px);
+          top: 50%;
+          transform: translateY(-50%);
+          opacity: 0;
+          background-color: rgba(8, 8, 15, 0.92);
+          color: white;
+          padding: 6px 10px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition-duration: 0.2s;
+          pointer-events: none;
+          letter-spacing: 0.4px;
+          font-size: 12.5px;
+          font-weight: 700;
+          white-space: nowrap;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow:
+            0 14px 46px rgba(0, 0, 0, 0.62),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+
+        .tikdDownloadBtn__tooltip::before {
+          position: absolute;
+          content: "";
+          width: 10px;
+          height: 10px;
+          background-color: rgba(8, 8, 15, 0.92);
+          transform: rotate(45deg);
+          right: -5px;
+          top: 50%;
+          margin-top: -5px;
+          border-right: 1px solid rgba(255, 255, 255, 0.08);
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .tikdDownloadWrap:hover .tikdDownloadBtn__tooltip,
+        .tikdDownloadBtn:hover .tikdDownloadBtn__tooltip {
+          opacity: 1;
+          transition-duration: 0.3s;
+        }
+
+        .tikdDownloadWrap:hover .tikdDownloadBtn,
+        .tikdDownloadBtn:hover {
+          transition-duration: 0.3s;
+        }
+
+        .tikdDownloadBtn:active {
+          transform: translateY(0px);
+        }
+
+        .tikdDownloadWrap:hover .tikdDownloadBtn__icon2,
+        .tikdDownloadBtn:hover .tikdDownloadBtn__icon2 {
+          border-bottom: 2px solid rgba(235, 235, 235, 0.95);
+          border-left: 2px solid rgba(235, 235, 235, 0.95);
+          border-right: 2px solid rgba(235, 235, 235, 0.95);
+        }
+
+        tikdDownloadWrap:hover .tikdDownloadBtn__svgIcon,
+        .tikdDownloadBtn:hover .tikdDownloadBtn__svgIcon {
+          fill: rgb(255, 255, 255);
+          animation: tikd-slide-in-top 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)
+            both;
+        }
+
+        @keyframes tikd-slide-in-top {
+          0% {
+            transform: translateY(-10px);
+            opacity: 0;
+          }
+          100% {
+            transform: translateY(0px);
+            opacity: 1;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .tikdDownloadBtn {
+            transition-duration: 0.01ms;
+          }
+          .tikdDownloadBtn:hover .tikdDownloadBtn__svgIcon {
+            animation: none;
+          }
+        }
+
+        /* ---------------- Publish success modal animations + confetti ---------------- */
+        .tikd-publish-overlay-anim {
+          animation: tikdPublishFadeIn 220ms ease-out both;
+        }
+
+        .tikd-publish-modal-anim {
+          animation: tikdPublishPopIn 280ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+        }
+
+        @keyframes tikdPublishFadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes tikdPublishPopIn {
+          from {
+            opacity: 0;
+            transform: translate3d(0, 10px, 0) scale(0.985);
+          }
+          to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) scale(1);
+          }
+        }
+
+        /* Confetti should be above backdrop but BELOW the modal */
+        .tikd-publish-confetti-canvas {
+          position: fixed;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        /* Ensure modal is above confetti */
+        .tikd-publish-modal {
+          position: relative;
+          z-index: 2;
+        }
+
+        .tikd-publish-modal-close {
+          position: relative;
+          z-index: 3;
+        }
+      `}</style>
     </main>
   );
 }

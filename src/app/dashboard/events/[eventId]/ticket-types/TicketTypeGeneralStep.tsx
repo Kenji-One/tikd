@@ -1,6 +1,7 @@
 // src/app/dashboard/organizations/[id]/events/[eventId]/ticket-types/TicketTypeGeneralStep.tsx
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { TicketTypeFormValues } from "./types";
 import type { UseFormRegister } from "react-hook-form";
 
@@ -19,6 +20,25 @@ type Props = {
 
 const PRICE_STEP = 0.5;
 
+function clampToMoney(n: number) {
+  if (!Number.isFinite(n)) return 0;
+  const safe = Math.max(0, n);
+  return Math.round(safe * 100) / 100;
+}
+
+function normalizeDraft(raw: string) {
+  // allow digits + dot/comma; keep it friendly while typing
+  return raw.replace(/[^\d.,]/g, "");
+}
+
+function draftToNumberOrNull(draft: string) {
+  const t = draft.trim().replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  return clampToMoney(n);
+}
+
 export default function TicketTypeGeneralStep({
   register,
   price,
@@ -29,6 +49,64 @@ export default function TicketTypeGeneralStep({
   onNext,
   isSubmitting,
 }: Props) {
+  const [isEditingPrice, setIsEditingPrice] = useState(false);
+  const [draftPrice, setDraftPrice] = useState<string>("");
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const prevEditingRef = useRef(false);
+
+  useEffect(() => {
+    // focus when we enter edit mode
+    if (!prevEditingRef.current && isEditingPrice) {
+      // next tick to ensure input is mounted
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    }
+    prevEditingRef.current = isEditingPrice;
+  }, [isEditingPrice]);
+
+  // keep draft in sync if parent price changes while not editing
+  useEffect(() => {
+    if (isEditingPrice) return;
+    setDraftPrice(isFree ? "" : String(clampToMoney(price)));
+  }, [isEditingPrice, isFree, price]);
+
+  function setAbsolutePrice(nextAbs: number) {
+    const next = clampToMoney(nextAbs);
+    const curr = clampToMoney(price);
+    const delta = next - curr;
+    if (delta !== 0) onPriceStep(delta);
+  }
+
+  function switchToEdit() {
+    setIsEditingPrice(true);
+    // If "Free", start empty so user can type immediately
+    setDraftPrice(isFree ? "" : String(clampToMoney(price)));
+  }
+
+  function commitDraft() {
+    const parsed = draftToNumberOrNull(draftPrice);
+
+    // Empty/invalid or <= 0 => Free
+    if (parsed === null || parsed <= 0) {
+      if (price !== 0) setAbsolutePrice(0);
+      setIsEditingPrice(false);
+      setDraftPrice("");
+      return;
+    }
+
+    setAbsolutePrice(parsed);
+    setIsEditingPrice(false);
+    setDraftPrice(String(parsed));
+  }
+
+  function cancelEdit() {
+    setIsEditingPrice(false);
+    setDraftPrice(isFree ? "" : String(clampToMoney(price)));
+  }
+
   return (
     <div className="space-y-6">
       {/* Name + Description */}
@@ -73,19 +151,65 @@ export default function TicketTypeGeneralStep({
             <button
               type="button"
               onClick={() => onPriceStep(-PRICE_STEP)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#11111A] text-lg leading-none text-neutral-100 hover:bg-[#181824]"
+              disabled={isEditingPrice}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#11111A] text-lg leading-none text-neutral-100 hover:bg-[#181824] disabled:opacity-60"
             >
               –
             </button>
 
-            <div className="min-w-[80px] text-center text-base font-semibold text-neutral-0">
-              {isFree ? "Free" : `$${Number(price || 0).toFixed(2)}`}
+            {/* Clickable Free/Price -> becomes editable */}
+            <div className="min-w-[120px] text-center">
+              {!isEditingPrice ? (
+                <button
+                  type="button"
+                  onClick={switchToEdit}
+                  className="inline-flex h-8 min-w-[120px] items-center justify-center rounded-full px-3 text-base font-semibold text-neutral-0 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary-500/50 cursor-text"
+                  aria-label="Edit ticket price"
+                  title="Click to type a price"
+                >
+                  {isFree ? "Free" : `$${clampToMoney(price).toFixed(2)}`}
+                </button>
+              ) : (
+                <input
+                  ref={inputRef}
+                  value={draftPrice}
+                  onChange={(e) => {
+                    const next = normalizeDraft(e.target.value);
+
+                    // If they delete the number -> go back to "Free" immediately
+                    if (next.trim() === "") {
+                      if (price !== 0) setAbsolutePrice(0);
+                      setDraftPrice("");
+                      setIsEditingPrice(false);
+                      return;
+                    }
+
+                    setDraftPrice(next);
+                  }}
+                  onBlur={commitDraft}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitDraft();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelEdit();
+                    }
+                  }}
+                  inputMode="decimal"
+                  placeholder="0"
+                  className="h-8 w-[120px] rounded-full bg-[#11111A] px-3 text-center text-base font-semibold text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500/70"
+                  aria-label="Ticket price"
+                />
+              )}
             </div>
 
             <button
               type="button"
               onClick={() => onPriceStep(PRICE_STEP)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-lg leading-none text-white shadow-[0_0_0_6px_rgba(133,92,255,0.4)] hover:bg-primary-500 cursor-pointer"
+              disabled={isEditingPrice}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-600 text-lg leading-none text-white shadow-[0_0_0_6px_rgba(133,92,255,0.4)] hover:bg-primary-500 cursor-pointer disabled:opacity-60"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"

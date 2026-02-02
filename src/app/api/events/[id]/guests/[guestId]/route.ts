@@ -226,7 +226,14 @@ export async function GET(
   for (const t of tickets) {
     const ownerObj =
       typeof t.ownerId === "object" && t.ownerId != null && "_id" in t.ownerId
-        ? t.ownerId
+        ? (t.ownerId as {
+            _id: Types.ObjectId;
+            firstName?: string;
+            lastName?: string;
+            username?: string;
+            email?: string;
+            phone?: string;
+          })
         : null;
 
     if (!ownerObj) continue;

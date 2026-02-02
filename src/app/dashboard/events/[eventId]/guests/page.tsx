@@ -25,6 +25,10 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 /* ----------------------------- Fetch helpers ----------------------------- */
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -37,11 +41,16 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {
-      const j = (await res.json()) as any;
-      msg = j?.error || j?.message || msg;
+      const j: unknown = await res.json();
+      const obj = asRecord(j);
+      const err = obj && typeof obj.error === "string" ? obj.error : undefined;
+      const message =
+        obj && typeof obj.message === "string" ? obj.message : undefined;
+      msg = err || message || msg;
     } catch {
       // ignore
     }
+
     throw new Error(msg);
   }
 

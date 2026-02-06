@@ -473,12 +473,12 @@ export default function EventTeamPage() {
       </button>
 
       {/* Invite Modal */}
-      <InviteTeamModal
+      {/* <InviteTeamModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onInvite={(payload) => inviteMutation.mutate(payload)}
         isSubmitting={inviteMutation.isPending}
-      />
+      /> */}
     </div>
   );
 }

@@ -1207,12 +1207,12 @@ export default function EventTeamPage() {
       </section>
 
       {/* Invite Modal */}
-      <InviteTeamModal
+      {/* <InviteTeamModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         onInvite={(payload) => inviteMutation.mutate(payload)}
         isSubmitting={inviteMutation.isPending}
-      />
+      /> */}
 
       {/* Roles Modal */}
       <RolesModal open={rolesOpen} onClose={() => setRolesOpen(false)} />

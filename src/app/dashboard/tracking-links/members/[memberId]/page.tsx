@@ -1,19 +1,14 @@
-// src/app/dashboard/tracking-links/members/[memberId]/page.tsx
+/* ------------------------------------------------------------------ */
+/*  src/app/dashboard/tracking-links/members/[memberId]/page.tsx      */
+/* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import {
-  ArrowLeft,
-  CircleDollarSign,
-  Eye,
-  Link2,
-  Ticket,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, CircleDollarSign, Eye, Link2, Ticket } from "lucide-react";
 
 import TrackingLinksTable from "@/components/dashboard/tables/TrackingLinksTable";
 import { Button } from "@/components/ui/Button";
@@ -68,6 +63,21 @@ function initials(nameOrEmail: string) {
   return s.slice(0, 2).toUpperCase();
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object";
+}
+
+function pickFirstArray(
+  obj: Record<string, unknown>,
+  keys: string[],
+): unknown[] {
+  for (const k of keys) {
+    const val = obj[k];
+    if (Array.isArray(val)) return val;
+  }
+  return [];
+}
+
 async function fetchMember(
   memberId: string,
 ): Promise<TrackingLinkMember | null> {
@@ -77,15 +87,23 @@ async function fetchMember(
   try {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return null;
-    const json = (await res.json().catch(() => null)) as any;
-    const item = json?.member ?? null;
-    if (!item || typeof item !== "object") return null;
+
+    const json: unknown = await res.json().catch(() => null);
+    if (!isRecord(json)) return null;
+
+    const memberRaw = json["member"];
+    if (!isRecord(memberRaw)) return null;
+
+    const imageRaw = memberRaw["image"];
 
     return {
-      id: String(item.id ?? memberId),
-      name: String(item.name ?? ""),
-      email: String(item.email ?? ""),
-      image: item.image ?? null,
+      id: String(memberRaw["id"] ?? memberId),
+      name: String(memberRaw["name"] ?? ""),
+      email: String(memberRaw["email"] ?? ""),
+      image:
+        typeof imageRaw === "string" || imageRaw == null
+          ? (imageRaw as string | null)
+          : null,
     };
   } catch {
     return null;
@@ -102,13 +120,11 @@ async function fetchTrackingLinksForMember(
 
   if (!res.ok) throw new Error("Failed to fetch member tracking links");
 
-  const json = (await res.json().catch(() => null)) as any;
-  const rows =
-    (Array.isArray(json?.rows) ? json.rows : null) ??
-    (Array.isArray(json?.data) ? json.data : null) ??
-    (Array.isArray(json?.trackingLinks) ? json.trackingLinks : null) ??
-    (Array.isArray(json?.links) ? json.links : null) ??
-    [];
+  const json: unknown = await res.json().catch(() => null);
+
+  const rows = isRecord(json)
+    ? pickFirstArray(json, ["rows", "data", "trackingLinks", "links"])
+    : [];
 
   return rows as TrackingLinkRow[];
 }
@@ -123,7 +139,7 @@ function SummaryCard({
   sublabel,
   tone = "primary",
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
   sublabel?: string;

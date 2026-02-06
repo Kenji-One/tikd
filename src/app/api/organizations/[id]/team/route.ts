@@ -17,6 +17,8 @@ import OrgRole from "@/models/OrgRole";
 type Ctx = { params: Promise<{ id: string }> };
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
 
+type SystemRole = "admin" | "promoter" | "scanner" | "collaborator" | "member";
+
 /* ------------------------------ Zod ------------------------------- */
 /**
  * Backwards compatible:
@@ -79,6 +81,8 @@ async function assertCanManageOrg(orgId: string, userId: string) {
   return !!admin;
 }
 
+type OrgTeamApiRow = Omit<IOrgTeam, "role"> & { role: SystemRole | "owner" };
+
 /* ------------------------------- GET ------------------------------ */
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const session = await auth();
@@ -128,16 +132,15 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
   // ✅ Display-only: return role="owner" for the org creator.
   //    DB stays role="admin" so permission checks keep working.
-  const shaped = members.map((m) => {
+  const shaped: OrgTeamApiRow[] = members.map((m) => {
     const isOwnerMember =
       ownerIdStr && m.userId && String(m.userId) === ownerIdStr;
 
-    if (!isOwnerMember) return m;
+    if (!isOwnerMember) {
+      return { ...(m as Omit<IOrgTeam, "role">), role: m.role as SystemRole };
+    }
 
-    return {
-      ...m,
-      role: "owner",
-    } as any;
+    return { ...(m as Omit<IOrgTeam, "role">), role: "owner" };
   });
 
   return NextResponse.json(shaped);
@@ -171,7 +174,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const jsonBody = await req.json();
+  const jsonBody: unknown = await req.json().catch(() => null);
   const parsed = inviteSchema.safeParse(jsonBody);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
@@ -187,12 +190,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
 
   // Validate custom role belongs to org
-  let resolvedRole:
-    | "admin"
-    | "promoter"
-    | "scanner"
-    | "collaborator"
-    | "member" = (role as any) ?? "member";
+  let resolvedRole: SystemRole = role ?? "member";
   let resolvedRoleId: Types.ObjectId | null = null;
 
   if (roleId) {
@@ -215,7 +213,12 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   const existingUser = await User.findOne({ email: emailLower })
     .select("_id firstName lastName username")
-    .lean();
+    .lean<{
+      _id: Types.ObjectId;
+      firstName?: string;
+      lastName?: string;
+      username?: string;
+    } | null>();
 
   const name =
     existingUser?.firstName || existingUser?.lastName

@@ -5,7 +5,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import { Plus, Users, Search, RefreshCw, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -62,6 +62,10 @@ type TeamApi = {
   /** ✅ optional (preferred) like orgs */
   myRoleId?: string | null;
   myRoleMeta?: RoleBadgeMeta | null;
+};
+
+type TeamRowStyle = CSSProperties & {
+  ["--team-accent"]?: string;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -166,13 +170,18 @@ async function fetchMyTeams(): Promise<TeamApi[]> {
   });
 
   if (!res.ok) {
-    const j = await res.json().catch(() => null);
+    const j: unknown = await res.json().catch(() => null);
     const msg =
-      (j && (j.error || j.message)) || `Failed to load teams (${res.status})`;
+      (typeof j === "object" &&
+        j !== null &&
+        ("error" in j || "message" in j) &&
+        (String((j as { error?: unknown }).error || "") ||
+          String((j as { message?: unknown }).message || ""))) ||
+      `Failed to load teams (${res.status})`;
     throw new Error(msg);
   }
 
-  return res.json();
+  return res.json() as Promise<TeamApi[]>;
 }
 
 function Pagination({
@@ -261,14 +270,12 @@ function TeamListRow({ item }: { item: CardRow }) {
         iconUrl: null,
       };
 
+  const styleVars: TeamRowStyle = { ["--team-accent"]: accent };
+
   return (
     <Link
       href={item.href}
-      style={
-        {
-          ["--team-accent" as any]: accent,
-        } as React.CSSProperties
-      }
+      style={styleVars}
       className={clsx(
         "group relative flex w-full items-center justify-between gap-4",
         "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",

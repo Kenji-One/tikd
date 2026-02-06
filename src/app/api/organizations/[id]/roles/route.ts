@@ -1,8 +1,7 @@
-// src/app/api/organizations/[id]/roles/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
-import { Types } from "mongoose";
+import { HydratedDocument, Types } from "mongoose";
 
 import { auth } from "@/lib/auth";
 import Organization from "@/models/Organization";
@@ -21,12 +20,24 @@ export const revalidate = 0;
 type Ctx = { params: Promise<{ id: string }> };
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
 
+type PermissionsMap = Record<string, boolean>;
+
+type RoleLean = Pick<
+  IOrgRole,
+  "_id" | "key" | "name" | "color" | "isSystem"
+> & {
+  order?: number;
+  permissions?: PermissionsMap;
+  iconKey?: string | null;
+  iconUrl?: string | null;
+};
+
 /* ------------------------------ Zod ------------------------------ */
 const permissionsSchema = z
   .record(z.string(), z.boolean())
   .superRefine((obj, ctx) => {
     for (const k of Object.keys(obj)) {
-      if (!ORG_PERMISSION_KEYS.includes(k as any)) {
+      if (!(ORG_PERMISSION_KEYS as readonly string[]).includes(k)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `Unknown permission key: ${k}`,
@@ -133,7 +144,7 @@ async function ensureSystemRoles(orgId: string, actorId: string) {
     color: string;
     order: number;
     iconKey: string | null;
-    permissions: Record<string, boolean>;
+    permissions: PermissionsMap;
   }> = [
     {
       key: "admin",
@@ -222,7 +233,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
   const roles = await OrgRole.find({ organizationId: id })
     .sort({ order: 1, createdAt: 1 })
-    .lean<IOrgRole[]>();
+    .lean<RoleLean[]>();
 
   // counts: system roles by OrgTeam.role, custom roles by OrgTeam.roleId
   const teamAgg = await OrgTeam.aggregate<{
@@ -268,8 +279,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       key: r.key,
       name: r.name,
       color: r.color || "",
-      iconKey: (r as any).iconKey ?? null,
-      iconUrl: (r as any).iconUrl ?? null,
+      iconKey: r.iconKey ?? null,
+      iconUrl: r.iconUrl ?? null,
       isSystem: r.isSystem,
       order: r.order,
       permissions: r.permissions,
@@ -303,14 +314,16 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   await ensureSystemRoles(id, session.user.id);
 
-  const body = await req.json();
+  const body: unknown = await req.json().catch(() => null);
   const parsed = createRoleSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
 
+  const roleData = parsed.data;
+
   const derivedKey =
-    (parsed.data?.key ? slugify(parsed.data.key) : slugify(parsed.data.name)) ||
+    (roleData.key ? slugify(roleData.key) : slugify(roleData.name)) ||
     "new-role";
 
   const max = await OrgRole.findOne({ organizationId: id })
@@ -319,8 +332,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     .lean<{ order: number } | null>();
 
   const basePerms = emptyPermissions();
-  const perms = parsed.data?.permissions
-    ? { ...basePerms, ...parsed.data.permissions }
+  const perms = roleData.permissions
+    ? { ...basePerms, ...roleData.permissions }
     : basePerms;
 
   const baseKey = derivedKey;
@@ -329,10 +342,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return OrgRole.create({
       organizationId: new Types.ObjectId(id),
       key: candidateKey,
-      name: parsed.data?.name,
-      color: parsed.data?.color || "",
-      iconKey: parsed.data?.iconKey ?? null,
-      iconUrl: parsed.data?.iconUrl ?? null,
+      name: roleData.name,
+      color: roleData.color || "",
+      iconKey: roleData.iconKey ?? null,
+      iconUrl: roleData.iconUrl ?? null,
       isSystem: false,
       order: (max?.order ?? 5) + 1,
       permissions: perms,
@@ -341,16 +354,17 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
 
   try {
-    let doc: any = null;
+    let doc: HydratedDocument<IOrgRole> | null = null;
 
     for (let i = 0; i < 50; i++) {
       const candidate = i === 0 ? baseKey : `${baseKey}-${i + 1}`;
       try {
         doc = await createWithKey(candidate);
         break;
-      } catch (e: any) {
-        if (e?.code === 11000) continue;
-        throw e;
+      } catch (err: unknown) {
+        const maybe = err as { code?: number };
+        if (maybe?.code === 11000) continue;
+        throw err;
       }
     }
 
@@ -367,8 +381,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         key: doc.key,
         name: doc.name,
         color: doc.color || "",
-        iconKey: doc.iconKey ?? null,
-        iconUrl: doc.iconUrl ?? null,
+        iconKey: (doc as unknown as RoleLean).iconKey ?? null,
+        iconUrl: (doc as unknown as RoleLean).iconUrl ?? null,
         isSystem: doc.isSystem,
         order: doc.order,
         permissions: doc.permissions,

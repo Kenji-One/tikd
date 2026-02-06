@@ -1,4 +1,3 @@
-// src/app/api/notifications/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Types } from "mongoose";
@@ -12,6 +11,18 @@ type SessionLike = {
 
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
 
+type NotificationsTab = "all" | "unread";
+
+type NotificationLean = {
+  _id: Types.ObjectId;
+  type: string;
+  title: string;
+  message?: string;
+  href?: string;
+  read: boolean;
+  createdAt: Date;
+};
+
 export async function GET(req: NextRequest) {
   const session = (await auth()) as SessionLike;
   const userId = String(session?.user?.id || "");
@@ -20,7 +31,8 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const tab = (searchParams.get("tab") || "all") as "all" | "unread";
+  const tab = (searchParams.get("tab") || "all") as NotificationsTab;
+
   const limitRaw = searchParams.get("limit");
   const limit = Math.min(
     Math.max(parseInt(limitRaw || "30", 10) || 30, 1),
@@ -29,7 +41,9 @@ export async function GET(req: NextRequest) {
 
   const recipientUserId = new Types.ObjectId(userId);
 
-  const filter: Record<string, any> = { recipientUserId };
+  const filter: { recipientUserId: Types.ObjectId; read?: boolean } = {
+    recipientUserId,
+  };
   if (tab === "unread") filter.read = false;
 
   const [items, unreadCount] = await Promise.all([
@@ -37,17 +51,7 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .limit(limit)
       .select("_id type title message href read createdAt")
-      .lean<
-        Array<{
-          _id: Types.ObjectId;
-          type: string;
-          title: string;
-          message?: string;
-          href?: string;
-          read: boolean;
-          createdAt: Date;
-        }>
-      >(),
+      .lean<NotificationLean[]>(),
     Notification.countDocuments({ recipientUserId, read: false }),
   ]);
 

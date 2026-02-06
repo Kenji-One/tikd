@@ -81,6 +81,8 @@ export type ConnectionProfileCardProps = {
   cardWidth?: ConnectionProfileCardWidth;
 };
 
+type CssVars = React.CSSProperties & Record<`--${string}`, string>;
+
 const KIND_ICON: Record<ConnectionProfileKind, LucideIcon> = {
   establishment: Landmark,
   organization: Building2,
@@ -489,9 +491,9 @@ export default function ConnectionProfileCard({
     </>
   );
 
-  const styleVars = {
-    ["--cp-accent" as any]: resolvedAccent,
-  } as React.CSSProperties;
+  const styleVars: CssVars = {
+    "--cp-accent": resolvedAccent,
+  };
 
   if (!tilt) {
     return (

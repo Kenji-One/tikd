@@ -1,7 +1,13 @@
 // src/app/dashboard/tracking-links/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import clsx from "clsx";
 import Link from "next/link";
 import { Users, Link2, CircleDollarSign, Ticket, Eye } from "lucide-react";
@@ -91,7 +97,7 @@ function asMemberRole(v: unknown): MemberRole {
   if (s === "promoter") return "promoter";
   if (s === "scanner") return "scanner";
   if (s === "collaborator") return "collaborator";
-  // fallback to collaborator so UI never crashes
+  // fallback so UI never crashes
   return "collaborator";
 }
 
@@ -105,19 +111,111 @@ function asMemberStatus(v: unknown): MemberStatus {
   return "active";
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function pickArray(
+  obj: Record<string, unknown>,
+  key: string,
+): unknown[] | null {
+  const val = obj[key];
+  return Array.isArray(val) ? val : null;
+}
+
+function asString(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+
+function asNumber(v: unknown, fallback = 0): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function asNullableString(v: unknown): string | null | undefined {
+  if (v === null) return null;
+  if (typeof v === "string") return v;
+  return undefined;
+}
+
+/**
+ * We accept multiple backend shapes (rows/data/trackingLinks/links),
+ * and coerce unknown rows to our UI shape with safe defaults.
+ */
+function parseTrackingLinksResponse(json: unknown): TrackingLinkRow[] {
+  let raw: unknown[] = [];
+
+  if (Array.isArray(json)) {
+    raw = json;
+  } else if (isRecord(json)) {
+    raw =
+      pickArray(json, "rows") ??
+      pickArray(json, "data") ??
+      pickArray(json, "trackingLinks") ??
+      pickArray(json, "links") ??
+      [];
+  }
+
+  return raw
+    .map((item): TrackingLinkRow | null => {
+      if (!isRecord(item)) return null;
+
+      const id =
+        asString(item.id) ||
+        asString(item._id) ||
+        asString(item.linkId) ||
+        asString(item.trackingLinkId);
+
+      if (!id) return null;
+
+      const destinationKindRaw = asString(item.destinationKind);
+      const destinationKind: DestinationKind =
+        destinationKindRaw === "Organization" ? "Organization" : "Event";
+
+      const statusRaw = asString(item.status);
+      const status: Status =
+        statusRaw === "Paused"
+          ? "Paused"
+          : statusRaw === "Disabled"
+            ? "Disabled"
+            : "Active";
+
+      return {
+        id,
+        name: asString(item.name),
+        organizationId: asString(item.organizationId),
+        destinationKind,
+        destinationId: asString(item.destinationId),
+        destinationTitle: asString(item.destinationTitle),
+        url: asString(item.url),
+        iconKey: asNullableString(item.iconKey),
+        iconUrl: asNullableString(item.iconUrl),
+        views: asNumber(item.views),
+        ticketsSold: asNumber(item.ticketsSold),
+        revenue: asNumber(item.revenue),
+        status,
+        created: asString(item.created, new Date().toISOString()),
+      };
+    })
+    .filter((x): x is TrackingLinkRow => Boolean(x));
+}
+
+function parseMembersResponse(json: unknown): MembersApiRow[] {
+  if (Array.isArray(json)) return json as MembersApiRow[];
+  if (isRecord(json)) {
+    const rows = pickArray(json, "rows");
+    if (rows) return rows as MembersApiRow[];
+    const members = pickArray(json, "members");
+    if (members) return members as MembersApiRow[];
+  }
+  return [];
+}
+
 async function fetchAllTrackingLinks(): Promise<TrackingLinkRow[]> {
   const res = await fetch("/api/tracking-links", { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch tracking links");
-  const json = (await res.json().catch(() => null)) as any;
 
-  const rows =
-    (Array.isArray(json?.rows) ? json.rows : null) ??
-    (Array.isArray(json?.data) ? json.data : null) ??
-    (Array.isArray(json?.trackingLinks) ? json.trackingLinks : null) ??
-    (Array.isArray(json?.links) ? json.links : null) ??
-    [];
-
-  return rows as TrackingLinkRow[];
+  const json: unknown = await res.json().catch(() => null);
+  return parseTrackingLinksResponse(json);
 }
 
 /**
@@ -130,17 +228,9 @@ async function fetchAllTrackingLinks(): Promise<TrackingLinkRow[]> {
 async function fetchTrackingLinkMembers(): Promise<MembersApiRow[]> {
   const res = await fetch("/api/tracking-links/members", { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch members");
-  const json = (await res.json().catch(() => null)) as MembersApiResponse;
 
-  const list = Array.isArray(json)
-    ? json
-    : Array.isArray((json as any)?.rows)
-      ? (json as any).rows
-      : Array.isArray((json as any)?.members)
-        ? (json as any).members
-        : [];
-
-  return list as MembersApiRow[];
+  const json: unknown = await res.json().catch(() => null);
+  return parseMembersResponse(json) as MembersApiRow[];
 }
 
 /* ----------------------------- UI Bits ---------------------------- */
@@ -153,7 +243,7 @@ function SummaryCard({
   sublabel,
   tone = "primary",
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
   sublabel?: string;
@@ -599,7 +689,7 @@ export default function TrackingLinksAllPage() {
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
 
-  const loadRows = async () => {
+  const loadRows = useCallback(async () => {
     setLoadingRows(true);
     setRowsError(null);
     try {
@@ -612,9 +702,9 @@ export default function TrackingLinksAllPage() {
         e instanceof Error ? e.message : "Failed to load tracking links",
       );
     }
-  };
+  }, []);
 
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     setLoadingMembers(true);
     setMembersError(null);
     try {
@@ -642,20 +732,18 @@ export default function TrackingLinksAllPage() {
         e instanceof Error ? e.message : "Failed to load members",
       );
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadRows();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadRows]);
 
   useEffect(() => {
     if (view !== "members") return;
     if (members.length) return;
     if (loadingMembers) return;
     loadMembers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [view, members.length, loadingMembers, loadMembers]);
 
   const totals = useMemo(() => {
     const totalLinks = rows.length;

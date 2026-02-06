@@ -46,8 +46,58 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { ROLE_ICON_KEYS, type RoleIconKey } from "@/lib/roleIcons";
+import { type RoleIconKey } from "@/lib/roleIcons";
 import TikdColorPicker from "@/components/ui/TikdColorPicker";
+
+/* ------------------------------ Icon helpers ------------------------ */
+type IconItem = { key: RoleIconKey; label: string; icon: ReactNode };
+
+const ICONS: IconItem[] = [
+  { key: "user", label: "User", icon: <User className="h-4 w-4" /> },
+  { key: "users", label: "Users", icon: <UsersIcon className="h-4 w-4" /> },
+  {
+    key: "shield",
+    label: "Shield",
+    icon: <ShieldCheck className="h-4 w-4" />,
+  },
+  { key: "badge", label: "Badge", icon: <BadgeCheck className="h-4 w-4" /> },
+  { key: "ticket", label: "Ticket", icon: <Ticket className="h-4 w-4" /> },
+  {
+    key: "megaphone",
+    label: "Promo",
+    icon: <Megaphone className="h-4 w-4" />,
+  },
+  { key: "scanner", label: "Scan", icon: <ScanLine className="h-4 w-4" /> },
+  { key: "crown", label: "Crown", icon: <Crown className="h-4 w-4" /> },
+  { key: "gem", label: "Gem", icon: <Gem className="h-4 w-4" /> },
+  { key: "wrench", label: "Tools", icon: <Wrench className="h-4 w-4" /> },
+  {
+    key: "settings",
+    label: "Settings",
+    icon: <Settings2 className="h-4 w-4" />,
+  },
+  { key: "star", label: "Star", icon: <Star className="h-4 w-4" /> },
+  {
+    key: "sparkles",
+    label: "Sparkles",
+    icon: <Sparkles className="h-4 w-4" />,
+  },
+  { key: "bolt", label: "Bolt", icon: <Bolt className="h-4 w-4" /> },
+  { key: "rocket", label: "Rocket", icon: <Rocket className="h-4 w-4" /> },
+  { key: "lock", label: "Lock", icon: <Lock className="h-4 w-4" /> },
+  { key: "key", label: "Key", icon: <KeyRound className="h-4 w-4" /> },
+  { key: "wallet", label: "Wallet", icon: <Wallet className="h-4 w-4" /> },
+  { key: "eye", label: "Eye", icon: <Eye className="h-4 w-4" /> },
+  { key: "globe", label: "Globe", icon: <Globe className="h-4 w-4" /> },
+  { key: "flag", label: "Flag", icon: <Flag className="h-4 w-4" /> },
+  { key: "camera", label: "Camera", icon: <Camera className="h-4 w-4" /> },
+  { key: "mic", label: "Mic", icon: <Mic className="h-4 w-4" /> },
+  {
+    key: "clipboard",
+    label: "Clipboard",
+    icon: <ClipboardList className="h-4 w-4" />,
+  },
+];
 
 /* ----------------------------- Types ----------------------------- */
 type OrgPermissionKey =
@@ -272,7 +322,7 @@ export default function RolesPermissionsModal({
 
   const ROLE_META: Record<
     string,
-    { label: string; icon: React.ReactNode; blurb: string }
+    { label: string; icon: ReactNode; blurb: string }
   > = {
     owner: {
       label: "Owner",
@@ -410,59 +460,11 @@ export default function RolesPermissionsModal({
     );
   }
 
-  /* ------------------------------ Icon helpers ------------------------ */
-  const ICONS: Array<{ key: RoleIconKey; label: string; icon: ReactNode }> = [
-    { key: "user", label: "User", icon: <User className="h-4 w-4" /> },
-    { key: "users", label: "Users", icon: <UsersIcon className="h-4 w-4" /> },
-    {
-      key: "shield",
-      label: "Shield",
-      icon: <ShieldCheck className="h-4 w-4" />,
-    },
-    { key: "badge", label: "Badge", icon: <BadgeCheck className="h-4 w-4" /> },
-    { key: "ticket", label: "Ticket", icon: <Ticket className="h-4 w-4" /> },
-    {
-      key: "megaphone",
-      label: "Promo",
-      icon: <Megaphone className="h-4 w-4" />,
-    },
-    { key: "scanner", label: "Scan", icon: <ScanLine className="h-4 w-4" /> },
-    { key: "crown", label: "Crown", icon: <Crown className="h-4 w-4" /> },
-    { key: "gem", label: "Gem", icon: <Gem className="h-4 w-4" /> },
-    { key: "wrench", label: "Tools", icon: <Wrench className="h-4 w-4" /> },
-    {
-      key: "settings",
-      label: "Settings",
-      icon: <Settings2 className="h-4 w-4" />,
-    },
-    { key: "star", label: "Star", icon: <Star className="h-4 w-4" /> },
-    {
-      key: "sparkles",
-      label: "Sparkles",
-      icon: <Sparkles className="h-4 w-4" />,
-    },
-    { key: "bolt", label: "Bolt", icon: <Bolt className="h-4 w-4" /> },
-    { key: "rocket", label: "Rocket", icon: <Rocket className="h-4 w-4" /> },
-    { key: "lock", label: "Lock", icon: <Lock className="h-4 w-4" /> },
-    { key: "key", label: "Key", icon: <KeyRound className="h-4 w-4" /> },
-    { key: "wallet", label: "Wallet", icon: <Wallet className="h-4 w-4" /> },
-    { key: "eye", label: "Eye", icon: <Eye className="h-4 w-4" /> },
-    { key: "globe", label: "Globe", icon: <Globe className="h-4 w-4" /> },
-    { key: "flag", label: "Flag", icon: <Flag className="h-4 w-4" /> },
-    { key: "camera", label: "Camera", icon: <Camera className="h-4 w-4" /> },
-    { key: "mic", label: "Mic", icon: <Mic className="h-4 w-4" /> },
-    {
-      key: "clipboard",
-      label: "Clipboard",
-      icon: <ClipboardList className="h-4 w-4" />,
-    },
-  ];
-
   const iconByKey = useMemo(() => {
     const m = new Map<RoleIconKey, ReactNode>();
     for (const it of ICONS) m.set(it.key, it.icon);
     return m;
-  }, [ICONS]);
+  }, []);
 
   /* ------------------------------ State ------------------------ */
   const qc = useQueryClient();
@@ -491,10 +493,7 @@ export default function RolesPermissionsModal({
     e.preventDefault();
     e.stopPropagation();
 
-    const clientX =
-      "clientX" in e ? (e as React.PointerEvent).clientX : (e as any).clientX;
-    const clientY =
-      "clientY" in e ? (e as React.PointerEvent).clientY : (e as any).clientY;
+    const { clientX, clientY } = e;
 
     setColorPickerPt({ x: clientX, y: clientY });
     setColorPickerOpen(true);
@@ -503,14 +502,6 @@ export default function RolesPermissionsModal({
     requestAnimationFrame(() => {
       (document.activeElement as HTMLElement | null)?.blur?.();
     });
-  }
-
-  // IMPORTANT: capture-phase blocker so the Input wrapper cannot focus itself
-  function blockInputFocus(
-    e: React.PointerEvent | React.MouseEvent | React.FocusEvent,
-  ) {
-    e.preventDefault();
-    e.stopPropagation();
   }
 
   const [draftPerms, setDraftPerms] =
@@ -605,7 +596,7 @@ export default function RolesPermissionsModal({
 
     setDraftName(activeRole.name);
     setDraftColor(activeRole.color || "");
-    setDraftIconKey((activeRole.iconKey as RoleIconKey) ?? null);
+    setDraftIconKey(activeRole.iconKey ?? null);
     setDraftIconUrl(activeRole.iconUrl ?? null);
 
     const base = makeEmptyPerms();
@@ -667,10 +658,14 @@ export default function RolesPermissionsModal({
       setEditorTab("permissions");
       setQ("");
     },
-    onError: (err: any) => {
-      const raw = String(err?.message ?? "Failed to create role");
+    onError: (err: unknown) => {
+      const raw =
+        err instanceof Error
+          ? err.message
+          : String(err ?? "Failed to create role");
+
       try {
-        const parsed = JSON.parse(raw);
+        const parsed = JSON.parse(raw) as { error?: string };
         setCreateErr(parsed?.error ?? raw);
       } catch {
         setCreateErr(raw);
@@ -694,7 +689,7 @@ export default function RolesPermissionsModal({
       if (updated._id === activeRoleId) {
         setDraftName(updated.name);
         setDraftColor(updated.color || "");
-        setDraftIconKey((updated.iconKey as RoleIconKey) ?? null);
+        setDraftIconKey(updated.iconKey ?? null);
         setDraftIconUrl(updated.iconUrl ?? null);
 
         const base = makeEmptyPerms();
@@ -805,9 +800,9 @@ export default function RolesPermissionsModal({
         overwrite: "1",
       }).toString();
 
-      const { timestamp, signature } = await fetch(
+      const { timestamp, signature } = (await fetch(
         `/api/cloudinary/sign?${params}`,
-      ).then((r) => r.json());
+      ).then((r) => r.json())) as { timestamp: number; signature: string };
 
       const form = new FormData();
       form.append("file", file);
@@ -827,11 +822,16 @@ export default function RolesPermissionsModal({
       const res = await fetch(uploadUrl, { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
 
-      const json = await res.json();
-      setDraftIconUrl(json.secure_url);
+      const uploaded = (await res.json()) as { secure_url?: string };
+      if (!uploaded.secure_url)
+        throw new Error("Upload succeeded but no secure_url returned");
+
+      setDraftIconUrl(uploaded.secure_url);
       setDraftIconKey(null); // uploaded icon wins
-    } catch (e: any) {
-      setUploadErr(String(e?.message ?? "Failed to upload icon"));
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : String(e ?? "Failed to upload icon");
+      setUploadErr(msg);
     } finally {
       setUploadingIcon(false);
     }
@@ -860,16 +860,6 @@ export default function RolesPermissionsModal({
     if (!resolvedColor) return null;
     return hexToRgb(resolvedColor);
   }, [resolvedColor]);
-
-  const colorInputBg = useMemo(() => {
-    if (!colorRgb) {
-      return "radial-gradient(900px 260px at 20% -20%, rgba(154,70,255,0.10), transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))";
-    }
-    const a = rgba(colorRgb, 0.18);
-    const b = rgba(colorRgb, 0.06);
-    const c = rgba(colorRgb, 0.12);
-    return `radial-gradient(820px 260px at 18% -20%, ${c}, transparent 55%), linear-gradient(90deg, ${a}, ${b})`;
-  }, [colorRgb]);
 
   if (!open) return null;
 

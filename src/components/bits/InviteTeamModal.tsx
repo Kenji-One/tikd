@@ -1,6 +1,7 @@
 // src/components/bits/InviteTeamModal.tsx
 "use client";
 
+import Image from "next/image";
 import {
   Fragment,
   useCallback,
@@ -40,7 +41,6 @@ import {
   Mic,
   ClipboardList,
   User,
-  UserRound,
   BadgeCheck,
   Ticket,
   Wallet,
@@ -227,11 +227,12 @@ function RolePillPreview({ meta }: { meta: RolePillMeta }) {
 
 function resolveRoleIconNodeSmall(role: OrgRoleRow): ReactNode {
   if (role.iconUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
     return (
-      <img
+      <Image
         src={role.iconUrl}
         alt=""
+        width={16}
+        height={16}
         className="h-4 w-4 rounded-sm object-cover"
         draggable={false}
       />
@@ -327,11 +328,12 @@ function hashStringToIndex(input: string, mod: number) {
 
 function resolveRoleIconNode(role: OrgRoleRow): ReactNode {
   if (role.iconUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
     return (
-      <img
+      <Image
         src={role.iconUrl}
         alt=""
+        width={20}
+        height={20}
         className="h-5 w-5 rounded-[6px] object-cover"
         draggable={false}
       />
@@ -361,10 +363,15 @@ const ROLE_ORDER: Role[] = ["admin", "promoter", "scanner", "collaborator"];
  * NOTE: Owner should NOT be shown here.
  * If you ever add "owner" as a system role key in backend, keep excluding it.
  */
-const SYSTEM_ROLE_ACCENTS: Record<
-  Role,
-  { title: string; subtitle: string; hint: string; color: string; Icon: any }
-> = {
+type RoleAccentMeta = {
+  title: string;
+  subtitle: string;
+  hint: string;
+  color: string;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+};
+
+const SYSTEM_ROLE_ACCENTS: Record<Role, RoleAccentMeta> = {
   admin: {
     title: "Admin",
     subtitle: "Full organization control",
@@ -451,13 +458,11 @@ const stepTitles = ["Choose a role", "Add email", "Apply & invite"] as const;
 
 /* --------------------------- Compact Summary ------------------------ */
 function SummaryCard({
-  label,
   roleMeta,
   email,
   temporary,
   expiresAt,
 }: {
-  label: string;
   roleMeta: RolePillMeta;
   email: string;
   temporary: boolean;
@@ -1070,7 +1075,6 @@ export default function InviteTeamModal({
 
           {/* Summary */}
           <SummaryCard
-            label={selectedLabel}
             roleMeta={selectedRoleMeta}
             email={email}
             temporary={temporary}

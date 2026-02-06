@@ -1,4 +1,3 @@
-// src/app/api/organizations/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Types } from "mongoose";
@@ -150,7 +149,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const json: unknown = await req.json();
+  const json: unknown = await req.json().catch(() => null);
   const parsed = orgSchema.safeParse(json);
 
   if (!parsed.success) {
@@ -169,6 +168,25 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ _id: org._id }, { status: 201 });
 }
+
+type OrgRoleLean = {
+  _id: Types.ObjectId;
+  organizationId: Types.ObjectId;
+  key: string;
+  name: string;
+  color?: string;
+  iconKey?: string | null;
+  iconUrl?: string | null;
+  isSystem: boolean;
+};
+
+type MyRoleMeta = {
+  key: string;
+  name: string;
+  color?: string;
+  iconKey?: string | null;
+  iconUrl?: string | null;
+};
 
 export async function GET() {
   const session = (await auth()) as SessionLike;
@@ -266,21 +284,10 @@ export async function GET() {
   const orgIdsObj = orgs.map((o) => new Types.ObjectId(String(o._id)));
   const rolesAll = await OrgRole.find({ organizationId: { $in: orgIdsObj } })
     .select("_id organizationId key name color iconKey iconUrl isSystem")
-    .lean<
-      Array<{
-        _id: Types.ObjectId;
-        organizationId: Types.ObjectId;
-        key: string;
-        name: string;
-        color?: string;
-        iconKey?: string | null;
-        iconUrl?: string | null;
-        isSystem: boolean;
-      }>
-    >();
+    .lean<OrgRoleLean[]>();
 
-  const roleByOrgAndKey = new Map<string, any>();
-  const roleById = new Map<string, any>();
+  const roleByOrgAndKey = new Map<string, OrgRoleLean>();
+  const roleById = new Map<string, OrgRoleLean>();
 
   for (const r of rolesAll) {
     const orgId = String(r.organizationId);
@@ -296,13 +303,7 @@ export async function GET() {
     const myRole = isOwner ? "owner" : (membershipRow?.role ?? "member");
     const myRoleId = isOwner ? null : (membershipRow?.roleId ?? null);
 
-    let myRoleMeta: {
-      key: string;
-      name: string;
-      color?: string;
-      iconKey?: string | null;
-      iconUrl?: string | null;
-    } | null = null;
+    let myRoleMeta: MyRoleMeta | null = null;
 
     if (myRole === "owner") {
       myRoleMeta = {
@@ -313,7 +314,7 @@ export async function GET() {
         iconUrl: null,
       };
     } else if (myRoleId && roleById.has(myRoleId)) {
-      const r = roleById.get(myRoleId);
+      const r = roleById.get(myRoleId)!;
       myRoleMeta = {
         key: r.key,
         name: r.name,

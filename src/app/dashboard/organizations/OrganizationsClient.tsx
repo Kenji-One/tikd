@@ -5,7 +5,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
@@ -43,6 +43,10 @@ type Org = {
   myRole?: string;
   myRoleId?: string | null;
   myRoleMeta?: RoleBadgeMeta | null;
+};
+
+type OrgRowStyle = CSSProperties & {
+  ["--org-accent"]?: string;
 };
 
 /* ---------------------------- Helpers ------------------------------ */
@@ -223,14 +227,12 @@ function OrganizationListRow({
   const roleMeta = roleMetaFromOrg(org);
   const accent = resolveOrgAccentColor(org);
 
+  const styleVars: OrgRowStyle = { ["--org-accent"]: accent };
+
   return (
     <Link
       href={`/dashboard/organizations/${org._id}`}
-      style={
-        {
-          ["--org-accent" as any]: accent,
-        } as React.CSSProperties
-      }
+      style={styleVars}
       className={clsx(
         "group relative flex w-full items-center justify-between gap-4",
         "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",

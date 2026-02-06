@@ -16,12 +16,24 @@ export const revalidate = 0;
 type Ctx = { params: Promise<{ id: string; roleId: string }> };
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
 
+type PermissionsMap = Record<string, boolean>;
+
+type RoleLean = Pick<
+  IOrgRole,
+  "_id" | "key" | "name" | "color" | "isSystem"
+> & {
+  order?: number;
+  permissions?: PermissionsMap;
+  iconKey?: string | null;
+  iconUrl?: string | null;
+};
+
 /* ------------------------------ Zod ------------------------------ */
 const permissionsSchema = z
   .record(z.string(), z.boolean())
   .superRefine((obj, ctx) => {
     for (const k of Object.keys(obj)) {
-      if (!ORG_PERMISSION_KEYS.includes(k as any)) {
+      if (!(ORG_PERMISSION_KEYS as readonly string[]).includes(k)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `Unknown permission key: ${k}`,
@@ -97,7 +109,7 @@ async function computeMembersCount(
   });
 }
 
-function shapeRoleRow(role: any, membersCount: number) {
+function shapeRoleRow(role: RoleLean, membersCount: number) {
   return {
     _id: role._id,
     key: role.key,
@@ -131,7 +143,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     );
   }
 
-  const body = await req.json();
+  const body: unknown = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
@@ -147,7 +159,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!existing)
     return NextResponse.json({ error: "Role not found" }, { status: 404 });
 
-  const update: Record<string, unknown> = {};
+  const update: Partial<{
+    name: string;
+    color: string;
+    iconKey: string | null;
+    iconUrl: string | null;
+    order: number;
+    permissions: PermissionsMap;
+  }> = {};
 
   if (typeof parsed.data.name === "string") update.name = parsed.data.name;
   if (typeof parsed.data.color === "string") update.color = parsed.data.color;
@@ -172,7 +191,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     },
     { $set: update },
     { new: true },
-  ).lean<IOrgRole | null>();
+  ).lean<RoleLean | null>();
 
   if (!updated)
     return NextResponse.json({ error: "Role not found" }, { status: 404 });

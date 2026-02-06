@@ -1,3 +1,4 @@
+// src/app/api/organizations/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Types } from "mongoose";
@@ -6,6 +7,7 @@ import "@/lib/mongoose";
 import Organization from "@/models/Organization";
 import OrgTeam from "@/models/OrgTeam";
 import User from "@/models/User";
+import OrgRole from "@/models/OrgRole";
 
 const businessTypeValues = [
   "brand",
@@ -123,7 +125,6 @@ async function ensureOrgOwnerIsAdmin(
     { organizationId: orgId, email: ownerEmailLower },
     {
       $set: {
-        // keep these in $set so it works for BOTH existing docs and upserts
         organizationId: orgId,
         email: ownerEmailLower,
 
@@ -161,7 +162,6 @@ export async function POST(req: Request) {
     ownerId: session.user.id,
   });
 
-  // ✅ Ensure creator becomes an active admin in org team
   const ident = await getSessionUserIdentity(session);
   if (ident.userId && ident.email) {
     await ensureOrgOwnerIsAdmin(org._id, ident.userId, ident.email, ident.name);
@@ -188,7 +188,6 @@ export async function GET() {
     )
     .lean<OrgLean[]>();
 
-  // Ensure owner membership exists (self-heal for old data)
   if (ownedOrgs.length && ident.email) {
     await Promise.all(
       ownedOrgs.map((o) =>
@@ -209,8 +208,14 @@ export async function GET() {
       ...(ident.email ? [{ email: ident.email.toLowerCase() }] : []),
     ],
   })
-    .select("organizationId role")
-    .lean<Array<{ organizationId: Types.ObjectId; role: string }>>();
+    .select("organizationId role roleId")
+    .lean<
+      Array<{
+        organizationId: Types.ObjectId;
+        role: string;
+        roleId?: Types.ObjectId | null;
+      }>
+    >();
 
   const memberOrgIds = membership.map((m) => String(m.organizationId));
   const ownedOrgIds = ownedOrgs.map((o) => String(o._id));
@@ -246,19 +251,103 @@ export async function GET() {
     totals.map((t) => [String(t._id), t.total]),
   );
 
-  const roleByOrgId = new Map<string, string>(
-    membership.map((m) => [String(m.organizationId), m.role]),
-  );
+  const membershipByOrgId = new Map<
+    string,
+    { role: string; roleId?: string | null }
+  >();
+  for (const m of membership) {
+    membershipByOrgId.set(String(m.organizationId), {
+      role: m.role,
+      roleId: m.roleId ? String(m.roleId) : null,
+    });
+  }
+
+  // ✅ fetch role meta for all orgs in one go
+  const orgIdsObj = orgs.map((o) => new Types.ObjectId(String(o._id)));
+  const rolesAll = await OrgRole.find({ organizationId: { $in: orgIdsObj } })
+    .select("_id organizationId key name color iconKey iconUrl isSystem")
+    .lean<
+      Array<{
+        _id: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        key: string;
+        name: string;
+        color?: string;
+        iconKey?: string | null;
+        iconUrl?: string | null;
+        isSystem: boolean;
+      }>
+    >();
+
+  const roleByOrgAndKey = new Map<string, any>();
+  const roleById = new Map<string, any>();
+
+  for (const r of rolesAll) {
+    const orgId = String(r.organizationId);
+    roleByOrgAndKey.set(`${orgId}:${r.key}`, r);
+    roleById.set(String(r._id), r);
+  }
 
   const shaped = orgs.map((o) => {
     const id = String(o._id);
     const isOwner = String(o.ownerId) === String(ident.userId);
-    const myRole = isOwner ? "admin" : (roleByOrgId.get(id) ?? "member");
+
+    const membershipRow = membershipByOrgId.get(id);
+    const myRole = isOwner ? "owner" : (membershipRow?.role ?? "member");
+    const myRoleId = isOwner ? null : (membershipRow?.roleId ?? null);
+
+    let myRoleMeta: {
+      key: string;
+      name: string;
+      color?: string;
+      iconKey?: string | null;
+      iconUrl?: string | null;
+    } | null = null;
+
+    if (myRole === "owner") {
+      myRoleMeta = {
+        key: "owner",
+        name: "Owner",
+        color: "#F7C948",
+        iconKey: "owner",
+        iconUrl: null,
+      };
+    } else if (myRoleId && roleById.has(myRoleId)) {
+      const r = roleById.get(myRoleId);
+      myRoleMeta = {
+        key: r.key,
+        name: r.name,
+        color: r.color || "",
+        iconKey: r.iconKey ?? null,
+        iconUrl: r.iconUrl ?? null,
+      };
+    } else {
+      const r = roleByOrgAndKey.get(`${id}:${myRole}`);
+      if (r) {
+        myRoleMeta = {
+          key: r.key,
+          name: r.name,
+          color: r.color || "",
+          iconKey: r.iconKey ?? null,
+          iconUrl: r.iconUrl ?? null,
+        };
+      } else {
+        myRoleMeta = {
+          key: myRole,
+          name: myRole.charAt(0).toUpperCase() + myRole.slice(1),
+          color: "",
+          iconKey: "users",
+          iconUrl: null,
+        };
+      }
+    }
 
     return {
       ...o,
       totalMembers: totalByOrgId.get(id) ?? 0,
       myRole,
+      myRoleId,
+      myRoleMeta,
     };
   });
 

@@ -1,16 +1,13 @@
-// src/app/api/organizations/[id]/team/[memberId]/route.ts
-/* ------------------------------------------------------------------ */
-/*  /api/organizations/[id]/team/[memberId] – Update / Delete /Resend */
-/* ------------------------------------------------------------------ */
-
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
 import crypto from "crypto";
+import { Types } from "mongoose";
 
 import { auth } from "@/lib/auth";
 import Organization from "@/models/Organization";
 import OrgTeam from "@/models/OrgTeam";
+import OrgRole from "@/models/OrgRole";
 
 type Ctx = { params: Promise<{ id: string; memberId: string }> };
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
@@ -32,13 +29,21 @@ async function assertCanManageOrg(orgId: string, userId: string) {
   return !!admin;
 }
 
-const patchSchema = z.object({
-  role: z.enum(["admin", "promoter", "scanner", "collaborator"]).optional(),
-  status: z.enum(["invited", "active", "revoked"]).optional(), // "expired" stays automatic
-  temporaryAccess: z.boolean().optional(),
-  expiresAt: z.coerce.date().optional(),
-  action: z.enum(["resend"]).optional(), // resend invitation email
-});
+const patchSchema = z
+  .object({
+    role: z
+      .enum(["admin", "promoter", "scanner", "collaborator", "member"])
+      .optional(),
+    roleId: z
+      .string()
+      .regex(/^[a-f\d]{24}$/i)
+      .optional(),
+    status: z.enum(["invited", "active", "revoked"]).optional(), // "expired" stays automatic
+    temporaryAccess: z.boolean().optional(),
+    expiresAt: z.coerce.date().optional(),
+    action: z.enum(["resend"]).optional(), // resend invitation email
+  })
+  .strict();
 
 /* ------------------------------- PATCH ---------------------------- */
 export async function PATCH(req: NextRequest, ctx: Ctx) {
@@ -63,14 +68,15 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
 
-  const { role, status, temporaryAccess, expiresAt, action } = parsed.data;
+  const { role, roleId, status, temporaryAccess, expiresAt, action } =
+    parsed.data;
 
   if (action === "resend") {
     const newToken = crypto.randomBytes(20).toString("hex");
     const updated = await OrgTeam.findOneAndUpdate(
       { _id: memberId, organizationId: id },
       { $set: { inviteToken: newToken, status: "invited" } },
-      { new: true }
+      { new: true },
     );
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -80,7 +86,31 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   const update: Record<string, unknown> = {};
-  if (role) update.role = role;
+
+  // System role assignment (clears custom roleId)
+  if (role) {
+    update.role = role;
+    update.roleId = null;
+  }
+
+  // Custom role assignment:
+  // We keep `role="member"` for compatibility and store custom role in `roleId`
+  if (roleId) {
+    const exists = await OrgRole.findOne({
+      _id: new Types.ObjectId(roleId),
+      organizationId: new Types.ObjectId(id),
+    })
+      .select("_id")
+      .lean();
+
+    if (!exists) {
+      return NextResponse.json({ error: "Role not found" }, { status: 404 });
+    }
+
+    update.role = "member";
+    update.roleId = new Types.ObjectId(roleId);
+  }
+
   if (status) update.status = status;
   if (typeof temporaryAccess === "boolean")
     update.temporaryAccess = temporaryAccess;
@@ -89,7 +119,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const updated = await OrgTeam.findOneAndUpdate(
     { _id: memberId, organizationId: id },
     { $set: update },
-    { new: true }
+    { new: true },
   );
 
   if (!updated) {

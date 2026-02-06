@@ -1,7 +1,14 @@
 // src/app/dashboard/organizations/[id]/members/page.tsx
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,8 +25,26 @@ import {
   Eye,
   Ticket,
   CircleDollarSign,
-  X,
+  UserRound,
   Plus,
+  Crown,
+  BadgeCheck,
+  Gem,
+  Wrench,
+  Settings2,
+  Star,
+  Sparkles,
+  Bolt,
+  Rocket,
+  Lock,
+  KeyRound,
+  Wallet,
+  Globe,
+  Flag,
+  Camera,
+  Mic,
+  ClipboardList,
+  User,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
@@ -28,10 +53,38 @@ import InviteTeamModal, {
   type InvitePayload,
   type Role as InviteRole,
 } from "@/components/bits/InviteTeamModal";
+import RolesPermissionsModal from "@/components/dashboard/modals/RolesPermissionsModal";
+import type { RoleIconKey } from "@/lib/roleIcons";
 
 /* ----------------------------- Types ----------------------------- */
-type Role = InviteRole;
+type Role = InviteRole | "member" | "owner";
 type Status = "invited" | "active" | "revoked" | "expired";
+
+type OrgPermissionKey =
+  | "members.view"
+  | "members.invite"
+  | "members.remove"
+  | "members.assignRoles"
+  | "events.create"
+  | "events.edit"
+  | "events.publish"
+  | "events.delete"
+  | "links.createTrackingLinks";
+
+type OrgPermissions = Record<OrgPermissionKey, boolean>;
+
+type OrgRoleRow = {
+  _id: string;
+  key: string;
+  name: string;
+  color?: string;
+  iconKey?: RoleIconKey | null;
+  iconUrl?: string | null;
+  isSystem: boolean;
+  order: number;
+  permissions: Partial<OrgPermissions>;
+  membersCount: number;
+};
 
 type TeamMember = {
   _id: string;
@@ -39,7 +92,13 @@ type TeamMember = {
   email: string;
   name?: string;
   userId?: string | null;
+
+  // system role (backwards compatibility)
   role: Role;
+
+  // custom role (optional)
+  roleId?: string | null;
+
   status: Status;
   temporaryAccess: boolean;
   expiresAt?: string;
@@ -50,6 +109,7 @@ type TeamMember = {
 
 type UpdateBody = Partial<{
   role: Role;
+  roleId: string;
   status: Status;
   temporaryAccess: boolean;
   expiresAt?: string;
@@ -94,7 +154,6 @@ function initialsFromName(name: string) {
 }
 
 function hashToInt(input: string) {
-  // Stable, tiny hash for deterministic demo metrics.
   let h = 2166136261;
   for (let i = 0; i < input.length; i++) {
     h ^= input.charCodeAt(i);
@@ -111,50 +170,60 @@ function fmtUsd(n: number) {
   return n.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
-function useFluidTabIndicator(
-  containerRef: { current: HTMLElement | null },
-  indicatorRef: { current: HTMLElement | null },
-  tab: string,
-) {
-  useLayoutEffect(() => {
-    const c = containerRef.current;
-    const i = indicatorRef.current;
-    if (!c || !i) return;
-    const active = c.querySelector<HTMLButtonElement>(`[data-tab="${tab}"]`);
-    if (!active) return;
-    const { offsetLeft, offsetWidth } = active;
-    i.style.transform = `translateX(${offsetLeft}px)`;
-    i.style.width = `${offsetWidth}px`;
-  }, [containerRef, indicatorRef, tab]);
+function safeHexToRgb(hex: string) {
+  const h = hex.replace("#", "").trim();
+  if (!/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(h)) return null;
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h.toLowerCase();
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return { r, g, b };
 }
 
-/* ----------------------------- UI bits --------------------------- */
-const ROLE_META: Record<
-  Role,
-  { label: string; icon: React.ReactNode; blurb: string }
-> = {
-  admin: {
-    label: "Admin",
-    icon: <ShieldCheck className="h-4 w-4" />,
-    blurb: "Full access",
-  },
-  promoter: {
-    label: "Promoter",
-    icon: <Megaphone className="h-4 w-4" />,
-    blurb: "Marketing & promos",
-  },
-  scanner: {
-    label: "Scanner",
-    icon: <ScanLine className="h-4 w-4" />,
-    blurb: "Check-in access",
-  },
-  collaborator: {
-    label: "Collaborator",
-    icon: <UsersIcon className="h-4 w-4" />,
-    blurb: "Limited collaboration",
-  },
+/* ----------------------------- Role icon helpers --------------------------- */
+const ROLE_ICON_MAP: Record<RoleIconKey, ReactNode> = {
+  user: <User className="h-4 w-4" />,
+  users: <UsersIcon className="h-4 w-4" />,
+  shield: <ShieldCheck className="h-4 w-4" />,
+  badge: <BadgeCheck className="h-4 w-4" />,
+  ticket: <Ticket className="h-4 w-4" />,
+  megaphone: <Megaphone className="h-4 w-4" />,
+  scanner: <ScanLine className="h-4 w-4" />,
+  crown: <Crown className="h-4 w-4" />,
+  gem: <Gem className="h-4 w-4" />,
+  wrench: <Wrench className="h-4 w-4" />,
+  settings: <Settings2 className="h-4 w-4" />,
+  owner: <Crown className="h-4 w-4" />,
+  star: <Star className="h-4 w-4" />,
+  sparkles: <Sparkles className="h-4 w-4" />,
+  bolt: <Bolt className="h-4 w-4" />,
+  rocket: <Rocket className="h-4 w-4" />,
+  lock: <Lock className="h-4 w-4" />,
+  key: <KeyRound className="h-4 w-4" />,
+  wallet: <Wallet className="h-4 w-4" />,
+  eye: <Eye className="h-4 w-4" />,
+  globe: <Globe className="h-4 w-4" />,
+  flag: <Flag className="h-4 w-4" />,
+  camera: <Camera className="h-4 w-4" />,
+  mic: <Mic className="h-4 w-4" />,
+  clipboard: <ClipboardList className="h-4 w-4" />,
 };
 
+type ResolvedRoleMeta = {
+  key: string;
+  name: string;
+  color?: string;
+  iconKey?: RoleIconKey | null;
+  iconUrl?: string | null;
+};
+
+/* ----------------------------- UI bits --------------------------- */
 function StatusPill({ status }: { status: Status }) {
   const map: Record<Status, string> = {
     invited:
@@ -185,33 +254,88 @@ function StatusPill({ status }: { status: Status }) {
   );
 }
 
-function RolePill({ role }: { role: Role }) {
-  const map: Record<Role, string> = {
-    admin:
-      "bg-primary-500/12 text-primary-200 ring-primary-500/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-    promoter:
-      "bg-[#428BFF]/12 text-[#A9C9FF] ring-[#428BFF]/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-    scanner:
-      "bg-emerald-500/12 text-emerald-200 ring-emerald-500/22 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-    collaborator:
-      "bg-white/8 text-neutral-100 ring-white/14 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
-  };
+function RolePill({ meta }: { meta: ResolvedRoleMeta }) {
+  // owner stays a special case (not in OrgRole list)
+  if (meta.key === "owner") {
+    const rgb = safeHexToRgb("#F7C948")!;
+    const soft = `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`;
+    const ring = `rgba(${rgb.r},${rgb.g},${rgb.b},0.26)`;
+    const text = `rgba(${Math.min(255, rgb.r + 120)},${Math.min(
+      255,
+      rgb.g + 120,
+    )},${Math.min(255, rgb.b + 120)},0.98)`;
 
-  const meta = ROLE_META[role];
+    return (
+      <span
+        className={clsx(
+          "inline-flex items-center gap-1 rounded-full px-2.5 pl-2 py-1.5",
+          "text-[13px] font-semibold ring-1 ring-inset",
+        )}
+        style={{
+          background: soft,
+          color: text,
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+          borderColor: ring,
+        }}
+        aria-label="Role: Owner"
+      >
+        <span className="inline-flex items-center justify-center">
+          <Crown className="h-4 w-4" />
+        </span>
+        <span className="leading-none">Owner</span>
+      </span>
+    );
+  }
+
+  const rgb = meta.color ? safeHexToRgb(meta.color) : null;
+  const soft =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`
+      : "rgba(255,255,255,0.08)";
+  const ring =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.26)`
+      : "rgba(255,255,255,0.14)";
+  const text =
+    rgb != null
+      ? `rgba(${Math.min(255, rgb.r + 120)},${Math.min(
+          255,
+          rgb.g + 120,
+        )},${Math.min(255, rgb.b + 120)},0.98)`
+      : "rgba(245,245,245,0.95)";
+
+  const iconNode = meta.iconUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={meta.iconUrl}
+      alt=""
+      className="h-4 w-4 rounded-sm object-cover"
+      draggable={false}
+    />
+  ) : meta.iconKey ? (
+    (ROLE_ICON_MAP[meta.iconKey] ?? <UsersIcon className="h-4 w-4" />)
+  ) : (
+    <UsersIcon className="h-4 w-4" />
+  );
 
   return (
     <span
       className={clsx(
         "inline-flex items-center gap-1 rounded-full px-2.5 pl-2 py-1.5",
         "text-[13px] font-semibold ring-1 ring-inset",
-        map[role] ?? map.collaborator,
       )}
-      aria-label={`Role: ${meta?.label ?? role}`}
+      style={{
+        background: soft,
+        color: text,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+        borderColor: ring,
+      }}
+      aria-label={`Role: ${meta.name}`}
     >
       <span className="inline-flex items-center justify-center">
-        {meta?.icon}
+        {iconNode}
       </span>
-      <span className="leading-none">{meta?.label ?? "—"}</span>
+      <span className="leading-none">{meta.name}</span>
     </span>
   );
 }
@@ -251,13 +375,17 @@ function MetricChip({
 function MemberActionsMenu({
   canManage,
   member,
+  roles,
+  rolesById,
   onRemove,
   onChangeRole,
 }: {
   canManage: boolean;
   member: TeamMember;
+  roles: OrgRoleRow[];
+  rolesById: Map<string, OrgRoleRow>;
   onRemove: () => void;
-  onChangeRole: (r: Role) => void;
+  onChangeRole: (next: { role?: InviteRole; roleId?: string }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -296,17 +424,13 @@ function MemberActionsMenu({
 
       const maxHeight = Math.max(180, window.innerHeight - PAD * 2);
 
-      // right-align to button by default
       let left = r.right - PANEL_W;
       left = Math.max(PAD, Math.min(left, window.innerWidth - PANEL_W - PAD));
 
-      // prefer: below the button
       const belowTop = r.bottom + 10;
 
-      // set a first-pass position so panel mounts and we can measure it
       setPos({ top: belowTop, left, maxHeight });
 
-      // after panel mounts, compute best top so it NEVER goes off-screen
       requestAnimationFrame(() => {
         const panel = panelRef.current;
         const hRaw = panel?.offsetHeight ?? 0;
@@ -320,16 +444,10 @@ function MemberActionsMenu({
 
         let top = belowTop;
 
-        if (belowFits) {
-          top = belowTop;
-        } else if (aboveFits) {
-          top = aboveTop;
-        } else {
-          // panel is too tall for the available space either way -> pin inside viewport
-          top = PAD;
-        }
+        if (belowFits) top = belowTop;
+        else if (aboveFits) top = aboveTop;
+        else top = PAD;
 
-        // final clamp just to be paranoid
         top = Math.max(PAD, Math.min(top, maxBottom - h));
 
         setPos({ top, left, maxHeight });
@@ -351,6 +469,53 @@ function MemberActionsMenu({
       window.removeEventListener("scroll", reposition, true);
     };
   }, [open]);
+
+  const DEFAULT_SYSTEM_ICON: Record<string, RoleIconKey> = {
+    admin: "shield",
+    promoter: "megaphone",
+    scanner: "scanner",
+    collaborator: "users",
+    member: "user",
+  };
+
+  function roleBadgeStyle(hex?: string, active?: boolean) {
+    const rgb = hex ? safeHexToRgb(hex) : null;
+    if (!rgb) return null;
+
+    return {
+      background: active
+        ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.22)`
+        : `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`,
+      borderColor: active
+        ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.30)`
+        : `rgba(${rgb.r},${rgb.g},${rgb.b},0.22)`,
+      color: `rgba(${Math.min(255, rgb.r + 120)},${Math.min(
+        255,
+        rgb.g + 120,
+      )},${Math.min(255, rgb.b + 120)},0.98)`,
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+    } as const;
+  }
+
+  function resolveRoleIconNode(
+    r: { iconUrl?: string | null; iconKey?: RoleIconKey | null },
+    fallbackKey: RoleIconKey,
+  ) {
+    if (r.iconUrl) {
+      // eslint-disable-next-line @next/next/no-img-element
+      return (
+        <img
+          src={r.iconUrl}
+          alt=""
+          className="h-4 w-4 rounded-sm object-cover"
+          draggable={false}
+        />
+      );
+    }
+
+    const key = r.iconKey ?? fallbackKey;
+    return ROLE_ICON_MAP[key] ?? <UsersIcon className="h-4 w-4" />;
+  }
 
   if (!canManage) return null;
 
@@ -377,11 +542,7 @@ function MemberActionsMenu({
         ? createPortal(
             <div
               ref={panelRef}
-              style={{
-                top: pos.top,
-                left: pos.left,
-                maxHeight: pos.maxHeight,
-              }}
+              style={{ top: pos.top, left: pos.left, maxHeight: pos.maxHeight }}
               className={clsx(
                 "fixed z-[9999] w-[230px]",
                 "overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95",
@@ -395,24 +556,43 @@ function MemberActionsMenu({
                 <div className="mt-0.5 text-[11px] text-neutral-500">
                   Current:{" "}
                   <span className="text-neutral-300 font-semibold">
-                    {ROLE_META[member.role].label}
+                    {member.roleId
+                      ? (rolesById.get(member.roleId)?.name ?? "Custom Role")
+                      : String(member.role)}
                   </span>
                 </div>
               </div>
 
-              {/* scroll container so it NEVER pushes off-screen */}
               <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
                 <div className="p-2 space-y-1">
                   {(
                     ["admin", "promoter", "scanner", "collaborator"] as Role[]
                   ).map((r) => {
-                    const active = r === member.role;
+                    const active = r === member.role && !member.roleId;
+
+                    const row =
+                      (roles ?? []).find((x) => x.isSystem && x.key === r) ??
+                      null;
+
+                    const displayName =
+                      row?.name ?? r.charAt(0).toUpperCase() + r.slice(1);
+
+                    const badgeInline = roleBadgeStyle(row?.color, active);
+
+                    const iconNode = resolveRoleIconNode(
+                      {
+                        iconUrl: row?.iconUrl ?? null,
+                        iconKey: row?.iconKey ?? null,
+                      },
+                      DEFAULT_SYSTEM_ICON[String(r)] ?? "users",
+                    );
+
                     return (
                       <button
                         key={r}
                         type="button"
                         onClick={() => {
-                          onChangeRole(r);
+                          onChangeRole({ role: r as InviteRole });
                           setOpen(false);
                         }}
                         className={clsx(
@@ -427,22 +607,25 @@ function MemberActionsMenu({
                       >
                         <span
                           className={clsx(
-                            "inline-flex h-7 w-7 items-center justify-center rounded-lg",
-                            active
-                              ? "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/25"
-                              : "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                            "inline-flex h-7 w-7 items-center justify-center rounded-lg ring-1",
+                            badgeInline
+                              ? ""
+                              : "bg-white/5 text-neutral-200 ring-white/10",
                           )}
+                          style={badgeInline ?? undefined}
                         >
-                          {ROLE_META[r].icon}
+                          {iconNode}
                         </span>
+
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-semibold">
-                            {ROLE_META[r].label}
+                            {displayName}
                           </div>
                           <div className="text-[11px] text-neutral-500">
-                            {ROLE_META[r].blurb}
+                            System role
                           </div>
                         </div>
+
                         {active ? (
                           <span className="text-[11px] font-semibold text-primary-200">
                             Selected
@@ -473,158 +656,94 @@ function MemberActionsMenu({
                     Remove
                   </button>
                 </div>
+                {(roles ?? []).some((r) => !r.isSystem) ? (
+                  <div className="border-t border-white/10">
+                    <div className="px-3 py-2 text-[11px] font-semibold text-neutral-500">
+                      Custom roles
+                    </div>
+
+                    <div className="p-2 pt-0 space-y-1">
+                      {(roles ?? [])
+                        .filter((r) => !r.isSystem)
+                        .slice()
+                        .sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+                        .map((r) => {
+                          const active =
+                            !!member.roleId && member.roleId === r._id;
+
+                          return (
+                            <button
+                              key={r._id}
+                              type="button"
+                              onClick={() => {
+                                onChangeRole({ roleId: r._id }); // ✅ backend sets role="member" + roleId
+                                setOpen(false);
+                              }}
+                              className={clsx(
+                                "w-full px-2.5 py-2 rounded-lg text-left",
+                                "flex items-center gap-2",
+                                "border border-white/10",
+                                active
+                                  ? "bg-primary-500/10 text-primary-100 ring-1 ring-primary-500/18"
+                                  : "bg-white/5 text-neutral-200 hover:bg-white/10",
+                                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                              )}
+                            >
+                              {(() => {
+                                const badgeInline = roleBadgeStyle(
+                                  r.color,
+                                  active,
+                                );
+                                const iconNode = resolveRoleIconNode(
+                                  {
+                                    iconUrl: r.iconUrl ?? null,
+                                    iconKey: r.iconKey ?? null,
+                                  },
+                                  "users",
+                                );
+
+                                return (
+                                  <span
+                                    className={clsx(
+                                      "inline-flex h-7 w-7 items-center justify-center rounded-lg",
+                                      badgeInline
+                                        ? ""
+                                        : "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                                    )}
+                                    style={badgeInline ?? undefined}
+                                  >
+                                    {iconNode}
+                                  </span>
+                                );
+                              })()}
+
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[12px] font-semibold truncate">
+                                  {r.name}
+                                </div>
+                                <div className="text-[11px] text-neutral-500 truncate">
+                                  {r.membersCount
+                                    ? `${r.membersCount} members`
+                                    : "Custom permissions"}
+                                </div>
+                              </div>
+
+                              {active ? (
+                                <span className="text-[11px] font-semibold text-primary-200">
+                                  Selected
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>,
             document.body,
           )
         : null}
-    </div>
-  );
-}
-
-/* ------------------------------ Roles Modal ------------------------ */
-function RolesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-
-    window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-[85] flex items-center justify-center px-3 py-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Roles"
-    >
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className={clsx("absolute inset-0 bg-black/60 backdrop-blur-[10px]")}
-      />
-
-      <div
-        ref={panelRef}
-        className={clsx(
-          "relative w-full max-w-[760px] overflow-hidden rounded-2xl",
-          "border border-white/10 bg-neutral-950/80",
-          "shadow-[0_30px_120px_rgba(0,0,0,0.75)]",
-        )}
-      >
-        <div
-          className="pointer-events-none absolute inset-0 opacity-100"
-          style={{
-            background:
-              "radial-gradient(1100px 520px at 18% -10%, rgba(154,70,255,0.20), transparent 60%), radial-gradient(900px 520px at 100% 20%, rgba(66,139,255,0.10), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-          }}
-        />
-
-        <div className="relative flex items-center justify-between p-5">
-          <div className="flex items-center gap-3">
-            <div
-              className={clsx(
-                "inline-flex h-10 w-10 items-center justify-center rounded-xl",
-                "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20",
-              )}
-            >
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-[16px] font-semibold tracking-[-0.2px] text-neutral-0">
-                Roles & Permissions
-              </div>
-              <div className="mt-1 text-[12px] text-neutral-400">
-                Create roles and edit permissions (Discord-style). UI only for
-                now.
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close modal"
-            className={clsx(
-              "inline-flex h-10 w-10 items-center justify-center rounded-full",
-              "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-            )}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="relative px-5 pb-6">
-          <div
-            className={clsx(
-              "rounded-2xl border border-white/10 bg-white/5 p-4 md:p-5",
-              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-            )}
-          >
-            <div className="text-[13px] font-semibold text-neutral-100">
-              Default roles
-            </div>
-            <div className="mt-2 grid gap-3 md:grid-cols-2">
-              {(["admin", "promoter", "scanner", "collaborator"] as Role[]).map(
-                (r) => (
-                  <div
-                    key={r}
-                    className={clsx(
-                      "rounded-2xl border border-white/10 bg-neutral-950/35 p-4",
-                      "flex items-start gap-3",
-                    )}
-                  >
-                    <div
-                      className={clsx(
-                        "inline-flex h-10 w-10 items-center justify-center rounded-xl",
-                        "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20",
-                      )}
-                    >
-                      {ROLE_META[r].icon}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[13px] font-semibold text-neutral-0">
-                        {ROLE_META[r].label}
-                      </div>
-                      <div className="mt-1 text-[12px] text-neutral-400">
-                        {ROLE_META[r].blurb}
-                      </div>
-                      <div className="mt-3 text-[11px] text-neutral-500">
-                        Permissions editor coming next.
-                      </div>
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-
-            <div className="mt-4 flex items-center justify-end gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                icon={<Plus className="h-4 w-4" />}
-              >
-                Create Role
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -712,23 +831,100 @@ export default function OrgMembersPage() {
 
   const tabBarRef = useRef<HTMLDivElement | null>(null);
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
+
+  function useFluidTabIndicator(
+    containerRef: { current: HTMLElement | null },
+    indicatorRef_: { current: HTMLElement | null },
+    tabKey: string,
+  ) {
+    useLayoutEffect(() => {
+      const c = containerRef.current;
+      const i = indicatorRef_.current;
+      if (!c || !i) return;
+      const active = c.querySelector<HTMLButtonElement>(
+        `[data-tab="${tabKey}"]`,
+      );
+      if (!active) return;
+      const { offsetLeft, offsetWidth } = active;
+      i.style.transform = `translateX(${offsetLeft}px)`;
+      i.style.width = `${offsetWidth}px`;
+    }, [containerRef, indicatorRef_, tabKey]);
+  }
+
   useFluidTabIndicator(tabBarRef, indicatorRef, tab);
 
-  // TODO: Replace with real permission check (session/ACL).
   const canManageMembers = true;
 
-  /* ---------------------- Shared Grid Template ---------------------- */
-  // ✅ One grid template used by BOTH header + rows => consistent spacing/align
-  // Added "Role" column to the LEFT of "Date Added".
   const GRID =
     "md:grid md:items-center md:gap-6 md:grid-cols-[minmax(300px,2.2fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(200px,1fr)]";
 
-  /* --------------------------- Data --------------------------- */
   const { data: members, isLoading } = useQuery<TeamMember[]>({
     queryKey: ["org-team", id],
     queryFn: () => json<TeamMember[]>(`/api/organizations/${id}/team`),
     staleTime: 30_000,
   });
+
+  const { data: roles } = useQuery<OrgRoleRow[]>({
+    queryKey: ["org-roles", id],
+    queryFn: () => json<OrgRoleRow[]>(`/api/organizations/${id}/roles`),
+    staleTime: 30_000,
+  });
+
+  const rolesById = useMemo(() => {
+    const map = new Map<string, OrgRoleRow>();
+    for (const r of roles ?? []) map.set(r._id, r);
+    return map;
+  }, [roles]);
+
+  const rolesByKey = useMemo(() => {
+    const map = new Map<string, OrgRoleRow>();
+    for (const r of roles ?? []) map.set(r.key, r);
+    return map;
+  }, [roles]);
+
+  function resolveMemberRoleMeta(m: TeamMember): ResolvedRoleMeta {
+    if (m.role === "owner") {
+      return {
+        key: "owner",
+        name: "Owner",
+        color: "#F7C948",
+        iconKey: "owner",
+      };
+    }
+
+    // custom role
+    if (m.roleId && rolesById.has(m.roleId)) {
+      const r = rolesById.get(m.roleId)!;
+      return {
+        key: r.key,
+        name: r.name,
+        color: r.color || "",
+        iconKey: r.iconKey ?? null,
+        iconUrl: r.iconUrl ?? null,
+      };
+    }
+
+    // system role resolved via roles list too
+    const sys = rolesByKey.get(String(m.role));
+    if (sys) {
+      return {
+        key: sys.key,
+        name: sys.name,
+        color: sys.color || "",
+        iconKey: sys.iconKey ?? null,
+        iconUrl: sys.iconUrl ?? null,
+      };
+    }
+
+    // fallback
+    const raw = String(m.role || "member");
+    return {
+      key: raw,
+      name: raw.charAt(0).toUpperCase() + raw.slice(1),
+      color: "",
+      iconKey: "users",
+    };
+  }
 
   const inviteMutation = useMutation({
     mutationFn: (payload: InvitePayload) =>
@@ -773,15 +969,14 @@ export default function OrgMembersPage() {
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return baseList;
+    const qx = query.trim().toLowerCase();
+    if (!qx) return baseList;
     return baseList.filter((m) => {
       const hay = `${m.name ?? ""} ${m.email}`.toLowerCase();
-      return hay.includes(q);
+      return hay.includes(qx);
     });
   }, [baseList, query]);
 
-  /* --------------------------- Pagination --------------------------- */
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -791,11 +986,13 @@ export default function OrgMembersPage() {
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
   useEffect(() => {
     setPage((p) => clamp(p, 1, totalPages));
   }, [totalPages]);
 
   const pageSafe = clamp(page, 1, totalPages);
+
   const slice = useMemo(() => {
     const start = (pageSafe - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
@@ -808,18 +1005,16 @@ export default function OrgMembersPage() {
     return `Showing ${start}-${end} from ${total} data`;
   }, [total, pageSafe]);
 
-  /* --------------------------- Demo metrics -------------------------- */
   const metrics = useMemo(() => {
     const map = new Map<
       string,
       { views: number; tickets: number; revenue: number }
     >();
-
     for (const m of filtered) {
       const seed = hashToInt(`${m._id}:${m.email}`);
       const views = 800 + (seed % 25000);
       const tickets = 10 + (seed % 920);
-      const revenue = 250 + (seed % 125000) / 10; // 250..12,750.0
+      const revenue = 250 + (seed % 125000) / 10;
       map.set(m._id, { views, tickets, revenue });
     }
     return map;
@@ -840,7 +1035,6 @@ export default function OrgMembersPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* Header */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300 uppercase">
@@ -895,7 +1089,6 @@ export default function OrgMembersPage() {
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="mb-4 flex items-center justify-between gap-3">
               <div
                 ref={tabBarRef}
@@ -938,7 +1131,6 @@ export default function OrgMembersPage() {
               </div>
             </div>
 
-            {/* Column header */}
             <div
               className={clsx(
                 "hidden md:block",
@@ -957,7 +1149,6 @@ export default function OrgMembersPage() {
               </div>
             </div>
 
-            {/* List */}
             <div className="mt-3">
               {isLoading ? (
                 <div className="space-y-3">
@@ -976,6 +1167,8 @@ export default function OrgMembersPage() {
                       revenue: 0,
                     };
 
+                    const roleMeta = resolveMemberRoleMeta(m);
+
                     return (
                       <div
                         key={m._id}
@@ -984,10 +1177,8 @@ export default function OrgMembersPage() {
                           "hover:bg-white/7 transition-colors",
                         )}
                       >
-                        {/* Desktop row */}
                         <div className={clsx("hidden md:block")}>
                           <div className={GRID}>
-                            {/* Name */}
                             <div className="min-w-0">
                               <div className="flex min-w-0 items-center gap-3">
                                 <div className="relative">
@@ -1012,48 +1203,48 @@ export default function OrgMembersPage() {
                               </div>
                             </div>
 
-                            {/* Views */}
                             <div className="text-[13px] text-neutral-200">
                               <span className="font-semibold text-neutral-100">
                                 {fmtNum(met.views)}
                               </span>
                             </div>
 
-                            {/* Tickets */}
                             <div className="text-[13px] text-neutral-200">
                               <span className="font-semibold text-neutral-100">
                                 {fmtNum(met.tickets)}
                               </span>
                             </div>
 
-                            {/* Revenue */}
                             <div className="text-[13px] text-neutral-200">
                               <span className="font-semibold text-neutral-100">
                                 {fmtUsd(met.revenue)}
                               </span>
                             </div>
 
-                            {/* Role */}
                             <div className="text-[13px] text-neutral-200">
-                              <RolePill role={m.role} />
+                              <RolePill meta={roleMeta} />
                             </div>
 
-                            {/* Date */}
                             <div className="text-[13px] text-neutral-400">
                               {prettyDateShort(m.createdAt)}
                             </div>
 
-                            {/* Status + menu */}
                             <div className="flex items-center justify-between gap-3">
                               <StatusPill status={m.status} />
                               <MemberActionsMenu
-                                canManage={canManageMembers}
+                                canManage={
+                                  canManageMembers && m.role !== "owner"
+                                }
                                 member={m}
+                                roles={roles ?? []}
+                                rolesById={rolesById}
                                 onRemove={() => deleteMutation.mutate(m._id)}
-                                onChangeRole={(r) =>
+                                onChangeRole={(next) =>
                                   updateMutation.mutate({
                                     memberId: m._id,
-                                    body: { role: r },
+                                    body: next.role
+                                      ? { role: next.role }
+                                      : { roleId: next.roleId! },
                                   })
                                 }
                               />
@@ -1061,7 +1252,6 @@ export default function OrgMembersPage() {
                           </div>
                         </div>
 
-                        {/* Mobile stacked */}
                         <div className="md:hidden">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-3">
@@ -1089,13 +1279,19 @@ export default function OrgMembersPage() {
                             <div className="flex items-center gap-2">
                               <StatusPill status={m.status} />
                               <MemberActionsMenu
-                                canManage={canManageMembers}
+                                canManage={
+                                  canManageMembers && m.role !== "owner"
+                                }
                                 member={m}
+                                roles={roles ?? []}
+                                rolesById={rolesById}
                                 onRemove={() => deleteMutation.mutate(m._id)}
-                                onChangeRole={(r) =>
+                                onChangeRole={(next) =>
                                   updateMutation.mutate({
                                     memberId: m._id,
-                                    body: { role: r },
+                                    body: next.role
+                                      ? { role: next.role }
+                                      : { roleId: next.roleId! },
                                   })
                                 }
                               />
@@ -1119,13 +1315,9 @@ export default function OrgMembersPage() {
                               value={fmtUsd(met.revenue)}
                             />
                             <MetricChip
-                              icon={
-                                ROLE_META[m.role]?.icon ?? (
-                                  <UsersIcon className="h-4 w-4" />
-                                )
-                              }
+                              icon={<UsersIcon className="h-4 w-4" />}
                               label="Role"
-                              value={ROLE_META[m.role]?.label ?? "—"}
+                              value={roleMeta.name}
                             />
                             <MetricChip
                               icon={<CalendarDays className="h-4 w-4" />}
@@ -1166,7 +1358,6 @@ export default function OrgMembersPage() {
               )}
             </div>
 
-            {/* Mobile FAB */}
             <button
               onClick={() => setInviteOpen(true)}
               className={clsx(
@@ -1185,16 +1376,19 @@ export default function OrgMembersPage() {
         </section>
       </section>
 
-      {/* Invite Modal */}
       <InviteTeamModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         onInvite={(payload) => inviteMutation.mutate(payload)}
         isSubmitting={inviteMutation.isPending}
+        orgId={id}
       />
 
-      {/* Roles Modal */}
-      <RolesModal open={rolesOpen} onClose={() => setRolesOpen(false)} />
+      <RolesPermissionsModal
+        open={rolesOpen}
+        onClose={() => setRolesOpen(false)}
+        orgId={id}
+      />
     </div>
   );
 }

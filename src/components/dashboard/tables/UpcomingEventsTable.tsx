@@ -5,13 +5,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronDown,
-  ArrowDownNarrowWide,
-  ArrowDownWideNarrow,
-} from "lucide-react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import clsx from "clsx";
+import { ArrowDownNarrowWide, ArrowDownWideNarrow } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+
 import { Button } from "@/components/ui/Button";
 import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
 
@@ -49,7 +48,7 @@ type SortDir = "asc" | "desc";
 
 /**
  * Dropdown options: only the field (no direction).
- * Direction is controlled by the separate arrows button.
+ * Direction is controlled INSIDE the new single sort control.
  */
 const SORT_FIELDS: { key: SortField; label: string }[] = [
   { key: "title", label: "Title" },
@@ -115,6 +114,363 @@ function TablePoster({ src, title }: { src: string | null; title: string }) {
   );
 }
 
+/* ---------------------- Sort Controls (SINGLE) ---------------------- */
+/** Matches the “Events” page singular sort button (icon + portal dropdown). */
+function SortControls({
+  options,
+  sortField,
+  sortDir,
+  setSortField,
+  setSortDir,
+  defaultDirFor,
+  dropdownWidthClass = "w-[220px]",
+}: {
+  options: { key: SortField; label: string }[];
+  sortField: SortField | null;
+  sortDir: SortDir;
+  setSortField: (v: SortField | null) => void;
+  setSortDir: (v: SortDir) => void;
+  defaultDirFor: (f: SortField) => SortDir;
+  dropdownWidthClass?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  // wrapper still holds the button (used for outside click)
+  const ref = useRef<HTMLDivElement>(null);
+
+  // portal panel ref (because it won't be inside `ref` anymore)
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const sortLabel = useMemo(() => {
+    if (!sortField) return "";
+    return options.find((o) => o.key === sortField)?.label ?? "Sort";
+  }, [options, sortField]);
+
+  const [pos, setPos] = useState<{ top: number; left: number }>({
+    top: 0,
+    left: 0,
+  });
+
+  const inferWidthFallback = useCallback(() => {
+    // best-effort parse: "w-[220px]" => 220
+    const m = /w-\[(\d+)px\]/.exec(dropdownWidthClass);
+    const n = m?.[1] ? Number(m[1]) : NaN;
+    return Number.isFinite(n) ? n : 220;
+  }, [dropdownWidthClass]);
+
+  const recalc = useCallback(() => {
+    const wrap = ref.current;
+    if (!wrap) return;
+
+    // button is the first child inside wrapper
+    const button = wrap.querySelector("button");
+    if (!button) return;
+
+    const r = button.getBoundingClientRect();
+    const vw = window.innerWidth;
+
+    const panelW =
+      panelRef.current?.getBoundingClientRect().width ?? inferWidthFallback();
+
+    // align dropdown to the button's right edge
+    let left = r.right - panelW;
+    const top = r.bottom + 8;
+
+    // clamp into viewport so it never goes off-screen
+    left = Math.max(12, Math.min(left, vw - 12 - panelW));
+
+    setPos({ top, left });
+  }, [inferWidthFallback]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      const t = e.target as Node;
+
+      const inButton = !!ref.current?.contains(t);
+      const inPanel = !!panelRef.current?.contains(t);
+
+      if (!inButton && !inPanel) setOpen(false);
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+
+    if (open) {
+      document.addEventListener("mousedown", onDoc);
+      window.addEventListener("keydown", onKey);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    // position immediately + after the panel measures itself
+    recalc();
+    const raf = requestAnimationFrame(recalc);
+
+    const onScrollOrResize = () => recalc();
+
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("scroll", onScrollOrResize, true);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("scroll", onScrollOrResize, true);
+    };
+  }, [open, recalc]);
+
+  function apply(field: SortField) {
+    // Clicking the active option again clears sorting (back to default state)
+    if (sortField === field) {
+      setSortField(null);
+      return;
+    }
+
+    setSortField(field);
+    setSortDir(defaultDirFor(field));
+  }
+
+  function setDir(dir: SortDir) {
+    if (!sortField) return;
+    setSortDir(dir);
+  }
+
+  const DirIcon = sortDir === "asc" ? ArrowDownNarrowWide : ArrowDownWideNarrow;
+
+  const dropdown = (
+    <div
+      ref={panelRef}
+      className="fixed z-[99999]"
+      style={{ top: pos.top, left: pos.left }}
+    >
+      <div className="relative">
+        <span className="pointer-events-none absolute -top-1 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
+        <div
+          className={clsx(
+            "overflow-hidden rounded-2xl border border-white/10",
+            "bg-[#121420] backdrop-blur",
+            "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
+            dropdownWidthClass,
+          )}
+        >
+          <div role="listbox" aria-label="Sort" className="p-2">
+            {options.map((opt) => {
+              const active = opt.key === sortField;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => apply(opt.key)}
+                  title={active ? "Click again to clear sort" : undefined}
+                  className={clsx(
+                    "flex w-full items-center justify-between",
+                    "rounded-lg px-3 py-2.5",
+                    "text-left text-sm outline-none",
+                    "hover:bg-white/5 focus:bg-white/5",
+                    active ? "bg-white/5 text-white" : "text-white/90",
+                  )}
+                >
+                  <span className="truncate">{opt.label}</span>
+                  {active ? (
+                    <span className="text-xs font-semibold text-white/80">
+                      ✓
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-px w-full bg-white/10" />
+
+          <div className="p-2">
+            <div
+              className={clsx(
+                "grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35",
+                !sortField && "opacity-60",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setDir("asc")}
+                disabled={!sortField}
+                className={clsx(
+                  "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
+                  "outline-none transition",
+                  "hover:bg-white/6 focus-visible:bg-white/6",
+                  sortField && sortDir === "asc"
+                    ? "bg-white/8 text-white"
+                    : "text-white/80",
+                  "disabled:cursor-not-allowed",
+                )}
+                aria-label="Ascending"
+              >
+                <ArrowDownNarrowWide className="h-4 w-4 opacity-90" />
+                Asc
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDir("desc")}
+                disabled={!sortField}
+                className={clsx(
+                  "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
+                  "outline-none transition",
+                  "hover:bg-white/6 focus-visible:bg-white/6",
+                  sortField && sortDir === "desc"
+                    ? "bg-white/8 text-white"
+                    : "text-white/80",
+                  "disabled:cursor-not-allowed",
+                )}
+                aria-label="Descending"
+              >
+                <ArrowDownWideNarrow className="h-4 w-4 opacity-90" />
+                Desc
+              </button>
+            </div>
+
+            {!sortField ? (
+              <p className="mt-2 px-1 text-[11px] text-white/45">
+                Select a sort type first
+              </p>
+            ) : null}
+
+            {sortField ? (
+              <div className="mt-2 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-950/25 px-3 py-2">
+                <p className="truncate text-[11px] text-white/70">
+                  <span className="text-white/45">Sorting:</span> {sortLabel}
+                </p>
+                <DirIcon className="h-4 w-4 text-white/70" />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={
+          !sortField
+            ? "Sort"
+            : `Sort by ${sortLabel} ${
+                sortDir === "asc" ? "ascending" : "descending"
+              }`
+        }
+        data-open={open ? "1" : "0"}
+        data-active={sortField ? "1" : "0"}
+        className={clsx(
+          "tikd-sort-btn group inline-flex select-none items-center justify-center",
+          "h-8 w-8 rounded-[4px] border border-white/10",
+          "bg-neutral-700/90 text-neutral-100",
+          "shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45)]",
+          "transition-[transform,box-shadow,border-color,background-color] duration-150",
+          "hover:bg-neutral-700 hover:border-white/14",
+          "active:scale-[0.985]",
+          "focus:outline-none focus-visible:border-primary-500",
+          "focus-visible:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45),0_0_0_2px_rgba(154,81,255,0.35)]",
+          open && "border-primary-500/70",
+          "cursor-pointer",
+        )}
+      >
+        <span className="tikd-sort-bars" aria-hidden="true">
+          <span className="tikd-sort-bar tikd-sort-bar1">
+            <span className="tikd-sort-dot" />
+          </span>
+          <span className="tikd-sort-bar tikd-sort-bar2">
+            <span className="tikd-sort-dot" />
+          </span>
+          <span className="tikd-sort-bar tikd-sort-bar1">
+            <span className="tikd-sort-dot" />
+          </span>
+        </span>
+
+        {sortField ? (
+          <span
+            aria-hidden="true"
+            className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-white/20 bg-neutral-500 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+          />
+        ) : null}
+      </button>
+
+      {/* ✅ Portal dropdown so parent overflow can’t clip it */}
+      {mounted && open ? createPortal(dropdown, document.body) : null}
+
+      <style jsx>{`
+        .tikd-sort-bars {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+        }
+
+        .tikd-sort-bar {
+          width: 52%;
+          height: 1.25px;
+          background: rgba(229, 229, 229, 0.9);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          border-radius: 2px;
+        }
+
+        .tikd-sort-dot {
+          width: 3.5px;
+          height: 3.5px;
+          position: absolute;
+          border-radius: 999px;
+          border: 1.5px solid rgba(255, 255, 255, 0.92);
+          background: rgba(140, 140, 166, 0.95);
+          box-shadow: 0 0 6px rgba(255, 255, 255, 0.28);
+          transition: transform 0.3s ease;
+        }
+
+        .tikd-sort-bar1 .tikd-sort-dot {
+          transform: translateX(-3px);
+        }
+        .tikd-sort-bar2 .tikd-sort-dot {
+          transform: translateX(3px);
+        }
+
+        .tikd-sort-btn:hover .tikd-sort-bar1 .tikd-sort-dot {
+          transform: translateX(3px);
+        }
+        .tikd-sort-btn:hover .tikd-sort-bar2 .tikd-sort-dot {
+          transform: translateX(-3px);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .tikd-sort-dot {
+            transition: none !important;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function UpcomingEventsTable() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-upcoming-events"],
@@ -130,8 +486,12 @@ export default function UpcomingEventsTable() {
   // ✅ Default direction (only used when sortField is chosen)
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const [sortOpen, setSortOpen] = useState(false);
-  const sortRef = useRef<HTMLDivElement | null>(null);
+  const defaultDirFor = useCallback((field: SortField): SortDir => {
+    // keep behavior identical to previous table:
+    // title defaults ASC, everything else defaults DESC
+    if (field === "title") return "asc";
+    return "desc";
+  }, []);
 
   const sortedRows = useMemo(() => {
     // If no field chosen, keep original order
@@ -168,45 +528,6 @@ export default function UpcomingEventsTable() {
     return arr;
   }, [rows, sortField, sortDir]);
 
-  const applySortField = (key: SortField) => {
-    if (sortField === key) {
-      setSortField(null);
-      setSortOpen(false);
-      setSortDir("desc");
-      return;
-    }
-
-    setSortField(key);
-    setSortOpen(false);
-
-    if (key === "title") setSortDir("asc");
-    else setSortDir("desc");
-  };
-
-  const toggleDir = () => setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-
-  // Close on outside click + ESC (best UX)
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (!sortOpen) return;
-      const t = e.target as Node | null;
-      if (!t) return;
-      if (sortRef.current && !sortRef.current.contains(t)) setSortOpen(false);
-    };
-
-    const onKey = (e: KeyboardEvent) => {
-      if (!sortOpen) return;
-      if (e.key === "Escape") setSortOpen(false);
-    };
-
-    document.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [sortOpen]);
-
   return (
     <div className="relative overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-2">
       {/* Header */}
@@ -215,118 +536,16 @@ export default function UpcomingEventsTable() {
           Upcoming Events
         </h3>
 
-        {/* Sort controls */}
-        <div className="flex items-center gap-1">
-          {/* Sort dropdown */}
-          <div ref={sortRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setSortOpen((v) => !v)}
-              aria-haspopup="listbox"
-              aria-expanded={sortOpen}
-              className={[
-                "flex items-center justify-between gap-2",
-                "rounded-md border border-white/10 bg-neutral-700",
-                "pl-3 pr-2 py-[6.8px]",
-                "text-left text-xs text-white/80 outline-none",
-                "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
-                "cursor-pointer",
-              ].join(" ")}
-            >
-              <span className="truncate">
-                {sortField
-                  ? (SORT_FIELDS.find((f) => f.key === sortField)?.label ??
-                    "Sort")
-                  : "Sort"}
-              </span>
-              <ChevronDown
-                className={`h-4 w-4 opacity-70 transition-transform ${
-                  sortOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {sortOpen && (
-              <div className="absolute right-0 z-50 mt-2">
-                <div className="relative">
-                  {/* caret */}
-                  <span className="pointer-events-none absolute -top-2 right-8 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
-
-                  <div
-                    role="listbox"
-                    aria-label="Sort"
-                    className={[
-                      "overflow-hidden rounded-2xl border border-white/10",
-                      "bg-[#121420] backdrop-blur",
-                      "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
-                      "w-[137px]",
-                    ].join(" ")}
-                  >
-                    <div className="p-2">
-                      {SORT_FIELDS.map((opt) => {
-                        const active = opt.key === sortField;
-
-                        return (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            role="option"
-                            aria-selected={active}
-                            onClick={() => applySortField(opt.key)}
-                            className={[
-                              "flex w-full items-center justify-between",
-                              "rounded-lg px-3 py-2.5",
-                              "text-left text-sm outline-none",
-                              "hover:bg-white/5 focus:bg-white/5",
-                              active
-                                ? "bg-white/5 text-white"
-                                : "text-white/90",
-                            ].join(" ")}
-                          >
-                            <span className="truncate">{opt.label}</span>
-                            {active ? (
-                              <span className="text-xs font-semibold text-white/80">
-                                ✓
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Direction button */}
-          <button
-            type="button"
-            onClick={toggleDir}
-            disabled={!sortField}
-            aria-label={
-              !sortField
-                ? "Select a sort type first"
-                : sortDir === "asc"
-                  ? "Sort direction ascending"
-                  : "Sort direction descending"
-            }
-            className={[
-              "grid h-[30px] w-[38px] place-items-center rounded-md",
-              "border border-white/10 bg-neutral-700",
-              "text-white/80 outline-none",
-              "hover:border-primary-500 hover:text-white focus-visible:border-primary-500",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "cursor-pointer",
-            ].join(" ")}
-          >
-            {sortDir === "asc" ? (
-              <ArrowDownNarrowWide className="h-4 w-4 opacity-90" />
-            ) : (
-              <ArrowDownWideNarrow className="h-4 w-4 opacity-90" />
-            )}
-          </button>
-        </div>
+        {/* ✅ NEW: single sort button (same as Events page) */}
+        <SortControls
+          options={SORT_FIELDS}
+          sortField={sortField}
+          sortDir={sortDir}
+          setSortField={setSortField}
+          setSortDir={setSortDir}
+          defaultDirFor={defaultDirFor}
+          dropdownWidthClass="w-[220px]"
+        />
       </div>
 
       {/* Body */}

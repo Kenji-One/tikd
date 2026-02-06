@@ -1,3 +1,4 @@
+// src/components/dashboard/NotificationsDialog.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,6 +8,7 @@ import clsx from "clsx";
 
 export type NotificationItem = {
   id: string;
+  type?: string;
   title: string;
   message?: string;
   createdAt: string; // ISO string
@@ -20,13 +22,7 @@ type Props = {
   onUnreadChange?: (count: number) => void;
 };
 
-const STORAGE_KEY = "tikd:notifications:v1";
-
 /* ----------------------------- Helpers ----------------------------- */
-function nowIso() {
-  return new Date().toISOString();
-}
-
 function timeAgo(iso: string) {
   const t = new Date(iso).getTime();
   const diff = Math.max(0, Date.now() - t);
@@ -47,60 +43,31 @@ function timeAgo(iso: string) {
   }).format(new Date(iso));
 }
 
-function safeParse(json: string | null): NotificationItem[] {
-  if (!json) return [];
-  try {
-    const v = JSON.parse(json);
-    if (!Array.isArray(v)) return [];
-    return v.filter(Boolean) as NotificationItem[];
-  } catch {
-    return [];
-  }
+async function fetchNotifications(tab: "all" | "unread") {
+  const res = await fetch(`/api/notifications?tab=${tab}&limit=50`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error("Failed to load notifications");
+  return (await res.json()) as {
+    unreadCount: number;
+    items: NotificationItem[];
+  };
 }
 
-function loadNotifications(): NotificationItem[] {
-  return safeParse(
-    typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null,
-  );
+async function markAllReadApi() {
+  const res = await fetch("/api/notifications/mark-all-read", {
+    method: "PATCH",
+  });
+  if (!res.ok) throw new Error("Failed to mark all read");
+  return (await res.json()) as { unreadCount: number };
 }
 
-function saveNotifications(list: NotificationItem[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-}
-
-function seedIfEmpty() {
-  const existing = loadNotifications();
-  if (existing.length > 0) return existing;
-
-  const seeded: NotificationItem[] = [
-    {
-      id: "n1",
-      title: "Ticket sold",
-      message: "You sold 2 tickets for “Avalon NYC: Yacht Party”.",
-      createdAt: nowIso(),
-      read: false,
-      href: "/dashboard/sales",
-    },
-    {
-      id: "n2",
-      title: "Event published",
-      message: "Your event is now live and visible to everyone.",
-      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      read: false,
-      href: "/dashboard/events",
-    },
-    {
-      id: "n3",
-      title: "Payout scheduled",
-      message: "Your payout will be processed within 1–2 business days.",
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      read: true,
-      href: "/dashboard/finances",
-    },
-  ];
-
-  saveNotifications(seeded);
-  return seeded;
+async function markOneReadApi(id: string) {
+  const res = await fetch(`/api/notifications/${id}/read`, {
+    method: "PATCH",
+  });
+  if (!res.ok) throw new Error("Failed to mark read");
+  return (await res.json()) as { unreadCount: number };
 }
 
 /* ------------------------------ UI -------------------------------- */
@@ -113,6 +80,7 @@ export default function NotificationsDialog({
 
   const [tab, setTab] = useState<"all" | "unread">("all");
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const unreadCount = useMemo(
     () => items.filter((n) => !n.read).length,
@@ -124,38 +92,85 @@ export default function NotificationsDialog({
     return items;
   }, [items, tab]);
 
-  // Load + seed on open
+  // Load from backend whenever opened or tab changes
   useEffect(() => {
     if (!open) return;
-    const seeded = seedIfEmpty();
-    setItems(seeded);
+
+    let cancelled = false;
+    setLoading(true);
+
+    fetchNotifications(tab)
+      .then((data) => {
+        if (cancelled) return;
+        setItems(Array.isArray(data.items) ? data.items : []);
+        onUnreadChange?.(Number(data.unreadCount || 0));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setItems([]);
+        onUnreadChange?.(0);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, tab]);
 
-  // Report unread changes to parent (badge)
+  // Keep badge synced even when local list updates (optimistic)
   useEffect(() => {
-    if (!open && items.length === 0) return;
+    if (!open) return;
     onUnreadChange?.(unreadCount);
-  }, [unreadCount, onUnreadChange, open, items.length]);
+  }, [unreadCount, onUnreadChange, open]);
 
-  function setAndPersist(next: NotificationItem[]) {
-    setItems(next);
-    saveNotifications(next);
-    onUnreadChange?.(next.filter((n) => !n.read).length);
+  async function markAllRead() {
+    // optimistic
+    const optimistic = items.map((n) => ({ ...n, read: true }));
+    setItems(optimistic);
+    onUnreadChange?.(0);
+
+    try {
+      const data = await markAllReadApi();
+      onUnreadChange?.(Number(data.unreadCount || 0));
+    } catch {
+      // if failed, reload tab
+      try {
+        const data = await fetchNotifications(tab);
+        setItems(data.items);
+        onUnreadChange?.(Number(data.unreadCount || 0));
+      } catch {
+        // ignore
+      }
+    }
   }
 
-  function markAllRead() {
-    const next = items.map((n) => ({ ...n, read: true }));
-    setAndPersist(next);
-  }
+  async function markOneRead(id: string) {
+    // optimistic
+    setItems((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+    );
 
-  function markOneRead(id: string) {
-    const next = items.map((n) => (n.id === id ? { ...n, read: true } : n));
-    setAndPersist(next);
+    try {
+      const data = await markOneReadApi(id);
+      onUnreadChange?.(Number(data.unreadCount || 0));
+    } catch {
+      // fallback reload
+      try {
+        const data = await fetchNotifications(tab);
+        setItems(data.items);
+        onUnreadChange?.(Number(data.unreadCount || 0));
+      } catch {
+        // ignore
+      }
+    }
   }
 
   function openNotification(n: NotificationItem) {
-    if (!n.read) markOneRead(n.id);
+    if (!n.read) void markOneRead(n.id);
     if (n.href) {
       onClose();
       router.push(n.href);
@@ -169,12 +184,9 @@ export default function NotificationsDialog({
       className={clsx(
         "absolute right-0 top-[calc(100%+10px)] z-[60] w-[380px]",
         "overflow-hidden rounded-2xl",
-        // glass container (match Friends page)
         "border border-white/10",
         "bg-neutral-950/55 backdrop-blur-2xl",
-        // subtle “friends popover” glow
         "bg-[radial-gradient(1100px_520px_at_12%_-10%,rgba(154,70,255,0.22),transparent_55%),radial-gradient(900px_520px_at_110%_-15%,rgba(154,70,255,0.14),transparent_55%)]",
-        // depth + inner highlight
         "shadow-[0_28px_110px_rgba(0,0,0,0.72)]",
         "ring-1 ring-white/[0.06]",
       )}
@@ -202,7 +214,7 @@ export default function NotificationsDialog({
             <button
               type="button"
               onClick={markAllRead}
-              disabled={unreadCount === 0}
+              disabled={unreadCount === 0 || loading}
               className={clsx(
                 "inline-flex h-8 items-center justify-center gap-2 rounded-lg px-3",
                 "border border-white/10 bg-primary-500/15 text-primary-200",
@@ -266,7 +278,25 @@ export default function NotificationsDialog({
       </div>
 
       {/* List */}
-      {visible.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+          <div
+            className={clsx(
+              "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+              "bg-white/[0.06] text-neutral-200 ring-1 ring-white/10",
+              "backdrop-blur-xl",
+            )}
+          >
+            <Bell className="h-5 w-5" />
+          </div>
+          <div className="text-[13px] font-semibold text-neutral-100">
+            Loading…
+          </div>
+          <div className="text-[12px] text-neutral-500">
+            Fetching your latest updates.
+          </div>
+        </div>
+      ) : visible.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
           <div
             className={clsx(
@@ -296,13 +326,10 @@ export default function NotificationsDialog({
                 onClick={() => openNotification(n)}
                 className={clsx(
                   "group relative w-full rounded-xl text-left",
-                  // frosted item cards like Friends page
                   "border border-white/10",
                   "bg-white/[0.05] backdrop-blur-xl",
                   "px-3 py-3",
-                  // subtle inner sheen
                   "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-                  // hover lift
                   "hover:bg-white/[0.08] hover:border-white/15 transition-colors",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                 )}

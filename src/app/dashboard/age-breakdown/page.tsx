@@ -1,6 +1,7 @@
+import { BadgeDollarSign, Ticket, TrendingUp, User } from "lucide-react";
+
 import DetailedViewShell from "@/components/dashboard/finances/DetailedViewShell";
 import type { DonutSegment } from "@/components/dashboard/charts/DonutFull";
-import UnderConstruction from "@/components/ui/UnderConstruction";
 
 const kpiA = [60, 120, 90, 160, 180, 130, 200, 230, 180, 220, 260, 300];
 const kpiB = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
@@ -20,17 +21,35 @@ const AGE_SOURCE: DonutSegment[] = [
   { value: 10, label: "Deleted", color: "#22C55E" },
 ];
 
-export default function FinancesAgeBreakdownDetailedPage() {
+function KpiIcon({ children }: { children: React.ReactNode }) {
   return (
-    <>
-      {/* <DetailedViewShell
+    <span
+      className={[
+        "inline-flex h-7 w-7 items-center justify-center rounded-md",
+        "border border-white/10",
+        "bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0)_40%),rgba(154,70,255,0.18)]",
+        "shadow-[0_14px_32px_rgba(0,0,0,0.55)]",
+        "text-white/90",
+      ].join(" ")}
+      aria-hidden
+    >
+      {children}
+    </span>
+  );
+}
+
+export default function AgeBreakdownDetailedPage() {
+  return (
+    <DetailedViewShell
       heading="Age Breakdown Detailed View"
+      backHref="/dashboard"
       miniCards={[
         {
           title: "Avg Customer Age",
           value: "40",
           delta: "+24.6%",
           series: kpiA,
+          icon: <User className="h-4 w-4" />,
         },
         {
           title: "Fastest Age Group Growth",
@@ -38,6 +57,7 @@ export default function FinancesAgeBreakdownDetailedPage() {
           delta: "-24.6%",
           negative: true,
           series: kpiB,
+          icon: <TrendingUp className="h-4 w-4" />,
         },
         {
           title: "Top Revenue Age Group",
@@ -45,6 +65,7 @@ export default function FinancesAgeBreakdownDetailedPage() {
           delta: "-24.6%",
           negative: true,
           series: kpiC,
+          icon: <BadgeDollarSign className="h-4 w-4" />,
         },
         {
           title: "Fastest Sellout Age Group",
@@ -52,6 +73,7 @@ export default function FinancesAgeBreakdownDetailedPage() {
           delta: "-24.6%",
           negative: true,
           series: kpiD,
+          icon: <Ticket className="h-4 w-4" />,
         },
       ]}
       bigCard={{
@@ -69,18 +91,19 @@ export default function FinancesAgeBreakdownDetailedPage() {
         },
         valuePrefix: "$",
         valueSuffix: "K",
+        // Figma: no icon next to the big value
+        valueIcon: false,
       }}
       donut={{
         label: "AGE SOURCE",
         heading: "SEPTEMBER 2025",
         segments: AGE_SOURCE,
       }}
-      mapLabel="TOP TICKETS SOLD BY AGE LOCATIONS"
+      mapLabel="TOP REVENUE LOCATIONS"
+      mode="revenue"
       barsLabel="PEAK DAYS"
       barsHeading="SEPTEMBER 2025"
       barsData={PEAK_BARS}
-    /> */}
-      <UnderConstruction />
-    </>
+    />
   );
 }

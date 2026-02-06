@@ -7,14 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import {
-  Plus,
-  Users,
-  Search,
-  RefreshCw,
-  ChevronRight,
-  ShieldCheck,
-} from "lucide-react";
+import { Plus, Users, Search, RefreshCw, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -24,6 +17,8 @@ import GridListToggle, {
 } from "@/components/ui/GridListToggle";
 import ConnectionProfileCard, {
   type ConnectionProfileKind,
+  type RoleBadgeMeta,
+  RoleBadge,
 } from "@/components/connections/ConnectionProfileCard";
 
 /* ------------------------------ Types ------------------------------ */
@@ -38,8 +33,12 @@ type CardRow = {
   totalMembers?: number;
   joinDateLabel?: string;
 
-  /** ✅ user’s role in this team */
+  /** ✅ org-like role meta support */
+  userRoleMeta?: RoleBadgeMeta | null;
   roleLabel?: string;
+
+  /** ✅ org/team accent color */
+  accentColor?: string;
 };
 
 type TeamApi = {
@@ -59,6 +58,10 @@ type TeamApi = {
   myRole?: string;
   role?: string;
   userRole?: string;
+
+  /** ✅ optional (preferred) like orgs */
+  myRoleId?: string | null;
+  myRoleMeta?: RoleBadgeMeta | null;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -100,7 +103,6 @@ function clampText(input: string, maxChars: number) {
     .replace(/\s+/g, " ")
     .trim();
   if (clean.length <= maxChars) return clean;
-  // keep room for ellipsis
   return `${clean.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }
 
@@ -114,9 +116,46 @@ function formatMembers(n?: number) {
 }
 
 function roleLabelFromTeam(t: TeamApi): string {
-  const raw = (t.myRole || t.userRole || t.role || "").trim();
+  const raw = String(t.myRole || t.userRole || t.role || "member")
+    .trim()
+    .toLowerCase();
+
   if (!raw) return "Member";
+  if (raw === "owner") return "Owner";
+
   return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+/** ✅ Same fallback behavior as orgs page */
+function roleMetaFromTeam(t: TeamApi): RoleBadgeMeta {
+  if (t.myRoleMeta?.name) return t.myRoleMeta;
+
+  const raw = String(t.myRole || t.userRole || t.role || "member")
+    .trim()
+    .toLowerCase();
+
+  if (raw === "owner") {
+    return {
+      key: "owner",
+      name: "Owner",
+      color: "#F7C948",
+      iconKey: "owner",
+      iconUrl: null,
+    };
+  }
+
+  return {
+    key: raw || "member",
+    name: raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Member",
+    color: "",
+    iconKey: "users",
+    iconUrl: null,
+  };
+}
+
+function resolveTeamAccentColor(t: TeamApi) {
+  const v = String(t.accentColor || "").trim();
+  return v || "var(--color-primary-500)";
 }
 
 async function fetchMyTeams(): Promise<TeamApi[]> {
@@ -206,22 +245,41 @@ function Pagination({
   );
 }
 
+/* ------------------------ Row card (List) ------------------------- */
 function TeamListRow({ item }: { item: CardRow }) {
   const badge = initialsFromName(item.title);
-  const roleLabel = (item.roleLabel || "Member").trim() || "Member";
+  const accent =
+    String(item.accentColor || "").trim() || "var(--color-primary-500)";
+
+  const roleMeta: RoleBadgeMeta = item.userRoleMeta?.name
+    ? item.userRoleMeta
+    : {
+        key: String(item.roleLabel || "member").toLowerCase(),
+        name: String(item.roleLabel || "Member"),
+        color: "",
+        iconKey: "users",
+        iconUrl: null,
+      };
 
   return (
     <Link
       href={item.href}
+      style={
+        {
+          ["--team-accent" as any]: accent,
+        } as React.CSSProperties
+      }
       className={clsx(
-        "group flex w-full items-center justify-between gap-4",
+        "group relative flex w-full items-center justify-between gap-4",
         "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
-        "hover:border-primary-500 hover:bg-white/7 transition-colors",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+        "transition-colors",
+        "hover:bg-white/7 hover:border-[color:var(--team-accent)]",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--team-accent)]/60",
       )}
     >
+      {/* Left (title + description) */}
       <div className="flex min-w-0 items-center gap-3">
-        <div className="relative h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
           {item.iconUrl ? (
             <Image
               src={item.iconUrl}
@@ -247,26 +305,34 @@ function TeamListRow({ item }: { item: CardRow }) {
         </div>
       </div>
 
-      {/* ✅ List meta updated to match card behavior */}
-      <div className="hidden items-center gap-6 md:flex">
-        {/* Role pill (replaces the old “members” slot in list view too) */}
-        <div
-          className={clsx(
-            "inline-flex items-center gap-1.5 rounded-full",
-            "border border-primary-500/22 bg-primary-500/10",
-            "px-2.5 py-1 text-[11px] font-semibold text-primary-200",
-            "shadow-[0_10px_28px_rgba(154,70,255,0.10)]",
-          )}
-        >
-          <ShieldCheck className="h-3.5 w-3.5 text-primary-300" />
-          <span className="max-w-[120px] truncate">{roleLabel}</span>
-        </div>
+      {/* ✅ True-centered meta (matches Organizations list row) */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex items-center gap-6">
+        <RoleBadge meta={roleMeta} />
 
-        {/* Total Members (replaces old Created [date]) */}
         <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
+          <span
+            className={clsx(
+              "inline-flex h-7 w-7 items-center justify-center rounded-lg",
+              "ring-1 ring-inset",
+            )}
+            style={{
+              background:
+                accent && String(accent).startsWith("#")
+                  ? `${accent}22`
+                  : "rgba(154,70,255,0.15)",
+              color:
+                accent && String(accent).startsWith("#")
+                  ? `${accent}`
+                  : "rgba(189,153,255,0.95)",
+              borderColor:
+                accent && String(accent).startsWith("#")
+                  ? `${accent}33`
+                  : "rgba(154,70,255,0.22)",
+            }}
+          >
             <Users className="h-4 w-4" />
           </span>
+
           <span className="font-semibold text-neutral-100">
             {formatMembers(item.totalMembers)}
           </span>
@@ -274,7 +340,8 @@ function TeamListRow({ item }: { item: CardRow }) {
         </div>
       </div>
 
-      <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
+      {/* Right (chevron) */}
+      <div className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
         <ChevronRight className="h-4 w-4" />
       </div>
     </Link>
@@ -287,7 +354,6 @@ export default function TeamsClient() {
   const [teamsQuery, setTeamsQuery] = useState("");
   const [teamsPage, setTeamsPage] = useState(1);
 
-  // ✅ new view toggle state
   const [teamsView, setTeamsView] = useState<GridListValue>("grid");
 
   const {
@@ -316,7 +382,10 @@ export default function TeamsClient() {
       iconUrl: t.logo || undefined,
       totalMembers: typeof t.totalMembers === "number" ? t.totalMembers : 0,
       joinDateLabel: formatJoinDateLabel(t.createdAt),
+
       roleLabel: roleLabelFromTeam(t),
+      userRoleMeta: roleMetaFromTeam(t),
+      accentColor: resolveTeamAccentColor(t),
     }));
   }, [teams]);
 
@@ -400,9 +469,7 @@ export default function TeamsClient() {
                   />
                 </div>
 
-                {/* Top-right controls swap */}
                 <div className="flex items-center gap-2">
-                  {/* ✅ replace Total Members bubble with Dribbble-style toggle */}
                   <GridListToggle
                     value={teamsView}
                     onChange={setTeamsView}
@@ -472,10 +539,12 @@ export default function TeamsClient() {
                         iconUrl={item.iconUrl}
                         totalMembers={item.totalMembers}
                         joinDateLabel={item.joinDateLabel}
+                        userRoleMeta={item.userRoleMeta ?? undefined}
                         userRoleLabel={item.roleLabel}
+                        accentColor={item.accentColor}
                         tilt
-                        tiltMaxDeg={4}
-                        tiltPerspective={900}
+                        tiltMaxDeg={3.5}
+                        tiltPerspective={1600}
                         tiltLiftPx={2}
                         cardWidth={
                           teamsSlice.length > 4 ? "compact" : "default"

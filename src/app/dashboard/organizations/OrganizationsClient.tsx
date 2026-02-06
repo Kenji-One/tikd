@@ -10,11 +10,14 @@ import clsx from "clsx";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Users, ChevronRight, ShieldCheck } from "lucide-react";
+import { Search, Plus, Users, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import ConnectionProfileCard from "@/components/connections/ConnectionProfileCard";
+import ConnectionProfileCard, {
+  type RoleBadgeMeta,
+  RoleBadge,
+} from "@/components/connections/ConnectionProfileCard";
 import GridListToggle, {
   type GridListValue,
 } from "@/components/ui/GridListToggle";
@@ -33,10 +36,13 @@ type Org = {
 
   website?: string;
 
-  /** ✅ user’s role in this org (backend can return any of these) */
+  /** ✅ org accent color (hex) */
+  accentColor?: string;
+
+  /** ✅ role display from backend */
   myRole?: string;
-  role?: string;
-  userRole?: string;
+  myRoleId?: string | null;
+  myRoleMeta?: RoleBadgeMeta | null;
 };
 
 /* ---------------------------- Helpers ------------------------------ */
@@ -104,11 +110,35 @@ function formatMembers(n?: number) {
   }
 }
 
-function roleLabelFromOrg(org: Org): string {
-  const raw = (org.myRole || org.userRole || org.role || "").trim();
-  if (!raw) return "Member";
-  // Make it look nice (Admin, Promoter, etc.)
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
+function roleMetaFromOrg(org: Org): RoleBadgeMeta {
+  if (org.myRoleMeta?.name) return org.myRoleMeta;
+
+  const raw = String(org.myRole || "member")
+    .trim()
+    .toLowerCase();
+  if (raw === "owner") {
+    return {
+      key: "owner",
+      name: "Owner",
+      color: "#F7C948",
+      iconKey: "owner",
+      iconUrl: null,
+    };
+  }
+
+  return {
+    key: raw || "member",
+    name: raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "Member",
+    color: "",
+    iconKey: "users",
+    iconUrl: null,
+  };
+}
+
+function resolveOrgAccentColor(org: Org) {
+  const v = String(org.accentColor || "").trim();
+  // if empty, use default "what it is now" (primary)
+  return v || "var(--color-primary-500)";
 }
 
 function Pagination({
@@ -190,16 +220,24 @@ function OrganizationListRow({
   description: string;
 }) {
   const badge = initialsFromName(org.name);
-  const roleLabel = roleLabelFromOrg(org);
+  const roleMeta = roleMetaFromOrg(org);
+  const accent = resolveOrgAccentColor(org);
 
   return (
     <Link
       href={`/dashboard/organizations/${org._id}`}
+      style={
+        {
+          ["--org-accent" as any]: accent,
+        } as React.CSSProperties
+      }
       className={clsx(
         "group relative flex w-full items-center justify-between gap-4",
         "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
-        "hover:border-primary-500 hover:bg-white/7 transition-colors",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+        "transition-colors",
+        // ✅ same behavior as before, but driven by org accent
+        "hover:bg-white/7 hover:border-[color:var(--org-accent)]",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--org-accent)]/60",
       )}
     >
       {/* Left (title + description) */}
@@ -232,22 +270,31 @@ function OrganizationListRow({
 
       {/* ✅ True-centered meta (center of the whole row) */}
       <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex items-center gap-6">
-        {/* ✅ Role (replaces the old “X Total Members” slot idea for list view too) */}
-        <div
-          className={clsx(
-            "inline-flex items-center gap-1.5 rounded-full",
-            "border border-primary-500/22 bg-primary-500/10",
-            "px-2.5 py-1 text-[11px] font-semibold text-primary-200",
-            "shadow-[0_10px_28px_rgba(154,70,255,0.10)]",
-          )}
-        >
-          <ShieldCheck className="h-3.5 w-3.5 text-primary-300" />
-          <span className="max-w-[120px] truncate">{roleLabel}</span>
-        </div>
+        {/* ✅ Role pill */}
+        <RoleBadge meta={roleMeta} />
 
-        {/* ✅ Total Members (replaces old Created [date]) */}
+        {/* ✅ Total Members */}
         <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
+          <span
+            className={clsx(
+              "inline-flex h-7 w-7 items-center justify-center rounded-lg",
+              "ring-1 ring-inset",
+            )}
+            style={{
+              background:
+                accent && String(accent).startsWith("#")
+                  ? `${accent}22`
+                  : "rgba(154,70,255,0.15)",
+              color:
+                accent && String(accent).startsWith("#")
+                  ? `${accent}`
+                  : "rgba(189,153,255,0.95)",
+              borderColor:
+                accent && String(accent).startsWith("#")
+                  ? `${accent}33`
+                  : "rgba(154,70,255,0.22)",
+            }}
+          >
             <Users className="h-4 w-4" />
           </span>
           <span className="font-semibold text-neutral-100">
@@ -273,7 +320,6 @@ export default function OrganizationsClient() {
   const [orgsQuery, setOrgsQuery] = useState("");
   const [orgsPage, setOrgsPage] = useState(1);
 
-  // ✅ view toggle state
   const [view, setView] = useState<GridListValue>("grid");
 
   const { data: orgs, isLoading: orgsLoading } = useQuery<Org[]>({
@@ -391,7 +437,6 @@ export default function OrganizationsClient() {
                   <div
                     className={clsx(
                       "grid gap-4",
-                      // ✅ Compact 240px cards, but let grid distribute leftover nicely (no ghost columns)
                       "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
                     )}
                   >
@@ -429,6 +474,8 @@ export default function OrganizationsClient() {
                         52,
                       );
 
+                      const roleMeta = roleMetaFromOrg(o);
+
                       return (
                         <ConnectionProfileCard
                           key={o._id}
@@ -440,7 +487,8 @@ export default function OrganizationsClient() {
                           iconUrl={o.logo}
                           totalMembers={o.totalMembers}
                           joinDateLabel={joinLabel(o.createdAt)}
-                          userRoleLabel={roleLabelFromOrg(o)}
+                          userRoleMeta={roleMeta}
+                          accentColor={resolveOrgAccentColor(o)}
                           tilt
                           tiltMaxDeg={3.5}
                           tiltPerspective={1600}

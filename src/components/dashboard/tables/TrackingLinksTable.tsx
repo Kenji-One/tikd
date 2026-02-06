@@ -43,6 +43,7 @@ type TrackingLinksTableProps = {
   eventId?: string;
   showViewAll?: boolean;
   viewAllHref?: string;
+  headerLeftAction?: ReactNode;
 };
 
 /**
@@ -52,7 +53,7 @@ type TrackingLinksTableProps = {
 type PresetIconKey =
   | "instagram"
   | "facebook"
-  | "twitter"
+  | "x"
   | "linkedin"
   | "google"
   | "youtube"
@@ -1285,7 +1286,7 @@ function TrackingLinkDialog({
   const presetIcons: Array<{ key: PresetIconKey; label: string }> = [
     { key: "instagram", label: "Instagram" },
     { key: "facebook", label: "Facebook" },
-    { key: "twitter", label: "X" },
+    { key: "x", label: "X" },
     { key: "linkedin", label: "LinkedIn" },
     { key: "google", label: "Google" },
     { key: "youtube", label: "YouTube" },
@@ -2002,6 +2003,7 @@ export default function TrackingLinksTable({
   organizationId,
   eventId,
   showViewAll = true,
+  headerLeftAction,
   viewAllHref,
 }: TrackingLinksTableProps) {
   const [data, setData] = useState<Row[]>([]);
@@ -2555,6 +2557,7 @@ export default function TrackingLinksTable({
         </div>
 
         <div className="flex items-center gap-2">
+          {headerLeftAction ? headerLeftAction : null}
           {/* + Create (top-right) */}
           <button
             type="button"

@@ -1,6 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  src/components/dashboard/finances/DetailedViewShell.tsx           */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
@@ -12,7 +9,13 @@ import SmallKpiChart from "@/components/dashboard/charts/SmallKpiChart";
 import RevenueChart, {
   type RevenueTooltip,
 } from "@/components/dashboard/charts/RevenueChart";
+import RevenueChartMulti, {
+  type MultiSeriesLine,
+} from "@/components/dashboard/charts/RevenueChartMulti";
 import BarsWeek from "@/components/dashboard/charts/BarsWeek";
+import BarsWeekStacked, {
+  type BarsStackSeries,
+} from "@/components/dashboard/charts/BarsWeekStacked";
 import DonutFull, {
   type DonutSegment,
 } from "@/components/dashboard/charts/DonutFull";
@@ -126,7 +129,14 @@ type BigCardCfg = {
   value: string;
   delta?: string;
   deltaPositive?: boolean;
+
+  /** default single-series chart */
   series: number[];
+
+  /** OPTIONAL: multi-series (used only where needed, e.g. Gender Breakdown) */
+  seriesLines?: MultiSeriesLine[];
+  pinSeriesKey?: string;
+
   tooltip: RevenueTooltip;
   valuePrefix?: string;
   valueSuffix?: string;
@@ -155,7 +165,12 @@ type Props = {
 
   barsLabel: string;
   barsHeading: string;
+
+  /** default single-series bars */
   barsData: number[];
+
+  /** OPTIONAL stacked bars (used only where needed, e.g. Gender Breakdown) */
+  barsStacks?: BarsStackSeries[];
 };
 
 const data = [
@@ -212,6 +227,7 @@ export default function DetailedViewShell({
   barsLabel,
   barsHeading,
   barsData,
+  barsStacks,
 }: Props) {
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => ({
     start: new Date(2024, 0, 1),
@@ -268,6 +284,14 @@ export default function DetailedViewShell({
 
   // ✅ dynamic month/year for Donut + Peak Days
   const monthYear = useMemo(() => currentMonthYearUpper(), []);
+
+  const multiLines = useMemo(() => {
+    if (!bigCard.seriesLines?.length) return null;
+    return bigCard.seriesLines.map((l) => ({
+      ...l,
+      series: mapSeriesToCount(l.series, labels.length),
+    }));
+  }, [bigCard.seriesLines, labels.length]);
 
   return (
     <div className="space-y-5">
@@ -344,19 +368,34 @@ export default function DetailedViewShell({
           </div>
 
           <div className="pr-6 pb-5 h-[320px] sm:h-[340px] lg:h-[360px]">
-            <RevenueChart
-              data={bigSeries}
-              dates={dates}
-              domain={[0, 250_000]}
-              yTicks={[0, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000]}
-              xLabels={labels}
-              tooltip={bigTooltip}
-              stroke="#9A46FF"
-              fillTop="#9A46FF"
-              tooltipVariant="primary"
-              valuePrefix={bigCard.valuePrefix}
-              valueSuffix={bigCard.valueSuffix}
-            />
+            {multiLines ? (
+              <RevenueChartMulti
+                series={multiLines}
+                pinSeriesKey={bigCard.pinSeriesKey}
+                dates={dates}
+                domain={[0, 250_000]}
+                yTicks={[0, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000]}
+                xLabels={labels}
+                tooltip={bigTooltip}
+                valuePrefix={bigCard.valuePrefix ?? ""}
+                valueSuffix={bigCard.valueSuffix ?? "K"}
+                tooltipVariant="primary"
+              />
+            ) : (
+              <RevenueChart
+                data={bigSeries}
+                dates={dates}
+                domain={[0, 250_000]}
+                yTicks={[0, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000]}
+                xLabels={labels}
+                tooltip={bigTooltip}
+                stroke="#9A46FF"
+                fillTop="#9A46FF"
+                tooltipVariant="primary"
+                valuePrefix={bigCard.valuePrefix}
+                valueSuffix={bigCard.valueSuffix}
+              />
+            )}
           </div>
         </div>
 
@@ -412,7 +451,6 @@ export default function DetailedViewShell({
           </div>
         </div>
 
-        {/* ✅ Peak days card now grows the chart to fill height */}
         <div className="col-span-12 xl:col-span-4 rounded-lg border border-neutral-700 bg-neutral-900 p-5 flex flex-col">
           <div className="shrink-0">
             <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
@@ -422,9 +460,16 @@ export default function DetailedViewShell({
             <div className="mt-1 text-2xl font-extrabold">{monthYear}</div>
           </div>
 
-          {/* key change: flex-1 instead of fixed h-[260px] */}
           <div className="mt-4 flex-1 min-h-[260px]">
-            <BarsWeek data={barsData} highlightIndex={4} metric={mode} />
+            {barsStacks?.length ? (
+              <BarsWeekStacked
+                series={barsStacks}
+                highlightIndex={4}
+                metric={mode}
+              />
+            ) : (
+              <BarsWeek data={barsData} highlightIndex={4} metric={mode} />
+            )}
           </div>
         </div>
       </section>

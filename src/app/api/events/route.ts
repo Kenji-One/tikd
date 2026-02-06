@@ -1,3 +1,4 @@
+// src/app/api/events/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
@@ -10,6 +11,7 @@ import Artist from "@/models/Artist";
 import User from "@/models/User";
 import OrgTeam from "@/models/OrgTeam";
 import EventTeam from "@/models/EventTeam";
+import { createNotification } from "@/lib/notifications";
 
 /* ------------------------- Helpers ------------------------- */
 const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
@@ -423,6 +425,15 @@ export async function POST(req: Request) {
     createdByUserId: session.user.id,
 
     status: parsed.data.status,
+  });
+
+  // ✅ Create a starter notification (type: event.created)
+  await createNotification({
+    recipientUserId: identity.userId,
+    type: "event.created",
+    title: "Event created",
+    message: `Your event “${parsed.data.title}” was created as a draft.`,
+    href: `/dashboard/events/${String(event._id)}`,
   });
 
   // ✅ Auto-add creator to EventTeam as ADMIN + ACTIVE

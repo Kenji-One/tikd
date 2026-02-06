@@ -1,3 +1,4 @@
+// src\models\OrgTeam.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 /* ----------------------------- Types ----------------------------- */
@@ -16,7 +17,15 @@ export interface IOrgTeam extends Document {
   userId?: Types.ObjectId | null;
   name?: string;
 
+  /**
+   * System role (kept for backwards compatibility).
+   * If a member has a custom role, keep `role="member"` and set `roleId`.
+   */
   role: OrgTeamRole;
+
+  /** Custom role reference (optional) */
+  roleId?: Types.ObjectId | null;
+
   status: OrgTeamStatus;
 
   temporaryAccess: boolean;
@@ -52,6 +61,13 @@ const OrgTeamSchema = new Schema<IOrgTeam>(
       type: String,
       enum: ["admin", "promoter", "scanner", "collaborator", "member"],
       required: true,
+    },
+
+    roleId: {
+      type: Schema.Types.ObjectId,
+      ref: "OrgRole",
+      default: null,
+      index: true,
     },
 
     status: {

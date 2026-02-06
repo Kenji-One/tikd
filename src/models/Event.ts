@@ -1,3 +1,4 @@
+// src\models\Event.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 export interface IEvent extends Document {

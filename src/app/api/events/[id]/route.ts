@@ -14,6 +14,7 @@ import Ticket from "@/models/Ticket";
 import OrgTeam from "@/models/OrgTeam";
 import EventTeam from "@/models/EventTeam";
 import type { HydratedDocument, Types } from "mongoose";
+import { createNotification } from "@/lib/notifications";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -292,6 +293,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
+  // ✅ Detect publish transition (draft -> published)
+  const prevStatus = event.status;
+
   const data = parsed.data;
 
   if (data.title !== undefined) event.title = data.title;
@@ -351,6 +355,53 @@ export async function PATCH(
   }
 
   await event.save();
+
+  // ✅ If it JUST got published, create a notification (and make the red dot real)
+  const didPublishNow = prevStatus === "draft" && event.status === "published";
+  if (didPublishNow) {
+    // Recipients: creator + org owner + active event team members (deduped)
+    const recipients = new Set<string>();
+
+    if (event.createdByUserId) recipients.add(String(event.createdByUserId));
+
+    const org = await Organization.findById(event.organizationId)
+      .select("_id ownerId name")
+      .lean<{
+        _id: Types.ObjectId;
+        ownerId: Types.ObjectId;
+        name?: string;
+      } | null>();
+
+    if (org?.ownerId) recipients.add(String(org.ownerId));
+
+    const team = await EventTeam.find({
+      eventId: event._id,
+      status: "active",
+      userId: { $ne: null },
+    })
+      .select("userId")
+      .lean<Array<{ userId?: Types.ObjectId | null }>>();
+
+    for (const row of team) {
+      if (row.userId) recipients.add(String(row.userId));
+    }
+
+    const title = "Event published";
+    const message = `“${event.title}” is now live.`;
+    const href = `/dashboard/events/${String(event._id)}`;
+
+    await Promise.all(
+      Array.from(recipients).map((userId) =>
+        createNotification({
+          recipientUserId: userId,
+          type: "event.published",
+          title,
+          message,
+          href,
+        }),
+      ),
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }

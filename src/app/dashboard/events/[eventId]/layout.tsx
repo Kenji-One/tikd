@@ -400,7 +400,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       pathname === `${basePath}/summary` ||
       activeTab === "summary" ||
       activeTab === "guests" ||
-      activeTab === "tracking-links"
+      activeTab === "tracking-links" ||
+      activeTab === "team"
     );
   }, [activeTab, basePath, pathname]);
 
@@ -1264,7 +1265,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           width: 100%;
           height: 100%;
           pointer-events: none;
-          z-index: 1;
+          z-index: 3;
         }
 
         /* Ensure modal is above confetti */
@@ -1274,8 +1275,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
         }
 
         .tikd-publish-modal-close {
-          position: relative;
-          z-index: 3;
+          z-index: 4;
         }
       `}</style>
     </main>

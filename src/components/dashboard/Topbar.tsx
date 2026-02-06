@@ -1,3 +1,4 @@
+// src/components/dashboard/Topbar.tsx
 "use client";
 
 import Link from "next/link";
@@ -10,7 +11,6 @@ import {
   Search as SearchIcon,
   Settings as SettingsIcon,
   LogOut,
-  MessageCircleMore,
 } from "lucide-react";
 
 import SearchModal from "@/components/search/SearchModal";
@@ -34,7 +34,6 @@ const SORT_OPTIONS: { key: SortByKey; label: string }[] = [
 export default function Topbar({ hideLogo = false }: TopbarProps) {
   /* ----- auth ---------------------------------------------------------- */
   const { data: session } = useSession();
-  console.log("Topbar session:", session);
   const seed = session?.user?.id ?? "guest";
   const avatarSrc =
     session?.user?.image && session.user.image.length > 0
@@ -46,7 +45,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
   const avatarRef = useRef<HTMLDivElement | null>(null);
 
   const [notifOpen, setNotifOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(11);
+  const [unreadCount, setUnreadCount] = useState(0);
   const notifRef = useRef<HTMLDivElement | null>(null);
 
   const [chatOpen, setChatOpen] = useState(false);
@@ -65,12 +64,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
   const showSortSelector = useMemo(() => {
     if (!pathname) return false;
 
-    // exact pages
-    // if (pathname === "/dashboard") return true;
-    if (pathname === "/dashboard/events") return true;
     if (pathname === "/dashboard/organizations") return true;
-
-    // dynamic org page: /dashboard/organization/[id]
     return /^\/dashboard\/organization\/[^/]+$/.test(pathname);
   }, [pathname]);
 
@@ -104,6 +98,30 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
     if (sortParam && sortParam !== sortBy) setSortBy(sortParam);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortParamRaw]);
+
+  // ✅ Load unread count from backend so dot is correct on refresh
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUnread() {
+      if (!session?.user?.id) return;
+      try {
+        const res = await fetch("/api/notifications?tab=unread&limit=1", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { unreadCount?: number };
+        if (!cancelled) setUnreadCount(Number(data.unreadCount || 0));
+      } catch {
+        // ignore
+      }
+    }
+
+    loadUnread();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -171,16 +189,13 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
           isEventDashboard && "px-4 md:px-6 lg:px-8",
         )}
       >
-        {/* ✅ Move the hero wash here ONLY for event dashboard pages */}
         {isEventDashboard && (
           <div aria-hidden="true" className="tikd-event-topbar-bg" />
         )}
 
-        {/* Content above the wash */}
         <div className="relative z-10">
           <div className="grid grid-cols-[3.10fr_1.51fr] gap-5 pb-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4 justify-between w-full sm:w-auto">
-              {/* Search trigger – looks like an input but opens SearchModal */}
               <div className={"relative w-full sm:max-w-md"}>
                 <button
                   type="button"
@@ -195,7 +210,6 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                 </button>
               </div>
 
-              {/* Sort selector */}
               {showSortSelector && (
                 <div ref={sortRef} className="relative w-full max-w-[126px]">
                   <button
@@ -216,7 +230,6 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                   {sortOpen && (
                     <div className="absolute left-0 z-50 mt-2 w-full">
                       <div className="relative">
-                        {/* caret */}
                         <span className="pointer-events-none absolute -top-2 left-6 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
 
                         <div
@@ -258,9 +271,8 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
               )}
             </div>
 
-            {/* Right controls */}
             <div className="flex items-center justify-end gap-2 sm:gap-3">
-              {/* Messages (Text Blaster) */}
+              {/* Messages */}
               <div className="relative" ref={chatRef}>
                 <button
                   type="button"
@@ -317,7 +329,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                 />
               </div>
 
-              {/* Notifications (popover like Friend Requests) */}
+              {/* Notifications */}
               <div className="relative" ref={notifRef}>
                 <button
                   type="button"
@@ -325,7 +337,6 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                   aria-haspopup="dialog"
                   aria-expanded={notifOpen}
                   onClick={() => {
-                    // close other popovers for clean UX
                     setAvatarOpen(false);
                     setSortOpen(false);
                     setSearchOpen(false);
@@ -361,7 +372,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                 />
               </div>
 
-              {/* Avatar w/ dropdown (account, settings, logout) */}
+              {/* Avatar */}
               <div className="relative" ref={avatarRef}>
                 <button
                   type="button"
@@ -401,7 +412,6 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                 {avatarOpen && (
                   <div className="absolute right-0 z-50 mt-2 w-56">
                     <div className="relative">
-                      {/* caret */}
                       <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
                       <div
                         role="menu"
@@ -479,7 +489,6 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
         </div>
       </div>
 
-      {/* Global search modal (reuses your existing component) */}
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
     </>
   );

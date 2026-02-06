@@ -507,7 +507,7 @@ function NavRow({
   // Clickable button-row (for modals)
   if (onClick && !disabled) {
     return (
-      <button type="button" onClick={onClick} className={base}>
+      <button type="button" onClick={onClick} className={base + " w-full"}>
         {content}
       </button>
     );

@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -34,9 +34,14 @@ type ToggleKey =
   | "age"
   | "teamMembers";
 
+/**
+ * ✅ Per task:
+ * - "Types of Ticket" OFF by default
+ * - "Guest List" OFF by default
+ */
 const DEFAULTS: Record<ToggleKey, boolean> = {
-  typesOfTicket: true,
-  guestList: true,
+  typesOfTicket: false,
+  guestList: false,
   djRequests: false,
   promoCodes: false,
   tableOrders: false,
@@ -81,6 +86,11 @@ export default function DownloadCsvModal({
 }: Props) {
   const [toggles, setToggles] = useState(DEFAULTS);
 
+  // ✅ Hard reset on open (prevents any “sticky” UI state across re-opens)
+  useEffect(() => {
+    if (open) setToggles(DEFAULTS);
+  }, [open]);
+
   const allOn = useMemo(() => Object.values(toggles).every(Boolean), [toggles]);
 
   if (!open) return null;
@@ -103,22 +113,23 @@ export default function DownloadCsvModal({
       <div
         className={clsx(
           "relative w-full",
-          // smaller like Figma (and never becomes a giant monster)
-          "max-w-[592px]",
+          // ✅ slightly smaller overall size
+          "max-w-[540px]",
           "rounded-3xl border border-white/10",
           "bg-neutral-950/85 backdrop-blur-2xl",
           "shadow-[0_24px_90px_rgba(0,0,0,0.70),inset_0_1px_0_rgba(255,255,255,0.06)]",
-          // cap height + internal scroll
+          // ✅ fix scrolling: real flex layout with a dedicated scroll region
           "max-h-[calc(100vh-48px)] overflow-hidden",
+          "flex flex-col",
         )}
       >
         {/* header */}
-        <div className="flex items-start justify-between px-7 pt-7">
+        <div className="flex items-start justify-between px-6 pt-6">
           <div className="pr-8">
-            <h2 className="text-[28px] font-semibold tracking-[-0.6px] text-neutral-0">
+            <h2 className="text-[24px] font-semibold tracking-[-0.5px] text-neutral-0">
               Download CSV
             </h2>
-            <p className="mt-3 font-medium text-neutral-400">
+            <p className="mt-2.5 text-[13px] font-medium leading-[1.35] text-neutral-400">
               Select the information you want to download from Event
             </p>
           </div>
@@ -126,7 +137,7 @@ export default function DownloadCsvModal({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />
@@ -134,19 +145,21 @@ export default function DownloadCsvModal({
         </div>
 
         {/* body scroll area */}
-        <div className="no-scrollbar overflow-y-auto px-7 pb-7 pt-5">
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
           {/* event name */}
-          <div className="font-semibold text-neutral-0">Event Name</div>
+          <div className="text-[13px] font-semibold text-neutral-0">
+            Event Name
+          </div>
           <div className="mt-2.5">
             <input
               readOnly
               value={eventName ?? ""}
               className={clsx(
                 "w-full",
-                // Figma-like input (less “ugly”, less tall)
                 "rounded-lg border border-neutral-700/60",
                 "bg-neutral-900/55",
-                "px-4 py-3",
+                // ✅ slightly smaller input
+                "px-3.5 py-2.5",
                 "font-medium text-neutral-200",
                 "placeholder:text-neutral-500",
                 "focus:outline-none focus:ring-2 focus:ring-primary-951/25",
@@ -156,13 +169,13 @@ export default function DownloadCsvModal({
           </div>
 
           {/* toggles */}
-          <div className="mt-6 space-y-3.5">
+          <div className="mt-5 space-y-3">
             {LABELS.map((it) => (
               <div
                 key={it.key}
                 className="flex items-center justify-between gap-6"
               >
-                <div className="text-[18px] font-semibold tracking-[-0.35px] text-neutral-0">
+                <div className="text-[16px] font-semibold tracking-[-0.3px] text-neutral-0">
                   {it.label}
                 </div>
 
@@ -176,9 +189,11 @@ export default function DownloadCsvModal({
               </div>
             ))}
           </div>
+        </div>
 
-          {/* actions */}
-          <div className="mt-8 flex items-center justify-end gap-4">
+        {/* footer actions (always reachable) */}
+        <div className="shrink-0 border-t border-white/10 bg-neutral-950/60 px-6 py-5 backdrop-blur-2xl">
+          <div className="flex items-center justify-end gap-3">
             {/* Figma: white pill */}
             <Button
               variant="secondary"

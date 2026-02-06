@@ -1,23 +1,30 @@
 // next.config.ts
-
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    // your own host is same-origin, but we whitelist the external dicebear API too
-    domains: ["api.dicebear.com", "localhost", "res.cloudinary.com"],
-    // if you still use remotePatterns for DiceBear…
+    // ✅ Next 15+ prefers remotePatterns over domains
     remotePatterns: [
+      // DiceBear (SVG)
       {
         protocol: "https",
         hostname: "api.dicebear.com",
-        port: "",
-        pathname: "/9.x/rings/svg",
+        pathname: "/9.x/**",
+      },
+
+      // Cloudinary
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+        pathname: "/**",
       },
     ],
 
-    // 🔓 allow Next/Image to proxy SVG content
+    // 🔓 allow SVG (only if you truly need it)
     dangerouslyAllowSVG: true,
+
+    // ✅ recommended when allowing SVG (prevents script execution inside SVGs)
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 };
 

@@ -546,9 +546,7 @@ export default function DashboardClient() {
 
         <MyTeamTable
           members={DEMO_MY_TEAM}
-          onDetailedView={() => {
-            console.log("Detailed View clicked");
-          }}
+          onDetailedView={() => router.push("/dashboard/my-members")}
         />
       </section>
 

@@ -1,6 +1,7 @@
 // src/app/dashboard/events/[eventId]/summary/page.tsx
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -463,6 +464,8 @@ function StatPillsRow(opts: {
 }
 
 export default function EventSummaryPage() {
+  const router = useRouter();
+
   const { eventId } = useParams() as { eventId?: string };
 
   const { data: event } = useQuery<EventWithMeta>({
@@ -828,7 +831,9 @@ export default function EventSummaryPage() {
                 variant="viewAction"
                 size="sm"
                 type="button"
-                onClick={() => console.log("Gender breakdown detailed view")}
+                onClick={() =>
+                  router.push(`/dashboard/gender-breakdown?eventId=${eventId}`)
+                }
               >
                 Detailed View
               </Button>
@@ -865,7 +870,9 @@ export default function EventSummaryPage() {
                 variant="viewAction"
                 size="sm"
                 type="button"
-                onClick={() => console.log("Age breakdown detailed view")}
+                onClick={() =>
+                  router.push(`/dashboard/age-breakdown?eventId=${eventId}`)
+                }
               >
                 Detailed View
               </Button>

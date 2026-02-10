@@ -220,7 +220,7 @@ export default function NotificationsDialog({
                 "border border-white/10 bg-primary-500/15 text-primary-200",
                 "hover:bg-primary-500/20 transition-colors",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                "disabled:opacity-50 disabled:hover:bg-primary-500/15",
+                "disabled:opacity-50 disabled:hover:bg-primary-500/15 cursor-pointer",
               )}
               aria-label="Mark all as read"
             >
@@ -236,7 +236,7 @@ export default function NotificationsDialog({
                 "inline-flex h-8 w-8 items-center justify-center rounded-lg",
                 "border border-white/10 bg-white/[0.06] text-neutral-200",
                 "hover:bg-white/[0.10] transition-colors",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
               )}
             >
               <X className="h-4 w-4" />
@@ -255,7 +255,7 @@ export default function NotificationsDialog({
               tab === "all"
                 ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
                 : "bg-white/[0.06] text-neutral-200 hover:bg-white/[0.10]",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
             )}
           >
             All
@@ -269,7 +269,7 @@ export default function NotificationsDialog({
               tab === "unread"
                 ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
                 : "bg-white/[0.06] text-neutral-200 hover:bg-white/[0.10]",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
             )}
           >
             Unread
@@ -331,7 +331,7 @@ export default function NotificationsDialog({
                   "px-3 py-3",
                   "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
                   "hover:bg-white/[0.08] hover:border-white/15 transition-colors",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
                 )}
               >
                 {!n.read ? (

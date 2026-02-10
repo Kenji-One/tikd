@@ -45,6 +45,9 @@ export interface IUser extends Document {
   company?: string; // e.g. "Highspeed Studios"
   companyHref?: string; // e.g. "https://highspeed.com"
 
+  /** ✅ NEW (Instagram on Friend card) */
+  instagram?: string; // e.g. "@tikd" or "https://instagram.com/tikd"
+
   // Security audit
   passwordUpdatedAt?: Date;
 
@@ -125,6 +128,9 @@ const UserSchema = new Schema<IUser>(
     jobTitle: { type: String, trim: true, default: "" },
     company: { type: String, trim: true, default: "" },
     companyHref: { type: String, trim: true, default: "" },
+
+    /** ✅ NEW (Instagram on Friend card) */
+    instagram: { type: String, trim: true, default: "" },
 
     // Security audit
     passwordUpdatedAt: { type: Date },

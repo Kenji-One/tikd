@@ -1,11 +1,8 @@
+// src\components\ui\Tilt3d.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -14,10 +11,9 @@ function usePrefersReducedMotion() {
     const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
     if (!mq) return;
 
-    const apply = () => setReduced(!!mq.matches);
+    const apply = () => setReduced(Boolean(mq.matches));
     apply();
 
-    // Safari < 14 fallback
     if (mq.addEventListener) mq.addEventListener("change", apply);
     else mq.addListener(apply);
 
@@ -30,103 +26,131 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
-/**
- * NOTE:
- * We intentionally split "perspective host" (the element that receives mouse events)
- * from "surface" (the element that gets rotated).
- *
- * We ALSO avoid always-on `will-change: transform` because Chromium may rasterize text
- * at a lower quality while animating. Instead, we enable will-change only on hover.
- */
-export function useTilt3d<T extends HTMLElement>(opts?: {
-  maxDeg?: number;
-  perspective?: number;
-  liftPx?: number;
+type TiltOpts = {
   disabled?: boolean;
-}) {
-  // This ref points to the INNER surface that we transform.
+
+  /**
+   * CodePen-style knobs (defaults tuned for Tikd UI)
+   * - scale lowered (no big zoom)
+   * - glow toned down (no white wash)
+   */
+  scale?: number; // default 1.03
+  divisor?: number; // default 100 (tilt response)
+  angleMultiplier?: number; // default 2 (log(distance) * multiplier)
+  glowSpreadMultiplier?: number; // default 1.45 (how fast glow "travels")
+};
+
+export function useTilt3d<T extends HTMLElement>(opts?: TiltOpts) {
   const ref = useRef<T | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
 
-  const maxDeg = opts?.maxDeg ?? 10;
-  const liftPx = opts?.liftPx ?? 3;
-  const disabled = !!opts?.disabled;
+  const disabled = Boolean(opts?.disabled);
+  const scale = opts?.scale ?? 1.03; // ✅ was 1.07 (too much)
+  const divisor = opts?.divisor ?? 100;
+  const angleMultiplier = opts?.angleMultiplier ?? 2;
+  const glowSpreadMultiplier = opts?.glowSpreadMultiplier ?? 1.45; // ✅ was effectively 2
 
+  const boundsRef = useRef<DOMRect | null>(null);
   const rafRef = useRef<number | null>(null);
 
-  const setVars = (el: HTMLElement, rx: number, ry: number, lift: number) => {
-    el.style.setProperty("--tikd-tilt-rx", `${rx}deg`);
-    el.style.setProperty("--tikd-tilt-ry", `${ry}deg`);
-    el.style.setProperty("--tikd-tilt-rx-inv", `${-rx}deg`);
-    el.style.setProperty("--tikd-tilt-ry-inv", `${-ry}deg`);
-    el.style.setProperty("--tikd-tilt-lift", `${lift}px`);
+  const glowSelector = "[data-tilt-glow]";
+
+  const setGlow = (el: HTMLElement, mx: number, my: number) => {
+    const glow = el.querySelector<HTMLElement>(glowSelector);
+    if (!glow) return;
+
+    // ✅ Much less “white film” and shine
+    glow.style.backgroundImage = `
+      radial-gradient(
+        circle at ${mx}px ${my}px,
+        rgba(255,255,255,0.10),
+        rgba(0,0,0,0.14)
+      )
+    `;
   };
 
-  const setTransform = (rx: number, ry: number, lift: number) => {
-    const el = ref.current;
-    if (!el) return;
+  const resetGlow = (el: HTMLElement) => {
+    const glow = el.querySelector<HTMLElement>(glowSelector);
+    if (!glow) return;
 
-    setVars(el as unknown as HTMLElement, rx, ry, lift);
-
-    // IMPORTANT: no `perspective()` here — perspective is applied on the parent via CSS property.
-    // Small translateZ helps keep 3D pipeline stable (and helps our counter-rotated text layer).
-    (el as unknown as HTMLElement).style.transform =
-      `rotateX(${rx}deg) rotateY(${ry}deg) translate3d(0, ${-lift}px, 0) translateZ(0.01px)`;
+    // ✅ Neutral, subtle resting glow (not bright)
+    glow.style.backgroundImage =
+      "radial-gradient(circle at 50% -20%, rgba(255,255,255,0.05), rgba(0,0,0,0.14))";
   };
 
-  const reset = () => {
-    const el = ref.current as unknown as HTMLElement | null;
-    if (!el) return;
+  const applyTransform = (el: HTMLElement, cx: number, cy: number) => {
+    const distance = Math.sqrt(cx * cx + cy * cy);
+    const safeDistance = Math.max(distance, 1);
+    const deg = Math.log(safeDistance) * angleMultiplier;
 
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-
-    el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)";
-    setTransform(0, 0, 0);
-
-    // ✅ Remove will-change after settling to avoid “blurry bitmap layer” behavior
-    window.setTimeout(() => {
-      const cur = ref.current as unknown as HTMLElement | null;
-      if (!cur) return;
-      cur.style.willChange = "auto";
-    }, 240);
+    el.style.transform = `
+      scale3d(${scale}, ${scale}, ${scale})
+      rotate3d(${cy / divisor}, ${-cx / divisor}, 0, ${deg}deg)
+    `;
   };
 
   const onMouseMove: React.MouseEventHandler<HTMLElement> = (e) => {
     if (disabled || prefersReducedMotion) return;
 
-    const el = ref.current as unknown as HTMLElement | null;
-    if (!el) return;
+    const surface = ref.current as unknown as HTMLElement | null;
+    if (!surface) return;
 
-    // Use the element receiving the handler (host) for bounds.
-    const host = e.currentTarget as HTMLElement;
-    const rect = host.getBoundingClientRect();
+    const rect = boundsRef.current ?? e.currentTarget.getBoundingClientRect();
+    boundsRef.current = rect;
 
-    const px = (e.clientX - rect.left) / rect.width; // 0..1
-    const py = (e.clientY - rect.top) / rect.height; // 0..1
+    const mouseX = e.clientX;
+    const mouseY = e.clientY;
 
-    const dx = (px - 0.5) * 2;
-    const dy = (py - 0.5) * 2;
+    const leftX = mouseX - rect.x;
+    const topY = mouseY - rect.y;
 
-    const rx = clamp(-dy * maxDeg, -maxDeg, maxDeg);
-    const ry = clamp(dx * maxDeg, -maxDeg, maxDeg);
+    const centerX = leftX - rect.width / 2;
+    const centerY = topY - rect.height / 2;
+
+    const glowX = centerX * glowSpreadMultiplier + rect.width / 2;
+    const glowY = centerY * glowSpreadMultiplier + rect.height / 2;
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
-      el.style.transition = "transform 50ms linear";
-      setTransform(rx, ry, liftPx);
+      surface.style.transition = "transform 0ms";
+      applyTransform(surface, centerX, centerY);
+      setGlow(surface, glowX, glowY);
     });
   };
 
-  const onMouseLeave: React.MouseEventHandler<HTMLElement> = () => reset();
+  const onMouseEnter: React.MouseEventHandler<HTMLElement> = (e) => {
+    if (disabled || prefersReducedMotion) return;
 
-  const onMouseEnter: React.MouseEventHandler<HTMLElement> = () => {
-    const el = ref.current as unknown as HTMLElement | null;
-    if (!el || disabled || prefersReducedMotion) return;
+    const surface = ref.current as unknown as HTMLElement | null;
+    if (!surface) return;
 
-    // ✅ Enable will-change ONLY while hovering
-    el.style.willChange = "transform";
-    el.style.transition = "transform 220ms cubic-bezier(.2,.8,.2,1)";
+    boundsRef.current = (
+      e.currentTarget as HTMLElement
+    ).getBoundingClientRect();
+
+    surface.style.willChange = "transform";
+    surface.style.transition = "transform 260ms ease-out";
+    resetGlow(surface);
+  };
+
+  const onMouseLeave: React.MouseEventHandler<HTMLElement> = () => {
+    const surface = ref.current as unknown as HTMLElement | null;
+    if (!surface) return;
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+
+    boundsRef.current = null;
+
+    surface.style.transition = "transform 260ms ease-out";
+    surface.style.transform = "";
+    resetGlow(surface);
+
+    window.setTimeout(() => {
+      const cur = ref.current as unknown as HTMLElement | null;
+      if (!cur) return;
+      cur.style.willChange = "auto";
+    }, 280);
   };
 
   useEffect(() => {
@@ -138,34 +162,36 @@ export function useTilt3d<T extends HTMLElement>(opts?: {
     };
   }, []);
 
-  return { ref, onMouseMove, onMouseLeave, onMouseEnter, reset };
+  return { ref, onMouseMove, onMouseLeave, onMouseEnter };
 }
 
 export function Tilt3d({
   children,
   className,
   style,
-  maxDeg,
   perspective,
-  liftPx,
   disabled,
+  maxDeg: _maxDeg, // legacy, ignored (kept for compatibility)
+  liftPx: _liftPx, // legacy, ignored (kept for compatibility)
 }: {
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
-  maxDeg?: number;
   perspective?: number;
-  liftPx?: number;
   disabled?: boolean;
+  maxDeg?: number;
+  liftPx?: number;
 }) {
-  const tilt = useTilt3d<HTMLDivElement>({
-    maxDeg,
-    perspective,
-    liftPx,
-    disabled,
-  });
+  const persp = perspective ?? 1500;
 
-  const persp = perspective ?? 1100;
+  const tilt = useTilt3d<HTMLDivElement>({
+    disabled,
+    // ✅ unified defaults across all cards
+    scale: 1.03,
+    divisor: 100,
+    angleMultiplier: 2,
+    glowSpreadMultiplier: 1.45,
+  });
 
   return (
     <div
@@ -174,33 +200,11 @@ export function Tilt3d({
       onMouseLeave={tilt.onMouseLeave}
       className={clsx("relative", className)}
       style={{
-        // Perspective is applied here (host), not inside transform.
         perspective: `${persp}px`,
         ...style,
       }}
     >
-      <div
-        ref={tilt.ref}
-        className={clsx("h-full w-full")}
-        style={{
-          // default vars so child layers can safely reference them
-          // (they’ll be updated live on hover)
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-          ...({
-            "--tikd-tilt-rx": "0deg",
-            "--tikd-tilt-ry": "0deg",
-            "--tikd-tilt-rx-inv": "0deg",
-            "--tikd-tilt-ry-inv": "0deg",
-            "--tikd-tilt-lift": "0px",
-          } as React.CSSProperties),
-          transform:
-            "rotateX(0deg) rotateY(0deg) translate3d(0, 0, 0) translateZ(0.01px)",
-          transformStyle: "preserve-3d",
-          backfaceVisibility: "hidden",
-          // willChange is managed dynamically in the hook
-          willChange: "auto",
-        }}
-      >
+      <div ref={tilt.ref} className="h-full w-full">
         {children}
       </div>
     </div>

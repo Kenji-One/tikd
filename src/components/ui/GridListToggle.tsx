@@ -73,10 +73,10 @@ export default function GridListToggle({
         className={clsx(
           "tikd-grid-list-btn",
           "group relative inline-grid h-10.5 w-10.5 select-none place-items-center",
-          "rounded-lg border border-white/10 bg-white/5 backdrop-blur-xl",
+          "rounded-lg border border-white/10 bg-neutral-900 backdrop-blur-xl",
           "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
           "transition-[filter,box-shadow,border-color,background,transform] duration-200 ease-out motion-reduce:transition-none",
-          "hover:border-white/15 hover:bg-white/[0.06]",
+          "hover:border-white/14 hover:bg-white/8",
           "active:scale-[0.96]",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
           "text-neutral-0",
@@ -86,14 +86,16 @@ export default function GridListToggle({
           className,
         )}
       >
-        {/* Active background */}
+        {/* ✅ Container fill (kept), now matches Upcoming pill background */}
         <span
           aria-hidden="true"
           className={clsx(
             "absolute inset-0.5 rounded-md",
             "border border-white/10",
-            "bg-[linear-gradient(90deg,var(--color-primary-600)_0%,var(--color-primary-500)_55%,var(--color-primary-400)_100%)]",
-            "shadow-[0_18px_56px_rgba(154,81,255,0.22),inset_0_1px_0_rgba(255,255,255,0.16)]",
+            "bg-neutral-900",
+            "shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+            "transition-[background-color,border-color] duration-200",
+            "group-hover:bg-white/8 group-hover:border-white/14",
           )}
         />
 

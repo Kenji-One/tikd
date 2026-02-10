@@ -501,6 +501,181 @@ function Chip({
   );
 }
 
+function safeHexToRgb(hex: string) {
+  const raw = hex.replace("#", "").trim();
+  if (raw.length !== 6) return null;
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
+  if (![r, g, b].every((n) => Number.isFinite(n))) return null;
+  return { r, g, b };
+}
+
+function DestinationPill({
+  kind,
+  accentColor,
+}: {
+  kind: DestinationKind;
+  accentColor?: string | null;
+}) {
+  const defaultEventHex = "#9A46FF";
+  const defaultOrgHex = "#A670FF";
+
+  const hex =
+    kind === "Organization" &&
+    typeof accentColor === "string" &&
+    accentColor.trim()
+      ? accentColor.trim()
+      : kind === "Event"
+        ? defaultEventHex
+        : defaultOrgHex;
+
+  const rgb = safeHexToRgb(hex);
+  const soft =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`
+      : "rgba(154,70,255,0.14)";
+  const ring =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.26)`
+      : "rgba(154,70,255,0.26)";
+  const text =
+    rgb != null
+      ? `rgba(${Math.min(255, rgb.r + 120)},${Math.min(
+          255,
+          rgb.g + 120,
+        )},${Math.min(255, rgb.b + 120)},0.98)`
+      : "rgba(231,222,255,0.98)";
+
+  const Icon = kind === "Event" ? Ticket : Building2;
+
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center gap-1 rounded-md px-2.5 pl-2 py-1.5",
+        "text-[13px] font-semibold ring-1 ring-inset",
+      )}
+      style={{
+        background: soft,
+        color: text,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+        borderColor: ring,
+      }}
+      aria-label={`Destination: ${kind}`}
+      title={kind}
+    >
+      <span className="inline-flex items-center justify-center">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="leading-none">{kind}</span>
+    </span>
+  );
+}
+
+function StatusPill({
+  status,
+  kind,
+  accentColor,
+}: {
+  status: Status;
+  kind: DestinationKind;
+  accentColor?: string | null;
+}) {
+  const isOrg = kind === "Organization";
+
+  // Event: keep semantic status colors
+  const eventHex =
+    status === "Active"
+      ? "#22C55E" // green-500-ish
+      : status === "Paused"
+        ? "#F59E0B" // amber-500-ish
+        : "#A3A3A3"; // neutral-ish for Disabled
+
+  // Org: use org accent color (fallback to purple)
+  const baseHex =
+    isOrg && typeof accentColor === "string" && accentColor.trim()
+      ? accentColor.trim()
+      : isOrg
+        ? "#A670FF"
+        : eventHex;
+
+  const rgb = safeHexToRgb(baseHex);
+
+  // ✅ Make the pill look lighter (more “active color”, less dark)
+  const alpha = status === "Active" ? 0.26 : status === "Paused" ? 0.18 : 0.1;
+  const ringAlpha =
+    status === "Active" ? 0.32 : status === "Paused" ? 0.26 : 0.18;
+
+  const soft =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`
+      : `rgba(154,70,255,${alpha})`;
+
+  const ring =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},${ringAlpha})`
+      : `rgba(154,70,255,${ringAlpha})`;
+
+  const text =
+    rgb != null
+      ? `rgba(${Math.min(255, rgb.r + 120)},${Math.min(
+          255,
+          rgb.g + 120,
+        )},${Math.min(255, rgb.b + 120)},0.98)`
+      : "rgba(231,222,255,0.98)";
+
+  const label = status;
+
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center justify-center",
+        "h-7 rounded-md px-3",
+        "text-[13px] font-semibold ring-1 ring-inset",
+      )}
+      style={{
+        background: soft,
+        color: text,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+        borderColor: ring,
+        opacity: status === "Disabled" ? 0.85 : 1,
+      }}
+      aria-label={`Status: ${label}`}
+      title={label}
+    >
+      {label}
+    </span>
+  );
+}
+
+// --- Accent color fetch helpers (safe + strict) ---
+function pickAccentFromOrgResponse(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+
+  // common shapes:
+  // { accentColor: "..." }
+  // { organization: { accentColor: "..." } }
+  // { org: { accentColor: "..." } }
+  const asRecord = json as Record<string, unknown>;
+
+  const direct = asRecord.accentColor;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const orgA = asRecord.organization;
+  if (orgA && typeof orgA === "object") {
+    const v = (orgA as Record<string, unknown>).accentColor;
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+
+  const orgB = asRecord.org;
+  if (orgB && typeof orgB === "object") {
+    const v = (orgB as Record<string, unknown>).accentColor;
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+
+  return null;
+}
+
 /* ----------------------------- Dialogs ---------------------------- */
 function ArchiveLinkDialog({
   open,
@@ -867,15 +1042,97 @@ function KindBadge({ kind }: { kind: DestinationKind }) {
     <span
       className={clsx(
         "inline-flex items-center gap-1.5",
-        "h-7 rounded-full px-2.5",
+        "h-8.5 rounded-md px-2",
         "border border-white/10 bg-neutral-950/40",
-        "text-[11px] font-semibold tracking-[0.14em] text-white/70",
+        "text-[12px] font-semibold tracking-[0.14em] text-white/70",
         "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
       )}
     >
-      <Icon className="h-3.5 w-3.5 text-white/55" />
+      <Icon className="h-4 w-4 text-white/55" />
       {label}
     </span>
+  );
+}
+
+function SelectedDestinationCard({
+  dest,
+  disabled,
+  onClear,
+}: {
+  dest: DestinationResult;
+  disabled?: boolean;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      className={clsx(
+        "rounded-lg border",
+        "border-primary-500/55 bg-primary-500/12",
+      )}
+    >
+      <div className="flex items-center gap-3 px-3 py-3">
+        <DestinationThumb
+          kind={dest.kind}
+          image={dest.image}
+          title={dest.title}
+        />
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
+            {dest.title}
+          </p>
+
+          <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
+            {dest.kind === "Event" ? (
+              <>
+                <span className="truncate">{dest.orgName || "Event"}</span>
+                {dest.date ? (
+                  <>
+                    <span className="text-neutral-600">•</span>
+                    <span className="inline-flex items-center gap-1 text-neutral-400">
+                      <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                      <span>{formatShortDate(dest.date)}</span>
+                    </span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <span className="truncate">{dest.subtitle}</span>
+            )}
+          </p>
+
+          <div className="mt-2 text-[12px] text-primary-200/80">
+            Selected — click X to unselect
+          </div>
+        </div>
+
+        <div className="shrink-0 flex items-center gap-2">
+          <KindBadge kind={dest.kind} />
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClear();
+            }}
+            disabled={disabled}
+            className={clsx(
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border",
+              "transition",
+              disabled
+                ? "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
+                : "border-primary-500/30 bg-primary-500/15 text-primary-200 hover:bg-primary-500/22",
+              "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+            )}
+            title={disabled ? "Locked" : "Clear selection"}
+            aria-label="Clear selection"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -928,6 +1185,7 @@ function TrackingLinkDialog({
     useState<DestinationResult | null>(null);
 
   const destWrapRef = useRef<HTMLDivElement | null>(null);
+  const destInputRef = useRef<HTMLInputElement | null>(null);
   const destAbortRef = useRef<AbortController | null>(null);
   const destDebounceRef = useRef<number | null>(null);
 
@@ -962,7 +1220,6 @@ function TrackingLinkDialog({
     "shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
   );
 
-  // ✅ Clear destination (unselect)
   const clearDestination = useCallback(() => {
     setDraft((prev) => ({
       ...prev,
@@ -974,11 +1231,13 @@ function TrackingLinkDialog({
     setDestQuery("");
     setDestError(null);
     setDestResults([]);
+    setDestOpen(true);
+
+    window.setTimeout(() => {
+      destInputRef.current?.focus();
+    }, 0);
   }, []);
 
-  // -------------------------------------------------------------------
-  // 1) Preload org-scope destinations (IMPORTANT: for CREATE mode too)
-  // -------------------------------------------------------------------
   useEffect(() => {
     if (!open) return;
     if (!isOrgScope || !organizationId) return;
@@ -1013,13 +1272,9 @@ function TrackingLinkDialog({
     };
   }, [open, isOrgScope, organizationId]);
 
-  // -------------------------------------------------------------------
-  // 2) Reset dialog state on open + apply edit/create defaults
-  // -------------------------------------------------------------------
   useEffect(() => {
     if (!open) return;
 
-    // cancel destination search timers/requests (prevents late setState)
     if (destDebounceRef.current) {
       window.clearTimeout(destDebounceRef.current);
       destDebounceRef.current = null;
@@ -1037,7 +1292,6 @@ function TrackingLinkDialog({
     setStatusOpen(false);
     setIconQuery("");
 
-    // cleanup any previous object url on open
     if (lastObjectUrlRef.current) {
       URL.revokeObjectURL(lastObjectUrlRef.current);
       lastObjectUrlRef.current = null;
@@ -1066,7 +1320,7 @@ function TrackingLinkDialog({
       };
 
       setSelectedDestMeta(meta);
-      setDestQuery(initial.destinationTitle || "");
+      setDestQuery("");
     } else {
       setDraft({
         name: "",
@@ -1081,8 +1335,6 @@ function TrackingLinkDialog({
       setDestQuery("");
     }
 
-    // Scope locks:
-    // - Event scope => lock destination to current event (no real picker)
     if (isEventScope && eventId) {
       const lockedTitle =
         mode === "edit" && initial?.destinationTitle
@@ -1106,7 +1358,7 @@ function TrackingLinkDialog({
         orgName: null,
       });
 
-      setDestQuery(lockedTitle);
+      setDestQuery("");
     }
 
     const t = window.setTimeout(() => {
@@ -1117,21 +1369,17 @@ function TrackingLinkDialog({
     return () => window.clearTimeout(t);
   }, [open, mode, initial, isEventScope, eventId]);
 
-  // -------------------------------------------------------------------
-  // 3) Org-scope auto-select (only if CREATE, and only if exactly 1 option)
-  // -------------------------------------------------------------------
   useEffect(() => {
     if (!open) return;
     if (mode !== "create") return;
     if (!isOrgScope) return;
-    if (isEventScope) return; // event scope wins
+    if (isEventScope) return;
     if (!orgScopeList) return;
     if (orgScopeLoading) return;
     if (orgScopeList.length !== 1) return;
 
     const only = orgScopeList[0];
 
-    // only auto-select if user hasn’t already selected something
     setDraft((prev) => {
       if (prev.destinationId) return prev;
       return {
@@ -1143,10 +1391,8 @@ function TrackingLinkDialog({
     });
 
     setSelectedDestMeta((prev) => prev ?? only);
-    setDestQuery((prev) => (prev ? prev : only.title));
   }, [open, mode, isOrgScope, isEventScope, orgScopeList, orgScopeLoading]);
 
-  // Close dropdowns on outside click
   useEffect(() => {
     if (!open) return;
 
@@ -1170,7 +1416,6 @@ function TrackingLinkDialog({
   }, [open]);
 
   useEffect(() => {
-    // cleanup custom icon object url when dialog closes
     if (open) return;
     if (lastObjectUrlRef.current) {
       URL.revokeObjectURL(lastObjectUrlRef.current);
@@ -1178,11 +1423,6 @@ function TrackingLinkDialog({
     }
   }, [open]);
 
-  // -------------------------------------------------------------------
-  // 4) Destination search (debounced + abortable)
-  // - All scope: no default suggestions (only selected item)
-  // - Org scope: default list is orgScopeList (org + events)
-  // -------------------------------------------------------------------
   useEffect(() => {
     if (!open) return;
     if (!destOpen) return;
@@ -1199,20 +1439,17 @@ function TrackingLinkDialog({
       destAbortRef.current = null;
     }
 
-    // When empty query:
     if (!q) {
       if (isOrgScope) {
-        // show org+events list (or loading state)
         setDestLoading(orgScopeLoading);
         setDestError(orgScopeError);
         setDestResults(orgScopeList ?? []);
         return;
       }
 
-      // all scope: NO default suggestions
       setDestLoading(false);
       setDestError(null);
-      setDestResults(selectedDestMeta ? [selectedDestMeta] : []);
+      setDestResults([]);
       return;
     }
 
@@ -1226,28 +1463,14 @@ function TrackingLinkDialog({
       fetchDestinations(q, ac.signal)
         .then((list) => {
           if (ac.signal.aborted) return;
-
-          const pinned = selectedDestMeta
-            ? [
-                selectedDestMeta,
-                ...list.filter(
-                  (x) =>
-                    !(
-                      x.kind === selectedDestMeta.kind &&
-                      x.id === selectedDestMeta.id
-                    ),
-                ),
-              ]
-            : list;
-
-          setDestResults(pinned);
+          setDestResults(list);
           setDestLoading(false);
           setDestError(null);
         })
         .catch((e) => {
           if (ac.signal.aborted) return;
           setDestLoading(false);
-          setDestResults(selectedDestMeta ? [selectedDestMeta] : []);
+          setDestResults([]);
           setDestError(getErrorMessage(e, "Search failed. Try again."));
         });
     }, 220);
@@ -1271,7 +1494,6 @@ function TrackingLinkDialog({
     orgScopeList,
     orgScopeLoading,
     orgScopeError,
-    selectedDestMeta,
   ]);
 
   const title =
@@ -1302,17 +1524,7 @@ function TrackingLinkDialog({
     return presetIcons.filter((p) => p.label.toLowerCase().includes(q));
   }, [iconQuery]);
 
-  // ✅ Pick destination (click again to unselect)
   const handlePickDestination = (d: DestinationResult) => {
-    const isSame =
-      draft.destinationKind === d.kind && draft.destinationId === d.id;
-
-    if (isSame) {
-      clearDestination();
-      setDestOpen(false);
-      return;
-    }
-
     setDraft((prev) => ({
       ...prev,
       destinationKind: d.kind,
@@ -1320,7 +1532,8 @@ function TrackingLinkDialog({
       destinationTitle: d.title,
     }));
     setSelectedDestMeta(d);
-    setDestQuery(d.title);
+
+    setDestQuery("");
     setDestError(null);
     setDestOpen(false);
   };
@@ -1338,7 +1551,7 @@ function TrackingLinkDialog({
 
     setDraft((prev) => ({
       ...prev,
-      iconUrl: url, // preview only (blob:)
+      iconUrl: url,
       iconKey: null,
     }));
   };
@@ -1365,7 +1578,8 @@ function TrackingLinkDialog({
   const hasNoIcon = !draft.iconKey && !draft.iconUrl;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+    // ✅ NO page scroll. Dialog is capped to viewport and scrolls internally.
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={saving ? undefined : onClose}
@@ -1378,10 +1592,12 @@ function TrackingLinkDialog({
         className={clsx(
           "relative mx-4 w-full max-w-[720px] rounded-xl",
           "border border-white/10 bg-neutral-900",
+          "max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]",
+          "overflow-hidden flex flex-col",
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header (fixed) */}
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 md:px-8">
           <div className="min-w-0">
             <h2 className="mt-1 text-2xl font-semibold tracking-[-0.48px] text-neutral-0">
@@ -1400,8 +1616,8 @@ function TrackingLinkDialog({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-6 py-6 md:px-8">
+        {/* Body (scrolls) */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 md:px-8 tikdHideScrollbar">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* Name */}
             <div className="md:col-span-2">
@@ -1438,7 +1654,6 @@ function TrackingLinkDialog({
               </label>
 
               <div className="rounded-lg border border-white/10 bg-neutral-900 p-3">
-                {/* Search input above icons */}
                 <div
                   className={clsx(
                     "relative w-full",
@@ -1461,9 +1676,7 @@ function TrackingLinkDialog({
                   />
                 </div>
 
-                {/* Icon grid */}
                 <div className={clsx("mt-3 flex gap-3", "flex-wrap")}>
-                  {/* None */}
                   <button
                     type="button"
                     disabled={saving}
@@ -1496,7 +1709,6 @@ function TrackingLinkDialog({
                     />
                   </button>
 
-                  {/* Presets */}
                   {filteredPresetIcons.map((p) => {
                     const selected = draft.iconKey === p.key && !draft.iconUrl;
 
@@ -1535,7 +1747,6 @@ function TrackingLinkDialog({
                   })}
                 </div>
 
-                {/* Upload row (preview only) */}
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
                   <input
                     ref={fileInputRef}
@@ -1584,7 +1795,6 @@ function TrackingLinkDialog({
                   </button>
                 </div>
 
-                {/* Selected preview (stable height) */}
                 <div className="mt-3 flex items-center gap-3 text-sm text-neutral-400 min-h-[28px]">
                   <span className="text-neutral-300">Selected:</span>
 
@@ -1630,198 +1840,226 @@ function TrackingLinkDialog({
               </p>
 
               <div className="mt-2">
-                <div
-                  className={clsx(
-                    "relative w-full",
-                    "rounded-lg border border-white/10 bg-white/5 h-12",
-                    errDest && "border-error-500",
-                  )}
-                >
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
-
-                  <input
-                    value={destQuery}
-                    onChange={(e) => {
-                      setDestQuery(e.target.value);
-                      setDestOpen(true);
-                    }}
-                    onFocus={(e) => {
-                      setStatusOpen(false);
-                      setDestOpen(true);
-                      window.setTimeout(() => {
-                        try {
-                          (e.target as HTMLInputElement).select();
-                        } catch {
-                          // ignore
-                        }
-                      }, 0);
-                    }}
-                    onBlur={() => setTouched(true)}
-                    placeholder="Search events or organizations…"
+                {destinationOk && selectedDestMeta ? (
+                  <SelectedDestinationCard
+                    dest={selectedDestMeta}
                     disabled={saving || isEventScope}
-                    className={clsx(
-                      "h-12 w-full rounded-lg bg-transparent",
-                      "pl-10 pr-10 text-[12px] text-neutral-100",
-                      "placeholder:text-neutral-500",
-                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
-                      "disabled:opacity-60 disabled:cursor-not-allowed",
-                    )}
+                    onClear={clearDestination}
                   />
-
-                  {/* Clear/unselect button */}
-                  {(destinationOk || destQuery.trim()) &&
-                  !saving &&
-                  !isEventScope ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        clearDestination();
-                        setDestOpen(true);
-                      }}
+                ) : (
+                  <>
+                    <div
                       className={clsx(
-                        "absolute right-2 top-1/2 -translate-y-1/2",
-                        "inline-flex h-8 w-8 items-center justify-center",
-                        "rounded-md border border-white/10 bg-white/5",
-                        "text-white/60 hover:text-white hover:bg-white/10 hover:border-white/20",
-                        "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
-                        "transition cursor-pointer",
+                        "relative w-full",
+                        "rounded-lg border border-white/10 bg-white/5 h-12",
+                        errDest && "border-error-500",
                       )}
-                      title="Clear selection"
-                      aria-label="Clear selection"
                     >
-                      <X size={14} />
-                    </button>
-                  ) : null}
-                </div>
+                      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
 
-                {destOpen && !isEventScope ? (
-                  <div className={dropdownPanelOverlayCls} role="listbox">
-                    <div className="max-h-[320px] overflow-auto p-2">
-                      {destLoading ? (
-                        <div className="px-3 py-3 text-sm text-neutral-400">
-                          {isOrgScope && !destQuery.trim()
-                            ? "Loading destinations…"
-                            : "Searching…"}
-                        </div>
-                      ) : destError ? (
-                        <div className="px-3 py-3 text-sm text-neutral-400">
-                          {destError}
-                        </div>
-                      ) : !destQuery.trim() &&
-                        !selectedDestMeta &&
-                        !isOrgScope ? (
-                        <div className="px-3 py-3 text-sm text-neutral-500">
-                          Type to search events or organizations.
-                        </div>
-                      ) : destResults.length === 0 ? (
-                        <div className="px-3 py-3 text-sm text-neutral-400">
-                          No matches.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {destResults.map((opt) => {
-                            const selected =
-                              opt.id === draft.destinationId &&
-                              opt.kind === draft.destinationKind;
+                      <input
+                        ref={destInputRef}
+                        value={destQuery}
+                        onChange={(e) => {
+                          setDestQuery(e.target.value);
+                          setDestOpen(true);
+                        }}
+                        onFocus={() => {
+                          setStatusOpen(false);
+                          setDestOpen(true);
+                        }}
+                        onBlur={() => setTouched(true)}
+                        placeholder="Search events or organizations…"
+                        disabled={saving || isEventScope}
+                        className={clsx(
+                          "h-12 w-full rounded-lg bg-transparent",
+                          "pl-10 pr-10 text-[12px] text-neutral-100",
+                          "placeholder:text-neutral-500",
+                          "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                          "disabled:opacity-60 disabled:cursor-not-allowed",
+                        )}
+                      />
 
-                            return (
-                              <button
-                                key={`${opt.kind}-${opt.id}`}
-                                type="button"
-                                role="option"
-                                aria-selected={selected}
-                                onClick={() => handlePickDestination(opt)}
-                                className={clsx(
-                                  "w-full text-left",
-                                  "rounded-xl border",
-                                  "px-3 py-3",
-                                  "transition cursor-pointer",
-                                  "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
-                                  selected
-                                    ? "border-primary-500/25 bg-primary-500/12"
-                                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15",
-                                )}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <DestinationThumb
-                                    kind={opt.kind}
-                                    image={opt.image}
-                                    title={opt.title}
-                                  />
+                      {destQuery.trim() && !saving && !isEventScope ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setDestQuery("");
+                            setDestError(null);
+                            setDestOpen(true);
+                            window.setTimeout(() => {
+                              destInputRef.current?.focus();
+                            }, 0);
+                          }}
+                          className={clsx(
+                            "absolute right-2 top-1/2 -translate-y-1/2",
+                            "inline-flex h-8 w-8 items-center justify-center",
+                            "rounded-md border border-white/10 bg-white/5",
+                            "text-white/60 hover:text-white hover:bg-white/10 hover:border-white/20",
+                            "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+                            "transition cursor-pointer",
+                          )}
+                          title="Clear search"
+                          aria-label="Clear search"
+                        >
+                          <X size={14} />
+                        </button>
+                      ) : null}
+                    </div>
 
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
-                                          {opt.title}
-                                        </p>
+                    {destOpen && !isEventScope ? (
+                      <div className={dropdownPanelOverlayCls} role="listbox">
+                        <div
+                          className={clsx(
+                            "max-h-[min(360px,60vh)] overflow-y-auto p-2 overscroll-contain",
+                            "tikdHideScrollbar",
+                          )}
+                        >
+                          {destLoading ? (
+                            <div className="px-3 py-3 text-sm text-neutral-400">
+                              {isOrgScope && !destQuery.trim()
+                                ? "Loading destinations…"
+                                : "Searching…"}
+                            </div>
+                          ) : destError ? (
+                            <div className="px-3 py-3 text-sm text-neutral-400">
+                              {destError}
+                            </div>
+                          ) : !destQuery.trim() && !isOrgScope ? (
+                            <div className="px-3 py-3 text-sm text-neutral-500">
+                              Type to search events or organizations.
+                            </div>
+                          ) : destResults.length === 0 ? (
+                            <div className="px-3 py-3 text-sm text-neutral-400">
+                              No matches.
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {destResults.map((opt) => {
+                                const selected =
+                                  opt.id === draft.destinationId &&
+                                  opt.kind === draft.destinationKind;
 
-                                        <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
-                                          {opt.kind === "Event" ? (
-                                            <>
-                                              <span className="truncate">
-                                                {opt.orgName || "Event"}
-                                              </span>
-                                              {opt.date ? (
+                                return (
+                                  <button
+                                    key={`${opt.kind}-${opt.id}`}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={selected}
+                                    onClick={() => handlePickDestination(opt)}
+                                    className={clsx(
+                                      "w-full text-left",
+                                      "rounded-lg border",
+                                      "px-3 py-3",
+                                      "transition cursor-pointer",
+                                      "focus:outline-none focus:ring-1 focus:ring-primary-500/55",
+                                      selected
+                                        ? "border-primary-500/55 bg-primary-500/12"
+                                        : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15",
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <DestinationThumb
+                                        kind={opt.kind}
+                                        image={opt.image}
+                                        title={opt.title}
+                                      />
+
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
+                                              {opt.title}
+                                            </p>
+
+                                            <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
+                                              {opt.kind === "Event" ? (
                                                 <>
-                                                  <span className="text-neutral-600">
-                                                    •
+                                                  <span className="truncate">
+                                                    {opt.orgName || "Event"}
                                                   </span>
-                                                  <span className="inline-flex items-center gap-1 text-neutral-400">
-                                                    <Calendar className="h-3.5 w-3.5 text-neutral-500" />
-                                                    <span>
-                                                      {formatShortDate(
-                                                        opt.date,
-                                                      )}
-                                                    </span>
-                                                  </span>
+                                                  {opt.date ? (
+                                                    <>
+                                                      <span className="text-neutral-600">
+                                                        •
+                                                      </span>
+                                                      <span className="inline-flex items-center gap-1 text-neutral-400">
+                                                        <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                                                        <span>
+                                                          {formatShortDate(
+                                                            opt.date,
+                                                          )}
+                                                        </span>
+                                                      </span>
+                                                    </>
+                                                  ) : null}
                                                 </>
-                                              ) : null}
-                                            </>
-                                          ) : (
-                                            <span className="truncate">
-                                              {opt.subtitle}
-                                            </span>
-                                          )}
-                                        </p>
+                                              ) : (
+                                                <span className="truncate">
+                                                  {opt.subtitle}
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+
+                                          <div className="shrink-0 pt-0.5">
+                                            <KindBadge kind={opt.kind} />
+                                          </div>
+                                        </div>
                                       </div>
 
-                                      <div className="shrink-0 pt-0.5">
-                                        <KindBadge kind={opt.kind} />
+                                      <div className="shrink-0">
+                                        {selected ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              clearDestination();
+                                            }}
+                                            className={clsx(
+                                              "inline-flex h-8 w-8 items-center justify-center rounded-md border",
+                                              "border-primary-500/30 bg-primary-500/15 text-primary-200",
+                                              "hover:bg-primary-500/22 transition cursor-pointer",
+                                              "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+                                            )}
+                                            title="Clear selection"
+                                            aria-label="Clear selection"
+                                          >
+                                            <X size={14} />
+                                          </button>
+                                        ) : (
+                                          <span
+                                            className={clsx(
+                                              "inline-flex h-8 w-8 items-center justify-center rounded-md border",
+                                              "transition",
+                                              "border-white/10 bg-white/5 text-white/20",
+                                            )}
+                                            aria-hidden
+                                          >
+                                            <Check size={14} />
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
-                                  </div>
 
-                                  <div className="shrink-0">
-                                    <span
-                                      className={clsx(
-                                        "inline-flex h-9 w-9 items-center justify-center rounded-xl border",
-                                        "transition",
-                                        selected
-                                          ? "border-primary-500/30 bg-primary-500/15 text-primary-200"
-                                          : "border-white/10 bg-white/5 text-white/20",
-                                      )}
-                                    >
-                                      <Check size={16} />
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {selected ? (
-                                  <div className="mt-2 text-[12px] text-primary-200/80">
-                                    Selected — click again to unselect
-                                  </div>
-                                ) : null}
-                              </button>
-                            );
-                          })}
+                                    {selected ? (
+                                      <div className="mt-2 text-[12px] text-primary-200/80">
+                                        Selected — click X to unselect
+                                      </div>
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
 
@@ -2007,6 +2245,10 @@ export default function TrackingLinksTable({
   viewAllHref,
 }: TrackingLinksTableProps) {
   const [data, setData] = useState<Row[]>([]);
+  const [orgAccentById, setOrgAccentById] = useState<Record<string, string>>(
+    {},
+  );
+
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -2154,6 +2396,61 @@ export default function TrackingLinksTable({
     return () => ac.abort();
   }, [effectiveScope, organizationId, eventId, matchesScope]);
 
+  useEffect(() => {
+    // Only needed when we display Organization badges
+    const orgIds = Array.from(
+      new Set(data.map((r) => r.organizationId).filter(Boolean)),
+    );
+
+    const missing = orgIds.filter((id) => !orgAccentById[id]);
+    if (missing.length === 0) return;
+
+    let alive = true;
+
+    (async () => {
+      try {
+        const pairs = await Promise.all(
+          missing.map(async (id) => {
+            try {
+              const res = await fetch(
+                `/api/organizations/${encodeURIComponent(id)}`,
+                {
+                  method: "GET",
+                  cache: "no-store",
+                },
+              );
+              if (!res.ok) return [id, null] as const;
+              const json = (await res.json().catch(() => null)) as unknown;
+              const accent = pickAccentFromOrgResponse(json);
+              return [id, accent] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          }),
+        );
+
+        if (!alive) return;
+
+        const next: Record<string, string> = {};
+        for (const [id, accent] of pairs) {
+          if (typeof accent === "string" && accent.trim()) {
+            next[id] = accent.trim();
+          }
+        }
+
+        if (Object.keys(next).length > 0) {
+          setOrgAccentById((prev) => ({ ...prev, ...next }));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [data, orgAccentById]);
+
   const sorted = useMemo(() => {
     const arr = [...data];
     arr.sort((a, b) => {
@@ -2190,6 +2487,13 @@ export default function TrackingLinksTable({
     return arr;
   }, [data, sortBy, dir]);
 
+  // Show only a small preview in widgets (no scroll). Full pages can pass showViewAll={false}.
+  const VISIBLE_LIMIT = 5;
+
+  const visibleRows = useMemo(() => {
+    return showViewAll ? sorted.slice(0, VISIBLE_LIMIT) : sorted;
+  }, [sorted, showViewAll]);
+
   const toggleSort = (key: SortKey) => {
     if (key === sortBy) setDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -2197,48 +2501,6 @@ export default function TrackingLinksTable({
       setDir("desc");
     }
   };
-
-  /* Clamp + fade like MyTeamTable/RecentSalesTable */
-  const clipRef = useRef<HTMLDivElement | null>(null);
-  const [isClamped, setIsClamped] = useState(false);
-  const [showBottomFade, setShowBottomFade] = useState(false);
-  const MAX = 458;
-
-  useEffect(() => {
-    if (!clipRef.current) return;
-
-    const el = clipRef.current;
-
-    const recompute = () => {
-      // 1) whether we should clamp height
-      const clamped = el.scrollHeight > MAX + 0.5;
-      setIsClamped(clamped);
-
-      // 2) whether it can actually scroll (overflow)
-      const canScroll = el.scrollHeight > el.clientHeight + 1;
-
-      // 3) whether user is at bottom (hide fade if at bottom)
-      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-
-      setShowBottomFade(canScroll && !atBottom);
-    };
-
-    const onScroll = () => recompute();
-
-    recompute();
-
-    const ro = new ResizeObserver(recompute);
-    ro.observe(el);
-
-    el.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", recompute);
-
-    return () => {
-      ro.disconnect();
-      el.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", recompute);
-    };
-  }, [sorted.length]);
 
   const openArchive = (row: Row) => {
     setActiveRow(row);
@@ -2533,6 +2795,16 @@ export default function TrackingLinksTable({
         :global(.tikdTrashWrap) {
           gap: 1px; /* was 2px */
         }
+        /* ---------- Hide scrollbars (keep scroll) ---------- */
+        :global(.tikdHideScrollbar) {
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none; /* IE/Edge legacy */
+        }
+
+        :global(.tikdHideScrollbar::-webkit-scrollbar) {
+          width: 0;
+          height: 0;
+        }
       `}</style>
 
       {/* Header */}
@@ -2605,13 +2877,18 @@ export default function TrackingLinksTable({
         <>
           {/* Table */}
           <div
-            ref={clipRef}
             className={clsx(
-              "relative rounded-lg",
-              isClamped ? "overflow-auto" : "overflow-hidden",
+              "relative rounded-lg overflow-hidden",
+              // No bottom padding — overlay must sit on top of the last row
             )}
-            style={{ height: isClamped ? `${MAX}px` : "auto" }}
           >
+            {showViewAll && sorted.length > VISIBLE_LIMIT ? (
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-neutral-900 to-transparent"
+                aria-hidden
+              />
+            ) : null}
+
             <table className="w-full table-fixed border-collapse font-medium">
               <colgroup>
                 <col style={{ width: "16%" }} />
@@ -2760,8 +3037,9 @@ export default function TrackingLinksTable({
               </thead>
 
               <tbody className="text-white">
-                {sorted.flatMap((r, i) => {
-                  const isLast = i === sorted.length - 1;
+                {visibleRows.flatMap((r, i) => {
+                  const isLast = i === visibleRows.length - 1;
+
                   const rowBg =
                     i % 2 === 0 ? "bg-neutral-948" : "bg-neutral-900";
 
@@ -2869,24 +3147,28 @@ export default function TrackingLinksTable({
                       </td>
 
                       {/* Destination */}
+                      {/* Destination */}
                       <td className="px-4 py-3 text-center">
                         <div className="inline-block">
-                          <Chip color="primary">{r.destinationKind}</Chip>
+                          <DestinationPill
+                            kind={r.destinationKind}
+                            accentColor={
+                              orgAccentById[r.organizationId] ?? null
+                            }
+                          />
                         </div>
                       </td>
 
                       {/* Status */}
                       <td className="px-4 py-3 text-center">
                         <div className="inline-block">
-                          {r.status === "Active" ? (
-                            <Chip color="success">Active</Chip>
-                          ) : r.status === "Paused" ? (
-                            <Chip color="warning">Paused</Chip>
-                          ) : (
-                            <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[13px] text-white/60 ring-1 ring-white/15">
-                              Disabled
-                            </span>
-                          )}
+                          <StatusPill
+                            status={r.status}
+                            kind={r.destinationKind}
+                            accentColor={
+                              orgAccentById[r.organizationId] ?? null
+                            }
+                          />
                         </div>
                       </td>
 
@@ -2970,25 +3252,24 @@ export default function TrackingLinksTable({
                 })}
               </tbody>
             </table>
-
-            {showBottomFade && showViewAll && computedViewAllHref ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
+            {showViewAll &&
+            computedViewAllHref &&
+            sorted.length > VISIBLE_LIMIT ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+                <div className="pointer-events-auto">
+                  <Button asChild variant="viewAction" size="sm">
+                    <Link
+                      href={computedViewAllHref}
+                      title="View all tracking links"
+                      aria-label="View all tracking links"
+                    >
+                      View All
+                    </Link>
+                  </Button>
+                </div>
+              </div>
             ) : null}
           </div>
-
-          {showViewAll && computedViewAllHref ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-              <Button asChild variant="viewAction" size="sm">
-                <Link
-                  href={computedViewAllHref}
-                  title="View all tracking links"
-                  aria-label="View all tracking links"
-                >
-                  View All
-                </Link>
-              </Button>
-            </div>
-          ) : null}
         </>
       )}
 

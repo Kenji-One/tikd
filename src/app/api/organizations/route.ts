@@ -43,7 +43,11 @@ const orgSchema = z.object({
 
   website: websiteSchema,
   businessType: z.enum(businessTypeValues),
-  location: z.string().min(2),
+  location: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || v.length >= 2),
   accentColor: z
     .string()
     .regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/)

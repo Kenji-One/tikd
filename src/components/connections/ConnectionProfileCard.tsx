@@ -163,7 +163,7 @@ export function RoleBadge({ meta }: { meta: RoleBadgeMeta }) {
 
   // owner special (keeps gold vibe)
   if (key === "owner") {
-    const rgb = safeHexToRgb("#F7C948")!;
+    const rgb = safeHexToRgb("#9A46FF")!;
     const soft = `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`;
     const ring = `rgba(${rgb.r},${rgb.g},${rgb.b},0.26)`;
     const text = `rgba(${Math.min(255, rgb.r + 120)},${Math.min(

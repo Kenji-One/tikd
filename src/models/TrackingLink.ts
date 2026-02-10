@@ -7,7 +7,7 @@ export type TrackingLinkStatus = "Active" | "Paused" | "Disabled";
 export type PresetIconKey =
   | "instagram"
   | "facebook"
-  | "twitter"
+  | "x"
   | "linkedin"
   | "google"
   | "youtube"

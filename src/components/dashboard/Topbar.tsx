@@ -64,7 +64,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
   const showSortSelector = useMemo(() => {
     if (!pathname) return false;
 
-    if (pathname === "/dashboard/organizations") return true;
+    // if (pathname === "/dashboard/organizations") return true;
     return /^\/dashboard\/organization\/[^/]+$/.test(pathname);
   }, [pathname]);
 
@@ -201,7 +201,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                   type="button"
                   onClick={() => setSearchOpen(true)}
                   aria-label="Open search"
-                  className="group flex h-[44px] w-full items-center gap-3 rounded-full border border-white/10 bg-[#121420] px-3 text-left text-sm text-white outline-none focus-visible:border-primary-500"
+                  className="group flex h-[44px] w-full items-center gap-3 rounded-full border border-white/10 bg-[#121420] px-3 text-left text-sm text-white outline-none focus-visible:border-primary-500 cursor-pointer"
                 >
                   <SearchIcon className="h-4 w-4 opacity-70" />
                   <span className="flex-1 truncate text-white/70">
@@ -473,7 +473,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                             type="button"
                             role="menuitem"
                             onClick={() => signOut({ callbackUrl: "/" })}
-                            className="mt-0.5 flex w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-left text-sm text-white/90 hover:bg-white/5 focus:bg-white/5 focus:outline-none"
+                            className="mt-0.5 flex w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-left text-sm text-white/90 hover:bg-white/5 focus:bg-white/5 focus:outline-none cursor-pointer"
                           >
                             <LogOut className="h-4 w-4 opacity-80" />
                             <span>Logout</span>

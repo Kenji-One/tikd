@@ -9,7 +9,7 @@ import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { ArrowDownNarrowWide, ArrowDownWideNarrow } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
 import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
@@ -381,12 +381,10 @@ function SortControls({
           "tikd-sort-btn group inline-flex select-none items-center justify-center",
           "h-8 w-8 rounded-[4px] border border-white/10",
           "bg-neutral-700/90 text-neutral-100",
-          "shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45)]",
           "transition-[transform,box-shadow,border-color,background-color] duration-150",
           "hover:bg-neutral-700 hover:border-white/14",
           "active:scale-[0.985]",
           "focus:outline-none focus-visible:border-primary-500",
-          "focus-visible:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45),0_0_0_2px_rgba(154,81,255,0.35)]",
           open && "border-primary-500/70",
           "cursor-pointer",
         )}
@@ -476,6 +474,7 @@ export default function UpcomingEventsTable() {
     queryKey: ["dashboard-upcoming-events"],
     queryFn: fetchUpcomingEvents,
     staleTime: 20_000,
+    placeholderData: keepPreviousData,
   });
 
   const rows = data?.rows ?? [];
@@ -701,8 +700,14 @@ export default function UpcomingEventsTable() {
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(0deg,#181828_0%,rgba(24,24,40,0)_100%)]" />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-2.5 flex justify-center">
-        <Button asChild variant="viewAction" size="sm">
+      {/* ✅ FIX: keep wrapper non-interactive but allow the button itself to receive clicks */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-2.5 z-10 flex justify-center">
+        <Button
+          asChild
+          variant="viewAction"
+          size="sm"
+          className="pointer-events-auto"
+        >
           <Link href="/dashboard/events">View All</Link>
         </Button>
       </div>

@@ -21,6 +21,10 @@ import ConnectionProfileCard, {
 import GridListToggle, {
   type GridListValue,
 } from "@/components/ui/GridListToggle";
+import SortControl, {
+  type SortDir,
+  type SortOption,
+} from "@/components/ui/SortControl";
 
 /* ------------------------------ Types ------------------------------ */
 type Org = {
@@ -143,6 +147,12 @@ function resolveOrgAccentColor(org: Org) {
   const v = String(org.accentColor || "").trim();
   // if empty, use default "what it is now" (primary)
   return v || "var(--color-primary-500)";
+}
+
+function safeDateMs(iso?: string) {
+  if (!iso) return 0;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) ? t : 0;
 }
 
 function Pagination({
@@ -315,6 +325,15 @@ function OrganizationListRow({
 }
 
 /* ------------------------------ Page ------------------------------- */
+type OrgSortField = "name" | "members" | "created";
+
+const ORG_SORT_OPTIONS: SortOption<OrgSortField>[] = [
+  { key: "name", label: "Name" },
+  { key: "members", label: "Total Members" },
+  { key: "created", label: "Created Date" },
+  // ✅ No "Event Date" here (organizations page only)
+];
+
 export default function OrganizationsClient() {
   const router = useRouter();
   const { data: session } = useSession();
@@ -323,6 +342,10 @@ export default function OrganizationsClient() {
   const [orgsPage, setOrgsPage] = useState(1);
 
   const [view, setView] = useState<GridListValue>("grid");
+
+  // ✅ Organizations-only sort state
+  const [sortField, setSortField] = useState<OrgSortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const { data: orgs, isLoading: orgsLoading } = useQuery<Org[]>({
     queryKey: ["orgs", "organizations-page"],
@@ -344,12 +367,40 @@ export default function OrganizationsClient() {
     });
   }, [orgsQuery, orgs]);
 
-  const orgsTotal = orgsFiltered.length;
+  const orgsSorted = useMemo(() => {
+    const base = [...orgsFiltered];
+    if (!sortField) return base;
+
+    const dirMul = sortDir === "asc" ? 1 : -1;
+
+    base.sort((a, b) => {
+      if (sortField === "name") {
+        const av = String(a.name || "").toLowerCase();
+        const bv = String(b.name || "").toLowerCase();
+        return av.localeCompare(bv) * dirMul;
+      }
+
+      if (sortField === "members") {
+        const av = typeof a.totalMembers === "number" ? a.totalMembers : 0;
+        const bv = typeof b.totalMembers === "number" ? b.totalMembers : 0;
+        return (av - bv) * dirMul;
+      }
+
+      // created
+      const av = safeDateMs(a.createdAt);
+      const bv = safeDateMs(b.createdAt);
+      return (av - bv) * dirMul;
+    });
+
+    return base;
+  }, [orgsFiltered, sortField, sortDir]);
+
+  const orgsTotal = orgsSorted.length;
   const orgsTotalPages = Math.max(1, Math.ceil(orgsTotal / orgsPageSize));
 
   useEffect(() => {
     setOrgsPage(1);
-  }, [orgsQuery]);
+  }, [orgsQuery, sortField, sortDir]);
 
   useEffect(() => {
     setOrgsPage((p) => clamp(p, 1, orgsTotalPages));
@@ -359,8 +410,8 @@ export default function OrganizationsClient() {
 
   const orgsSlice = useMemo(() => {
     const start = (orgsPageSafe - 1) * orgsPageSize;
-    return orgsFiltered.slice(start, start + orgsPageSize);
-  }, [orgsFiltered, orgsPageSafe]);
+    return orgsSorted.slice(start, start + orgsPageSize);
+  }, [orgsSorted, orgsPageSafe]);
 
   const orgsShowingLabel = useMemo(() => {
     if (!orgsTotal) return "Showing 0-0 from 0 data";
@@ -396,10 +447,15 @@ export default function OrganizationsClient() {
               </div>
 
               <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+                {/* ✅ Search container color now matches the "Upcoming" pill container */}
                 <div
                   className={clsx(
                     "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 bg-white/5 h-10",
+                    "rounded-lg border border-white/10 h-10",
+                    "bg-[#121420]",
+                    "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
+                    "hover:bg-white/5 hover:border-white/14",
+                    "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20",
                   )}
                 >
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
@@ -418,6 +474,16 @@ export default function OrganizationsClient() {
 
                 <div className="flex items-center gap-2">
                   <GridListToggle value={view} onChange={setView} />
+
+                  {/* ✅ Sort button goes LEFT of "New organization" */}
+                  <SortControl<OrgSortField>
+                    options={ORG_SORT_OPTIONS}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    setSortField={setSortField}
+                    setSortDir={setSortDir}
+                    defaultDirFor={(f) => (f === "name" ? "asc" : "desc")}
+                  />
 
                   <Button
                     onClick={() => router.push("/dashboard/organizations/new")}

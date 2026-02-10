@@ -174,21 +174,20 @@ export default function RolesPermissionsModal({
 
   const DEFAULT_ROLE_COLORS = useMemo(
     () => [
-      // prettier + warmer / premium palette (still practical)
-      "#8B5CF6", // purple
-      "#7C3AED", // violet
-      "#A855F7", // fuchsia
-      "#4F46E5", // indigo
-      "#3B82F6", // blue
-      "#06B6D4", // cyan
-      "#14B8A6", // teal
-      "#22C55E", // green
-      "#84CC16", // lime
-      "#F59E0B", // amber
-      "#F97316", // orange
-      "#FB7185", // rose
-      "#EF4444", // red
-      "#94A3B8", // slate
+      "#8B5CF6",
+      "#7C3AED",
+      "#A855F7",
+      "#4F46E5",
+      "#3B82F6",
+      "#06B6D4",
+      "#14B8A6",
+      "#22C55E",
+      "#84CC16",
+      "#F59E0B",
+      "#F97316",
+      "#FB7185",
+      "#EF4444",
+      "#94A3B8",
     ],
     [],
   );
@@ -373,7 +372,7 @@ export default function RolesPermissionsModal({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={clsx(
-          "relative inline-flex h-6 w-[46px] items-center rounded-full",
+          "relative inline-flex h-6 w-[46px] items-center rounded-full cursor-pointer",
           "border border-white/10 bg-white/5",
           "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
           "transition",
@@ -469,12 +468,13 @@ export default function RolesPermissionsModal({
   /* ------------------------------ State ------------------------ */
   const qc = useQueryClient();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const bodyScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [q, setQ] = useState("");
   const [view, setView] = useState<"list" | "editor">("list");
   const [activeRoleId, setActiveRoleId] = useState<string | null>(null);
   const [editorTab, setEditorTab] = useState<"manager" | "permissions">(
-    "permissions",
+    "manager",
   );
 
   const [draftName, setDraftName] = useState("");
@@ -489,7 +489,6 @@ export default function RolesPermissionsModal({
   });
 
   function openColorPickerAt(e: React.PointerEvent | React.MouseEvent) {
-    // prevent focus steal / text selection
     e.preventDefault();
     e.stopPropagation();
 
@@ -498,7 +497,6 @@ export default function RolesPermissionsModal({
     setColorPickerPt({ x: clientX, y: clientY });
     setColorPickerOpen(true);
 
-    // keep scroll stable + kill focus ring noise
     requestAnimationFrame(() => {
       (document.activeElement as HTMLElement | null)?.blur?.();
     });
@@ -528,14 +526,14 @@ export default function RolesPermissionsModal({
     () => ({
       _id: OWNER_PSEUDO_ID,
       key: "owner",
-      name: ROLE_META.owner.label, // "Owner"
+      name: ROLE_META.owner.label,
       color: "#8B5CF6",
       iconKey: null,
       iconUrl: null,
       isSystem: true,
       order: -10_000,
-      permissions: makeEmptyPerms(), // not used (display-only)
-      membersCount: 1, // display hint; real owner membership is handled in team endpoint
+      permissions: makeEmptyPerms(),
+      membersCount: 1,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -545,7 +543,6 @@ export default function RolesPermissionsModal({
     const hasOwner = roles.some((r) => r.key === "owner");
     const list = hasOwner ? [...roles] : [ownerDisplayRole, ...roles];
 
-    // hard-order: owner first, admin second, then by order asc
     const rank = (r: OrgRoleRow) => {
       if (r.key === "owner") return -2;
       if (r.key === "admin") return -1;
@@ -578,14 +575,30 @@ export default function RolesPermissionsModal({
 
   const activeRole = useMemo(() => {
     if (!activeRoleId) return null;
-    // Only real roles can be edited
     return roles.find((r) => r._id === activeRoleId) ?? null;
   }, [roles, activeRoleId]);
+
+  /* ------------------------ Reset on open ------------------------ */
+  useEffect(() => {
+    if (!open) return;
+
+    // Always open to the main roles list view (fresh start).
+    setView("list");
+    setEditorTab("manager");
+    setQ("");
+    setCreateErr(null);
+    setUploadErr(null);
+    setColorPickerOpen(false);
+    setActiveRoleId(null);
+
+    requestAnimationFrame(() => {
+      bodyScrollRef.current?.scrollTo({ top: 0 });
+    });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     if (roles.length && !activeRoleId) {
-      // Prefer Admin as the first editable role, otherwise first real role
       const admin = roles.find((r) => r.key === "admin");
       setActiveRoleId((admin ?? roles[0])!._id);
     }
@@ -607,12 +620,10 @@ export default function RolesPermissionsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRole?._id]);
 
-  // Close the popover picker if modal closes
   useEffect(() => {
     if (!open) setColorPickerOpen(false);
   }, [open]);
 
-  // Close the popover picker when you leave editor (list view)
   useEffect(() => {
     if (view === "list") setColorPickerOpen(false);
   }, [view]);
@@ -624,6 +635,7 @@ export default function RolesPermissionsModal({
       if (e.key === "Escape") {
         if (view === "editor") {
           setView("list");
+          setEditorTab("manager");
           return;
         }
         onClose();
@@ -655,7 +667,7 @@ export default function RolesPermissionsModal({
       });
       setActiveRoleId(created._id);
       setView("editor");
-      setEditorTab("permissions");
+      setEditorTab("manager"); // ✅ Create Role opens on Display/Manager first
       setQ("");
     },
     onError: (err: unknown) => {
@@ -685,7 +697,6 @@ export default function RolesPermissionsModal({
         return list.map((r) => (r._id === updated._id ? updated : r));
       });
 
-      // keep editor draft in sync with the saved server state
       if (updated._id === activeRoleId) {
         setDraftName(updated.name);
         setDraftColor(updated.color || "");
@@ -719,7 +730,10 @@ export default function RolesPermissionsModal({
         return left[0]?._id ?? null;
       });
 
-      if (view === "editor") setView("list");
+      if (view === "editor") {
+        setView("list");
+        setEditorTab("manager");
+      }
     },
   });
 
@@ -756,19 +770,20 @@ export default function RolesPermissionsModal({
   const onOpenEditor = (roleId: string) => {
     setActiveRoleId(roleId);
     setView("editor");
-    setEditorTab("permissions");
+    setEditorTab("manager"); // ✅ Edit opens on Display/Manager first
   };
 
   const onTogglePerm = (k: OrgPermissionKey, v: boolean) => {
-    setDraftPerms((p) => ({ ...p, [k]: v }));
-
     const roleId = activeRoleId;
     if (!roleId) return;
+
+    const next = { ...draftPerms, [k]: v };
+    setDraftPerms(next);
 
     queueMicrotask(() => {
       patchRoleMutation.mutate({
         roleId,
-        body: { permissions: { ...draftPerms, [k]: v } },
+        body: { permissions: next },
       });
     });
   };
@@ -827,7 +842,7 @@ export default function RolesPermissionsModal({
         throw new Error("Upload succeeded but no secure_url returned");
 
       setDraftIconUrl(uploaded.secure_url);
-      setDraftIconKey(null); // uploaded icon wins
+      setDraftIconKey(null);
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : String(e ?? "Failed to upload icon");
@@ -871,18 +886,12 @@ export default function RolesPermissionsModal({
       aria-label="Roles"
     >
       <style jsx>{`
-        /* -----------------------------------------------------------
-   * Animation-only hooks (keep YOUR button box styles in JSX)
-   * ----------------------------------------------------------- */
-
         :global(.tikdIconBtn) {
           position: relative;
           overflow: hidden;
         }
 
-        /* ---------- Edit hover effect (EXACT Uiverse behavior) ---------- */
         :global(.tikdIconBtn--edit) {
-          /* keeps z-index layering predictable inside your button */
           isolation: isolate;
         }
 
@@ -915,7 +924,6 @@ export default function RolesPermissionsModal({
           will-change: transform;
         }
 
-        /* the “written line” is now anchored to the pencil */
         :global(.tikdEditMotion::after) {
           content: "";
           position: absolute;
@@ -923,7 +931,6 @@ export default function RolesPermissionsModal({
           width: 30px;
           height: 1px;
 
-          /* tune these 2 to match the pencil tip perfectly */
           bottom: 0px;
           right: 14px;
 
@@ -932,12 +939,12 @@ export default function RolesPermissionsModal({
           pointer-events: none;
 
           transform: scaleX(0);
-          transform-origin: right; /* grows LEFT from pencil */
+          transform-origin: right;
           transition: transform 0.5s ease-out;
         }
 
         :global(.tikdIconBtn--edit:hover .tikdEditMotion) {
-          transform: translateX(6px); /* move pencil + line together */
+          transform: translateX(6px);
         }
 
         :global(.tikdIconBtn--edit:hover .tikdEditMotion::after) {
@@ -945,25 +952,23 @@ export default function RolesPermissionsModal({
         }
 
         :global(.tikdIconBtn--edit .tikdEditSvg) {
-          height: 15px; /* smaller icon */
+          height: 15px;
           fill: rgba(255, 255, 255, 0.92);
 
-          /* use layout nudge (NOT transform) so hover transform matches reference */
           position: relative;
           top: -1px;
 
           z-index: 3;
-          transition: all 0.2s; /* match reference */
-          transform-origin: bottom; /* match reference */
+          transition: all 0.2s;
+          transform-origin: bottom;
           will-change: transform;
-          display: block; /* avoid baseline jiggle */
+          display: block;
         }
 
         :global(.tikdIconBtn--edit:hover .tikdEditSvg) {
           transform: rotate(-15deg);
         }
 
-        /* ---------- Trash hover effect (bin lid flip only) ---------- */
         :global(.tikdTrashWrap) {
           display: inline-flex;
           flex-direction: column;
@@ -973,7 +978,7 @@ export default function RolesPermissionsModal({
         }
 
         :global(.tikdIconBtn--trash .svgIcon) {
-          width: 11px; /* smaller */
+          width: 11px;
           transition: transform 0.3s ease;
         }
 
@@ -991,7 +996,7 @@ export default function RolesPermissionsModal({
         }
 
         :global(.tikdTrashWrap) {
-          gap: 1px; /* was 2px */
+          gap: 1px;
         }
       `}</style>
 
@@ -1057,11 +1062,15 @@ export default function RolesPermissionsModal({
         </div>
 
         {/* Body */}
-        <div className="relative flex-1 overflow-y-auto no-scrollbar px-5 pb-5">
+        <div
+          ref={bodyScrollRef}
+          className="relative flex-1 overflow-y-auto no-scrollbar px-5 pb-5"
+        >
           <div
             className={clsx(
-              "rounded-2xl border border-white/10 bg-white/5",
-              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+              "rounded-2xl border border-white/10",
+              "bg-neutral-950/35",
+              "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
               "p-4 md:p-5",
             )}
           >
@@ -1102,7 +1111,7 @@ export default function RolesPermissionsModal({
                   list.
                 </div>
 
-                <div className="mt-4 rounded-xl border border-white/10 bg-neutral-950/30 overflow-hidden">
+                <div className="mt-4 rounded-xl border border-white/10 bg-neutral-950/35 overflow-hidden">
                   <div className="px-4 py-3">
                     <div className="grid grid-cols-[1fr_140px_88px] items-center gap-3 text-[12px] font-semibold text-neutral-400">
                       <div>{rolesCountLabel}</div>
@@ -1119,7 +1128,7 @@ export default function RolesPermissionsModal({
                         {Array.from({ length: 5 }).map((_, i) => (
                           <div
                             key={i}
-                            className="h-[52px] rounded-xl border border-white/10 bg-white/5"
+                            className="h-[52px] rounded-xl border border-white/10 bg-neutral-950/35"
                           />
                         ))}
                       </div>
@@ -1152,7 +1161,7 @@ export default function RolesPermissionsModal({
                               "group px-4 py-3",
                               "grid grid-cols-[1fr_140px_88px] items-center gap-3",
                               "border-t border-white/10",
-                              "bg-transparent hover:bg-white/[0.04]",
+                              "bg-transparent hover:bg-white/[0.03]",
                               "transition-colors",
                             )}
                           >
@@ -1160,15 +1169,15 @@ export default function RolesPermissionsModal({
                               <div
                                 className={clsx(
                                   "relative h-9 w-9 shrink-0 overflow-hidden rounded-xl",
-                                  "border border-white/10 bg-neutral-950/35",
-                                  "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                                  "border border-white/10 bg-neutral-950/45",
+                                  "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
                                 )}
                               >
                                 <div
                                   className="absolute inset-0 opacity-100"
                                   style={{
                                     background:
-                                      "radial-gradient(120px 80px at 25% 20%, rgba(154,70,255,0.35), transparent 55%), radial-gradient(100px 70px at 90% 80%, rgba(66,139,255,0.20), transparent 60%)",
+                                      "radial-gradient(120px 80px at 25% 20%, rgba(154,70,255,0.28), transparent 58%), radial-gradient(100px 70px at 90% 80%, rgba(66,139,255,0.16), transparent 62%)",
                                   }}
                                 />
                                 <div className="relative flex h-full w-full items-center justify-center text-primary-200">
@@ -1204,8 +1213,8 @@ export default function RolesPermissionsModal({
                                 aria-label="Edit role"
                                 className={clsx(
                                   "inline-flex items-center justify-center",
-                                  "h-9 w-9 rounded-md border border-white/10 bg-white/5",
-                                  "text-white/80 hover:bg-white/10 hover:border-white/20",
+                                  "h-9 w-9 rounded-md border border-white/10 bg-neutral-950/40",
+                                  "text-white/80 hover:bg-neutral-950/55 hover:border-white/20",
                                   "focus:outline-none focus:ring-1 focus:ring-primary-600/35",
                                   "transition cursor-pointer",
                                   "tikdIconBtn tikdIconBtn--edit",
@@ -1234,11 +1243,11 @@ export default function RolesPermissionsModal({
                                 disabled={!canDelete(r) || saving}
                                 className={clsx(
                                   "inline-flex items-center justify-center",
-                                  "h-9 w-9 rounded-md border border-white/10 bg-white/5",
+                                  "h-9 w-9 rounded-md border border-white/10 bg-neutral-950/40",
                                   "text-white/80 hover:bg-error-500/15 hover:border-error-500/35",
                                   "focus:outline-none focus:ring-1 focus:ring-primary-600/35",
                                   "transition cursor-pointer",
-                                  "tikdIconBtn tikdIconBtn--trash",
+                                  "tikdIconBtn tikdIconBtn--trash cursor-pointer",
                                   (!canDelete(r) || saving) &&
                                     "opacity-50 pointer-events-none",
                                 )}
@@ -1268,11 +1277,14 @@ export default function RolesPermissionsModal({
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
-                    onClick={() => setView("list")}
+                    onClick={() => {
+                      setView("list");
+                      setEditorTab("manager");
+                    }}
                     className={clsx(
                       "inline-flex items-center gap-2 rounded-xl px-3 py-2",
-                      "border border-white/10 bg-neutral-950/35 text-neutral-200 hover:bg-white/10",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                      "border border-white/10 bg-neutral-950/45 text-neutral-200 hover:bg-neutral-950/60",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
                     )}
                   >
                     <ArrowLeft className="h-4 w-4" />
@@ -1293,8 +1305,8 @@ export default function RolesPermissionsModal({
                   <div
                     className={clsx(
                       "rounded-2xl border border-white/10",
-                      "bg-white/7",
-                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                      "bg-neutral-950/45",
+                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
                       "overflow-hidden",
                       "flex flex-col",
                       "min-h-[520px]",
@@ -1309,8 +1321,8 @@ export default function RolesPermissionsModal({
                         onClick={onCreateRole}
                         className={clsx(
                           "inline-flex h-8 w-8 items-center justify-center rounded-lg",
-                          "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
-                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                          "border border-white/10 bg-neutral-950/40 text-neutral-200 hover:bg-neutral-950/55",
+                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
                           saving && "opacity-60 pointer-events-none",
                         )}
                         aria-label="Create role"
@@ -1351,14 +1363,14 @@ export default function RolesPermissionsModal({
                               setActiveRoleId(r._id);
                             }}
                             className={clsx(
-                              "w-full rounded-xl px-3 py-2.5 text-left",
+                              "w-full rounded-xl px-3 py-2.5 text-left cursor-pointer",
                               "border border-white/10",
                               "flex items-center gap-2.5",
                               isOwnerRow && "opacity-70 cursor-default",
                               active
-                                ? "bg-[linear-gradient(90deg,rgba(154,70,255,0.18),rgba(66,139,255,0.10))] text-primary-100 ring-1 ring-primary-500/22"
-                                : "bg-white/5 text-neutral-200 hover:bg-white/10",
-                              isOwnerRow && "hover:bg-white/5",
+                                ? "bg-[linear-gradient(90deg,rgba(154,70,255,0.16),rgba(66,139,255,0.08))] text-primary-100 ring-1 ring-primary-500/20"
+                                : "bg-neutral-950/35 text-neutral-200 hover:bg-neutral-950/50",
+                              isOwnerRow && "hover:bg-neutral-950/35",
                               "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                               "transition",
                             )}
@@ -1369,8 +1381,8 @@ export default function RolesPermissionsModal({
                               className={clsx(
                                 "inline-flex h-8 w-8 items-center justify-center rounded-xl",
                                 active
-                                  ? "bg-primary-500/18 text-primary-200 ring-1 ring-primary-500/25"
-                                  : "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                                  ? "bg-primary-500/16 text-primary-200 ring-1 ring-primary-500/22"
+                                  : "bg-neutral-950/35 text-neutral-200 ring-1 ring-white/10",
                               )}
                             >
                               {icon}
@@ -1396,37 +1408,37 @@ export default function RolesPermissionsModal({
                   {/* Right panel */}
                   <div
                     className={clsx(
-                      "rounded-2xl border border-white/10 bg-neutral-950/30",
-                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                      "rounded-2xl border border-white/10 bg-neutral-950/35",
+                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
                       "overflow-hidden",
                       "flex flex-col",
                       "min-h-[520px]",
                     )}
                   >
-                    <div className="relative border-b border-white/10 bg-white/4 px-4 py-3">
+                    <div className="relative border-b border-white/10 bg-neutral-950/45 px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="font-semibold text-neutral-200">
                           {activeRole?.name ?? "Role"}
                         </div>
 
-                        <div className="inline-flex items-center rounded-full border border-white/10 bg-neutral-950/40 p-1">
+                        <div className="inline-flex items-center rounded-full border border-white/10 bg-neutral-950/55 p-1">
                           <button
                             type="button"
                             onClick={() => setEditorTab("manager")}
                             className={clsx(
-                              "rounded-full px-3 py-1.5 text-[12px] font-semibold",
+                              "rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer",
                               editorTab === "manager"
                                 ? "bg-white/10 text-neutral-0"
                                 : "text-neutral-300 hover:text-neutral-0",
                             )}
                           >
-                            User role manager
+                            Display
                           </button>
                           <button
                             type="button"
                             onClick={() => setEditorTab("permissions")}
                             className={clsx(
-                              "rounded-full px-3 py-1.5 text-[12px] font-semibold",
+                              "rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer",
                               editorTab === "permissions"
                                 ? "bg-white/10 text-neutral-0"
                                 : "text-neutral-300 hover:text-neutral-0",
@@ -1442,11 +1454,10 @@ export default function RolesPermissionsModal({
                       <div className="flex-1 overflow-auto no-scrollbar">
                         <div className="p-4">
                           <div className="text-[12px] text-neutral-400">
-                            Basic role settings. (Permissions are in the next
-                            tab.)
+                            Display settings. (Permissions are in the next tab.)
                           </div>
 
-                          {/* Preview (exact table RolePill styling) */}
+                          {/* Preview */}
                           <div className="mt-4">
                             <div className="flex items-center gap-2">
                               <div className="text-[12px] font-semibold text-neutral-200">
@@ -1514,7 +1525,7 @@ export default function RolesPermissionsModal({
                                 >
                                   <div
                                     className={clsx(
-                                      "rounded-lg border border-white/10 bg-neutral-950/55",
+                                      "rounded-lg border border-white/10 bg-neutral-950/60",
                                       "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
                                     )}
                                   >
@@ -1530,7 +1541,6 @@ export default function RolesPermissionsModal({
                                       endAdornment={
                                         <button
                                           type="button"
-                                          // prevent input from focusing
                                           onMouseDown={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
@@ -1576,8 +1586,8 @@ export default function RolesPermissionsModal({
                                   className={clsx(
                                     "inline-flex items-center justify-center",
                                     "h-[44px] w-[44px] shrink-0 rounded-lg",
-                                    "border border-white/10 bg-white/5 text-neutral-0",
-                                    "hover:bg-white/10 hover:border-white/20 transition",
+                                    "border border-white/10 bg-neutral-950/45 text-neutral-0",
+                                    "hover:bg-neutral-950/60 hover:border-white/20 transition",
                                     "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                                     "disabled:opacity-60 disabled:pointer-events-none cursor-pointer",
                                   )}
@@ -1651,11 +1661,11 @@ export default function RolesPermissionsModal({
                               <div className="text-[12px] font-semibold text-neutral-200">
                                 Role icon
                               </div>
-                              <div className="mt-2 rounded-2xl border border-white/10 bg-white/4 p-3">
+                              <div className="mt-2 rounded-2xl border border-white/10 bg-neutral-950/45 p-3">
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-3">
                                     <div
-                                      className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-neutral-950/50"
+                                      className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-neutral-950/60"
                                       style={{
                                         boxShadow:
                                           "inset 0 1px 0 rgba(255,255,255,0.06)",
@@ -1684,9 +1694,9 @@ export default function RolesPermissionsModal({
                                     <label
                                       className={clsx(
                                         "inline-flex items-center gap-2",
-                                        "rounded-xl border border-white/10 bg-white/5 px-3 py-2",
+                                        "rounded-xl border border-white/10 bg-neutral-950/45 px-3 py-2",
                                         "text-[12px] font-semibold text-neutral-0",
-                                        "hover:bg-white/10 cursor-pointer",
+                                        "hover:bg-neutral-950/60 cursor-pointer",
                                         "focus-within:ring-2 focus-within:ring-primary-500/60",
                                         uploadingIcon &&
                                           "opacity-60 pointer-events-none",
@@ -1745,8 +1755,8 @@ export default function RolesPermissionsModal({
                                         }}
                                         className={clsx(
                                           "h-9 w-9 rounded-lg grid place-items-center",
-                                          "border border-white/10 bg-neutral-950/45",
-                                          "hover:bg-white/8 hover:border-white/20 transition",
+                                          "border border-white/10 bg-neutral-950/55",
+                                          "hover:bg-neutral-950/65 hover:border-white/20 transition cursor-pointer",
                                           active &&
                                             "ring-2 ring-primary-500/55 bg-[radial-gradient(140px_90px_at_30%_20%,rgba(154,70,255,0.22),transparent_60%),radial-gradient(140px_90px_at_90%_80%,rgba(66,139,255,0.14),transparent_60%)]",
                                         )}
@@ -1763,7 +1773,7 @@ export default function RolesPermissionsModal({
                               </div>
                             </div>
 
-                            <div className="rounded-xl border border-white/10 bg-white/4 p-4">
+                            <div className="rounded-xl border border-white/10 bg-neutral-950/45 p-4">
                               <div className="text-[12px] font-semibold text-neutral-200">
                                 Notes
                               </div>
@@ -1779,7 +1789,7 @@ export default function RolesPermissionsModal({
                           className={clsx(
                             "sticky bottom-0 z-[2]",
                             "border-t border-white/10",
-                            "bg-neutral-950/55 backdrop-blur-[12px]",
+                            "bg-neutral-950/65 backdrop-blur-[12px]",
                           )}
                         >
                           <div className="flex items-center justify-between gap-2 px-4 py-3">
@@ -1794,7 +1804,7 @@ export default function RolesPermissionsModal({
                                   "inline-flex items-center gap-2 rounded-xl px-3 py-2",
                                   "border border-error-500/25 bg-error-500/10 text-error-200",
                                   "hover:bg-error-500/14 hover:border-error-500/35 transition",
-                                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-error-500/40",
+                                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-error-500/40 cursor-pointer",
                                   saving && "opacity-60 pointer-events-none",
                                 )}
                                 aria-label="Delete role"
@@ -1840,8 +1850,8 @@ export default function RolesPermissionsModal({
                             <div
                               key={sec.title}
                               className={clsx(
-                                "rounded-2xl border border-white/10 bg-white/4",
-                                "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                                "rounded-2xl border border-white/10 bg-neutral-950/45",
+                                "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
                                 "overflow-hidden",
                               )}
                             >
@@ -1865,7 +1875,7 @@ export default function RolesPermissionsModal({
                                     key={p.key}
                                     className={clsx(
                                       "flex items-center justify-between gap-3 px-4 py-3",
-                                      "bg-transparent hover:bg-white/[0.03] transition-colors",
+                                      "bg-transparent hover:bg-white/[0.025] transition-colors",
                                     )}
                                   >
                                     <div className="min-w-0">

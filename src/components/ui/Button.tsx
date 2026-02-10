@@ -57,6 +57,7 @@ export interface ButtonProps
 
 const base =
   "inline-flex items-center justify-center gap-1 text-sm leading-[90%] font-medium tracking-[-0.28px] rounded-full " +
+  "pointer-events-auto " +
   "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 " +
   "disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer";
 
@@ -77,15 +78,10 @@ const variants: Record<
 
   /**
    * Used for all "View All" / "Detailed View" actions
-   * - hover: scale + slight rotate
-   * - active: scale down + rotate back + border pulse animation
+   * NEW: Uiverse-style calm purple wrap + rotating line on hover
    */
   viewAction:
-    "pointer-events-auto rounded-full border border-neutral-500 bg-neutral-700 px-3 py-2 text-xs font-medium text-white " +
-    "transition-[transform,background-color,color,border-color] duration-300 " +
-    "hover:cursor-pointer hover:scale-[1.05] hover:rotate-[3deg] hover:border-white " +
-    "active:scale-[0.90] active:rotate-[-3deg] active:bg-black active:text-primary-500 active:border-primary-600 " +
-    "active:animate-[tikdBorderMove_500ms_forwards]",
+    "tikd-viewAction focus-visible:ring-2 focus-visible:ring-primary-500/45",
 };
 
 const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -93,6 +89,24 @@ const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
   md: "py-3 px-4",
   lg: "py-4 px-8",
   xs: "py-[13px] px-4",
+  icon: "p-2 w-9 h-9",
+};
+
+/**
+ * viewAction uses the size classes on the INNER content (not the outer button),
+ * because its layout matches the Uiverse structure:
+ * button > wrap > outline + content
+ *
+ * ✅ Tweaked: slightly smaller across the board
+ */
+const viewActionContentSizes: Record<
+  NonNullable<ButtonProps["size"]>,
+  string
+> = {
+  xs: "py-1.5 px-3 text-[11px]",
+  sm: "py-2 px-3.5 text-[12px]",
+  md: "py-2.5 px-4 text-[13px]",
+  lg: "py-3 px-6 text-[14px]",
   icon: "p-2 w-9 h-9",
 };
 
@@ -151,7 +165,7 @@ const variantSweep: Record<NonElectricVariant, string> = {
     "before:bg-gradient-to-r before:from-transparent before:via-primary-500/16 before:to-transparent",
   ),
 
-  // If you ever enable `animation` on viewAction, keep it subtle.
+  // viewAction has its own dedicated animation; keep this subtle if enabled elsewhere.
   viewAction: clsx(
     sweepBase("before:duration-850"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/14 before:to-transparent",
@@ -198,10 +212,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) => {
     const Comp = asChild ? Slot : "button";
+    const isViewAction = variant === "viewAction";
+
+    const spinnerSize =
+      isViewAction && (size === "xs" || size === "sm")
+        ? "h-3.5 w-3.5"
+        : "h-4 w-4";
 
     const Spinner = (
       <svg
-        className="-ml-1 h-4 w-4 animate-spin text-current"
+        className={clsx("-ml-1 animate-spin text-current", spinnerSize)}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -230,16 +250,41 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           : electricDefaultInner
         : variants[variant];
 
-    const animateClasses = animation
-      ? getSweepClasses(variant, electricInner)
-      : "";
+    // viewAction already has its own hover animation; avoid stacking the sweep on top.
+    const animateClasses =
+      animation && !isViewAction ? getSweepClasses(variant, electricInner) : "";
 
     const combined = clsx(
       base,
       innerClasses,
-      sizes[size],
+      // viewAction handles sizing on its inner content element
+      !isViewAction ? sizes[size] : "",
       animateClasses,
       className,
+    );
+
+    const normalChildren = (
+      <span className="inline-flex items-center gap-2">
+        {loading && Spinner}
+        {icon}
+        {children}
+      </span>
+    );
+
+    const viewActionChildren = (
+      <div className="tikd-viewAction__wrap">
+        <div className="tikd-viewAction__outline" aria-hidden="true" />
+        <div
+          className={clsx(
+            "tikd-viewAction__content",
+            viewActionContentSizes[size],
+          )}
+        >
+          {loading && Spinner}
+          {icon}
+          {children}
+        </div>
+      </div>
     );
 
     const buttonEl = (
@@ -250,11 +295,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         data-animate={animation ? "true" : "false"}
         {...props}
       >
-        <span className="inline-flex items-center gap-2">
-          {loading && Spinner}
-          {icon}
-          {children}
-        </span>
+        {isViewAction ? viewActionChildren : normalChildren}
       </Comp>
     );
 

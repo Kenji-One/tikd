@@ -94,7 +94,7 @@ const createSchema = z.object({
     .enum([
       "instagram",
       "facebook",
-      "twitter",
+      "x",
       "linkedin",
       "google",
       "youtube",

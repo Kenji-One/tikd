@@ -2,7 +2,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, Ticket } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Eye, Ticket, ChevronLeft, ChevronRight } from "lucide-react";
 
 import KpiCard from "@/components/dashboard/cards/KpiCard";
 import RevenueChart from "@/components/dashboard/charts/RevenueChart";
@@ -12,11 +13,14 @@ import MyTeamTable, {
   DEMO_MY_TEAM,
 } from "@/components/dashboard/tables/MyTeamTable";
 import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
-import BreakdownCard from "@/components/dashboard/cards/BreakdownCard";
 
+import { Button } from "@/components/ui/Button";
 import DateRangePicker, {
   type DateRangeValue,
 } from "@/components/ui/DateRangePicker";
+import DonutFull, {
+  type DonutSegment,
+} from "@/components/dashboard/charts/DonutFull";
 
 /* Demo series (MONTHLY) — scoped to org dashboard */
 const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
@@ -239,7 +243,7 @@ function sumBucket(values: number[], from: number, to: number) {
   return s;
 }
 
-/* ----------------------------- Demo breakdown helpers ----------------------------- */
+/* ----------------------------- breakdown helpers (same as Event page) ----------------------------- */
 function splitByPercent(total: number, percents: number[]) {
   const safeTotal = Math.max(0, total);
   if (safeTotal === 0) return percents.map(() => 0);
@@ -263,7 +267,6 @@ function splitByPercent(total: number, percents: number[]) {
   return out;
 }
 
-/** Deterministic dummy total per org */
 function stableDummyTotal(seed: string, min = 8000, max = 48000) {
   let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
@@ -274,7 +277,234 @@ function stableDummyTotal(seed: string, min = 8000, max = 48000) {
   return min + n;
 }
 
+function currentMonthYearUpper() {
+  const now = new Date();
+  return now
+    .toLocaleDateString(undefined, { month: "long", year: "numeric" })
+    .toUpperCase();
+}
+
+function mulberry32(seed: number) {
+  return function () {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildStableAges(seedStr: string, total: number) {
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const rand = mulberry32(Math.abs(h) || 1);
+
+  const N = 12;
+  const poolMin = 18;
+  const poolMax = 65;
+
+  const chosen = new Set<number>();
+  while (chosen.size < N) {
+    const a = poolMin + Math.floor(rand() * (poolMax - poolMin + 1));
+    chosen.add(a);
+  }
+
+  const ages = Array.from(chosen);
+  const weights = ages.map(() => 0.25 + rand() * 1.75);
+  const sumW = weights.reduce((a, b) => a + b, 0) || 1;
+
+  const raw = weights.map((w) => (total * w) / sumW);
+  const floors = raw.map((x) => Math.floor(x));
+  let remainder = Math.max(0, total - floors.reduce((a, b) => a + b, 0));
+
+  const fracIdx = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac)
+    .map((x) => x.i);
+
+  const counts = [...floors];
+  let k = 0;
+  while (remainder > 0 && fracIdx.length > 0) {
+    counts[fracIdx[k % fracIdx.length]] += 1;
+    remainder -= 1;
+    k += 1;
+  }
+
+  const pairs = ages.map((age, i) => ({ age, count: counts[i] ?? 0 }));
+  pairs.sort((a, b) => b.count - a.count);
+
+  return pairs.filter((p) => p.count > 0);
+}
+
+const AGE_COLORS = [
+  "#FF7A45",
+  "#FF3B4A",
+  "#9A46FF",
+  "#3B82F6",
+  "#22C55E",
+  "#F59E0B",
+  "#EC4899",
+  "#14B8A6",
+  "#A3E635",
+  "#60A5FA",
+  "#FB7185",
+  "#C084FC",
+];
+
+/* ----------------------------- Compact, modern pills row ----------------------------- */
+function StatPillsRow(opts: {
+  items: {
+    key: string;
+    label: string;
+    value: number;
+    pct: number;
+    color: string;
+  }[];
+  withArrows?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
+}) {
+  const { items, withArrows, onPrev, onNext } = opts;
+
+  const rgba = (hex: string, a: number) => {
+    const h = hex.replace("#", "").trim();
+    const full =
+      h.length === 3
+        ? h
+            .split("")
+            .map((c) => c + c)
+            .join("")
+        : h;
+    const r = parseInt(full.slice(0, 2), 16) || 0;
+    const g = parseInt(full.slice(2, 4), 16) || 0;
+    const b = parseInt(full.slice(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  };
+
+  const ArrowBtn = (props: {
+    dir: "left" | "right";
+    onClick?: () => void;
+    label: string;
+  }) => {
+    const Icon = props.dir === "left" ? ChevronLeft : ChevronRight;
+
+    return (
+      <button
+        type="button"
+        onClick={props.onClick}
+        aria-label={props.label}
+        className={[
+          "group inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+          "border border-white/10 bg-white/[0.03] backdrop-blur-xl",
+          "shadow-[0_12px_28px_rgba(0,0,0,0.42)]",
+          "text-white/75 hover:text-white",
+          "hover:bg-white/[0.06]",
+          "active:scale-[0.98]",
+          "focus-visible:outline-none focus-visible:shadow-[0_0_0_2px_rgba(154,81,255,0.30),0_12px_28px_rgba(0,0,0,0.42)]",
+        ].join(" ")}
+      >
+        <Icon
+          size={16}
+          className={[
+            "transition-transform duration-150",
+            props.dir === "left" ? "group-hover:-translate-x-0.5" : "",
+            props.dir === "right" ? "group-hover:translate-x-0.5" : "",
+          ].join(" ")}
+        />
+      </button>
+    );
+  };
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center gap-2.5">
+        {withArrows ? (
+          <ArrowBtn dir="left" onClick={onPrev} label="Previous" />
+        ) : (
+          <div className="w-9" />
+        )}
+
+        <div className="flex flex-1 flex-wrap gap-2.5">
+          {items.map((it) => {
+            const borderBg = `linear-gradient(135deg,
+              ${rgba(it.color, 0.38)} 0%,
+              rgba(154, 70, 255, 0.22) 46%,
+              rgba(255, 255, 255, 0.10) 100%)`;
+
+            return (
+              <div
+                key={it.key}
+                className={[
+                  "min-w-[160px] flex-1",
+                  "sm:min-w-[170px] md:min-w-[180px]",
+                  "group relative rounded-xl p-[1px]",
+                ].join(" ")}
+                style={{ background: borderBg }}
+              >
+                <div
+                  className={[
+                    "relative overflow-hidden rounded-[11px]",
+                    "border border-white/10 bg-white/[0.03] backdrop-blur-xl",
+                    "px-3 py-2",
+                    "shadow-[0_14px_34px_rgba(0,0,0,0.40)]",
+                    "transition-[transform,background-color,border-color] duration-150",
+                    "hover:bg-white/[0.045] hover:border-white/15",
+                    "active:scale-[0.99]",
+                  ].join(" ")}
+                >
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                    style={{
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 55%)",
+                    }}
+                  />
+
+                  <div className="relative flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
+                        style={{
+                          backgroundColor: it.color,
+                          boxShadow:
+                            "0 0 0 1px rgba(0,0,0,0.15), 0 0 18px rgba(154,70,255,0.10)",
+                        }}
+                      />
+                      <span className="min-w-0 break-words text-[12.5px] font-semibold tracking-[-0.01em] leading-tight text-white/80">
+                        {it.label}
+                      </span>
+                    </div>
+
+                    <div className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
+                      <span className="text-[14px] font-extrabold tabular-nums text-white">
+                        {it.value.toLocaleString()}
+                      </span>
+                      <span className="text-[11px] font-semibold tabular-nums text-white/45">
+                        {it.pct}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {withArrows ? (
+          <ArrowBtn dir="right" onClick={onNext} label="Next" />
+        ) : (
+          <div className="w-9" />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function OrgSummaryClient({ orgId }: { orgId: string }) {
+  const router = useRouter();
+
   const today = useMemo(() => clampToDay(new Date()), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
 
@@ -435,33 +665,84 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     });
   }, [dates, pinnedIndex, monthlyMode]);
 
-  /* ✅ Breakdown (demo but deterministic) */
   const breakdownTotal = useMemo(
     () => stableDummyTotal(orgId ?? "no-org"),
     [orgId],
   );
+  const monthYearUpper = useMemo(() => currentMonthYearUpper(), []);
 
-  const genderSegments = useMemo(() => {
+  const genderSegments = useMemo<DonutSegment[]>(() => {
     const [male, female, other] = splitByPercent(breakdownTotal, [66, 23, 11]);
     return [
-      { label: "Male", value: male, color: "#3B82F6" }, // Blue
-      { label: "Female", value: female, color: "#EC4899" }, // Pink
-      { label: "Other", value: other, color: "#9CA3AF" }, // Gray
+      { label: "Male", value: male, color: "#3B82F6" },
+      { label: "Female", value: female, color: "#EC4899" },
+      { label: "Other", value: other, color: "#9CA3AF" },
     ];
   }, [breakdownTotal]);
 
-  const ageSegments = useMemo(() => {
-    const [a, b, c] = splitByPercent(breakdownTotal, [62, 27, 11]);
-    return [
-      { label: "18–24", value: a, color: "#FF7A45" },
-      { label: "25–34", value: b, color: "#FF3B4A" },
-      { label: "Other", value: c, color: "#9A46FF" },
-    ];
-  }, [breakdownTotal]);
+  const genderTotal = useMemo(
+    () => genderSegments.reduce((a, s) => a + Number(s.value || 0), 0),
+    [genderSegments],
+  );
+
+  const genderPills = useMemo(() => {
+    return genderSegments.map((s) => ({
+      key: s.label,
+      label: s.label,
+      value: Number(s.value || 0),
+      pct:
+        genderTotal > 0
+          ? Math.round((Number(s.value || 0) / genderTotal) * 100)
+          : 0,
+      color: s.color,
+    }));
+  }, [genderSegments, genderTotal]);
+
+  const agePairs = useMemo(() => {
+    const total = Math.max(1, breakdownTotal);
+    return buildStableAges(`${orgId ?? "no-org"}::ages`, total);
+  }, [breakdownTotal, orgId]);
+
+  const [agePage, setAgePage] = useState(0);
+
+  const agePages = useMemo(() => {
+    const per = 4;
+    return Math.max(1, Math.ceil(agePairs.length / per));
+  }, [agePairs.length]);
+
+  const ageSlicePairs = useMemo(() => {
+    const per = 4;
+    const start = (agePage % agePages) * per;
+    return agePairs.slice(start, start + per);
+  }, [agePairs, agePage, agePages]);
+
+  const ageSliceSegments = useMemo<DonutSegment[]>(() => {
+    return ageSlicePairs.map((p, idx) => ({
+      label: String(p.age),
+      value: p.count,
+      color: AGE_COLORS[idx % AGE_COLORS.length],
+    }));
+  }, [ageSlicePairs]);
+
+  const ageSliceTotal = useMemo(() => {
+    return ageSliceSegments.reduce((a, s) => a + Number(s.value || 0), 0);
+  }, [ageSliceSegments]);
+
+  const agePills = useMemo(() => {
+    return ageSliceSegments.map((s) => ({
+      key: s.label,
+      label: `Age ${s.label}`,
+      value: Number(s.value || 0),
+      pct:
+        ageSliceTotal > 0
+          ? Math.round((Number(s.value || 0) / ageSliceTotal) * 100)
+          : 0,
+      color: s.color,
+    }));
+  }, [ageSliceSegments, ageSliceTotal]);
 
   return (
     <div className="space-y-5 px-4 md:px-6 lg:px-8">
-      {/* TOP: charts left + recent sales right (EXACT like Event summary) */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
         <div className="grid grid-cols-1 rounded-lg border border-neutral-700 bg-neutral-900 pl-4 lg:grid-cols-[3.15fr_1.74fr]">
           <KpiCard
@@ -558,26 +839,87 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         <RecentSalesTable />
       </section>
 
-      {/* MID: breakdowns left + my team right (EXACT like Event summary) */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <BreakdownCard
-            title="Gender Breakdown"
-            segments={genderSegments}
-            donutProps={{ height: 180, thickness: 22 }}
-            onDetailedView={() => {
-              // later: /dashboard/organizations/:id/analytics/demographics?tab=gender
-            }}
-          />
+          <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
+                  Gender Breakdown
+                </div>
+                <div className="mt-1 text-2xl font-extrabold">
+                  {monthYearUpper}
+                </div>
+              </div>
 
-          <BreakdownCard
-            title="Age Breakdown"
-            segments={ageSegments}
-            donutProps={{ height: 180, thickness: 22 }}
-            onDetailedView={() => {
-              // later: /dashboard/organizations/:id/analytics/demographics?tab=age
-            }}
-          />
+              <Button
+                variant="viewAction"
+                size="sm"
+                type="button"
+                onClick={() =>
+                  router.push(`/dashboard/gender-breakdown?orgId=${orgId}`)
+                }
+              >
+                Detailed View
+              </Button>
+            </div>
+
+            <div className="mt-4">
+              <DonutFull
+                segments={genderSegments}
+                height={300}
+                thickness={60}
+                padAngle={4}
+                minSliceAngle={6}
+                trackColor="transparent"
+                showSliceBadges
+              />
+              <StatPillsRow items={genderPills} />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
+                  Age Breakdown
+                </div>
+                <div className="mt-1 text-2xl font-extrabold">
+                  {monthYearUpper}
+                </div>
+              </div>
+
+              <Button
+                variant="viewAction"
+                size="sm"
+                type="button"
+                onClick={() =>
+                  router.push(`/dashboard/age-breakdown?orgId=${orgId}`)
+                }
+              >
+                Detailed View
+              </Button>
+            </div>
+
+            <div className="mt-4">
+              <DonutFull
+                segments={ageSliceSegments}
+                height={300}
+                thickness={60}
+                padAngle={5}
+                minSliceAngle={8}
+                trackColor="transparent"
+                showSliceBadges
+              />
+
+              <StatPillsRow
+                items={agePills}
+                withArrows
+                onPrev={() => setAgePage((p) => (p - 1 + agePages) % agePages)}
+                onNext={() => setAgePage((p) => (p + 1) % agePages)}
+              />
+            </div>
+          </div>
         </div>
 
         <MyTeamTable
@@ -588,7 +930,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         />
       </section>
 
-      {/* ✅ Scoped to this org (includes its events) */}
       <TrackingLinksTable
         scope="organization"
         organizationId={orgId}

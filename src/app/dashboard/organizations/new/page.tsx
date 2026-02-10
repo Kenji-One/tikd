@@ -128,7 +128,14 @@ const OrgSchema = z.object({
 
   website: websiteSchema,
   businessType: z.enum(businessTypeValues),
-  location: z.string().min(2, "Location is required"),
+  location: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .refine((v) => !v || v.length >= 2, {
+      message: "Location must be at least 2 characters",
+    }),
   accentColor: z
     .string()
     .regex(
@@ -369,7 +376,7 @@ export default function NewOrganizationPage() {
       description: data.description?.trim()
         ? data.description.trim()
         : undefined,
-      location: data.location?.trim() ? data.location.trim() : data.location,
+      location: data.location?.trim() ? data.location.trim() : undefined,
       name: data.name?.trim() ? data.name.trim() : data.name,
     };
 
@@ -538,7 +545,7 @@ export default function NewOrganizationPage() {
               </div>
 
               <div className="space-y-2">
-                <FieldLabel required>Address</FieldLabel>
+                <FieldLabel>Address</FieldLabel>
                 <Controller
                   control={control}
                   name="location"

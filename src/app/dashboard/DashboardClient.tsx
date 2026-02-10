@@ -451,7 +451,7 @@ export default function DashboardClient() {
             value="$240.8K"
             delta="+24.6%"
             accent="from-[#7C3AED] to-[#9333EA]"
-            className="pr-6 py-5 border-r border-neutral-700"
+            className="pr-6 py-5 pb-4 border-r border-neutral-700"
             stretchChart
             detailsHref="/dashboard/revenue"
             toolbar={
@@ -489,7 +489,7 @@ export default function DashboardClient() {
               }
               delta="+24.6%"
               accent="from-[#7C3AED] to-[#9A46FF]"
-              className="p-5 border-b border-neutral-700"
+              className="p-5 pb-4 border-b border-neutral-700"
               detailsHref="/dashboard/page-views"
             >
               <SmallKpiChart
@@ -518,7 +518,7 @@ export default function DashboardClient() {
               }
               delta="-24.6%"
               accent="from-[#7C3AED] to-[#9A46FF]"
-              className="p-5"
+              className="p-5 pb-4"
               detailsHref="/dashboard/tickets-sold"
             >
               <SmallKpiChart

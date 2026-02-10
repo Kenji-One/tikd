@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 /* ------------------------------ utils ------------------------------ */
+const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
+
 function clampInt(n: number, min: number, max: number) {
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, Math.trunc(n)));
@@ -40,7 +42,6 @@ function formatEventDateLabel(d: Date) {
 }
 
 function formatCurrency(n: number) {
-  // Note: assumes tickets store a currency amount in the same unit you want to display.
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -48,54 +49,54 @@ function formatCurrency(n: number) {
   }).format(Number.isFinite(n) ? n : 0);
 }
 
-/**
- * Best-effort revenue extraction:
- * We try common numeric fields on Ticket docs (amount/total/price/paidAmount/totalAmount),
- * convert to double safely, and sum.
- *
- * If your Ticket schema uses cents (e.g. 12345 = $123.45), adjust conversion here.
- */
-async function getTicketMetrics(eventId: Types.ObjectId) {
-  const ticketsSold = await Ticket.countDocuments({
-    eventId,
-    status: "paid",
-  });
+type EventLean = {
+  _id: Types.ObjectId;
+  title: string;
+  date: Date;
+  endDate?: Date | null;
+  image?: string;
+  pageViews?: number;
+  views?: number;
+};
 
-  const revenueAgg = await Ticket.aggregate<{
-    _id: null;
-    sum: number;
-  }>([
-    { $match: { eventId, status: "paid" } },
-    {
-      $project: {
-        _amt: {
-          $ifNull: [
-            "$amount",
-            {
-              $ifNull: [
-                "$total",
-                {
-                  $ifNull: [
-                    "$price",
-                    {
-                      $ifNull: [
-                        "$paidAmount",
-                        { $ifNull: ["$totalAmount", 0] },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
+type TicketAggRow = {
+  _id: Types.ObjectId; // eventId
+  ticketsSold: number;
+  revenueNumber: number;
+};
+
+async function getTicketMetricsByEventIds(eventIds: Types.ObjectId[]) {
+  const map = new Map<string, { ticketsSold: number; revenueNumber: number }>();
+  if (eventIds.length === 0) return map;
+
+  // Best-effort amount expression (same logic you had, but done ONCE for all eventIds)
+  const amountExpr = {
+    $ifNull: [
+      "$amount",
+      {
+        $ifNull: [
+          "$total",
+          {
+            $ifNull: [
+              "$price",
+              {
+                $ifNull: ["$paidAmount", { $ifNull: ["$totalAmount", 0] }],
+              },
+            ],
+          },
+        ],
       },
-    },
+    ],
+  };
+
+  const agg = await Ticket.aggregate<TicketAggRow>([
+    { $match: { eventId: { $in: eventIds }, status: "paid" } },
     {
       $project: {
+        eventId: 1,
         amt: {
           $convert: {
-            input: "$_amt",
+            input: amountExpr,
             to: "double",
             onError: 0,
             onNull: 0,
@@ -103,88 +104,112 @@ async function getTicketMetrics(eventId: Types.ObjectId) {
         },
       },
     },
-    { $group: { _id: null, sum: { $sum: "$amt" } } },
+    {
+      $group: {
+        _id: "$eventId",
+        ticketsSold: { $sum: 1 },
+        revenueNumber: { $sum: "$amt" },
+      },
+    },
   ]);
 
-  const revenueNumber = revenueAgg?.[0]?.sum ?? 0;
+  for (const r of agg) {
+    map.set(String(r._id), {
+      ticketsSold: Number.isFinite(r.ticketsSold) ? r.ticketsSold : 0,
+      revenueNumber: Number.isFinite(r.revenueNumber) ? r.revenueNumber : 0,
+    });
+  }
 
-  return { ticketsSold, revenueNumber };
+  return map;
 }
 
 /* ------------------------------- GET ------------------------------- */
 /**
  * GET /api/dashboard/upcoming-events?limit=4
- * Returns rows ready for the UpcomingEventsTable.
- *
- * Shows events created by the current user that are upcoming:
- * - date in the future, OR
- * - multi-day event with endDate still in the future
  */
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const { searchParams } = new URL(req.url);
-  const limit = clampInt(Number(searchParams.get("limit") ?? 4), 1, 20);
+    const userIdRaw = String(session.user.id || "");
+    if (!isObjectId(userIdRaw)) {
+      return NextResponse.json(
+        { error: "Invalid session user id" },
+        { status: 400 },
+      );
+    }
+    const userId = new Types.ObjectId(userIdRaw);
 
-  const now = new Date();
+    const { searchParams } = new URL(req.url);
+    const limit = clampInt(Number(searchParams.get("limit") ?? 4), 1, 20);
 
-  // Upcoming filter (supports multi-day)
-  const upcomingFilter = {
-    $or: [
-      { endDate: { $gte: now } },
-      { endDate: { $exists: false }, date: { $gte: now } },
-      { endDate: null as unknown as undefined, date: { $gte: now } },
-    ],
-  };
+    const now = new Date();
 
-  const events = await Event.find({
-    createdByUserId: session.user.id,
-    ...upcomingFilter,
-  })
-    .sort({ date: 1 })
-    .limit(limit)
-    .lean<
-      {
-        _id: Types.ObjectId;
-        title: string;
-        date: Date;
-        endDate?: Date;
-        image?: string;
-        pageViews?: number;
-        views?: number;
-      }[]
-    >();
+    // Upcoming filter (supports multi-day)
+    const upcomingFilter = {
+      $or: [
+        { endDate: { $gte: now } }, // multi-day still ongoing
+        { endDate: { $exists: false }, date: { $gte: now } }, // no endDate
+        { endDate: null, date: { $gte: now } }, // endDate explicitly null
+      ],
+    };
 
-  const rows = await Promise.all(
-    events.map(async (e) => {
-      const eventId = new Types.ObjectId(e._id);
+    const events = await Event.find({
+      createdByUserId: userId,
+      ...upcomingFilter,
+    })
+      .select("_id title date endDate image pageViews views")
+      .sort({ date: 1 })
+      .limit(limit)
+      .lean<EventLean[]>();
 
-      const { ticketsSold, revenueNumber } = await getTicketMetrics(eventId);
+    const eventIds = events.map((e) => e._id);
+    const metricsByEventId = await getTicketMetricsByEventIds(eventIds);
+
+    const rows = events.map((e) => {
+      const m = metricsByEventId.get(String(e._id)) ?? {
+        ticketsSold: 0,
+        revenueNumber: 0,
+      };
+
+      const dateObj = new Date(e.date);
+      const eventDateMs = dateObj.getTime();
 
       const pageViews =
         (typeof e.pageViews === "number" ? e.pageViews : undefined) ??
         (typeof e.views === "number" ? e.views : undefined) ??
         0;
 
-      const dateObj = new Date(e.date);
-      const eventDateMs = dateObj.getTime();
-
       return {
         id: String(e._id),
         title: e.title,
         dateLabel: formatDateTimeLabel(dateObj),
         pageViews,
-        tickets: ticketsSold,
-        revenue: formatCurrency(revenueNumber),
+        tickets: m.ticketsSold,
+        revenue: formatCurrency(m.revenueNumber),
         eventDateLabel: formatEventDateLabel(dateObj),
         eventDateMs,
         img: e.image ?? null,
       };
-    }),
-  );
+    });
 
-  return NextResponse.json({ rows });
+    // Small private cache helps refresh/back without risking shared-user caching
+    return NextResponse.json(
+      { rows },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=15, stale-while-revalidate=60",
+        },
+      },
+    );
+  } catch (err: unknown) {
+    console.error("GET /api/dashboard/upcoming-events failed", err);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
+  }
 }

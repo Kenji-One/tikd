@@ -1,11 +1,10 @@
-// src/components/ui/EventCard.tsx
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { Calendar } from "lucide-react";
 import clsx from "classnames";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Tilt3d } from "@/components/ui/Tilt3d";
 
 /* -------------------------------------------------------------------------- */
@@ -34,6 +33,16 @@ export interface EventCardProps {
     onToggle: () => void;
     ariaLabel?: string;
   };
+
+  /**
+   * Optional overlay slots that will be placed INSIDE the Tilt surface.
+   * Useful for dashboard overlays like info tooltip + pin button.
+   */
+  topLeftOverlay?: ReactNode;
+  topLeftOverlayClassName?: string;
+
+  topRightOverlay?: ReactNode;
+  topRightOverlayClassName?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -131,7 +140,6 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 export const EVENT_CARD_DEFAULT_POSTER = DEFAULT_POSTER;
 
 function PinIcon({ className }: { className?: string }) {
-  // Client-provided SVG adapted to currentColor
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -171,9 +179,12 @@ export function EventCard({
   clickable = true,
   href,
   pin,
+  topLeftOverlay,
+  topLeftOverlayClassName,
+  topRightOverlay,
+  topRightOverlayClassName,
 }: EventCardProps) {
   const dateColour = "text-primary-951";
-  const ellipseBg = "bg-[rgba(154,81,255,0.6)]";
   const borderHover = "hover:border-primary-951";
 
   const initialSrc = useMemo(() => {
@@ -198,7 +209,7 @@ export function EventCard({
   const targetHref = href ?? `/events/${id}`;
 
   const pinButton = pin ? (
-     pin.pinned ? (
+    pin.pinned ? (
       <div
         className={clsx(
           "absolute right-3 top-3 z-20",
@@ -215,7 +226,6 @@ export function EventCard({
         <span>Pinned</span>
       </div>
     ) : (
-      // ✅ Unpinned state: hover-only, clickable pin button
       <button
         type="button"
         aria-label={pin.ariaLabel ?? "Pin event"}
@@ -237,28 +247,39 @@ export function EventCard({
     )
   ) : null;
 
+  const overlays = (
+    <>
+      {topLeftOverlay ? (
+        <div
+          className={clsx(
+            "absolute left-3 top-3 z-30",
+            topLeftOverlayClassName,
+          )}
+        >
+          {topLeftOverlay}
+        </div>
+      ) : null}
+
+      {topRightOverlay ? (
+        <div
+          className={clsx(
+            "absolute right-3 top-3 z-30",
+            topRightOverlayClassName,
+          )}
+        >
+          {topRightOverlay}
+        </div>
+      ) : null}
+    </>
+  );
+
   const inner = (
     <>
-      {pinButton}
+      {/* ✅ overlays INSIDE the tilt surface */}
+      {overlays}
 
-      {/* glow ellipse – visible only while *this* card is hovered */}
-      <div
-        className={clsx(
-          `
-          pointer-events-none
-          absolute
-          left-1/2 top-0
-          w-[188px] h-[63px]
-          -translate-x-1/2 translate-y-[7px]
-          blur-2xl
-          opacity-0
-          transition-opacity duration-200
-          group-hover/card:opacity-100
-          rounded-full
-        `,
-          ellipseBg,
-        )}
-      />
+      {/* legacy pin system (optional) */}
+      {pinButton}
 
       <div
         className={clsx(
@@ -282,6 +303,20 @@ export function EventCard({
               if (imgSrc !== DEFAULT_POSTER) setImgSrc(DEFAULT_POSTER);
             }}
           />
+
+          {/* Glow only affects poster area */}
+          <div
+            data-tilt-glow
+            className={clsx(
+              "pointer-events-none absolute inset-0 rounded-lg",
+              "opacity-0 transition-opacity duration-200",
+              "group-hover/card:opacity-100",
+            )}
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 50% -20%, rgba(255,255,255,0.05), rgba(0,0,0,0.14))",
+            }}
+          />
         </div>
       </div>
 
@@ -298,7 +333,7 @@ export function EventCard({
 
   if (clickable) {
     return (
-      <Tilt3d maxDeg={6} perspective={900} liftPx={2} className="w-full">
+      <Tilt3d perspective={1500} className="w-full">
         <Link href={targetHref} className={cardClasses}>
           {inner}
         </Link>
@@ -307,7 +342,7 @@ export function EventCard({
   }
 
   return (
-    <Tilt3d maxDeg={6} perspective={900} liftPx={2} className="w-full">
+    <Tilt3d perspective={1500} className="w-full">
       <div className={cardClasses}>{inner}</div>
     </Tilt3d>
   );

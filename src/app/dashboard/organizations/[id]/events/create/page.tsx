@@ -335,6 +335,44 @@ function buildLocationString(v: FormValues) {
   }
 }
 
+function buildLocationDisplayString(
+  v: Pick<
+    FormValues,
+    | "locationMode"
+    | "locationCity"
+    | "locationAddress"
+    | "locationName"
+    | "locationOther"
+  >,
+) {
+  switch (v.locationMode) {
+    case "tbd":
+      return "To Be Determined";
+    case "tba":
+      return "To Be Announced";
+    case "secret":
+      return "It’s a secret";
+    case "city":
+      return (v.locationCity || "").trim();
+    case "other":
+      return (v.locationOther || "").trim();
+    case "specific": {
+      const name = (v.locationName || "").trim();
+      const addr = (v.locationAddress || "").trim();
+      const city = (v.locationCity || "").trim();
+
+      const parts = [name, addr].filter(Boolean);
+      let out = parts.join(" · ");
+
+      if (!out) out = city;
+
+      return out;
+    }
+    default:
+      return "";
+  }
+}
+
 const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1280" viewBox="0 0 900 1280">
   <defs>
@@ -566,8 +604,16 @@ export default function NewEventPage() {
       locationAddress,
       locationName,
       locationOther,
-    } as FormValues;
-    return buildLocationString(v) || "Location TBA";
+    } as Pick<
+      FormValues,
+      | "locationMode"
+      | "locationCity"
+      | "locationAddress"
+      | "locationName"
+      | "locationOther"
+    >;
+
+    return buildLocationDisplayString(v) || "Location TBA";
   }, [
     locationMode,
     locationCity,
@@ -1059,12 +1105,13 @@ export default function NewEventPage() {
                           Location will be shown as:{" "}
                           <span className="text-neutral-200">
                             {locationMode === "tbd"
-                              ? "TBD"
+                              ? "To Be Determined"
                               : locationMode === "tba"
-                                ? "TBA"
+                                ? "To Be Announced"
                                 : "It’s a secret"}
                           </span>
                         </p>
+
                         <p className="mt-1 text-sm text-neutral-300">
                           You can update this later before publishing (or
                           anytime if you allow edits).

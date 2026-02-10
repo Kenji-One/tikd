@@ -14,6 +14,7 @@ import {
   Trash2,
   Phone,
   Mail,
+  Instagram,
   ChevronLeft,
   ChevronRight,
   X,
@@ -41,6 +42,10 @@ type Friend = {
 
   phone: string;
   email: string;
+
+  /** ✅ NEW */
+  instagram?: string;
+
   avatarUrl?: string;
   createdAt?: string | null;
 };
@@ -156,6 +161,29 @@ function formatRelative(iso?: string | null) {
   return `${day} days ago`;
 }
 
+/** ✅ Instagram helpers */
+function cleanInstagramValue(v?: string | null) {
+  return String(v ?? "").trim();
+}
+
+function instagramDisplay(v?: string | null) {
+  const raw = cleanInstagramValue(v);
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  const handle = raw.replace(/^@/, "").trim();
+  if (!handle) return "";
+  return `@${handle}`;
+}
+
+function instagramHref(v?: string | null) {
+  const raw = cleanInstagramValue(v);
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  const handle = raw.replace(/^@/, "").trim();
+  if (!handle) return "";
+  return `https://instagram.com/${handle}`;
+}
+
 /* ------------------------ Friends UI pieces ------------------------ */
 function FriendActionsMenu({
   onRemove,
@@ -259,6 +287,8 @@ function FriendsCard({
   onRemove?: (id: string) => void;
 }) {
   const badge = initialsFromName(friend.name);
+  const igText = instagramDisplay(friend.instagram);
+  const igUrl = instagramHref(friend.instagram);
 
   return (
     <Tilt3d
@@ -409,6 +439,39 @@ function FriendsCard({
                   {friend.email || "—"}
                 </span>
               </div>
+
+              {/* ✅ NEW: Instagram under Email */}
+              <div className="flex items-center gap-3">
+                <span
+                  className={clsx(
+                    "inline-flex h-7 w-7 items-center justify-center rounded-md",
+                    "bg-primary-500/15 text-primary-300",
+                    "ring-1 ring-primary-500/20",
+                  )}
+                >
+                  <Instagram className="h-4 w-4" />
+                </span>
+
+                {igText ? (
+                  <a
+                    href={igUrl || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={clsx(
+                      "text-[12px] font-medium text-neutral-100",
+                      "hover:text-primary-200",
+                      "truncate",
+                    )}
+                    title={igText}
+                  >
+                    {igText}
+                  </a>
+                ) : (
+                  <span className="text-[12px] font-medium text-neutral-100">
+                    —
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -425,6 +488,8 @@ function FriendsRow({
   onRemove?: (id: string) => void;
 }) {
   const badge = initialsFromName(friend.name);
+  const igText = instagramDisplay(friend.instagram);
+  const igUrl = instagramHref(friend.instagram);
 
   return (
     <div
@@ -478,11 +543,32 @@ function FriendsRow({
           </span>
           {friend.phone || "—"}
         </div>
+
         <div className="flex items-center gap-2 text-[12px] text-neutral-200">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
             <Mail className="h-4 w-4" />
           </span>
           {friend.email || "—"}
+        </div>
+
+        {/* ✅ NEW: Instagram in list view (desktop) */}
+        <div className="flex items-center gap-2 text-[12px] text-neutral-200">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-500/15 text-primary-300 ring-1 ring-primary-500/20">
+            <Instagram className="h-4 w-4" />
+          </span>
+          {igText ? (
+            <a
+              href={igUrl || "#"}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-primary-200"
+              title={igText}
+            >
+              {igText}
+            </a>
+          ) : (
+            "—"
+          )}
         </div>
       </div>
 
@@ -1176,7 +1262,7 @@ export default function FriendsClient() {
 
     return friends.filter((f) => {
       const hay =
-        `${f.name} ${f.role} ${f.company} ${f.email} ${f.phone}`.toLowerCase();
+        `${f.name} ${f.role} ${f.company} ${f.email} ${f.phone} ${f.instagram ?? ""}`.toLowerCase();
       return hay.includes(q);
     });
   }, [friendsQuery, friends]);
@@ -1240,7 +1326,11 @@ export default function FriendsClient() {
                 <div
                   className={clsx(
                     "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 bg-white/5 h-10",
+                    "rounded-lg border border-white/10 h-10",
+                    "bg-[#121420]",
+                    "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
+                    "hover:bg-white/5 hover:border-white/14",
+                    "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20",
                   )}
                 >
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
@@ -1286,7 +1376,10 @@ export default function FriendsClient() {
                         "border border-white/10 cursor-pointer",
                         requestsOpen
                           ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
-                          : "bg-white/5 text-neutral-200 hover:bg-white/8",
+                          : clsx(
+                              "bg-[#121420] text-neutral-200 hover:bg-white/5 hover:border-white/14",
+                              "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
+                            ),
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                       )}
                     >
@@ -1495,7 +1588,6 @@ export default function FriendsClient() {
                 <div
                   className={clsx(
                     "grid gap-4",
-                    // ✅ keep fixed card tracks even if there are only 1–2 items (no stretching)
                     "grid-cols-[repeat(auto-fill,minmax(240px,1fr))]",
                   )}
                 >

@@ -1,7 +1,15 @@
 // src/app/dashboard/events/[eventId]/team/page.tsx
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -710,17 +718,38 @@ export default function EventTeamPage() {
   const organizationId = event?.organization?._id;
 
   /* ---------------------- Shared Grid Template ---------------------- */
-  // ✅ Exact same template as org members page
   const GRID =
     "md:grid md:items-center md:gap-6 md:grid-cols-[minmax(300px,2.2fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(200px,1fr)]";
 
-  /* ---------------------- Row purple gradient (NO grid lines) ------ */
-  const rowBgStyle: React.CSSProperties = {
-    background:
-      "radial-gradient(900px 220px at 18% 55%, rgba(154,70,255,0.16), transparent 62%)," +
-      "radial-gradient(700px 220px at 92% 45%, rgba(66,139,255,0.10), transparent 62%)," +
-      "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-  };
+  /* ---------------------- Spider-web grid background ---------------------- */
+  const firstRowRef = useRef<HTMLDivElement | null>(null);
+  const [gridCell, setGridCell] = useState<number>(44);
+
+  const GRID_LINE = "rgba(154,70,255,0.11)";
+
+  const onRowMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+
+    const x = ((e.clientX - r.left) / r.width) * 100;
+    const y = ((e.clientY - r.top) / r.height) * 100;
+
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height / 2);
+
+    el.style.setProperty("--mx", `${x}%`);
+    el.style.setProperty("--my", `${y}%`);
+    el.style.setProperty("--mxpx", `${clamp(dx, -18, 18)}px`);
+    el.style.setProperty("--mypx", `${clamp(dy, -12, 12)}px`);
+  }, []);
+
+  const onRowMouseLeave = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    el.style.setProperty("--mx", "50%");
+    el.style.setProperty("--my", "50%");
+    el.style.setProperty("--mxpx", "0px");
+    el.style.setProperty("--mypx", "0px");
+  }, []);
 
   /* --------------------------- Data --------------------------- */
   const { data: members, isLoading: isMembersLoading } = useQuery<TeamMember[]>(
@@ -819,6 +848,39 @@ export default function EventTeamPage() {
     const end = Math.min(total, start + pageSize - 1);
     return `Showing ${start}-${end} from ${total} data`;
   }, [total, pageSafe]);
+
+  /* ✅ FIX: moved BELOW slice so we don't touch slice before init */
+  useLayoutEffect(() => {
+    const el = firstRowRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const apply = () => {
+      const h = el.getBoundingClientRect().height;
+      if (!Number.isFinite(h) || h <= 0) return;
+
+      const cell = Math.round(h / 2); // two equal rows per row height
+      const next = clamp(cell, 18, 64);
+      setGridCell((prev) => (prev === next ? prev : next));
+    };
+
+    apply();
+
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(el);
+
+    return () => ro.disconnect();
+  }, [slice.length]);
+
+  const rowBgStyle: React.CSSProperties = {
+    backgroundImage:
+      `linear-gradient(to bottom, ${GRID_LINE} 1px, transparent 1px),` +
+      `linear-gradient(to right, ${GRID_LINE} 1px, transparent 1px),` +
+      `linear-gradient(180deg, rgba(31,18,55,0.92), rgba(24,14,44,0.92))`,
+    backgroundSize: `${gridCell}px ${gridCell}px, ${gridCell}px ${gridCell}px, auto`,
+    backgroundRepeat: "repeat, repeat, no-repeat",
+    backgroundPosition: "0 0, 0 0, 0 0",
+    backgroundBlendMode: "lighten, lighten, normal",
+  };
 
   /* --------------------------- Demo metrics -------------------------- */
   const metrics = useMemo(() => {
@@ -984,7 +1046,7 @@ export default function EventTeamPage() {
                 </div>
               ) : slice.length ? (
                 <div className="space-y-3">
-                  {slice.map((m) => {
+                  {slice.map((m, idx) => {
                     const title = m.name || m.email;
                     const badge = initialsFromName(title);
                     const met = metrics.get(m._id) ?? {
@@ -996,13 +1058,22 @@ export default function EventTeamPage() {
                     return (
                       <div
                         key={m._id}
+                        ref={idx === 0 ? firstRowRef : undefined}
+                        onMouseMove={onRowMouseMove}
+                        onMouseLeave={onRowMouseLeave}
                         className={clsx(
-                          "relative rounded-[12px] border border-white/10 px-4 py-3",
+                          "group relative overflow-hidden rounded-[12px] border border-white/10 px-4 py-3",
                           "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
                           "transition-colors",
                           "hover:border-white/14 hover:brightness-[1.02]",
+
+                          // mouse-follow LIGHT (clean, no blob)
+                          "before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-[14px]",
+                          "before:opacity-0 group-hover:before:opacity-100 before:transition-opacity before:duration-300",
+                          "before:bg-[radial-gradient(520px_280px_at_var(--mx,50%)_var(--my,50%),rgba(199,160,255,0.20),transparent_60%),radial-gradient(180px_140px_at_var(--mx,50%)_var(--my,50%),rgba(255,255,255,0.10),transparent_64%)]",
+                          "before:mix-blend-screen before:blur-[7px]",
                         )}
-                        style={rowBgStyle} // ✅ purple gradient only (no grid lines)
+                        style={rowBgStyle}
                       >
                         {/* Desktop row */}
                         <div className={clsx("hidden md:block")}>

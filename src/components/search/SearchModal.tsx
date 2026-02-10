@@ -98,7 +98,7 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className="group inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5/50 px-3 py-1.5 text-xs text-neutral-200 hover:bg-white/10 active:scale-[0.98] transition"
+      className="group inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5/50 px-3 py-1.5 text-xs text-neutral-200 hover:bg-white/10 active:scale-[0.98] transition cursor-pointer"
     >
       {children}
     </button>
@@ -184,12 +184,16 @@ export default function SearchModal({
     }
   }
 
-  /* When opening modal, keep "All" as the default selection */
   useEffect(() => {
     if (!open) return;
+
+    setQuery("");
+    setResults({ events: [], orgs: [], teams: [], friends: [] });
+    setActive(null);
+    setLoading(false);
+
     setFilter("all");
     setDropdownOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   /* key handling + focus */
@@ -347,7 +351,7 @@ export default function SearchModal({
                   className={clsx(
                     "group inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5",
                     "h-7 sm:h-9 px-2 sm:px-3 text-[11px] sm:text-xs text-neutral-200",
-                    "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40",
+                    "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40 cursor-pointer",
                   )}
                   aria-haspopup="listbox"
                   aria-expanded={dropdownOpen}
@@ -377,7 +381,7 @@ export default function SearchModal({
                         inputRef.current?.focus();
                       }}
                       className={clsx(
-                        "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none",
+                        "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none cursor-pointer",
                         filter === "all" ? "bg-white/7" : "bg-transparent",
                       )}
                     >
@@ -399,7 +403,7 @@ export default function SearchModal({
                             inputRef.current?.focus();
                           }}
                           className={clsx(
-                            "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none",
+                            "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none cursor-pointer",
                             filter === f && "bg-white/7",
                           )}
                         >
@@ -427,7 +431,7 @@ export default function SearchModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="ml-0.5 inline-flex h-6 w-6 sm:h-9 sm:w-9 items-center justify-center rounded-full hover:bg-white/7 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40"
+                className="ml-0.5 inline-flex h-6 w-6 sm:h-9 sm:w-9 items-center justify-center rounded-full hover:bg-white/7 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-700/40 cursor-pointer"
                 aria-label="Close search"
               >
                 <X className="h-5 w-5 text-neutral-300" />
@@ -448,7 +452,7 @@ export default function SearchModal({
                     </h4>
                     {recent.length > 0 && (
                       <button
-                        className="text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none"
+                        className="text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none cursor-pointer"
                         onClick={() => {
                           localStorage.removeItem(HISTORY_KEY);
                           setRecent([]);
@@ -514,7 +518,7 @@ export default function SearchModal({
                               "group grid w-full items-center text-left transition",
                               "grid-cols-[48px_1fr_auto] sm:grid-cols-[56px_1fr_auto]",
                               "gap-3 sm:gap-4 px-3.5 sm:px-4 py-3",
-                              "hover:bg-white/5 focus:outline-none",
+                              "hover:bg-white/5 focus:outline-none cursor-pointer",
                               activeNow && "bg-white/6",
                             )}
                           >
@@ -577,7 +581,7 @@ export default function SearchModal({
                             "group grid w-full items-center text-left transition",
                             "grid-cols-[40px_1fr_auto] sm:grid-cols-[44px_1fr_auto]",
                             "gap-3 sm:gap-3.5 px-3.5 sm:px-4 py-3",
-                            "hover:bg-white/5 focus:outline-none",
+                            "hover:bg-white/5 focus:outline-none cursor-pointer",
                             activeNow && "bg-white/6",
                           )}
                         >

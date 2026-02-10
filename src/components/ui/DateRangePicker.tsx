@@ -174,6 +174,17 @@ function rangeEq(a: DateRangeValue, b: DateRangeValue) {
   );
 }
 
+function normalizeRange(next: DateRangeValue, effMin: Date, effMax: Date) {
+  const s = next.start ? clampToDay(next.start) : null;
+  const e = next.end ? clampToDay(next.end) : null;
+
+  const cs = s ? maxDate(s, effMin) : null;
+  const ce = e ? minDate(e, effMax) : null;
+
+  if (cs && ce && isBefore(ce, cs)) return { start: ce, end: cs };
+  return { start: cs, end: ce };
+}
+
 export default function DateRangePicker({
   value,
   onChange,
@@ -222,11 +233,32 @@ export default function DateRangePicker({
   const [viewYear, setViewYear] = useState(initialAnchor.getFullYear());
   const [viewMonth, setViewMonth] = useState(initialAnchor.getMonth());
 
+  // Draft selection (only applied on "Done")
+  const [draft, setDraft] = useState<DateRangeValue>({
+    start: value.start ? clampToDay(value.start) : null,
+    end: value.end ? clampToDay(value.end) : null,
+  });
+
+  // Committed values (from props)
+  const committedStart = value.start ? clampToDay(value.start) : null;
+  const committedEnd = value.end ? clampToDay(value.end) : null;
+
+  // Draft values (used while popover is open)
+  const start = draft.start ? clampToDay(draft.start) : null;
+  const end = draft.end ? clampToDay(draft.end) : null;
+
   useEffect(() => {
     if (!open) return;
-    const d = value.start ?? value.end ?? today;
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
+
+    const s = value.start ? clampToDay(value.start) : null;
+    const e = value.end ? clampToDay(value.end) : null;
+
+    setDraft({ start: s, end: e });
+
+    const anchor = s ?? e ?? today;
+    setViewYear(anchor.getFullYear());
+    setViewMonth(anchor.getMonth());
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -239,6 +271,7 @@ export default function DateRangePicker({
         setOpen(false);
         setMonthOpen(false);
         setYearOpen(false);
+        // ✅ closing without "Done" should NOT apply anything
       }
     }
     document.addEventListener("mousedown", onDocDown);
@@ -252,16 +285,17 @@ export default function DateRangePicker({
         setOpen(false);
         setMonthOpen(false);
         setYearOpen(false);
+        // ✅ closing without "Done" should NOT apply anything
       }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const start = value.start ? clampToDay(value.start) : null;
-  const end = value.end ? clampToDay(value.end) : null;
-
-  const label = useMemo(() => fmtRangeLabel(start, end), [start, end]);
+  const label = useMemo(
+    () => fmtRangeLabel(committedStart, committedEnd),
+    [committedStart, committedEnd],
+  );
 
   const offset = monthOffsetMondayFirst(viewYear, viewMonth);
   const dim = daysInMonth(viewYear, viewMonth);
@@ -313,11 +347,13 @@ export default function DateRangePicker({
     const picked = clampToDay(new Date(viewYear, viewMonth, day));
     if (isDisabled(picked, effMin, effMax)) return;
 
+    // ✅ Draft-only selection. "Done" applies.
     if (!start || (start && end)) {
-      onChange({ start: picked, end: null });
+      setDraft({ start: picked, end: null });
       return;
     }
 
+    // start exists and end is null => set end
     let a = start;
     let b = picked;
 
@@ -327,32 +363,33 @@ export default function DateRangePicker({
       b = tmp;
     }
 
-    onChange({ start: a, end: b });
-    setOpen(false);
-    setMonthOpen(false);
-    setYearOpen(false);
+    setDraft({ start: a, end: b });
   }
 
   function clear() {
+    // Keep existing behavior: clear applies immediately
+    setDraft({ start: null, end: null });
     onChange({ start: null, end: null });
   }
 
   function applyRange(next: DateRangeValue) {
-    const s = next.start ? clampToDay(next.start) : null;
-    const e = next.end ? clampToDay(next.end) : null;
-
-    const cs = s ? maxDate(s, effMin) : null;
-    const ce = e ? minDate(e, effMax) : null;
-
-    if (cs && ce && isBefore(ce, cs)) {
-      onChange({ start: ce, end: cs });
-    } else {
-      onChange({ start: cs, end: ce });
-    }
+    const normalized = normalizeRange(next, effMin, effMax);
+    onChange(normalized);
 
     setOpen(false);
     setMonthOpen(false);
     setYearOpen(false);
+  }
+
+  function applyDone() {
+    if (!draft.start) return;
+
+    // ✅ Single-day selection should apply immediately via Done (end = start)
+    const next: DateRangeValue = draft.end
+      ? draft
+      : { start: draft.start, end: draft.start };
+
+    applyRange(next);
   }
 
   // ✅ Presets are ONLY for compact variant (field variant should NOT show them at all)
@@ -403,7 +440,7 @@ export default function DateRangePicker({
   );
 
   const compactBtn =
-    "inline-flex w-full items-center gap-2 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-1.5 text-[11px] font-semibold text-white/80 hover:text-white hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40";
+    "inline-flex w-full items-center gap-2 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-1.5 text-[11px] font-semibold text-white/80 hover:text-white hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer";
 
   const fieldBtn = clsx(
     "w-full rounded-lg border bg-neutral-950/60 px-4 py-3 transition",
@@ -478,7 +515,7 @@ export default function DateRangePicker({
           aria-expanded={open}
         >
           <div className="min-w-0 text-left">
-            {start && end ? (
+            {committedStart && committedEnd ? (
               <div className="truncate text-base font-medium leading-none text-white/85 tabular-nums">
                 {label}
               </div>
@@ -523,7 +560,9 @@ export default function DateRangePicker({
                         key={p.key}
                         type="button"
                         onClick={() => applyRange(p.range)}
-                        className={sidebarBtn(activeKey === p.key)}
+                        className={
+                          sidebarBtn(activeKey === p.key) + " cursor-pointer"
+                        }
                       >
                         {p.label}
                       </button>
@@ -544,7 +583,7 @@ export default function DateRangePicker({
                           key={y}
                           type="button"
                           onClick={() => applyRange(yrRange)}
-                          className={sidebarBtn(active)}
+                          className={sidebarBtn(active) + " cursor-pointer"}
                         >
                           {y}
                         </button>
@@ -562,7 +601,7 @@ export default function DateRangePicker({
                   type="button"
                   onClick={() => canPrev && moveMonth(-1)}
                   className={clsx(
-                    "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white",
+                    "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white cursor-pointer",
                     !canPrev && "opacity-40 pointer-events-none",
                   )}
                   aria-label="Previous month"
@@ -580,7 +619,7 @@ export default function DateRangePicker({
                     }}
                     className={clsx(
                       "inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-semibold text-white/90",
-                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer",
                     )}
                     aria-expanded={monthOpen}
                     aria-haspopup="listbox"
@@ -604,7 +643,7 @@ export default function DateRangePicker({
                     }}
                     className={clsx(
                       "inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-semibold text-white/90",
-                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer",
                     )}
                     aria-expanded={yearOpen}
                     aria-haspopup="listbox"
@@ -639,7 +678,7 @@ export default function DateRangePicker({
                               setMonthOpen(false);
                             }}
                             className={clsx(
-                              "w-full rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition",
+                              "w-full rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition cursor-pointer",
                               i === viewMonth
                                 ? "bg-primary-500/15 text-primary-300"
                                 : "text-white/80 hover:bg-white/5 hover:text-white",
@@ -674,7 +713,7 @@ export default function DateRangePicker({
                               setYearOpen(false);
                             }}
                             className={clsx(
-                              "w-full rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold transition",
+                              "w-full rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold transition cursor-pointer",
                               y === viewYear
                                 ? "bg-primary-500/15 text-primary-300"
                                 : "text-white/80 hover:bg-white/5 hover:text-white",
@@ -694,7 +733,7 @@ export default function DateRangePicker({
                   type="button"
                   onClick={() => canNext && moveMonth(1)}
                   className={clsx(
-                    "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white",
+                    "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white cursor-pointer",
                     !canNext && "opacity-40 pointer-events-none",
                   )}
                   aria-label="Next month"
@@ -746,7 +785,7 @@ export default function DateRangePicker({
                       onClick={() => commitPick(day)}
                       disabled={disabled}
                       className={clsx(
-                        "h-8 rounded-lg text-[11px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                        "h-8 rounded-lg text-[11px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer",
                         disabled
                           ? "cursor-not-allowed text-white/20 opacity-45"
                           : "text-white/85 hover:bg-white/5",
@@ -786,13 +825,31 @@ export default function DateRangePicker({
                   </span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={clear}
-                  className="shrink-0 rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[10px] font-semibold text-white/75 hover:border-primary-500 hover:text-white"
-                >
-                  Clear
-                </button>
+                <div className="shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={clear}
+                    className="rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[10px] font-semibold text-white/75 hover:border-primary-500 hover:text-white cursor-pointer"
+                  >
+                    Clear
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={applyDone}
+                    disabled={!draft.start}
+                    className={clsx(
+                      "rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition",
+                      "border",
+                      draft.start
+                        ? "cursor-pointer border-primary-500/35 bg-primary-500/20 text-primary-100 hover:bg-primary-500/26 hover:border-primary-500/55"
+                        : "cursor-not-allowed border-white/10 bg-white/5 text-white/30 opacity-80",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                    )}
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             </div>
           </div>

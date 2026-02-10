@@ -18,6 +18,9 @@ type FriendUserLean = {
   email?: string;
   phone?: string;
   image?: string;
+
+  /** ✅ NEW */
+  instagram?: string;
 };
 
 type FriendshipLean = {
@@ -66,8 +69,14 @@ export async function GET() {
     status: "accepted",
     $or: [{ requesterId: meId }, { recipientId: meId }],
   })
-    .populate("requesterId", "firstName lastName username email phone image")
-    .populate("recipientId", "firstName lastName username email phone image")
+    .populate(
+      "requesterId",
+      "firstName lastName username email phone image instagram",
+    )
+    .populate(
+      "recipientId",
+      "firstName lastName username email phone image instagram",
+    )
     .lean()) as unknown as RawFriendshipPopulated[];
 
   const friendships: FriendshipLean[] = rawFriendships.map((f) => ({
@@ -100,6 +109,7 @@ export async function GET() {
         name: displayName(other),
         email: other.email ?? "",
         phone: other.phone ?? "",
+        instagram: other.instagram ?? "",
         avatarUrl: other.image ?? "",
 
         // Keep UI fields stable (you can later map org/team roles here)

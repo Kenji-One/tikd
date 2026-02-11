@@ -25,7 +25,6 @@ import {
   Eye,
   Ticket,
   CircleDollarSign,
-  UserRound,
   Plus,
   Crown,
   BadgeCheck,
@@ -926,6 +925,83 @@ export default function OrgMembersPage() {
     };
   }
 
+  /**
+   * Default sort: highest role -> lowest role
+   * We follow the same role ordering users see in the “Roles” popup:
+   * Owner (top), then Admin, then by `order`, then by name.
+   */
+  const roleOrder = useMemo(() => {
+    const list = [...(roles ?? [])];
+
+    // ensure Owner exists as the top-most role even if backend doesn't return it
+    if (!list.some((r) => r.key === "owner")) {
+      list.unshift({
+        _id: "__owner__",
+        key: "owner",
+        name: "Owner",
+        color: "#F7C948",
+        iconKey: "owner",
+        iconUrl: null,
+        isSystem: true,
+        order: -10_000,
+        permissions: {},
+        membersCount: 0,
+      });
+    }
+
+    const rank = (r: OrgRoleRow) => {
+      if (r.key === "owner") return -2;
+      if (r.key === "admin") return -1;
+      return 0;
+    };
+
+    return list
+      .slice()
+      .sort((a, b) => {
+        const ra = rank(a);
+        const rb = rank(b);
+        if (ra !== rb) return ra - rb;
+
+        const ao = a.order ?? 0;
+        const bo = b.order ?? 0;
+        if (ao !== bo) return ao - bo;
+
+        return a.name.localeCompare(b.name);
+      })
+      .map((r, idx) => ({ ...r, __idx: idx }));
+  }, [roles]);
+
+  const roleOrderIdxById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of roleOrder) m.set(r._id, (r as any).__idx as number);
+    return m;
+  }, [roleOrder]);
+
+  const roleOrderIdxByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of roleOrder) m.set(r.key, (r as any).__idx as number);
+    return m;
+  }, [roleOrder]);
+
+  const getMemberRoleOrderIndex = useMemo(() => {
+    return (m: TeamMember) => {
+      // owner (system)
+      if (m.role === "owner") return roleOrderIdxByKey.get("owner") ?? 0;
+
+      // custom role
+      if (m.roleId && roleOrderIdxById.has(m.roleId)) {
+        return roleOrderIdxById.get(m.roleId)!;
+      }
+
+      // system role by key
+      const key = String(m.role || "member");
+      if (roleOrderIdxByKey.has(key)) return roleOrderIdxByKey.get(key)!;
+
+      // fallback to “member” bucket if it exists, else push to bottom
+      return roleOrderIdxByKey.get("member") ?? 9_999;
+    };
+  }, [roleOrderIdxById, roleOrderIdxByKey]);
+
   const inviteMutation = useMutation({
     mutationFn: (payload: InvitePayload) =>
       json<{ member: TeamMember }>(`/api/organizations/${id}/team`, {
@@ -968,14 +1044,35 @@ export default function OrgMembersPage() {
     [tab, active, temporary],
   );
 
+  // ✅ default sort by highest role -> lowest role (based on Roles popup order)
+  const sortedBaseList = useMemo(() => {
+    const list = baseList.slice();
+
+    const secondary = (m: TeamMember) =>
+      `${(m.name ?? "").trim().toLowerCase()}|${m.email.trim().toLowerCase()}`;
+
+    list.sort((a, b) => {
+      const ia = getMemberRoleOrderIndex(a);
+      const ib = getMemberRoleOrderIndex(b);
+      if (ia !== ib) return ia - ib; // smaller index == higher role (top of list)
+
+      // stable-ish tie-breaker so the table doesn't "shuffle" randomly
+      const sa = secondary(a);
+      const sb = secondary(b);
+      return sa.localeCompare(sb);
+    });
+
+    return list;
+  }, [baseList, getMemberRoleOrderIndex]);
+
   const filtered = useMemo(() => {
     const qx = query.trim().toLowerCase();
-    if (!qx) return baseList;
-    return baseList.filter((m) => {
+    if (!qx) return sortedBaseList;
+    return sortedBaseList.filter((m) => {
       const hay = `${m.name ?? ""} ${m.email}`.toLowerCase();
       return hay.includes(qx);
     });
-  }, [baseList, query]);
+  }, [sortedBaseList, query]);
 
   const [page, setPage] = useState(1);
   const pageSize = 10;

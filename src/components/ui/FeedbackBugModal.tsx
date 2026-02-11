@@ -143,12 +143,23 @@ export default function FeedbackBugModal({ open, onClose, variant }: Props) {
         className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
       />
 
-      {/* Dialog */}
-      <div className="absolute inset-0 flex items-center justify-center px-4 py-6">
+      {/* Dialog area (IMPORTANT: this sits above the backdrop and catches clicks) */}
+      <div
+        className="absolute inset-0 flex items-center justify-center px-4 py-6"
+        onMouseDown={(e) => {
+          // Clicked the "empty space" around the dialog (not inside it)
+          if (e.target === e.currentTarget) onClose();
+        }}
+        onTouchStart={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
           className={clsx(
             "relative w-full max-w-[760px]",
             "rounded-[22px] border border-white/10",
@@ -176,7 +187,7 @@ export default function FeedbackBugModal({ open, onClose, variant }: Props) {
               "grid h-9 w-9 place-items-center rounded-xl",
               "border border-white/10 bg-white/5 text-white/80",
               "transition hover:bg-white/10 hover:text-white",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer",
             )}
           >
             <X className="h-4.5 w-4.5" />

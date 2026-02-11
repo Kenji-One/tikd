@@ -5,6 +5,7 @@ import { Types } from "mongoose";
 import { auth } from "@/lib/auth";
 import "@/lib/mongoose";
 import Friendship from "@/models/Friendship";
+import User from "@/models/User";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,9 +37,19 @@ function displayName(u: {
   return full || u.username || u.email || "User";
 }
 
-const sendSchema = z.object({
-  toUserIds: z.array(z.string().min(1)).min(1),
-});
+/**
+ * ✅ Accept either:
+ * - { toUserIds: string[] }  (legacy / existing)
+ * - { toEmail: string }      (new, privacy-friendly UX)
+ */
+const sendSchema = z.union([
+  z.object({
+    toUserIds: z.array(z.string().min(1)).min(1),
+  }),
+  z.object({
+    toEmail: z.string().trim().toLowerCase().email(),
+  }),
+]);
 
 export async function GET() {
   const session = await auth();
@@ -90,22 +101,60 @@ export async function POST(req: NextRequest) {
 
   const meId = new Types.ObjectId(me);
 
-  const uniqueTo = Array.from(new Set(parsed.data.toUserIds)).filter(
-    (id) => isObjectId(id) && id !== me,
-  );
+  // Build recipient list (objectIds) from either mode
+  let toIds: Types.ObjectId[] = [];
+  let toEmails: string[] = [];
 
-  if (!uniqueTo.length) {
-    return NextResponse.json(
-      { error: "No valid recipients provided." },
-      { status: 400 },
+  if ("toUserIds" in parsed.data) {
+    const uniqueTo = Array.from(new Set(parsed.data.toUserIds)).filter(
+      (id) => isObjectId(id) && id !== me,
     );
+
+    if (!uniqueTo.length) {
+      return NextResponse.json(
+        { error: "No valid recipients provided." },
+        { status: 400 },
+      );
+    }
+
+    toIds = uniqueTo.map((id) => new Types.ObjectId(id));
+  } else {
+    const email = parsed.data.toEmail.trim().toLowerCase();
+    toEmails = [email];
+
+    // Find user by email (privacy-friendly UX)
+    const user = await User.findOne({ email })
+      .select("_id email")
+      .lean<{ _id: Types.ObjectId; email?: string } | null>();
+
+    if (!user?._id) {
+      // Don’t leak extra info; just say not found
+      return NextResponse.json(
+        { error: "No user found with that email." },
+        { status: 404 },
+      );
+    }
+
+    if (String(user._id) === String(meId)) {
+      return NextResponse.json(
+        { error: "You cannot send a request to yourself." },
+        { status: 400 },
+      );
+    }
+
+    toIds = [new Types.ObjectId(user._id)];
   }
 
   const created: string[] = [];
-  const skipped: Array<{ toUserId: string; reason: string }> = [];
+  const skipped: Array<{
+    toUserId?: string;
+    toEmail?: string;
+    reason: string;
+  }> = [];
 
-  for (const to of uniqueTo) {
-    const toId = new Types.ObjectId(to);
+  for (let i = 0; i < toIds.length; i++) {
+    const toId = toIds[i];
+    const toEmail = toEmails[i]; // may be undefined in toUserIds mode
 
     // Check both directions
     const existing = await Friendship.findOne({
@@ -127,13 +176,21 @@ export async function POST(req: NextRequest) {
 
     // Already friends
     if (existing.status === "accepted") {
-      skipped.push({ toUserId: to, reason: "already_friends" });
+      skipped.push({
+        toUserId: String(toId),
+        toEmail,
+        reason: "already_friends",
+      });
       continue;
     }
 
     // Pending already exists
     if (existing.status === "pending") {
-      skipped.push({ toUserId: to, reason: "already_pending" });
+      skipped.push({
+        toUserId: String(toId),
+        toEmail,
+        reason: "already_pending",
+      });
       continue;
     }
 

@@ -460,7 +460,7 @@ export default function TeamsClient() {
                   className={clsx(
                     "relative w-full sm:w-[420px]",
                     "rounded-lg border border-white/10 h-10",
-                    "bg-[#121420]",
+                    "bg-[#12141f]",
                     "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
                     "hover:bg-white/5 hover:border-white/14",
                     "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20 focus:border-primary-500/70",

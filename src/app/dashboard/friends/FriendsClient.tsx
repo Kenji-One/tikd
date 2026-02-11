@@ -50,14 +50,6 @@ type Friend = {
   createdAt?: string | null;
 };
 
-type AddCandidate = {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  avatarUrl?: string;
-};
-
 type FriendRequest = {
   id: string; // request id
   fromUserId: string;
@@ -69,7 +61,6 @@ type FriendRequest = {
 /* ---------------------------- Helpers ------------------------------ */
 const EMPTY_FRIENDS: Friend[] = [];
 const EMPTY_REQUESTS: FriendRequest[] = [];
-const EMPTY_CANDIDATES: AddCandidate[] = [];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
@@ -182,6 +173,16 @@ function instagramHref(v?: string | null) {
   const handle = raw.replace(/^@/, "").trim();
   if (!handle) return "";
   return `https://instagram.com/${handle}`;
+}
+
+function normalizeEmail(v: string) {
+  return v.trim().toLowerCase();
+}
+
+function isValidEmail(v: string) {
+  const email = normalizeEmail(v);
+  // Good-enough UI validation (server validates again)
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email);
 }
 
 /* ------------------------ Friends UI pieces ------------------------ */
@@ -655,10 +656,9 @@ function AddFriendModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSend: (selected: AddCandidate[]) => Promise<void>;
+  onSend: (email: string) => Promise<void>;
 }) {
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<AddCandidate[]>([]);
+  const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -666,20 +666,8 @@ function AddFriendModal({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastActiveElRef = useRef<HTMLElement | null>(null);
 
-  const qTrim = query.trim();
-  const hasSearch = qTrim.length > 0;
-
-  // ✅ Only fetch when user is actually searching (no default suggestions).
-  const candidatesQ = useQuery({
-    queryKey: ["friends-candidates", hasSearch ? qTrim : "", open],
-    enabled: open && hasSearch,
-    queryFn: async () => {
-      const url = `/api/friends/candidates?q=${encodeURIComponent(qTrim)}`;
-      return fetchJSON<AddCandidate[]>(url);
-    },
-  });
-
-  const candidates = candidatesQ.data ?? EMPTY_CANDIDATES;
+  const emailTrim = email.trim();
+  const canSend = isValidEmail(emailTrim);
 
   useEffect(() => {
     if (!open) return;
@@ -736,50 +724,23 @@ function AddFriendModal({
 
   useEffect(() => {
     if (!open) {
-      setQuery("");
-      setSelected([]);
+      setEmail("");
       setSent(false);
       setErrorMsg("");
     }
   }, [open]);
-
-  const selectedIds = useMemo(() => selected.map((s) => s.id), [selected]);
-
-  const results = useMemo(() => {
-    // Show results excluding already selected users
-    if (!hasSearch) return EMPTY_CANDIDATES;
-    return candidates.filter((c) => !selectedIds.includes(c.id));
-  }, [candidates, selectedIds, hasSearch]);
-
-  const canSend = selected.length > 0;
-
-  function togglePick(candidate: AddCandidate) {
-    setSent(false);
-    setErrorMsg("");
-    setSelected((prev) =>
-      prev.some((p) => p.id === candidate.id) ? prev : [...prev, candidate],
-    );
-    window.setTimeout(() => inputRef.current?.focus(), 0);
-  }
-
-  function removePick(id: string) {
-    setSent(false);
-    setErrorMsg("");
-    setSelected((prev) => prev.filter((x) => x.id !== id));
-    window.setTimeout(() => inputRef.current?.focus(), 0);
-  }
 
   async function sendNow() {
     if (!canSend) return;
     setErrorMsg("");
 
     try {
-      await onSend(selected);
+      await onSend(normalizeEmail(emailTrim));
       setSent(true);
-      setSelected([]);
-      setQuery("");
+      setEmail("");
+      window.setTimeout(() => inputRef.current?.focus(), 0);
     } catch (e: unknown) {
-      setErrorMsg(getErrorMessage(e, "Failed to send requests."));
+      setErrorMsg(getErrorMessage(e, "Failed to send request."));
     }
   }
 
@@ -834,7 +795,7 @@ function AddFriendModal({
                 Add Friends
               </div>
               <div className="mt-1 text-[12px] text-neutral-400">
-                Search by email or phone, pick multiple, then send a request.
+                Type an email address, then send a request.
               </div>
             </div>
           </div>
@@ -844,7 +805,7 @@ function AddFriendModal({
             onClick={onClose}
             aria-label="Close modal"
             className={clsx(
-              "inline-flex h-10 w-10 items-center justify-center rounded-full",
+              "inline-flex h-10 w-10 items-center justify-center rounded-full cursor-pointer",
               "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
             )}
@@ -861,7 +822,7 @@ function AddFriendModal({
             )}
           >
             <div className="text-[12px] font-medium text-neutral-300">
-              Search by Email / Phone Number
+              Email Address
             </div>
 
             <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
@@ -871,71 +832,37 @@ function AddFriendModal({
                   "focus-within:ring-2 focus-within:ring-primary-500/35",
                 )}
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  {selected.map((c) => {
-                    const name = c.name ?? "Selected";
-                    const badge = initialsFromName(name);
-
-                    return (
-                      <span
-                        key={c.id}
-                        className={clsx(
-                          "inline-flex items-center gap-2 rounded-full",
-                          "border border-white/10 bg-white/5 px-1 py-1",
-                          "text-[12px] font-semibold text-neutral-100",
-                        )}
-                      >
-                        <span
-                          className={clsx(
-                            "inline-flex h-6 w-6 items-center justify-center rounded-full",
-                            "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/20",
-                            "text-[11px] font-extrabold",
-                          )}
-                        >
-                          {badge}
-                        </span>
-                        <span className="max-w-[180px] truncate">{name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removePick(c.id)}
-                          aria-label={`Remove ${name}`}
-                          className={clsx(
-                            "inline-flex h-6 w-6 items-center justify-center rounded-full",
-                            "bg-white/0 text-neutral-300 hover:bg-white/10 hover:text-neutral-0",
-                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                          )}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
-                    );
-                  })}
-
-                  <div
+                <div
+                  className={clsx(
+                    "relative w-full",
+                    "rounded-lg border border-white/10 bg-white/5 h-10",
+                  )}
+                >
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
+                  <input
+                    ref={inputRef}
+                    value={email}
+                    onChange={(e) => {
+                      setSent(false);
+                      setErrorMsg("");
+                      setEmail(e.target.value);
+                    }}
+                    placeholder="Type email address…"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     className={clsx(
-                      "relative w-full",
-                      "min-w-[220px] flex-1",
-                      "rounded-lg border border-white/10 bg-white/5 h-10",
+                      "h-10 w-full rounded-lg bg-transparent",
+                      "pl-10 pr-4 text-[12px] text-neutral-100",
+                      "placeholder:text-neutral-500",
+                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
                     )}
-                  >
-                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
-                    <input
-                      ref={inputRef}
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Type email, phone, or name…"
-                      className={clsx(
-                        "h-10 w-full rounded-lg bg-transparent",
-                        "pl-10 pr-4 text-[12px] text-neutral-100",
-                        "placeholder:text-neutral-500",
-                        "outline-none border-none focus:ring-1 focus:ring-primary-500",
-                      )}
-                    />
-                  </div>
+                  />
                 </div>
 
                 <div className="mt-2 text-[11px] text-neutral-500">
-                  Tip: you can add multiple friends before sending.
+                  We won’t show search results for privacy.
                 </div>
               </div>
 
@@ -946,7 +873,7 @@ function AddFriendModal({
                   disabled={!canSend}
                   className={clsx(
                     "w-full md:w-auto",
-                    "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl px-5",
+                    "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl px-5 cursor-pointer",
                     "border border-white/10",
                     canSend
                       ? "bg-[linear-gradient(90deg,rgba(134,0,238,0.35),rgba(154,70,255,0.55),rgba(170,115,255,0.35))] text-neutral-0 shadow-[0_18px_54px_rgba(154,81,255,0.22)]"
@@ -965,6 +892,12 @@ function AddFriendModal({
               </div>
             </div>
 
+            {emailTrim.length > 0 && !canSend ? (
+              <div className="mt-3 text-[12px] text-neutral-500">
+                Enter a valid email to enable “Send Request”.
+              </div>
+            ) : null}
+
             {sent ? (
               <div
                 className={clsx(
@@ -972,7 +905,7 @@ function AddFriendModal({
                   "text-[12px] text-success-300",
                 )}
               >
-                Requests sent.
+                Request sent.
               </div>
             ) : null}
 
@@ -988,142 +921,13 @@ function AddFriendModal({
             ) : null}
           </div>
 
-          {/* ✅ Results section ONLY when searching (no default suggestions) */}
-          {hasSearch ? (
-            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-              <div
-                className={clsx(
-                  "flex items-center justify-between px-4 py-3 md:px-5",
-                  "border-b border-white/10",
-                )}
-              >
-                <div className="text-[13px] font-semibold text-neutral-200">
-                  Results
-                </div>
-                <div className="text-[11px] text-neutral-500">
-                  {candidatesQ.isLoading
-                    ? "Searching…"
-                    : `${results.length} result${results.length === 1 ? "" : "s"}`}
-                </div>
-              </div>
-
-              <div className="max-h-[340px] overflow-auto p-2 no-scrollbar md:max-h-[420px]">
-                {candidatesQ.isLoading ? (
-                  <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                    <div
-                      className={clsx(
-                        "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                        "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
-                      )}
-                    >
-                      <Users className="h-5 w-5" />
-                    </div>
-                    <div className="text-[13px] font-semibold text-neutral-100">
-                      Searching…
-                    </div>
-                    <div className="text-[12px] text-neutral-500">
-                      Looking up users matching your query.
-                    </div>
-                  </div>
-                ) : results.length ? (
-                  <div className="space-y-2">
-                    {results.map((c) => {
-                      const badge = initialsFromName(c.name);
-
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => togglePick(c)}
-                          className={clsx(
-                            "w-full text-left",
-                            "flex items-center gap-3 rounded-2xl px-3 py-3",
-                            "border border-white/10 bg-neutral-950/25 hover:bg-neutral-900/35",
-                            "transition-colors",
-                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                          )}
-                        >
-                          <div className="relative">
-                            <div className="h-11 w-11 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
-                              {c.avatarUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={c.avatarUrl}
-                                  alt={c.name}
-                                  className="h-full w-full object-cover"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
-                                  {badge}
-                                </div>
-                              )}
-                            </div>
-                            <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-                              {badge}
-                            </div>
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate font-semibold text-neutral-0">
-                              {c.name}
-                            </div>
-                            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-neutral-400">
-                              <span className="inline-flex items-center gap-2">
-                                <Mail className="h-4 w-4 text-primary-300" />
-                                <span className="truncate">{c.email}</span>
-                              </span>
-                              {c.phone ? (
-                                <span className="inline-flex items-center gap-2">
-                                  <Phone className="h-4 w-4 text-primary-300" />
-                                  <span className="truncate">{c.phone}</span>
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-
-                          <span
-                            className={clsx(
-                              "inline-flex h-9 items-center justify-center rounded-xl px-3",
-                              "border border-white/10 bg-white/5 text-[12px] font-semibold",
-                              "text-neutral-100 hover:border-primary-500/40",
-                            )}
-                          >
-                            Add
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                    <div
-                      className={clsx(
-                        "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                        "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
-                      )}
-                    >
-                      <Users className="h-5 w-5" />
-                    </div>
-                    <div className="text-[13px] font-semibold text-neutral-100">
-                      No matches found
-                    </div>
-                    <div className="text-[12px] text-neutral-500">
-                      Try searching by email, phone, or name.
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : null}
-
           <div className="mt-4 flex justify-end">
             <button
               type="button"
               onClick={onClose}
               className={clsx(
                 "inline-flex h-10 items-center justify-center rounded-xl px-4",
-                "border border-white/10 bg-white/5 text-[12px] font-semibold text-neutral-200",
+                "border border-white/10 bg-white/5 text-[12px] font-semibold text-neutral-200 cursor-pointer",
                 "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
               )}
             >
@@ -1171,11 +975,15 @@ export default function FriendsClient() {
   });
 
   const sendMut = useMutation({
-    mutationFn: (toUserIds: string[]) =>
-      fetchJSON<{ ok: true; created: string[]; skipped: unknown[] }>(
-        "/api/friends/requests",
-        { method: "POST", body: JSON.stringify({ toUserIds }) },
-      ),
+    mutationFn: (toEmail: string) =>
+      fetchJSON<{
+        ok: true;
+        created: string[];
+        skipped: Array<{ toUserId?: string; toEmail?: string; reason: string }>;
+      }>("/api/friends/requests", {
+        method: "POST",
+        body: JSON.stringify({ toEmail }),
+      }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["friend-requests"] });
       await qc.invalidateQueries({ queryKey: ["friends"] });
@@ -1327,7 +1135,7 @@ export default function FriendsClient() {
                   className={clsx(
                     "relative w-full sm:w-[420px]",
                     "rounded-lg border border-white/10 h-10",
-                    "bg-[#121420]",
+                    "bg-[#12141f]",
                     "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
                     "hover:bg-white/5 hover:border-white/14",
                     "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20",
@@ -1629,10 +1437,8 @@ export default function FriendsClient() {
       <AddFriendModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSend={async (sel) => {
-          const toUserIds = sel.map((s) => s.id);
-          if (!toUserIds.length) return;
-          await sendMut.mutateAsync(toUserIds);
+        onSend={async (toEmail) => {
+          await sendMut.mutateAsync(toEmail);
         }}
       />
     </div>

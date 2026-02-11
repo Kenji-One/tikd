@@ -47,6 +47,11 @@ type Org = {
   myRole?: string;
   myRoleId?: string | null;
   myRoleMeta?: RoleBadgeMeta | null;
+
+  /** ✅ analytics-like fields (optional, for sorting UI parity) */
+  pageViews?: number;
+  ticketsSold?: number;
+  revenue?: number;
 };
 
 type OrgRowStyle = CSSProperties & {
@@ -149,10 +154,9 @@ function resolveOrgAccentColor(org: Org) {
   return v || "var(--color-primary-500)";
 }
 
-function safeDateMs(iso?: string) {
-  if (!iso) return 0;
-  const t = new Date(iso).getTime();
-  return Number.isFinite(t) ? t : 0;
+function safeNumber(v: unknown) {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function Pagination({
@@ -325,13 +329,21 @@ function OrganizationListRow({
 }
 
 /* ------------------------------ Page ------------------------------- */
-type OrgSortField = "name" | "members" | "created";
+/**
+ * ✅ Match the “GOOD” reference list:
+ * - Title
+ * - Page Views
+ * - Tickets Sold
+ * - Revenue
+ * ❌ NO “Event Date”
+ */
+type OrgSortField = "title" | "pageViews" | "ticketsSold" | "revenue";
 
 const ORG_SORT_OPTIONS: SortOption<OrgSortField>[] = [
-  { key: "name", label: "Name" },
-  { key: "members", label: "Total Members" },
-  { key: "created", label: "Created Date" },
-  // ✅ No "Event Date" here (organizations page only)
+  { key: "title", label: "Title" },
+  { key: "pageViews", label: "Page Views" },
+  { key: "ticketsSold", label: "Tickets Sold" },
+  { key: "revenue", label: "Revenue" },
 ];
 
 export default function OrganizationsClient() {
@@ -374,22 +386,22 @@ export default function OrganizationsClient() {
     const dirMul = sortDir === "asc" ? 1 : -1;
 
     base.sort((a, b) => {
-      if (sortField === "name") {
+      if (sortField === "title") {
         const av = String(a.name || "").toLowerCase();
         const bv = String(b.name || "").toLowerCase();
         return av.localeCompare(bv) * dirMul;
       }
 
-      if (sortField === "members") {
-        const av = typeof a.totalMembers === "number" ? a.totalMembers : 0;
-        const bv = typeof b.totalMembers === "number" ? b.totalMembers : 0;
-        return (av - bv) * dirMul;
+      if (sortField === "pageViews") {
+        return (safeNumber(a.pageViews) - safeNumber(b.pageViews)) * dirMul;
       }
 
-      // created
-      const av = safeDateMs(a.createdAt);
-      const bv = safeDateMs(b.createdAt);
-      return (av - bv) * dirMul;
+      if (sortField === "ticketsSold") {
+        return (safeNumber(a.ticketsSold) - safeNumber(b.ticketsSold)) * dirMul;
+      }
+
+      // revenue
+      return (safeNumber(a.revenue) - safeNumber(b.revenue)) * dirMul;
     });
 
     return base;
@@ -452,7 +464,7 @@ export default function OrganizationsClient() {
                   className={clsx(
                     "relative w-full sm:w-[420px]",
                     "rounded-lg border border-white/10 h-10",
-                    "bg-[#121420]",
+                    "bg-[#12141f]",
                     "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
                     "hover:bg-white/5 hover:border-white/14",
                     "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20",
@@ -482,7 +494,7 @@ export default function OrganizationsClient() {
                     sortDir={sortDir}
                     setSortField={setSortField}
                     setSortDir={setSortDir}
-                    defaultDirFor={(f) => (f === "name" ? "asc" : "desc")}
+                    defaultDirFor={(f) => (f === "title" ? "asc" : "desc")}
                   />
 
                   <Button

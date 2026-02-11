@@ -1118,7 +1118,7 @@ function SelectedDestinationCard({
             }}
             disabled={disabled}
             className={clsx(
-              "inline-flex h-8 w-8 items-center justify-center rounded-md border",
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border cursor-pointer",
               "transition",
               disabled
                 ? "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"

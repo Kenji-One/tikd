@@ -16,13 +16,13 @@ import {
   Building2,
   Users2,
   UserRound,
+  Ticket,
 } from "lucide-react";
 
 /* ────────────────────────────────────────────────────────────────
    Types
    ──────────────────────────────────────────────────────────────── */
 type Filter = "all" | "event" | "org" | "team" | "friend";
-
 type ItemType = "event" | "org" | "team" | "friend";
 
 type Item = {
@@ -34,6 +34,9 @@ type Item = {
   date?: string | null; // ISO string
   image?: string | null; // poster/avatar/logo
   href: string;
+
+  // optional, if your API provides it (safe to ignore)
+  orgId?: string | null;
 };
 
 type Results = {
@@ -91,7 +94,7 @@ function Chip({
   children,
   onClick,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onClick?: () => void;
 }) {
   return (
@@ -122,6 +125,106 @@ function itemKey(item: Item) {
   return `${item.type}:${item.id}`;
 }
 
+/* ---- Tracking-links style pill helpers (same logic as TrackingLinksTable) ---- */
+function safeHexToRgb(hex: string) {
+  const raw = hex.replace("#", "").trim();
+  if (raw.length !== 6) return null;
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
+  if (![r, g, b].every((n) => Number.isFinite(n))) return null;
+  return { r, g, b };
+}
+
+function pickAccentFromOrgResponse(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+
+  const asRecord = json as Record<string, unknown>;
+
+  const direct = asRecord.accentColor;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const orgA = asRecord.organization;
+  if (orgA && typeof orgA === "object") {
+    const v = (orgA as Record<string, unknown>).accentColor;
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+
+  const orgB = asRecord.org;
+  if (orgB && typeof orgB === "object") {
+    const v = (orgB as Record<string, unknown>).accentColor;
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+
+  return null;
+}
+
+/**
+ * EXACT same “Destination” column pill style as TrackingLinksTable:
+ * - Event: always default event hex
+ * - Org: uses org accent color if available (fallback to default org hex)
+ * - Event icon: Ticket
+ */
+function SearchDestinationPill({
+  type,
+  accentColor,
+}: {
+  type: "event" | "org";
+  accentColor?: string | null;
+}) {
+  const defaultEventHex = "#9A46FF";
+  const defaultOrgHex = "#A670FF";
+
+  const hex =
+    type === "org" && typeof accentColor === "string" && accentColor.trim()
+      ? accentColor.trim()
+      : type === "event"
+        ? defaultEventHex
+        : defaultOrgHex;
+
+  const rgb = safeHexToRgb(hex);
+  const soft =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`
+      : "rgba(154,70,255,0.14)";
+  const ring =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.26)`
+      : "rgba(154,70,255,0.26)";
+  const text =
+    rgb != null
+      ? `rgba(${Math.min(255, rgb.r + 120)},${Math.min(
+          255,
+          rgb.g + 120,
+        )},${Math.min(255, rgb.b + 120)},0.98)`
+      : "rgba(231,222,255,0.98)";
+
+  const label = type === "event" ? "Event" : "Organization";
+  const Icon = type === "event" ? Ticket : Building2;
+
+  return (
+    <span
+      className={clsx(
+        "hidden sm:inline-flex items-center gap-1 rounded-md px-2.5 pl-2 py-1.5",
+        "text-[13px] font-semibold ring-1 ring-inset",
+      )}
+      style={{
+        background: soft,
+        color: text,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+        borderColor: ring,
+      }}
+      aria-label={`Destination: ${label}`}
+      title={label}
+    >
+      <span className="inline-flex items-center justify-center">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="leading-none">{label}</span>
+    </span>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────────
    Component
    ──────────────────────────────────────────────────────────────── */
@@ -134,10 +237,10 @@ export default function SearchModal({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const cardRef = useRef<HTMLDivElement | null>(null); // ⬅️ modal card ref
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all"); // ✅ default to All
+  const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Results>({
     events: [],
@@ -147,6 +250,11 @@ export default function SearchModal({
   });
   const [active, setActive] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // org accent cache (same idea as TrackingLinksTable)
+  const [orgAccentById, setOrgAccentById] = useState<Record<string, string>>(
+    {},
+  );
 
   const flatResults: Item[] = useMemo(() => {
     if (filter === "all") {
@@ -241,7 +349,6 @@ export default function SearchModal({
     const ac = new AbortController();
     const t = setTimeout(async () => {
       try {
-        // ✅ if filter=all, omit type (or you can send type=all if your API supports it)
         const typeParam =
           filter === "all" ? "" : `&type=${encodeURIComponent(filter)}`;
 
@@ -287,6 +394,68 @@ export default function SearchModal({
     };
   }, [query, filter, open]);
 
+  // load org accent colors for org pills (match TrackingLinksTable behavior)
+  useEffect(() => {
+    if (!open) return;
+
+    const orgIds = Array.from(
+      new Set(
+        flatResults
+          .filter((x) => x.type === "org")
+          .map((x) => x.id)
+          .filter(Boolean),
+      ),
+    );
+
+    const missing = orgIds.filter((id) => !orgAccentById[id]);
+    if (missing.length === 0) return;
+
+    let alive = true;
+
+    (async () => {
+      try {
+        const pairs = await Promise.all(
+          missing.map(async (id) => {
+            try {
+              const res = await fetch(
+                `/api/organizations/${encodeURIComponent(id)}`,
+                {
+                  method: "GET",
+                  cache: "no-store",
+                },
+              );
+              if (!res.ok) return [id, null] as const;
+              const json = (await res.json().catch(() => null)) as unknown;
+              const accent = pickAccentFromOrgResponse(json);
+              return [id, accent] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          }),
+        );
+
+        if (!alive) return;
+
+        const next: Record<string, string> = {};
+        for (const [id, accent] of pairs) {
+          if (typeof accent === "string" && accent.trim()) {
+            next[id] = accent.trim();
+          }
+        }
+
+        if (Object.keys(next).length > 0) {
+          setOrgAccentById((prev) => ({ ...prev, ...next }));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [open, flatResults, orgAccentById]);
+
   if (!open || typeof window === "undefined") return null;
 
   /* ─────────────────────────── UI ─────────────────────────── */
@@ -296,7 +465,6 @@ export default function SearchModal({
         "fixed inset-0 z-[100] overflow-y-auto overscroll-contain",
         "bg-gradient-to-b from-neutral-950/80 to-neutral-950/60 backdrop-blur-md",
       )}
-      // Close when clicking/tapping anywhere outside the card
       onPointerDown={(e) => {
         const target = e.target as Node;
         if (cardRef.current && !cardRef.current.contains(target)) {
@@ -307,10 +475,8 @@ export default function SearchModal({
       role="dialog"
       aria-label="Search"
     >
-      {/* safe-area padding + centering */}
       <div className="min-h-screen w-full grid place-items-start sm:place-items-center pt-[max(env(safe-area-inset-top),0.75rem)] pb-[max(env(safe-area-inset-bottom),1rem)]">
         <div className="w-full max-w-3xl px-3 sm:px-4">
-          {/* Command bar + results (the “card”) */}
           <div
             ref={cardRef}
             className={clsx(
@@ -329,7 +495,6 @@ export default function SearchModal({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onPointerDown={() => {
-                  // ✅ requirement: default to "All" when clicking the search box
                   if (filter !== "all") setFilter("all");
                   setDropdownOpen(false);
                 }}
@@ -369,9 +534,8 @@ export default function SearchModal({
                       "bg-neutral-900/95 backdrop-blur-xl",
                       "shadow-[0_22px_50px_-20px_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.35)]",
                     )}
-                    onPointerDown={(e) => e.stopPropagation()} // prevent outside-close when interacting the menu
+                    onPointerDown={(e) => e.stopPropagation()}
                   >
-                    {/* ✅ All (above Events) */}
                     <button
                       role="option"
                       aria-selected={filter === "all"}
@@ -516,15 +680,15 @@ export default function SearchModal({
                             }}
                             className={clsx(
                               "group grid w-full items-center text-left transition",
-                              "grid-cols-[48px_1fr_auto] sm:grid-cols-[56px_1fr_auto]",
-                              "gap-3 sm:gap-4 px-3.5 sm:px-4 py-3",
+                              "grid-cols-[40px_1fr_auto] sm:grid-cols-[44px_1fr_auto]",
+                              "gap-3 sm:gap-3.5 px-3.5 sm:px-4 py-3",
                               "hover:bg-white/5 focus:outline-none cursor-pointer",
                               activeNow && "bg-white/6",
                             )}
                           >
                             <div
                               className={clsx(
-                                "h-12 w-12 sm:h-14 sm:w-14 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5",
+                                "h-10 w-10 sm:h-11 sm:w-11 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5",
                                 "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
                               )}
                             >
@@ -538,7 +702,7 @@ export default function SearchModal({
                                 />
                               ) : (
                                 <div className="flex h-full w-full items-center justify-center text-neutral-400">
-                                  <Calendar className="h-5 w-5" />
+                                  <Ticket className="h-4 w-4" />
                                 </div>
                               )}
                             </div>
@@ -557,9 +721,8 @@ export default function SearchModal({
                               </div>
                             </div>
 
-                            <span className="hidden sm:inline-flex rounded-full bg-primary-900/30 px-2 py-1 text-[10px] uppercase tracking-wide text-primary-300">
-                              Events
-                            </span>
+                            {/* EXACT tracking-links destination pill style */}
+                            <SearchDestinationPill type="event" />
                           </button>
                         </li>
                       );
@@ -623,19 +786,25 @@ export default function SearchModal({
                             </div>
                           </div>
 
-                          <span
-                            className={clsx(
-                              "hidden sm:inline-flex rounded-full px-2 py-1 text-[10px] uppercase tracking-wide",
-                              item.type === "org" &&
-                                "bg-warning-950 text-warning-300",
-                              item.type === "team" &&
-                                "bg-success-950 text-success-300",
-                              item.type === "friend" &&
-                                "bg-white/7 text-neutral-200",
-                            )}
-                          >
-                            {ITEM_LABEL[item.type]}
-                          </span>
+                          {/* Org: exact tracking-links destination pill + org accent color */}
+                          {item.type === "org" ? (
+                            <SearchDestinationPill
+                              type="org"
+                              accentColor={orgAccentById[item.id] ?? null}
+                            />
+                          ) : (
+                            <span
+                              className={clsx(
+                                "hidden sm:inline-flex rounded-full px-2 py-1 text-[10px] uppercase tracking-wide",
+                                item.type === "team" &&
+                                  "bg-success-950 text-success-300",
+                                item.type === "friend" &&
+                                  "bg-white/7 text-neutral-200",
+                              )}
+                            >
+                              {ITEM_LABEL[item.type]}
+                            </span>
+                          )}
                         </button>
                       </li>
                     );

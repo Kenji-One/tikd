@@ -1,4 +1,3 @@
-// src/app/dashboard/gender-breakdown/page.tsx
 import { Repeat2, Users, UserRound, Repeat } from "lucide-react";
 
 import DetailedViewShell from "@/components/dashboard/finances/DetailedViewShell";
@@ -66,11 +65,27 @@ function KpiIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function GenderBreakdownDetailedPage() {
+export default function GenderBreakdownDetailedPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  const eventIdRaw = searchParams?.eventId;
+  const orgIdRaw = searchParams?.orgId;
+
+  const eventId = Array.isArray(eventIdRaw) ? eventIdRaw[0] : eventIdRaw;
+  const orgId = Array.isArray(orgIdRaw) ? orgIdRaw[0] : orgIdRaw;
+
+  const backHref = eventId
+    ? `/dashboard/events/${eventId}/summary`
+    : orgId
+      ? `/dashboard/organizations/${orgId}/summary`
+      : "/dashboard";
+
   return (
     <DetailedViewShell
       heading="Gender Breakdown Detailed View"
-      backHref="/dashboard"
+      backHref={backHref}
       miniCards={[
         {
           title: "Gender Ratio",

@@ -73,7 +73,7 @@ export default function GridListToggle({
         className={clsx(
           "tikd-grid-list-btn",
           "group relative inline-grid h-10.5 w-10.5 select-none place-items-center",
-          "rounded-lg border border-white/10 bg-neutral-900 backdrop-blur-xl",
+          "rounded-lg border border-white/10 bg-[#12141f] backdrop-blur-xl cursor-pointer",
           "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
           "transition-[filter,box-shadow,border-color,background,transform] duration-200 ease-out motion-reduce:transition-none",
           "hover:border-white/14 hover:bg-white/8",
@@ -91,9 +91,7 @@ export default function GridListToggle({
           aria-hidden="true"
           className={clsx(
             "absolute inset-0.5 rounded-md",
-            "border border-white/10",
-            "bg-neutral-900",
-            "shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
+            "bg-[#12141f]",
             "transition-[background-color,border-color] duration-200",
             "group-hover:bg-white/8 group-hover:border-white/14",
           )}

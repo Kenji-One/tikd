@@ -38,11 +38,27 @@ function KpiIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function AgeBreakdownDetailedPage() {
+export default function AgeBreakdownDetailedPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
+  const eventIdRaw = searchParams?.eventId;
+  const orgIdRaw = searchParams?.orgId;
+
+  const eventId = Array.isArray(eventIdRaw) ? eventIdRaw[0] : eventIdRaw;
+  const orgId = Array.isArray(orgIdRaw) ? orgIdRaw[0] : orgIdRaw;
+
+  const backHref = eventId
+    ? `/dashboard/events/${eventId}/summary`
+    : orgId
+      ? `/dashboard/organizations/${orgId}/summary`
+      : "/dashboard";
+
   return (
     <DetailedViewShell
       heading="Age Breakdown Detailed View"
-      backHref="/dashboard"
+      backHref={backHref}
       miniCards={[
         {
           title: "Avg Customer Age",

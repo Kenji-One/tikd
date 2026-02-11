@@ -303,7 +303,7 @@ function MiniSelect<T extends string>({
         onClick={() => setOpen((v) => !v)}
         className={clsx(
           "inline-flex items-center gap-2 rounded-full border border-white/10",
-          "bg-neutral-900 px-3 py-2 font-medium text-neutral-200",
+          "bg-[#12141f] px-3 py-2 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
           "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer",
           btnClassName,
@@ -1493,7 +1493,7 @@ export default function DashboardEventsPage() {
                 <div
                   className={clsx(
                     "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 bg-neutral-900 h-10",
+                    "rounded-lg border border-white/10 bg-[#12141f] h-10",
                   )}
                 >
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />

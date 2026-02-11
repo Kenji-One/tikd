@@ -741,6 +741,13 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     }));
   }, [ageSliceSegments, ageSliceTotal]);
 
+  // ✅ Match Event Dashboard sizing/feel: make the 3 cards stretch to equal height.
+  // - Force grid to stretch items
+  // - Give each card a consistent min-height + flex column layout
+  // - Let the chart area flex so donut/pills sit like Event Dashboard
+  const panelClass =
+    "rounded-lg border border-neutral-700 bg-neutral-900 p-5 h-full min-h-[520px] flex flex-col";
+
   return (
     <div className="space-y-5 px-4 md:px-6 lg:px-8">
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
@@ -839,12 +846,14 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         <RecentSalesTable />
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
+      {/* ✅ This section now matches Event Dashboard sizing */}
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr] items-stretch">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 items-stretch">
+          {/* Gender Breakdown */}
+          <div className={panelClass}>
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
+                <div className="text-[16px] font-extrabold uppercase leading-none text-neutral-400">
                   Gender Breakdown
                 </div>
                 <div className="mt-1 text-2xl font-extrabold">
@@ -864,10 +873,10 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
               </Button>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 flex flex-1 flex-col justify-center">
               <DonutFull
                 segments={genderSegments}
-                height={300}
+                height={320}
                 thickness={60}
                 padAngle={4}
                 minSliceAngle={6}
@@ -878,10 +887,11 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
             </div>
           </div>
 
-          <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
+          {/* Age Breakdown */}
+          <div className={panelClass}>
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
+                <div className="text-[16px] font-extrabold uppercase leading-none text-neutral-400">
                   Age Breakdown
                 </div>
                 <div className="mt-1 text-2xl font-extrabold">
@@ -901,10 +911,10 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
               </Button>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 flex flex-1 flex-col justify-center">
               <DonutFull
                 segments={ageSliceSegments}
-                height={300}
+                height={320}
                 thickness={60}
                 padAngle={5}
                 minSliceAngle={8}
@@ -922,12 +932,15 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
           </div>
         </div>
 
-        <MyTeamTable
-          members={DEMO_MY_TEAM}
-          onDetailedView={() => {
-            // later: /dashboard/organizations/:id/team
-          }}
-        />
+        {/* My Members (force same height envelope as donuts) */}
+        <div className="h-full min-h-[520px]">
+          <MyTeamTable
+            members={DEMO_MY_TEAM}
+            onDetailedView={() => {
+              // later: /dashboard/organizations/:id/team
+            }}
+          />
+        </div>
       </section>
 
       <TrackingLinksTable

@@ -304,7 +304,6 @@ function RolePill({ meta }: { meta: ResolvedRoleMeta }) {
       : "rgba(245,245,245,0.95)";
 
   const iconNode = meta.iconUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={meta.iconUrl}
       alt=""
@@ -501,7 +500,6 @@ function MemberActionsMenu({
     fallbackKey: RoleIconKey,
   ) {
     if (r.iconUrl) {
-      // eslint-disable-next-line @next/next/no-img-element
       return (
         <img
           src={r.iconUrl}
@@ -930,8 +928,10 @@ export default function OrgMembersPage() {
    * We follow the same role ordering users see in the “Roles” popup:
    * Owner (top), then Admin, then by `order`, then by name.
    */
-  const roleOrder = useMemo(() => {
-    const list = [...(roles ?? [])];
+  type OrgRoleRowWithIdx = OrgRoleRow & { __idx: number };
+
+  const roleOrder = useMemo<OrgRoleRowWithIdx[]>(() => {
+    const list: OrgRoleRow[] = [...(roles ?? [])];
 
     // ensure Owner exists as the top-most role even if backend doesn't return it
     if (!list.some((r) => r.key === "owner")) {
@@ -955,31 +955,30 @@ export default function OrgMembersPage() {
       return 0;
     };
 
-    return list
-      .slice()
-      .sort((a, b) => {
-        const ra = rank(a);
-        const rb = rank(b);
-        if (ra !== rb) return ra - rb;
+    const sorted = list.slice().sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
 
-        const ao = a.order ?? 0;
-        const bo = b.order ?? 0;
-        if (ao !== bo) return ao - bo;
+      const ao = a.order ?? 0;
+      const bo = b.order ?? 0;
+      if (ao !== bo) return ao - bo;
 
-        return a.name.localeCompare(b.name);
-      })
-      .map((r, idx) => ({ ...r, __idx: idx }));
+      return a.name.localeCompare(b.name);
+    });
+
+    return sorted.map((r, idx) => ({ ...r, __idx: idx }));
   }, [roles]);
 
   const roleOrderIdxById = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of roleOrder) m.set(r._id, (r as any).__idx as number);
+    for (const r of roleOrder) m.set(r._id, r.__idx);
     return m;
   }, [roleOrder]);
 
   const roleOrderIdxByKey = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of roleOrder) m.set(r.key, (r as any).__idx as number);
+    for (const r of roleOrder) m.set(r.key, r.__idx);
     return m;
   }, [roleOrder]);
 

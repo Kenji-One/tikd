@@ -11,7 +11,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import {
   ChevronDown,
@@ -2244,6 +2244,7 @@ export default function TrackingLinksTable({
   headerLeftAction,
   viewAllHref,
 }: TrackingLinksTableProps) {
+  const router = useRouter();
   const [data, setData] = useState<Row[]>([]);
   const [orgAccentById, setOrgAccentById] = useState<Record<string, string>>(
     {},
@@ -3257,14 +3258,15 @@ export default function TrackingLinksTable({
             sorted.length > VISIBLE_LIMIT ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
                 <div className="pointer-events-auto">
-                  <Button asChild variant="viewAction" size="sm">
-                    <Link
-                      href={computedViewAllHref}
-                      title="View all tracking links"
-                      aria-label="View all tracking links"
-                    >
-                      View All
-                    </Link>
+                  <Button
+                    type="button"
+                    variant="viewAction"
+                    size="sm"
+                    onClick={() => router.push(computedViewAllHref)}
+                    title="View all tracking links"
+                    aria-label="View all tracking links"
+                  >
+                    View All
                   </Button>
                 </div>
               </div>

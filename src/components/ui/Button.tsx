@@ -272,11 +272,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     );
 
     const viewActionChildren = (
-      <div className="tikd-viewAction__wrap">
-        <div className="tikd-viewAction__outline" aria-hidden="true" />
+      <div className="tikd-viewAction__wrap relative isolate">
+        <div
+          className="tikd-viewAction__outline pointer-events-none"
+          aria-hidden="true"
+        />
         <div
           className={clsx(
-            "tikd-viewAction__content",
+            "tikd-viewAction__content relative z-10",
             viewActionContentSizes[size],
           )}
         >

@@ -4,6 +4,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { Instagram } from "lucide-react";
 import SortArrowsIcon from "@/components/ui/SortArrowsIcon";
@@ -362,6 +363,8 @@ function PosterThumb({ alt, src }: { alt: string; src?: string | null }) {
 
 /* ---------------------------- Component ---------------------------- */
 export default function RecentSalesTable() {
+  const router = useRouter();
+
   const clipRef = useRef<HTMLDivElement | null>(null);
   const [isClamped, setIsClamped] = useState(false);
   const MAX = 519;
@@ -609,16 +612,17 @@ export default function RecentSalesTable() {
       </div>
 
       {/* Bottom center pill */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center z-10">
-        <Button
-          type="button"
-          // onClick={onDetailedView}
-          onClick={() => {}}
-          variant="viewAction"
-          size="sm"
-        >
-          View All
-        </Button>
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+        <div className="pointer-events-auto">
+          <Button
+            type="button"
+            onClick={() => router.push("/dashboard/sales")}
+            variant="viewAction"
+            size="sm"
+          >
+            View All
+          </Button>
+        </div>
       </div>
     </div>
   );

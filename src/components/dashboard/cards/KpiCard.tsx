@@ -1,7 +1,8 @@
+// src/components/dashboard/cards/KpiCard.tsx
 "use client";
 
 import type { PropsWithChildren, ReactNode } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
 
@@ -44,6 +45,8 @@ export default function KpiCard({
   hideDetails = false,
   detailsLabel = "Detailed View",
 }: Props) {
+  const router = useRouter();
+
   const rawDelta = (delta ?? "").trim();
   const isNegative = rawDelta.startsWith("-");
   // remove leading + or - for display (keep for logic)
@@ -88,11 +91,16 @@ export default function KpiCard({
   const FooterAction = () => {
     if (hideDetails) return null;
 
-    // Reusable + consistent everywhere
+    // ✅ Make detailsHref always work (avoid asChild + Slot wrapper issues)
     if (detailsHref) {
       return (
-        <Button asChild variant="viewAction" size="sm">
-          <Link href={detailsHref}>{detailsLabel}</Link>
+        <Button
+          type="button"
+          variant="viewAction"
+          size="sm"
+          onClick={() => router.push(detailsHref)}
+        >
+          {detailsLabel}
         </Button>
       );
     }

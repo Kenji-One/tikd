@@ -5,6 +5,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
@@ -470,6 +471,7 @@ function SortControls({
 }
 
 export default function UpcomingEventsTable() {
+  const router = useRouter();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-upcoming-events"],
     queryFn: fetchUpcomingEvents,
@@ -702,14 +704,16 @@ export default function UpcomingEventsTable() {
 
       {/* ✅ FIX: keep wrapper non-interactive but allow the button itself to receive clicks */}
       <div className="pointer-events-none absolute inset-x-0 bottom-2.5 z-10 flex justify-center">
-        <Button
-          asChild
-          variant="viewAction"
-          size="sm"
-          className="pointer-events-auto"
-        >
-          <Link href="/dashboard/events">View All</Link>
-        </Button>
+        <div className="pointer-events-auto">
+          <Button
+            type="button"
+            variant="viewAction"
+            size="sm"
+            onClick={() => router.push("/dashboard/events")}
+          >
+            View All
+          </Button>
+        </div>
       </div>
     </div>
   );

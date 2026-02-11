@@ -48,6 +48,12 @@ const TRAFFIC_SOURCE: DonutSegment[] = [
   { value: 10, label: "Deleted", color: "#22C55E" },
 ];
 
+type SearchParamsShape = Record<string, string | string[] | undefined>;
+
+type PageProps = {
+  searchParams?: Promise<SearchParamsShape>;
+};
+
 function KpiIcon({ children }: { children: React.ReactNode }) {
   return (
     <span
@@ -65,13 +71,13 @@ function KpiIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function GenderBreakdownDetailedPage({
+export default async function GenderBreakdownDetailedPage({
   searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>;
-}) {
-  const eventIdRaw = searchParams?.eventId;
-  const orgIdRaw = searchParams?.orgId;
+}: PageProps) {
+  const sp = (await searchParams) ?? {};
+
+  const eventIdRaw = sp.eventId;
+  const orgIdRaw = sp.orgId;
 
   const eventId = Array.isArray(eventIdRaw) ? eventIdRaw[0] : eventIdRaw;
   const orgId = Array.isArray(orgIdRaw) ? orgIdRaw[0] : orgIdRaw;
@@ -131,12 +137,6 @@ export default function GenderBreakdownDetailedPage({
          */
         series: totalSeries,
 
-        /**
-         * ✅ Match reference:
-         * - Blue / Pink / Gray
-         * - Each line has a soft warm down-fill (area gradient)
-         * - Keep the rest of the design unchanged
-         */
         seriesLines: [
           // draw "other" first so it sits visually behind
           {

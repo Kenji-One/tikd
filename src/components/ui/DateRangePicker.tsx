@@ -166,6 +166,25 @@ function addDays(d: Date, delta: number) {
   return x;
 }
 
+/**
+ * Month-aware subtraction/addition that keeps the day as stable as possible.
+ * Example: Mar 31 - 1 month => Feb 28/29.
+ */
+function addMonths(d: Date, delta: number) {
+  const x = new Date(d);
+  const day = x.getDate();
+
+  x.setMonth(x.getMonth() + delta);
+
+  // If we overflowed into the next month (e.g., Feb doesn't have 31),
+  // snap to the last day of the previous month.
+  if (x.getDate() !== day) {
+    x.setDate(0);
+  }
+
+  return x;
+}
+
 function rangeEq(a: DateRangeValue, b: DateRangeValue) {
   if (!a.start || !a.end || !b.start || !b.end) return false;
   return (
@@ -398,13 +417,14 @@ export default function DateRangePicker({
 
     const t = today;
 
-    const thisYear = {
-      start: startOfYear(currentYear),
-      end: endOfYear(currentYear),
+    const last3Months = {
+      start: clampToDay(addMonths(t, -3)),
+      end: t,
     };
-    const lastYear = {
-      start: startOfYear(currentYear - 1),
-      end: endOfYear(currentYear - 1),
+
+    const last6Months = {
+      start: clampToDay(addMonths(t, -6)),
+      end: t,
     };
 
     return [
@@ -419,10 +439,10 @@ export default function DateRangePicker({
         label: "Last 30 days",
         range: { start: addDays(t, -29), end: t },
       },
-      { key: "thisYear", label: "This year", range: thisYear },
-      { key: "lastYear", label: "Last year", range: lastYear },
+      { key: "m3", label: "3 Months", range: last3Months },
+      { key: "m6", label: "6 Months", range: last6Months },
     ] as const;
-  }, [variant, today, currentYear]);
+  }, [variant, today]);
 
   const activeKey = useMemo(() => {
     if (variant !== "compact") return null;

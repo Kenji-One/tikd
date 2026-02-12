@@ -24,6 +24,7 @@ import {
   Eye,
   Ticket,
   DollarSign,
+  Building2,
 } from "lucide-react";
 
 import { Input } from "@/components/ui/Input";
@@ -414,7 +415,7 @@ function StatChip({
           {icon}
         </span>
 
-        <span className="truncate text-[13px] font-semibold leading-none text-white">
+        <span className="truncate text-[13px] font-semibold leading-[1.2] text-white">
           {value}
         </span>
 
@@ -1147,24 +1148,104 @@ function EventRowCard({
   const rowImg =
     ev.image && ev.image.trim() ? ev.image.trim() : EVENT_CARD_DEFAULT_POSTER;
 
+  const org = ev.organization ?? ev.org;
+  const orgName = org?.name ?? "—";
+
+  const revenue = revenueOf(ev);
+  const tickets = ticketsOf(ev);
+  const views = viewsOf(ev);
+
+  function MobileChip({
+    label,
+    value,
+    icon,
+  }: {
+    label: string;
+    value: string;
+    icon: React.ReactNode;
+  }) {
+    return (
+      <span
+        className={clsx(
+          "inline-flex items-center gap-1.5 rounded-full",
+          "border border-white/10 bg-white/[0.04] px-2.5 py-1",
+          "text-[11px] font-medium text-neutral-200",
+          "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]",
+        )}
+      >
+        <span className="text-primary-200" aria-hidden="true">
+          {icon}
+        </span>
+        <span className="tabular-nums text-neutral-0">{value}</span>
+        <span className="text-neutral-400">{label}</span>
+      </span>
+    );
+  }
+
+  function MetricCell({
+    label,
+    value,
+    icon,
+    align = "center",
+    divider = false,
+  }: {
+    label: string;
+    value: string;
+    icon: React.ReactNode;
+    align?: "left" | "center";
+    divider?: boolean;
+  }) {
+    return (
+      <div
+        className={clsx(
+          "min-w-0",
+          align === "center" ? "text-center" : "text-left",
+          divider &&
+            "relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-px before:bg-white/10",
+        )}
+      >
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+          {label}
+        </div>
+
+        <div
+          className={clsx(
+            "mt-1 flex items-center gap-2",
+            align === "center" ? "justify-center" : "justify-start",
+          )}
+        >
+          <span className="text-primary-200" aria-hidden="true">
+            {icon}
+          </span>
+          <span className="truncate text-[13px] font-semibold text-neutral-0 tabular-nums">
+            {value}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Link
       href={`/dashboard/events/${ev._id}`}
       className={clsx(
-        "group relative flex w-full items-center justify-between gap-4",
-        "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
-        "hover:border-primary-500 hover:bg-white/7 transition-colors",
+        "group relative flex w-full items-center gap-4",
+        "rounded-[14px] border border-white/10",
+        "bg-white/[0.04] px-4 py-3.5",
+        "shadow-[0_18px_55px_rgba(0,0,0,0.35)]",
+        "transition-colors",
+        "hover:border-primary-500/55 hover:bg-white/[0.06]",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
       )}
     >
       {/* Left */}
       <div className="flex min-w-0 items-center gap-3">
-        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[12px] bg-white/5 ring-1 ring-white/10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={rowImg}
             alt=""
-            className="h-10 w-10 object-cover"
+            className="h-11 w-11 object-cover"
             onError={(e) => {
               const img = e.currentTarget;
               if (img.src !== EVENT_CARD_DEFAULT_POSTER) {
@@ -1176,27 +1257,86 @@ function EventRowCard({
         </div>
 
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold text-neutral-50">
-            {ev.title}
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="truncate text-[14px] font-semibold text-neutral-50">
+              {ev.title}
+            </div>
+
+            {/* {pinned ? (
+              <span
+                className={clsx(
+                  "hidden sm:inline-flex items-center gap-1.5 rounded-full",
+                  "border border-primary-500/25 bg-primary-500/10 px-2 py-1",
+                  "text-[10px] font-semibold text-primary-200",
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-primary-300" />
+                Pinned
+              </span>
+            ) : null} */}
           </div>
+
           <div className="mt-0.5 truncate text-[12px] text-neutral-400">
-            {clampText(`${formatDateLine(ev.date)} • ${ev.location ?? ""}`, 64)}
+            {clampText(`${formatDateLine(ev.date)} • ${ev.location ?? ""}`, 68)}
+          </div>
+
+          {/* Mobile metrics */}
+          <div className="mt-2 flex flex-wrap gap-2 md:hidden">
+            <MobileChip
+              label="Sold"
+              value={tickets.toLocaleString()}
+              icon={<Ticket className="h-3.5 w-3.5" />}
+            />
+            <MobileChip
+              label="Views"
+              value={views.toLocaleString()}
+              icon={<Eye className="h-3.5 w-3.5" />}
+            />
+            <MobileChip
+              label="Revenue"
+              value={money(revenue)}
+              icon={<DollarSign className="h-3.5 w-3.5" />}
+            />
           </div>
         </div>
       </div>
 
-      {/* Center (true centered like org rows, desktop only) */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex items-center gap-6">
-        <div className="text-[12px] text-neutral-300">
-          {ev.category ? clampText(ev.category, 22) : "—"}
-        </div>
-        <div className="text-[12px] text-neutral-400">
-          {formatEventDate(ev.date)}
-        </div>
+      {/* Desktop metrics (clean, aligned) */}
+      <div
+        className={clsx(
+          "hidden md:grid flex-1 items-center",
+          "grid-cols-[minmax(220px,1fr)_110px_110px_140px]",
+          "gap-6 px-2",
+        )}
+      >
+        <MetricCell
+          label="Host"
+          value={orgName}
+          icon={<Building2 className="h-4 w-4" />}
+          align="left"
+        />
+        <MetricCell
+          label="Sold"
+          value={tickets.toLocaleString()}
+          icon={<Ticket className="h-4 w-4" />}
+          divider
+        />
+        <MetricCell
+          label="Views"
+          value={views.toLocaleString()}
+          icon={<Eye className="h-4 w-4" />}
+          divider
+        />
+        <MetricCell
+          label="Revenue"
+          value={money(revenue)}
+          icon={<DollarSign className="h-4 w-4" />}
+          divider
+        />
       </div>
 
       {/* Right */}
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={(e) => {
@@ -1207,9 +1347,12 @@ function EventRowCard({
           className={clsx(
             "inline-flex h-9 w-9 items-center justify-center rounded-lg",
             pinned
-              ? "border-primary-500/45 bg-primary-500/10 text-neutral-0"
+              ? "border border-primary-500/45 bg-primary-500/10 text-neutral-0"
               : "border border-white/10 bg-white/5 text-neutral-200",
-            "hover:border-primary-500 hover:bg-white/10 transition",
+            "shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_22px_rgba(0,0,0,0.35)]",
+            "transition",
+            "hover:border-primary-500/60 hover:bg-white/10",
+            "active:scale-[0.97]",
           )}
           aria-label={pinned ? "Unpin event" : "Pin event"}
           title={pinned ? "Unpin" : "Pin"}

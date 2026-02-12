@@ -1,4 +1,3 @@
-// src/components/search/SearchModal.tsx
 "use client";
 
 import type { ReactNode } from "react";
@@ -12,7 +11,6 @@ import {
   Loader2,
   ChevronDown,
   History,
-  Calendar,
   Building2,
   Users2,
   UserRound,
@@ -225,6 +223,58 @@ function SearchDestinationPill({
   );
 }
 
+/**
+ * NEW: Friends pill redesigned to match the Event/Organization pill vibe.
+ * (Also used for Team for consistency.)
+ */
+function SearchTypePill({ type }: { type: "team" | "friend" }) {
+  const meta =
+    type === "friend"
+      ? { hex: "#A6D7FF", label: "Friends", Icon: UserRound }
+      : { hex: "#45FF79", label: "Teams", Icon: Users2 };
+
+  const rgb = safeHexToRgb(meta.hex);
+  const soft =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.12)`
+      : "rgba(166,215,255,0.12)";
+  const ring =
+    rgb != null
+      ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.24)`
+      : "rgba(166,215,255,0.24)";
+  const text =
+    rgb != null
+      ? `rgba(${Math.min(255, rgb.r + 80)},${Math.min(
+          255,
+          rgb.g + 80,
+        )},${Math.min(255, rgb.b + 80)},0.98)`
+      : "rgba(231,222,255,0.95)";
+
+  const Icon = meta.Icon;
+
+  return (
+    <span
+      className={clsx(
+        "hidden sm:inline-flex items-center gap-1 rounded-md px-2.5 pl-2 py-1.5",
+        "text-[13px] font-semibold ring-1 ring-inset",
+      )}
+      style={{
+        background: soft,
+        color: text,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+        borderColor: ring,
+      }}
+      aria-label={`Type: ${meta.label}`}
+      title={meta.label}
+    >
+      <span className="inline-flex items-center justify-center">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="leading-none">{meta.label}</span>
+    </span>
+  );
+}
+
 /* ────────────────────────────────────────────────────────────────
    Component
    ──────────────────────────────────────────────────────────────── */
@@ -282,9 +332,16 @@ export default function SearchModal({
       /* ignore */
     }
   }, []);
+
   function pushRecent(q: string) {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+
     try {
-      const next = [q, ...recent.filter((x) => x !== q)].slice(0, 8);
+      const next = [trimmed, ...recent.filter((x) => x !== trimmed)].slice(
+        0,
+        8,
+      );
       localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
       setRecent(next);
     } catch {
@@ -572,7 +629,7 @@ export default function SearchModal({
                           )}
                         >
                           {f === "event" && (
-                            <Calendar className="h-4 w-4 opacity-80" />
+                            <Ticket className="h-4 w-4 opacity-80" />
                           )}
                           {f === "org" && (
                             <Building2 className="h-4 w-4 opacity-80" />
@@ -607,46 +664,31 @@ export default function SearchModal({
 
             {/* Results panel */}
             <div className="max-h-[70vh] sm:max-h-[60vh] overflow-auto rounded-b-2xl sm:rounded-b-[1.5rem]">
-              {/* Empty query → Recent */}
-              {!query.trim() && (
+              {/* Empty query → Recent (ONLY when there are recents) */}
+              {!query.trim() && recent.length > 0 && (
                 <div className="p-3.5 sm:p-5">
                   <div className="flex items-center justify-between">
                     <h4 className="text-[13px] sm:text-sm font-medium text-neutral-100">
                       Recent searches
                     </h4>
-                    {recent.length > 0 && (
-                      <button
-                        className="text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none cursor-pointer"
-                        onClick={() => {
-                          localStorage.removeItem(HISTORY_KEY);
-                          setRecent([]);
-                        }}
-                      >
-                        Clear
-                      </button>
-                    )}
+                    <button
+                      className="text-xs text-neutral-400 hover:text-neutral-200 focus:outline-none cursor-pointer"
+                      onClick={() => {
+                        localStorage.removeItem(HISTORY_KEY);
+                        setRecent([]);
+                      }}
+                    >
+                      Clear
+                    </button>
                   </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {recent.length === 0 ? (
-                      <>
-                        <Chip onClick={() => setQuery("Jazz")}>Jazz</Chip>
-                        <Chip onClick={() => setQuery("New York")}>
-                          New York
-                        </Chip>
-                        <Chip onClick={() => setQuery("Coldplay")}>
-                          Coldplay
-                        </Chip>
-                        <Chip onClick={() => setQuery("Theatre")}>Theatre</Chip>
-                      </>
-                    ) : (
-                      recent.map((r) => (
-                        <Chip key={r} onClick={() => setQuery(r)}>
-                          <History className="h-3.5 w-3.5 text-neutral-300" />
-                          <span className="truncate">{r}</span>
-                        </Chip>
-                      ))
-                    )}
+                    {recent.map((r) => (
+                      <Chip key={r} onClick={() => setQuery(r)}>
+                        <History className="h-3.5 w-3.5 text-neutral-300" />
+                        <span className="truncate">{r}</span>
+                      </Chip>
+                    ))}
                   </div>
                 </div>
               )}
@@ -786,24 +828,16 @@ export default function SearchModal({
                             </div>
                           </div>
 
-                          {/* Org: exact tracking-links destination pill + org accent color */}
+                          {/* Right pill */}
                           {item.type === "org" ? (
                             <SearchDestinationPill
                               type="org"
                               accentColor={orgAccentById[item.id] ?? null}
                             />
+                          ) : item.type === "team" ? (
+                            <SearchTypePill type="team" />
                           ) : (
-                            <span
-                              className={clsx(
-                                "hidden sm:inline-flex rounded-full px-2 py-1 text-[10px] uppercase tracking-wide",
-                                item.type === "team" &&
-                                  "bg-success-950 text-success-300",
-                                item.type === "friend" &&
-                                  "bg-white/7 text-neutral-200",
-                              )}
-                            >
-                              {ITEM_LABEL[item.type]}
-                            </span>
+                            <SearchTypePill type="friend" />
                           )}
                         </button>
                       </li>

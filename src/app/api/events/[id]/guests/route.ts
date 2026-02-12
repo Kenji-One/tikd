@@ -1,4 +1,3 @@
-// src/app/api/events/[id]/guests/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
@@ -110,10 +109,6 @@ function safeStr(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
-function safeNum(v: unknown): number | undefined {
-  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
-}
-
 function last4(hexish: string): string {
   const s = String(hexish || "");
   return s.length >= 4 ? s.slice(-4) : s;
@@ -137,6 +132,29 @@ function pickFullName(u: {
   const un = safeStr(u.username).trim();
   if (un) return un;
   return safeStr(u.email).trim() || "Guest";
+}
+
+function normalizeEmail(s: string) {
+  return safeStr(s).trim().toLowerCase();
+}
+
+function normalizePhone(s: string) {
+  const raw = safeStr(s).trim();
+  const hasPlus = raw.startsWith("+");
+  const digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function isEmailLike(s: string) {
+  const v = safeStr(s).trim();
+  if (!v.includes("@")) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+function isPhoneLike(s: string) {
+  const digits = normalizePhone(s).replace(/^\+/, "");
+  return digits.length >= 7 && digits.length <= 15;
 }
 
 /* ------------------------------------------------------------------ */
@@ -401,8 +419,9 @@ export async function GET(
 
 /* ------------------------------------------------------------------ */
 /* POST /api/events/:id/guests                                         */
-/* Body: { userIds: string[] }                                         */
-/* Adds manual guests based on existing users                           */
+/* Supports either:                                                    */
+/*  - Body: { userIds: string[] }  (legacy)                            */
+/*  - Body: { guests: { fullName, email?, phone? }[] } (new direct input) */
 /* ------------------------------------------------------------------ */
 export async function POST(
   req: NextRequest,
@@ -423,13 +442,129 @@ export async function POST(
 
   const body = (await req.json().catch(() => null)) as {
     userIds?: unknown;
+    guests?: unknown;
   } | null;
 
   const userIdsRaw = body?.userIds;
+  const guestsRaw = body?.guests;
+
   const userIds = Array.isArray(userIdsRaw)
     ? userIdsRaw.filter((x) => typeof x === "string")
     : [];
 
+  const guests = Array.isArray(guestsRaw)
+    ? guestsRaw
+        .filter((x) => x && typeof x === "object")
+        .map((x) => x as Record<string, unknown>)
+    : [];
+
+  const wantsUserIds = userIds.length > 0;
+  const wantsGuests = guests.length > 0;
+
+  if (!wantsUserIds && !wantsGuests) {
+    return NextResponse.json(
+      { error: "Provide userIds[] or guests[]" },
+      { status: 400 },
+    );
+  }
+
+  /* --------------------- NEW: direct input guests --------------------- */
+  if (wantsGuests) {
+    const prepared = guests
+      .map((g) => {
+        const fullName = safeStr(g.fullName).trim().replace(/\s+/g, " ");
+        const emailRaw = safeStr(g.email);
+        const phoneRaw = safeStr(g.phone);
+
+        const email = isEmailLike(emailRaw) ? normalizeEmail(emailRaw) : "";
+        const phone = isPhoneLike(phoneRaw) ? normalizePhone(phoneRaw) : "";
+
+        // require at least a usable name, or email/phone
+        const validName = fullName.length >= 2 ? fullName : "";
+        const finalName = validName || (email ? "Guest" : phone ? "Guest" : "");
+
+        if (!finalName && !email && !phone) return null;
+
+        return {
+          eventId,
+          userId: null,
+          fullName: finalName || "Guest",
+          email,
+          phone,
+          status: "pending_arrival" as const,
+        };
+      })
+      .filter(Boolean) as Array<{
+      eventId: string;
+      userId: null;
+      fullName: string;
+      email: string;
+      phone: string;
+      status: "pending_arrival";
+    }>;
+
+    if (!prepared.length) {
+      return NextResponse.json(
+        { error: "No valid guests provided" },
+        { status: 400 },
+      );
+    }
+
+    // Avoid duplicates for manual entries:
+    // - if email exists: treat (eventId+email) as unique-ish
+    // - else if phone exists: treat (eventId+phone)
+    // - else: treat (eventId+fullName) (best-effort)
+    const emails = prepared.map((g) => g.email).filter(Boolean);
+    const phones = prepared.map((g) => g.phone).filter(Boolean);
+    const names = prepared.map((g) => g.fullName).filter(Boolean);
+
+    const existing = await EventGuest.find({
+      eventId,
+      $or: [
+        emails.length ? { email: { $in: emails } } : undefined,
+        phones.length ? { phone: { $in: phones } } : undefined,
+        names.length ? { fullName: { $in: names } } : undefined,
+      ].filter(Boolean) as Record<string, unknown>[],
+    })
+      .select({ email: 1, phone: 1, fullName: 1 })
+      .lean<Array<{ email?: unknown; phone?: unknown; fullName?: unknown }>>()
+      .exec();
+
+    const existingEmail = new Set(
+      existing.map((e) => normalizeEmail(safeStr(e.email))).filter(Boolean),
+    );
+    const existingPhone = new Set(
+      existing.map((e) => normalizePhone(safeStr(e.phone))).filter(Boolean),
+    );
+    const existingName = new Set(
+      existing
+        .map((e) => safeStr(e.fullName).trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    const toInsert = prepared.filter((g) => {
+      const e = normalizeEmail(g.email);
+      const p = normalizePhone(g.phone);
+      const n = g.fullName.trim().toLowerCase();
+
+      if (e && existingEmail.has(e)) return false;
+      if (!e && p && existingPhone.has(p)) return false;
+      if (!e && !p && n && existingName.has(n)) return false;
+      return true;
+    });
+
+    if (!toInsert.length) {
+      return NextResponse.json({ ok: true });
+    }
+
+    await EventGuest.insertMany(toInsert, { ordered: false }).catch(() => {
+      // ignore duplicate insert races
+    });
+
+    return NextResponse.json({ ok: true });
+  }
+
+  /* -------------------------- Legacy: userIds -------------------------- */
   if (!userIds.length || userIds.some((id) => !isObjectId(id))) {
     return NextResponse.json({ error: "Invalid userIds" }, { status: 400 });
   }
@@ -456,9 +591,9 @@ export async function POST(
     >()
     .exec();
 
-  // Create manual guests; we’ll avoid duplicates by checking existing EventGuest docs by email
-  // (If your EventGuest schema has a better unique key like userId, you can switch to that.)
-  const emails = users.map((u) => safeStr(u.email)).filter(Boolean);
+  const emails = users
+    .map((u) => normalizeEmail(safeStr(u.email)))
+    .filter(Boolean);
 
   const existing = await EventGuest.find({
     eventId,
@@ -468,11 +603,13 @@ export async function POST(
     .lean<Array<{ email?: unknown }>>()
     .exec();
 
-  const existingSet = new Set(existing.map((e) => safeStr(e.email)));
+  const existingSet = new Set(
+    existing.map((e) => normalizeEmail(safeStr(e.email))).filter(Boolean),
+  );
 
   const toInsert = users
     .filter((u) => {
-      const email = safeStr(u.email);
+      const email = normalizeEmail(safeStr(u.email));
       return email && !existingSet.has(email);
     })
     .map((u) => {
@@ -480,8 +617,8 @@ export async function POST(
       return {
         eventId,
         fullName,
-        email: safeStr(u.email),
-        phone: safeStr(u.phone),
+        email: normalizeEmail(safeStr(u.email)),
+        phone: normalizePhone(safeStr(u.phone)),
         status: "pending_arrival" as const,
       };
     });

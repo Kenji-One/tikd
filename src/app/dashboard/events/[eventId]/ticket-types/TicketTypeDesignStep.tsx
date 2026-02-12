@@ -1,3 +1,4 @@
+// src/app/dashboard/events/[eventId]/ticket-types/TicketTypeDesignStep.tsx
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
@@ -132,7 +133,7 @@ export default function TicketTypeDesignStep({
           <div
             className={clsx(
               "mx-auto rounded-3xl bg-transparent",
-              cardWidthClass
+              cardWidthClass,
             )}
           >
             {/* Ticket */}
@@ -161,7 +162,7 @@ export default function TicketTypeDesignStep({
                 <div
                   className={clsx(
                     "relative overflow-hidden rounded-2xl",
-                    artworkHeightClass
+                    artworkHeightClass,
                   )}
                 >
                   {/* If no custom ticket background is set, show event image as artwork.
@@ -349,16 +350,16 @@ export default function TicketTypeDesignStep({
                 "flex flex-col items-center justify-between gap-3 rounded-lg border px-2.5 py-3 text-xs capitalize transition-colors",
                 "bg-neutral-900 text-neutral-0",
                 isActive
-                  ? "border-success-500 "
-                  : "border-neutral-950 hover:border-success-500"
+                  ? "border-primary-500"
+                  : "border-neutral-950 hover:border-primary-500",
               )}
             >
               <span
                 className={clsx(
                   "flex h-8 w-8 items-center justify-center rounded-lg text-sm font-semibold",
                   isActive
-                    ? "bg-success-500 text-neutral-0"
-                    : "bg-neutral-0 text-neutral-400"
+                    ? "bg-primary-500 text-white"
+                    : "bg-neutral-0 text-neutral-400",
                 )}
               >
                 {value === "horizontal"

@@ -245,7 +245,7 @@ export default function TicketTypeCheckoutStep({
               "mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full border text-neutral-300 transition-colors",
               enableEmailAttachments
                 ? "border-white/40 hover:border-primary-500 hover:text-primary-200"
-                : "border-white/10 text-neutral-600 hover:border-white/30"
+                : "border-white/10 text-neutral-600 hover:border-white/30",
             )}
             title={
               enableEmailAttachments ? "Disable attachments" : "Enable again"
@@ -259,7 +259,7 @@ export default function TicketTypeCheckoutStep({
           <span
             className={clsx(
               "text-lg",
-              enableEmailAttachments ? "text-neutral-0" : "text-neutral-500"
+              enableEmailAttachments ? "text-neutral-0" : "text-neutral-500",
             )}
           >
             Add Files
@@ -270,7 +270,7 @@ export default function TicketTypeCheckoutStep({
               "rounded-full border border-white/10 px-6 py-3 font-medium text-neutral-0 hover:border-primary-500 cursor-pointer transition-colors",
               enableEmailAttachments
                 ? "border-white/30 text-neutral-0 hover:border-primary-500"
-                : "border-white/10 text-neutral-500"
+                : "border-white/10 text-neutral-500",
             )}
           >
             Setup

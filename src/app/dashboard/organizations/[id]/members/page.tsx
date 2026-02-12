@@ -256,7 +256,7 @@ function StatusPill({ status }: { status: Status }) {
 function RolePill({ meta }: { meta: ResolvedRoleMeta }) {
   // owner stays a special case (not in OrgRole list)
   if (meta.key === "owner") {
-    const rgb = safeHexToRgb("#F7C948")!;
+    const rgb = safeHexToRgb("#9A46FF")!;
     const soft = `rgba(${rgb.r},${rgb.g},${rgb.b},0.14)`;
     const ring = `rgba(${rgb.r},${rgb.g},${rgb.b},0.26)`;
     const text = `rgba(${Math.min(255, rgb.r + 120)},${Math.min(
@@ -884,7 +884,7 @@ export default function OrgMembersPage() {
       return {
         key: "owner",
         name: "Owner",
-        color: "#F7C948",
+        color: "#9A46FF",
         iconKey: "owner",
       };
     }
@@ -939,7 +939,7 @@ export default function OrgMembersPage() {
         _id: "__owner__",
         key: "owner",
         name: "Owner",
-        color: "#F7C948",
+        color: "#9A46FF",
         iconKey: "owner",
         iconUrl: null,
         isSystem: true,

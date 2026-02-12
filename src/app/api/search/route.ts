@@ -1,4 +1,3 @@
-// src/app/api/search/route.ts
 /* ------------------------------------------------------------------ *
  *  /api/search  – global search for events / organizations / teams / friends
  *  Query params:
@@ -12,12 +11,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
+import { Types } from "mongoose";
+import { auth } from "@/lib/auth";
+
 import Event from "@/models/Event";
 import Organization from "@/models/Organization";
 import Team from "@/models/Team";
 import User from "@/models/User";
-
-import type { Types } from "mongoose";
+import Friendship from "@/models/Friendship";
 
 /* ---------- shared result item types (client shape) ---------------- */
 type SearchItemEvent = {
@@ -112,6 +113,8 @@ interface FriendLean {
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, n));
 
+const isObjectId = (v: string) => /^[a-f\d]{24}$/i.test(v);
+
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
@@ -131,6 +134,12 @@ export async function GET(req: NextRequest) {
     // Safe regex (escape special chars)
     const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const rx = new RegExp(pattern, "i");
+
+    // Only used when searching friends (or all)
+    const session = await auth();
+    const me =
+      session?.user?.id && isObjectId(session.user.id) ? session.user.id : null;
+    const meId = me ? new Types.ObjectId(me) : null;
 
     const [eventsRaw, orgsRaw, teamsRaw, friendsRaw] = await Promise.all([
       type === "event" || type === "all"
@@ -166,31 +175,67 @@ export async function GET(req: NextRequest) {
             .lean()
         : ([] as TeamLean[]),
 
+      // ✅ Friends: ONLY accepted friendships for the logged-in user.
       type === "friend" || type === "all"
-        ? User.find<FriendLean>(
-            {
-              $or: [
-                { username: rx },
-                { email: rx },
-                { firstName: rx },
-                { lastName: rx },
-                { jobTitle: rx },
-                { company: rx },
-              ],
-            },
-            {
-              _id: 1,
-              username: 1,
-              email: 1,
-              image: 1,
-              firstName: 1,
-              lastName: 1,
-              jobTitle: 1,
-              company: 1,
-            },
-          )
-            .limit(perType)
-            .lean()
+        ? (async (): Promise<FriendLean[]> => {
+            if (!meId) return [];
+
+            const rels = (await Friendship.find(
+              {
+                status: "accepted",
+                $or: [{ requesterId: meId }, { recipientId: meId }],
+              },
+              { _id: 0, requesterId: 1, recipientId: 1 },
+            ).lean()) as unknown as Array<{
+              requesterId: Types.ObjectId;
+              recipientId: Types.ObjectId;
+            }>;
+
+            const friendIds = Array.from(
+              new Set(
+                rels
+                  .map((r) =>
+                    String(r.requesterId) === String(meId)
+                      ? String(r.recipientId)
+                      : String(r.requesterId),
+                  )
+                  .filter(Boolean),
+              ),
+            ).map((id) => new Types.ObjectId(id));
+
+            if (friendIds.length === 0) return [];
+
+            // NOTE:
+            // Mongoose's TS types for `.lean()` can return FlattenMaps<unknown> for _id.
+            // Runtime is correct because we control the projection, so we cast the lean output.
+            const raw = await User.find(
+              {
+                _id: { $in: friendIds },
+                $or: [
+                  { username: rx },
+                  { email: rx },
+                  { firstName: rx },
+                  { lastName: rx },
+                  { jobTitle: rx },
+                  { company: rx },
+                ],
+              },
+              {
+                _id: 1,
+                username: 1,
+                email: 1,
+                image: 1,
+                firstName: 1,
+                lastName: 1,
+                jobTitle: 1,
+                company: 1,
+              },
+            )
+              .limit(perType)
+              .lean();
+
+            return raw as unknown as FriendLean[];
+          })()
         : ([] as FriendLean[]),
     ]);
 
@@ -228,8 +273,6 @@ export async function GET(req: NextRequest) {
       title: t.name,
       subtitle: t.location || "",
       image: t.logo ?? null,
-      // ✅ you just created /api/teams/[teamId], but UI href should be page route.
-      // If you don't have a /teams/[id] page yet, keep it consistent with your dashboard paths.
       href: `/dashboard/teams/${t._id}`,
     });
 
@@ -280,5 +323,5 @@ export async function GET(req: NextRequest) {
   db.events.createIndex({ title: "text", location: "text", date: 1 })
   db.organizations.createIndex({ name: "text", city: "text" })
   db.teams.createIndex({ name: "text", location: "text" })
-  db.users.createIndex({ username: "text", email: "text", firstName: "text", lastName: "text", jobTitle: "text", company: "text" })
+  db.friendships.createIndex({ requesterId: 1, recipientId: 1, status: 1 })
 */

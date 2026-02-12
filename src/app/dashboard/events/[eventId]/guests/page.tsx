@@ -1,4 +1,3 @@
-// src/app/dashboard/events/[eventId]/guests/page.tsx
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +15,6 @@ import {
   Send,
   Mail,
   Phone,
-  Users,
   Loader2,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -92,12 +90,10 @@ type GuestRow = {
   canRemove?: boolean;
 };
 
-type AddCandidate = {
-  id: string;
-  name: string;
-  email: string;
+type ManualGuestPayload = {
+  fullName: string;
+  email?: string;
   phone?: string;
-  avatarUrl?: string;
 };
 
 /* ---------------------------- Helpers ---------------------------- */
@@ -157,6 +153,43 @@ function useFluidTabIndicator(
   }, [containerRef, indicatorRef, tab]);
 }
 
+function normalizeEmail(s: string) {
+  return s.trim().toLowerCase();
+}
+
+function normalizePhone(s: string) {
+  // keep leading +, strip other non-digits
+  const trimmed = s.trim();
+  const hasPlus = trimmed.startsWith("+");
+  const digits = trimmed.replace(/[^\d]/g, "");
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function isEmailLike(s: string) {
+  const v = s.trim();
+  if (!v.includes("@")) return false;
+  // intentionally simple + safe
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+function isPhoneLike(s: string) {
+  const digits = normalizePhone(s).replace(/^\+/, "");
+  // allow 7..15 digits-ish
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+function guessNameFromEmail(email: string) {
+  const local = email.split("@")[0] || "Guest";
+  const cleaned = local.replace(/[._-]+/g, " ").trim();
+  const capped = cleaned
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  return capped || "Guest";
+}
+
 /* ----------------------------- UI bits --------------------------- */
 const ICON_BTN_40 = clsx(
   "inline-flex h-10 w-10 items-center justify-center rounded-full",
@@ -211,6 +244,13 @@ function TicketPill({ label }: { label: string }) {
 }
 
 /* ---------------------------- Add Guest Modal ---------------------------- */
+
+type ChipGuest = {
+  key: string; // stable unique key in UI
+  label: string; // what we show on chip
+  payload: ManualGuestPayload; // what we send to API
+};
+
 function AddGuestModal({
   open,
   onClose,
@@ -223,8 +263,7 @@ function AddGuestModal({
   onAdded: () => void;
 }) {
   const [query, setQuery] = useState("");
-  // ✅ store selected users so chips keep name/email even when results are empty
-  const [selectedUsers, setSelectedUsers] = useState<AddCandidate[]>([]);
+  const [selected, setSelected] = useState<ChipGuest[]>([]);
   const [sent, setSent] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
@@ -232,30 +271,7 @@ function AddGuestModal({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastActiveElRef = useRef<HTMLElement | null>(null);
 
-  const hasQuery = query.trim().length > 0;
-
-  const selectedIds = useMemo(
-    () => selectedUsers.map((u) => u.id),
-    [selectedUsers],
-  );
-
-  const candidatesQ = useQuery({
-    queryKey: [
-      "event-guests-candidates",
-      eventId,
-      open,
-      hasQuery ? query.trim() : "",
-    ],
-    // ✅ no query -> no fetch (removes "Suggestions" feature)
-    enabled: open && Boolean(eventId) && hasQuery,
-    queryFn: async () => {
-      const q = query.trim();
-      const url = `/api/events/${eventId}/guests/candidates?q=${encodeURIComponent(q)}`;
-      return fetchJSON<AddCandidate[]>(url);
-    },
-  });
-
-  const candidates = candidatesQ.data ?? [];
+  const canSend = selected.length > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -313,48 +329,71 @@ function AddGuestModal({
   useEffect(() => {
     if (!open) {
       setQuery("");
-      setSelectedUsers([]);
+      setSelected([]);
       setSent(false);
       setErrorMsg("");
     }
   }, [open]);
 
-  // ✅ results only when user is searching (no suggestions)
-  const results = useMemo(() => {
-    if (!hasQuery) return [];
-    const selectedSet = new Set(selectedIds);
-    return candidates.filter((c) => !selectedSet.has(c.id));
-  }, [candidates, selectedIds, hasQuery]);
+  function addFromInput(raw: string) {
+    const v = raw.trim();
+    if (!v) return;
 
-  const canSend = selectedUsers.length > 0;
-
-  function togglePick(c: AddCandidate) {
     setSent(false);
     setErrorMsg("");
-    setSelectedUsers((prev) => {
-      if (prev.some((x) => x.id === c.id)) return prev;
-      return [...prev, c];
+
+    let payload: ManualGuestPayload;
+    let key: string;
+    let label: string;
+
+    if (isEmailLike(v)) {
+      const email = normalizeEmail(v);
+      payload = { fullName: guessNameFromEmail(email), email };
+      key = `email:${email}`;
+      label = email;
+    } else if (isPhoneLike(v)) {
+      const phone = normalizePhone(v);
+      payload = { fullName: "Guest", phone };
+      key = `phone:${phone}`;
+      label = phone;
+    } else {
+      // treat as name
+      const name = v.replace(/\s+/g, " ").trim();
+      if (name.length < 2) {
+        setErrorMsg("Please enter a valid email, phone number, or full name.");
+        return;
+      }
+      payload = { fullName: name };
+      key = `name:${name.toLowerCase()}`;
+      label = name;
+    }
+
+    setSelected((prev) => {
+      if (prev.some((x) => x.key === key)) return prev;
+      return [...prev, { key, label, payload }];
     });
+
+    setQuery("");
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
-  function removePick(id: string) {
+  function removePick(key: string) {
     setSent(false);
     setErrorMsg("");
-    setSelectedUsers((prev) => prev.filter((x) => x.id !== id));
+    setSelected((prev) => prev.filter((x) => x.key !== key));
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   const addMutation = useMutation({
-    mutationFn: async (userIds: string[]) => {
+    mutationFn: async (guests: ManualGuestPayload[]) => {
       return fetchJSON<{ ok: true }>(`/api/events/${eventId}/guests`, {
         method: "POST",
-        body: JSON.stringify({ userIds }),
+        body: JSON.stringify({ guests }),
       });
     },
     onSuccess: () => {
       setSent(true);
-      setSelectedUsers([]);
+      setSelected([]);
       setQuery("");
       onAdded();
     },
@@ -367,10 +406,10 @@ function AddGuestModal({
     if (!canSend || addMutation.isPending) return;
     setErrorMsg("");
 
-    const ids = selectedUsers.map((s) => s.id);
-    if (!ids.length) return;
+    const guests = selected.map((s) => s.payload);
+    if (!guests.length) return;
 
-    addMutation.mutate(ids);
+    addMutation.mutate(guests);
   }
 
   if (!open) return null;
@@ -424,8 +463,8 @@ function AddGuestModal({
                 Add Guests
               </div>
               <div className="mt-1 text-[12px] text-neutral-400">
-                Search by email, phone or name — pick multiple — add to this
-                event.
+                Enter email, phone, or name — press Enter to add — then submit
+                all at once.
               </div>
             </div>
           </div>
@@ -448,7 +487,7 @@ function AddGuestModal({
             )}
           >
             <div className="text-[12px] font-medium text-neutral-300">
-              Search by Email / Phone Number / Name
+              Email / Phone / Name
             </div>
 
             <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
@@ -459,18 +498,19 @@ function AddGuestModal({
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  {selectedUsers.map((u) => {
-                    const name = u.name ?? "Selected";
-                    const badge = initialsFromName(name);
+                  {selected.map((c) => {
+                    const label = c.label;
+                    const badge = initialsFromName(c.payload.fullName || label);
 
                     return (
                       <span
-                        key={u.id}
+                        key={c.key}
                         className={clsx(
                           "inline-flex items-center gap-2 rounded-full",
                           "border border-white/10 bg-white/5 px-1 py-1",
                           "text-[12px] font-semibold text-neutral-100",
                         )}
+                        title={label}
                       >
                         <span
                           className={clsx(
@@ -481,11 +521,19 @@ function AddGuestModal({
                         >
                           {badge}
                         </span>
-                        <span className="max-w-[180px] truncate">{name}</span>
+
+                        <span className="max-w-[220px] truncate">{label}</span>
+
+                        {c.key.startsWith("email:") ? (
+                          <Mail className="h-4 w-4 text-primary-300/80" />
+                        ) : c.key.startsWith("phone:") ? (
+                          <Phone className="h-4 w-4 text-primary-300/80" />
+                        ) : null}
+
                         <button
                           type="button"
-                          onClick={() => removePick(u.id)}
-                          aria-label={`Remove ${name}`}
+                          onClick={() => removePick(c.key)}
+                          aria-label={`Remove ${label}`}
                           className={clsx(
                             "inline-flex h-6 w-6 items-center justify-center rounded-full",
                             "bg-white/0 text-neutral-300 hover:bg-white/10 hover:text-neutral-0",
@@ -510,6 +558,12 @@ function AddGuestModal({
                       ref={inputRef}
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addFromInput(query);
+                        }
+                      }}
                       placeholder="Type email, phone, or name…"
                       className={clsx(
                         "h-10 w-full rounded-lg bg-transparent",
@@ -519,10 +573,29 @@ function AddGuestModal({
                       )}
                     />
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => addFromInput(query)}
+                    disabled={!query.trim()}
+                    className={clsx(
+                      "inline-flex h-10 items-center justify-center rounded-lg px-3",
+                      "border border-white/10 text-[12px] font-semibold",
+                      query.trim()
+                        ? "bg-white/5 text-neutral-100 hover:bg-white/10"
+                        : "bg-white/5 text-neutral-500 opacity-60 cursor-not-allowed",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                    )}
+                    aria-label="Add typed guest"
+                    title="Add"
+                  >
+                    Add
+                  </button>
                 </div>
 
                 <div className="mt-2 text-[11px] text-neutral-500">
-                  Tip: select multiple guests, then add them in one go.
+                  Tip: press <span className="text-neutral-300">Enter</span> to
+                  add each guest. No suggestions are shown here.
                 </div>
               </div>
 
@@ -580,148 +653,7 @@ function AddGuestModal({
             ) : null}
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-            <div
-              className={clsx(
-                "flex items-center justify-between px-4 py-3 md:px-5",
-                "border-b border-white/10",
-              )}
-            >
-              <div className="text-[13px] font-semibold text-neutral-200">
-                Results
-              </div>
-              <div className="text-[11px] text-neutral-500">
-                {hasQuery
-                  ? `${results.length} result${results.length === 1 ? "" : "s"}`
-                  : "Type to search"}
-              </div>
-            </div>
-
-            <div className="max-h-[340px] overflow-auto p-2 no-scrollbar md:max-h-[420px]">
-              {!hasQuery ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                  <div
-                    className={clsx(
-                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
-                    )}
-                  >
-                    <Search className="h-5 w-5" />
-                  </div>
-                  <div className="text-[13px] font-semibold text-neutral-100">
-                    Start typing to search
-                  </div>
-                  <div className="text-[12px] text-neutral-500">
-                    Enter an email, phone, or name to see results.
-                  </div>
-                </div>
-              ) : candidatesQ.isLoading ? (
-                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                  <div
-                    className={clsx(
-                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
-                    )}
-                  >
-                    <Users className="h-5 w-5" />
-                  </div>
-                  <div className="text-[13px] font-semibold text-neutral-100">
-                    Loading…
-                  </div>
-                  <div className="text-[12px] text-neutral-500">
-                    Searching users directory.
-                  </div>
-                </div>
-              ) : results.length ? (
-                <div className="space-y-2">
-                  {results.map((c) => {
-                    const badge = initialsFromName(c.name);
-
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => togglePick(c)}
-                        className={clsx(
-                          "w-full text-left",
-                          "flex items-center gap-3 rounded-2xl px-3 py-3",
-                          "border border-white/10 bg-neutral-950/25 hover:bg-neutral-900/35",
-                          "transition-colors",
-                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                        )}
-                      >
-                        <div className="relative">
-                          <div className="h-11 w-11 overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
-                            {c.avatarUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={c.avatarUrl}
-                                alt={c.name}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
-                                {badge}
-                              </div>
-                            )}
-                          </div>
-                          <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-                            {badge}
-                          </div>
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate font-semibold text-neutral-0">
-                            {c.name}
-                          </div>
-                          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-neutral-400">
-                            <span className="inline-flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-primary-300" />
-                              <span className="truncate">{c.email}</span>
-                            </span>
-                            {c.phone ? (
-                              <span className="inline-flex items-center gap-2">
-                                <Phone className="h-4 w-4 text-primary-300" />
-                                <span className="truncate">{c.phone}</span>
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <span
-                          className={clsx(
-                            "inline-flex h-10 items-center justify-center rounded-xl px-3",
-                            "border border-white/10 bg-white/5 text-[12px] font-semibold",
-                            "text-neutral-100 hover:border-primary-500/40",
-                          )}
-                        >
-                          Add
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                  <div
-                    className={clsx(
-                      "inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                      "bg-primary-500/12 text-primary-200 ring-1 ring-primary-500/18",
-                    )}
-                  >
-                    <Users className="h-5 w-5" />
-                  </div>
-                  <div className="text-[13px] font-semibold text-neutral-100">
-                    No matches found
-                  </div>
-                  <div className="text-[12px] text-neutral-500">
-                    Try searching by email, phone, or name.
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          {/* ✅ Removed "Results / Suggestions" completely */}
 
           <div className="mt-4 flex justify-end">
             <button

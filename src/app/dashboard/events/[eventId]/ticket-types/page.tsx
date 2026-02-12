@@ -1055,7 +1055,7 @@ export default function TicketTypesPage() {
           animation={true}
         >
           <Plus className="h-4 w-4" />
-          New ticket type
+          Create Ticket Type
         </Button>
       </header>
 

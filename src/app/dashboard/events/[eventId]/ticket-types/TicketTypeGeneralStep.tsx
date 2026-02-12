@@ -109,6 +109,42 @@ export default function TicketTypeGeneralStep({
 
   return (
     <div className="space-y-6">
+      {/* Local styles: fake caret for the "Free" display state */}
+      <style jsx>{`
+        .tikd-ttw-priceDisplay {
+          position: relative;
+        }
+
+        .tikd-ttw-fakeCaret {
+          display: inline-block;
+          width: 1.5px;
+          height: 1.05em;
+          margin-left: 4px;
+          transform: translateY(1px);
+          background: rgba(255, 255, 255, 0.85);
+          box-shadow: 0 0 10px rgba(154, 70, 255, 0.35);
+          animation: tikd-ttw-caretBlink 1.05s steps(1, end) infinite;
+        }
+
+        @keyframes tikd-ttw-caretBlink {
+          0%,
+          49% {
+            opacity: 1;
+          }
+          50%,
+          100% {
+            opacity: 0;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .tikd-ttw-fakeCaret {
+            animation: none !important;
+            opacity: 1;
+          }
+        }
+      `}</style>
+
       {/* Name + Description */}
       <div className="space-y-4">
         <div className="space-y-2">
@@ -163,11 +199,33 @@ export default function TicketTypeGeneralStep({
                 <button
                   type="button"
                   onClick={switchToEdit}
-                  className="inline-flex h-8 min-w-[120px] items-center justify-center rounded-full px-3 text-base font-semibold text-neutral-0 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary-500/50 cursor-text"
+                  onKeyDown={(e) => {
+                    // Make it feel like an input: Enter/Space opens editing
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      switchToEdit();
+                    }
+                  }}
+                  className={[
+                    "tikd-ttw-priceDisplay",
+                    "inline-flex h-8 min-w-[120px] items-center justify-center rounded-full px-3",
+                    "text-base font-semibold text-neutral-0",
+                    "cursor-text",
+                    "bg-[#11111A]/0 hover:bg-white/5",
+                    "focus:outline-none focus:ring-2 focus:ring-primary-500/50",
+                  ].join(" ")}
                   aria-label="Edit ticket price"
                   title="Click to type a price"
                 >
-                  {isFree ? "Free" : `$${clampToMoney(price).toFixed(2)}`}
+                  {isFree ? (
+                    <>
+                      Free
+                      {/* ✅ Fake blinking caret so it *looks* like an active, editable input even before click */}
+                      <span aria-hidden className="tikd-ttw-fakeCaret" />
+                    </>
+                  ) : (
+                    `$${clampToMoney(price).toFixed(2)}`
+                  )}
                 </button>
               ) : (
                 <input

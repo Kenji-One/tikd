@@ -137,7 +137,7 @@ function QuantityCard(props: {
 
         <div className="flex-1">
           {isUnlimited ? (
-            <span className="text-success-500">Unlimited</span>
+            <span className="text-primary-400">Unlimited</span>
           ) : (
             <NumberField
               value={value}

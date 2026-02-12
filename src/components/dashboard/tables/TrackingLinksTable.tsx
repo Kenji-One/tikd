@@ -44,12 +44,14 @@ type TrackingLinksTableProps = {
   showViewAll?: boolean;
   viewAllHref?: string;
   headerLeftAction?: ReactNode;
+  currentEventMeta?: {
+    title: string;
+    image: string | null;
+    date: string | null;
+    orgName: string | null;
+  } | null;
 };
 
-/**
- * IMPORTANT: Backend expects "twitter" (not "x") in iconKey enums.
- * We still label it as "X" in UI.
- */
 type PresetIconKey =
   | "instagram"
   | "facebook"
@@ -572,36 +574,18 @@ function DestinationPill({
   );
 }
 
-function StatusPill({
-  status,
-  kind,
-  accentColor,
-}: {
-  status: Status;
-  kind: DestinationKind;
-  accentColor?: string | null;
-}) {
-  const isOrg = kind === "Organization";
-
-  // Event: keep semantic status colors
-  const eventHex =
-    status === "Active"
-      ? "#22C55E" // green-500-ish
-      : status === "Paused"
-        ? "#F59E0B" // amber-500-ish
-        : "#A3A3A3"; // neutral-ish for Disabled
-
-  // Org: use org accent color (fallback to purple)
+function StatusPill({ status }: { status: Status }) {
+  // Always use semantic status colors (NEVER org accent)
   const baseHex =
-    isOrg && typeof accentColor === "string" && accentColor.trim()
-      ? accentColor.trim()
-      : isOrg
-        ? "#A670FF"
-        : eventHex;
+    status === "Active"
+      ? "#22C55E" // green
+      : status === "Paused"
+        ? "#F59E0B" // yellow/amber
+        : "#A3A3A3"; // gray
 
   const rgb = safeHexToRgb(baseHex);
 
-  // ✅ Make the pill look lighter (more “active color”, less dark)
+  // Keep your "lighter pill" styling
   const alpha = status === "Active" ? 0.26 : status === "Paused" ? 0.18 : 0.1;
   const ringAlpha =
     status === "Active" ? 0.32 : status === "Paused" ? 0.26 : 0.18;
@@ -609,12 +593,12 @@ function StatusPill({
   const soft =
     rgb != null
       ? `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`
-      : `rgba(154,70,255,${alpha})`;
+      : `rgba(163,163,163,${alpha})`;
 
   const ring =
     rgb != null
       ? `rgba(${rgb.r},${rgb.g},${rgb.b},${ringAlpha})`
-      : `rgba(154,70,255,${ringAlpha})`;
+      : `rgba(163,163,163,${ringAlpha})`;
 
   const text =
     rgb != null
@@ -622,9 +606,7 @@ function StatusPill({
           255,
           rgb.g + 120,
         )},${Math.min(255, rgb.b + 120)},0.98)`
-      : "rgba(231,222,255,0.98)";
-
-  const label = status;
+      : "rgba(231,231,231,0.98)";
 
   return (
     <span
@@ -640,10 +622,10 @@ function StatusPill({
         borderColor: ring,
         opacity: status === "Disabled" ? 0.85 : 1,
       }}
-      aria-label={`Status: ${label}`}
-      title={label}
+      aria-label={`Status: ${status}`}
+      title={status}
     >
-      {label}
+      {status}
     </span>
   );
 }
@@ -694,7 +676,7 @@ function ArchiveLinkDialog({
   if (!open || !row) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 sm:p-6">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={loading ? undefined : onClose}
@@ -1085,29 +1067,40 @@ function SelectedDestinationCard({
           <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
             {dest.kind === "Event" ? (
               <>
-                <span className="truncate">{dest.orgName || "Event"}</span>
-                {dest.date ? (
+                {dest.orgName ? (
                   <>
-                    <span className="text-neutral-600">•</span>
-                    <span className="inline-flex items-center gap-1 text-neutral-400">
-                      <Calendar className="h-3.5 w-3.5 text-neutral-500" />
-                      <span>{formatShortDate(dest.date)}</span>
-                    </span>
+                    <span className="truncate">{dest.orgName}</span>
+                    {dest.date ? (
+                      <>
+                        <span className="text-neutral-600">•</span>
+                        <span className="inline-flex items-center gap-1 text-neutral-400">
+                          <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                          <span>{formatShortDate(dest.date)}</span>
+                        </span>
+                      </>
+                    ) : null}
                   </>
-                ) : null}
+                ) : dest.date ? (
+                  <span className="inline-flex items-center gap-1 text-neutral-400">
+                    <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                    <span>{formatShortDate(dest.date)}</span>
+                  </span>
+                ) : (
+                  <span className="truncate">Event</span>
+                )}
               </>
             ) : (
               <span className="truncate">{dest.subtitle}</span>
             )}
           </p>
 
-          <div className="mt-2 text-[12px] text-primary-200/80">
+          {/* <div className="mt-2 text-[12px] text-primary-200/80">
             Selected — click X to unselect
-          </div>
+          </div> */}
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
-          <KindBadge kind={dest.kind} />
+          <DestinationPill kind={dest.kind} />
 
           <button
             type="button"
@@ -1146,6 +1139,7 @@ function TrackingLinkDialog({
   scope,
   organizationId,
   eventId,
+  currentEventMeta,
 }: {
   open: boolean;
   mode: "create" | "edit";
@@ -1157,6 +1151,12 @@ function TrackingLinkDialog({
   scope: TrackingLinksScope;
   organizationId?: string;
   eventId?: string;
+  currentEventMeta?: {
+    title: string;
+    image: string | null;
+    date: string | null;
+    orgName: string | null;
+  } | null;
 }) {
   useEscapeToClose(open, onClose);
 
@@ -1188,6 +1188,10 @@ function TrackingLinkDialog({
   const destInputRef = useRef<HTMLInputElement | null>(null);
   const destAbortRef = useRef<AbortController | null>(null);
   const destDebounceRef = useRef<number | null>(null);
+
+  const [destOrgAccentById, setDestOrgAccentById] = useState<
+    Record<string, string>
+  >({});
 
   // Org-scope preloaded list (org + its events)
   const [orgScopeList, setOrgScopeList] = useState<DestinationResult[] | null>(
@@ -1337,9 +1341,11 @@ function TrackingLinkDialog({
 
     if (isEventScope && eventId) {
       const lockedTitle =
-        mode === "edit" && initial?.destinationTitle
+        (mode === "edit" && initial?.destinationTitle
           ? initial.destinationTitle
-          : "Current Event";
+          : null) ||
+        currentEventMeta?.title ||
+        "Current Event";
 
       setDraft((prev) => ({
         ...prev,
@@ -1353,9 +1359,9 @@ function TrackingLinkDialog({
         id: eventId,
         title: lockedTitle,
         subtitle: "Event",
-        image: null,
-        date: null,
-        orgName: null,
+        image: currentEventMeta?.image ?? null,
+        date: currentEventMeta?.date ?? null,
+        orgName: currentEventMeta?.orgName ?? null,
       });
 
       setDestQuery("");
@@ -1367,7 +1373,7 @@ function TrackingLinkDialog({
     }, 0);
 
     return () => window.clearTimeout(t);
-  }, [open, mode, initial, isEventScope, eventId]);
+  }, [open, mode, initial, isEventScope, eventId, currentEventMeta]);
 
   useEffect(() => {
     if (!open) return;
@@ -1495,6 +1501,68 @@ function TrackingLinkDialog({
     orgScopeLoading,
     orgScopeError,
   ]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const orgIds = Array.from(
+      new Set(
+        (destResults ?? [])
+          .filter((d) => d.kind === "Organization")
+          .map((d) => d.id)
+          .filter(Boolean),
+      ),
+    );
+
+    const missing = orgIds.filter((id) => !destOrgAccentById[id]);
+    if (missing.length === 0) return;
+
+    let alive = true;
+
+    (async () => {
+      try {
+        const pairs = await Promise.all(
+          missing.map(async (id) => {
+            try {
+              const res = await fetch(
+                `/api/organizations/${encodeURIComponent(id)}`,
+                {
+                  method: "GET",
+                  cache: "no-store",
+                },
+              );
+              if (!res.ok) return [id, null] as const;
+
+              const json = (await res.json().catch(() => null)) as unknown;
+              const accent = pickAccentFromOrgResponse(json);
+              return [id, accent] as const;
+            } catch {
+              return [id, null] as const;
+            }
+          }),
+        );
+
+        if (!alive) return;
+
+        const next: Record<string, string> = {};
+        for (const [id, accent] of pairs) {
+          if (typeof accent === "string" && accent.trim()) {
+            next[id] = accent.trim();
+          }
+        }
+
+        if (Object.keys(next).length > 0) {
+          setDestOrgAccentById((prev) => ({ ...prev, ...next }));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [open, destResults, destOrgAccentById]);
 
   const title =
     mode === "create" ? "Create Tracking Link" : "Edit Tracking Link";
@@ -2005,7 +2073,14 @@ function TrackingLinkDialog({
                                           </div>
 
                                           <div className="shrink-0 pt-0.5">
-                                            <KindBadge kind={opt.kind} />
+                                            <DestinationPill
+                                              kind={opt.kind}
+                                              accentColor={
+                                                opt.kind === "Organization"
+                                                  ? destOrgAccentById[opt.id]
+                                                  : null
+                                              }
+                                            />
                                           </div>
                                         </div>
                                       </div>
@@ -2045,11 +2120,11 @@ function TrackingLinkDialog({
                                       </div>
                                     </div>
 
-                                    {selected ? (
+                                    {/* {selected ? (
                                       <div className="mt-2 text-[12px] text-primary-200/80">
                                         Selected — click X to unselect
                                       </div>
-                                    ) : null}
+                                    ) : null} */}
                                   </button>
                                 );
                               })}
@@ -2243,6 +2318,7 @@ export default function TrackingLinksTable({
   showViewAll = true,
   headerLeftAction,
   viewAllHref,
+  currentEventMeta,
 }: TrackingLinksTableProps) {
   const router = useRouter();
   const [data, setData] = useState<Row[]>([]);
@@ -2253,7 +2329,7 @@ export default function TrackingLinksTable({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [sortBy, setSortBy] = useState<SortKey>("views");
+  const [sortBy, setSortBy] = useState<SortKey>("created");
   const [dir, setDir] = useState<SortDir>("desc");
 
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -3128,16 +3204,50 @@ export default function TrackingLinksTable({
 
                       {/* Views */}
                       <td className="px-4 py-3 text-center">
-                        <span className="tabular-nums inline-flex items-center justify-center gap-1">
-                          {r.views}
-                        </span>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            className="h-4 w-4"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              clipRule="evenodd"
+                              d="M10.8749 6.00001L11.1862 5.84401V5.84251L11.1839 5.84026L11.1794 5.83126L11.1637 5.80126L11.1037 5.69326C11.0304 5.56696 10.9526 5.44338 10.8704 5.32276C10.596 4.91997 10.2806 4.54673 9.92916 4.20901C9.08467 3.39901 7.78491 2.57251 5.99992 2.57251C4.21642 2.57251 2.91592 3.39826 2.07142 4.20901C1.72001 4.54673 1.40457 4.91997 1.13017 5.32276C1.01882 5.48704 0.915692 5.65675 0.821166 5.83126L0.816666 5.84026L0.815166 5.84251V5.84326C0.815166 5.84326 0.814416 5.84401 1.12567 6.00001L0.814416 5.84326C0.790351 5.89188 0.777832 5.94539 0.777832 5.99963C0.777832 6.05388 0.790351 6.10739 0.814416 6.15601L0.813666 6.15751L0.815916 6.15976L0.820416 6.16876C0.843802 6.21562 0.868817 6.26165 0.895416 6.30676C1.21836 6.85232 1.61343 7.35182 2.06992 7.79176C2.91517 8.60176 4.21492 9.42676 5.99992 9.42676C7.78416 9.42676 9.08466 8.60176 9.92991 7.79101C10.2807 7.45289 10.5958 7.07969 10.8704 6.67726C10.9756 6.52242 11.0734 6.36275 11.1637 6.19876L11.1794 6.16876L11.1839 6.15976L11.1854 6.15751V6.15676C11.1854 6.15676 11.1862 6.15601 10.8749 6.00001ZM10.8749 6.00001L11.1862 6.15676C11.2102 6.10814 11.2227 6.05463 11.2227 6.00038C11.2227 5.94614 11.2102 5.89262 11.1862 5.84401L10.8749 6.00001ZM5.95492 4.84801C5.64939 4.84801 5.35637 4.96938 5.14033 5.18542C4.92429 5.40146 4.80292 5.69448 4.80292 6.00001C4.80292 6.30554 4.92429 6.59855 5.14033 6.8146C5.35637 7.03064 5.64939 7.15201 5.95492 7.15201C6.26044 7.15201 6.55346 7.03064 6.7695 6.8146C6.98554 6.59855 7.10691 6.30554 7.10691 6.00001C7.10691 5.69448 6.98554 5.40146 6.7695 5.18542C6.55346 4.96938 6.26044 4.84801 5.95492 4.84801ZM4.10842 6.00001C4.10842 5.50989 4.30311 5.03984 4.64968 4.69328C4.99625 4.34671 5.4663 4.15201 5.95642 4.15201C6.44654 4.15201 6.91658 4.34671 7.26315 4.69328C7.60972 5.03984 7.80442 5.50989 7.80442 6.00001C7.80442 6.49013 7.60972 6.96018 7.26315 7.30674C6.91658 7.65331 6.44654 7.84801 5.95642 7.84801C5.4663 7.84801 4.99625 7.65331 4.64968 7.30674C4.30311 6.96018 4.10842 6.49013 4.10842 6.00001Z"
+                              fill="#A7A7BC"
+                            />
+                          </svg>
+                          <span className="tabular-nums inline-flex items-center justify-center gap-1">
+                            {r.views}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Tickets Sold */}
                       <td className="px-4 py-3 text-center">
-                        <span className="tabular-nums inline-flex items-center justify-center gap-1">
-                          {r.ticketsSold}
-                        </span>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            className="h-4 w-4"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              clipRule="evenodd"
+                              d="M7.00413 9.5015L7.00713 8.5C7.00713 8.36706 7.05994 8.23957 7.15394 8.14556C7.24794 8.05156 7.37544 7.99875 7.50838 7.99875C7.64132 7.99875 7.76881 8.05156 7.86281 8.14556C7.95682 8.23957 8.00963 8.36706 8.00963 8.5V9.4885C8.00963 9.729 8.00963 9.8495 8.08663 9.9235C8.16413 9.997 8.28163 9.992 8.51813 9.982C9.44963 9.9425 10.0221 9.817 10.4251 9.414C10.8301 9.011 10.9556 8.4385 10.9951 7.5055C11.0026 7.3205 11.0066 7.2275 10.9721 7.166C10.9371 7.1045 10.7996 7.0275 10.5236 6.873C10.3682 6.78633 10.2387 6.65971 10.1485 6.50624C10.0584 6.35276 10.0108 6.17799 10.0108 6C10.0108 5.82201 10.0584 5.64724 10.1485 5.49376C10.2387 5.34029 10.3682 5.21367 10.5236 5.127C10.7996 4.973 10.9376 4.8955 10.9721 4.834C11.0066 4.7725 11.0026 4.68 10.9946 4.4945C10.9556 3.5615 10.8296 2.9895 10.4251 2.586C9.98663 2.148 9.34763 2.0375 8.26413 2.0095C8.23095 2.00863 8.19794 2.01442 8.16703 2.02652C8.13613 2.03862 8.10796 2.05678 8.08419 2.07995C8.06043 2.10311 8.04154 2.1308 8.02865 2.16138C8.01575 2.19196 8.00912 2.22481 8.00913 2.258V3.5C8.00913 3.63294 7.95632 3.76043 7.86232 3.85444C7.76831 3.94844 7.64082 4.00125 7.50788 4.00125C7.37494 4.00125 7.24744 3.94844 7.15344 3.85444C7.05944 3.76043 7.00663 3.63294 7.00663 3.5L7.00313 2.2495C7.003 2.18328 6.9766 2.11982 6.92973 2.07305C6.88286 2.02627 6.81934 2 6.75313 2H4.99713C3.10713 2 2.16213 2 1.57463 2.586C1.16963 2.989 1.04413 3.5615 1.00463 4.4945C0.997127 4.6795 0.993127 4.7725 1.02763 4.834C1.06263 4.8955 1.20013 4.973 1.47613 5.127C1.63159 5.21367 1.7611 5.34029 1.85125 5.49376C1.9414 5.64724 1.98893 5.82201 1.98893 6C1.98893 6.17799 1.9414 6.35276 1.85125 6.50624C1.7611 6.65971 1.63159 6.78633 1.47613 6.873C1.20013 7.0275 1.06213 7.1045 1.02763 7.166C0.993127 7.2275 0.997127 7.32 1.00513 7.505C1.04413 8.4385 1.17013 9.011 1.57463 9.414C2.16213 10 3.10713 10 4.99763 10H6.50263C6.73863 10 6.85613 10 6.92963 9.927C7.00313 9.854 7.00363 9.737 7.00413 9.5015ZM8.00913 6.5V5.5C8.00913 5.36706 7.95632 5.23957 7.86232 5.14556C7.76831 5.05156 7.64082 4.99875 7.50788 4.99875C7.37494 4.99875 7.24744 5.05156 7.15344 5.14556C7.05944 5.23957 7.00663 5.36706 7.00663 5.5V6.5C7.00663 6.63301 7.05946 6.76056 7.15351 6.85461C7.24756 6.94866 7.37512 7.0015 7.50813 7.0015C7.64113 7.0015 7.76869 6.94866 7.86274 6.85461C7.95679 6.76056 8.00913 6.63301 8.00913 6.5Z"
+                              fill="#A7A7BC"
+                            />
+                          </svg>
+                          <span className="tabular-nums inline-flex items-center justify-center gap-1">
+                            {r.ticketsSold}
+                          </span>
+                        </div>
                       </td>
 
                       {/* Revenue */}
@@ -3163,13 +3273,7 @@ export default function TrackingLinksTable({
                       {/* Status */}
                       <td className="px-4 py-3 text-center">
                         <div className="inline-block">
-                          <StatusPill
-                            status={r.status}
-                            kind={r.destinationKind}
-                            accentColor={
-                              orgAccentById[r.organizationId] ?? null
-                            }
-                          />
+                          <StatusPill status={r.status} />
                         </div>
                       </td>
 
@@ -3253,9 +3357,7 @@ export default function TrackingLinksTable({
                 })}
               </tbody>
             </table>
-            {showViewAll &&
-            computedViewAllHref &&
-            sorted.length > VISIBLE_LIMIT ? (
+            {showViewAll && computedViewAllHref ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
                 <div className="pointer-events-auto">
                   <Button
@@ -3294,6 +3396,7 @@ export default function TrackingLinksTable({
         scope={effectiveScope}
         organizationId={organizationId}
         eventId={eventId}
+        currentEventMeta={currentEventMeta}
       />
 
       {/* Edit */}
@@ -3307,6 +3410,7 @@ export default function TrackingLinksTable({
         scope={effectiveScope}
         organizationId={organizationId}
         eventId={eventId}
+        currentEventMeta={currentEventMeta}
       />
     </div>
   );

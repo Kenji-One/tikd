@@ -69,7 +69,7 @@ export default function Checkbox({
         htmlFor={inputId}
         className={clsx(
           "group inline-flex select-none items-center gap-3",
-          disabled ? "cursor-not-allowed" : "cursor-pointer"
+          disabled ? "cursor-not-allowed" : "cursor-pointer",
         )}
       >
         {/* Native input (peer) */}
@@ -95,23 +95,23 @@ export default function Checkbox({
             RADIUS_MAP[size],
             "border border-neutral-600 bg-neutral-900",
 
-            // ON state
-            "peer-checked:border-[1.5px] peer-checked:border-success-800 peer-checked:bg-[#181828]",
+            // ON state (✅ purple brand)
+            "peer-checked:border-[1.5px] peer-checked:border-primary-700 peer-checked:bg-[#181828]",
 
-            // Focus ring
-            "outline-none ring-0 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-400/60",
+            // Focus ring (✅ purple)
+            "outline-none ring-0 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500/55",
 
-            // Green neon fill (under the checkmark)
+            // Purple neon fill (under the checkmark)
             "after:content-[''] after:absolute after:pointer-events-none after:transition-all after:opacity-0 after:z-[1]",
             "after:left-1/2 after:top-1/2 after:-translate-x-1/2 after:-translate-y-1/2",
-            "after:h-[17px] after:w-[18px] after:bg-[#45FF79]",
+            "after:h-[17px] after:w-[18px] after:bg-primary-500",
             AFTER_INSET[size],
             "peer-checked:after:opacity-100",
 
             // ✅ Drive the SVG visibility from the peer (real input state)
             "peer-checked:[&>svg]:opacity-100 peer-checked:[&>svg]:scale-100",
 
-            className
+            className,
           )}
         >
           {/* Checkmark ABOVE the ::after fill */}
@@ -120,7 +120,7 @@ export default function Checkbox({
               "relative z-[2] transition-[opacity,transform] duration-150 opacity-0 scale-75",
               size === "sm" && "h-3.5 w-3.5",
               size === "md" && "h-4 w-4",
-              size === "lg" && "h-3.5 w-3.5"
+              size === "lg" && "h-3.5 w-3.5",
             )}
             xmlns="http://www.w3.org/2000/svg"
             width="14"

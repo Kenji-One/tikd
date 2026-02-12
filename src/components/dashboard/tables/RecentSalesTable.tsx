@@ -612,7 +612,7 @@ export default function RecentSalesTable() {
       </div>
 
       {/* Bottom center pill */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 z-1 flex justify-center">
         <div className="pointer-events-auto">
           <Button
             type="button"

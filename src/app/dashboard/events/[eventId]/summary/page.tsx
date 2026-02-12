@@ -172,14 +172,6 @@ function fmtMonthYearLong(d: Date) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-/** "JANUARY 2026" style (matches Traffic Source header vibe) */
-function currentMonthYearUpper() {
-  const now = new Date();
-  return now
-    .toLocaleDateString(undefined, { month: "long", year: "numeric" })
-    .toUpperCase();
-}
-
 /* ----------------------------- Event-metrics + breakdown demo ----------------------------- */
 type EventMetrics = {
   ticketsSold: number;
@@ -289,6 +281,35 @@ function buildStableAges(seedStr: string, total: number) {
   return pairs.filter((p) => p.count > 0);
 }
 
+/**
+ * ✅ Integer percents that ALWAYS sum to 100 (largest remainder method).
+ * - Uses floors, then distributes the remainder to biggest fractional parts.
+ */
+function percentsSumTo100(values: number[]) {
+  const v = values.map((x) => Math.max(0, Number.isFinite(x) ? x : 0));
+  const total = v.reduce((a, b) => a + b, 0);
+
+  if (total <= 0 || v.length === 0) return v.map(() => 0);
+
+  const raw = v.map((x) => (x / total) * 100);
+  const floors = raw.map((x) => Math.floor(x));
+  let remainder = 100 - floors.reduce((a, b) => a + b, 0);
+
+  const order = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac)
+    .map((o) => o.i);
+
+  const out = [...floors];
+  let k = 0;
+  while (remainder > 0 && order.length > 0) {
+    out[order[k % order.length]] += 1;
+    remainder -= 1;
+    k += 1;
+  }
+  return out;
+}
+
 const AGE_COLORS = [
   "#FF7A45",
   "#FF3B4A",
@@ -378,11 +399,6 @@ function StatPillsRow(opts: {
           <div className="w-9" />
         )}
 
-        {/* ✅ FLEX instead of grid:
-            - auto-fits 3 items (gender) without forcing 4 cols
-            - still fits 4 (age) nicely on wide screens
-            - wraps cleanly on small screens
-        */}
         <div className="flex flex-1 flex-wrap gap-2.5">
           {items.map((it) => {
             const borderBg = `linear-gradient(135deg,
@@ -394,10 +410,8 @@ function StatPillsRow(opts: {
               <div
                 key={it.key}
                 className={[
-                  // ✅ sizing rules: never too narrow, but flexible
                   "min-w-[160px] flex-1",
                   "sm:min-w-[170px] md:min-w-[180px]",
-                  // ✅ gradient border wrapper
                   "group relative rounded-xl p-[1px]",
                 ].join(" ")}
                 style={{ background: borderBg }}
@@ -413,7 +427,6 @@ function StatPillsRow(opts: {
                     "active:scale-[0.99]",
                   ].join(" ")}
                 >
-                  {/* subtle top sheen */}
                   <div
                     className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                     style={{
@@ -423,7 +436,6 @@ function StatPillsRow(opts: {
                   />
 
                   <div className="relative flex items-center justify-between gap-3">
-                    {/* ✅ label: NO truncate; wraps if needed */}
                     <div className="flex min-w-0 items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
@@ -437,7 +449,6 @@ function StatPillsRow(opts: {
                       </span>
                     </div>
 
-                    {/* ✅ numbers: always fully visible */}
                     <div className="flex shrink-0 items-baseline gap-2 whitespace-nowrap">
                       <span className="text-[14px] font-extrabold tabular-nums text-white">
                         {it.value.toLocaleString()}
@@ -509,6 +520,39 @@ export default function EventSummaryPage() {
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
     [effectiveStart, effectiveEnd],
   );
+
+  // --- NEW: safely pick common event fields (defensive) ---
+  const currentEventMeta = useMemo(() => {
+    if (!eventId) return null;
+
+    const e = event as unknown as Record<string, any> | undefined;
+
+    const title =
+      (typeof e?.title === "string" && e.title) ||
+      (typeof e?.name === "string" && e.name) ||
+      "Current Event";
+
+    const image =
+      (typeof e?.image === "string" && e.image) ||
+      (typeof e?.poster === "string" && e.poster) ||
+      (typeof e?.photo === "string" && e.photo) ||
+      (typeof e?.coverImage === "string" && e.coverImage) ||
+      null;
+
+    const date =
+      (typeof e?.date === "string" && e.date) ||
+      (typeof e?.startDate === "string" && e.startDate) ||
+      (typeof e?.startsAt === "string" && e.startsAt) ||
+      (typeof e?.startTime === "string" && e.startTime) ||
+      null;
+
+    const orgName =
+      (typeof e?.orgName === "string" && e.orgName) ||
+      (typeof e?.organization?.name === "string" && e.organization.name) ||
+      null;
+
+    return { title, image, date, orgName };
+  }, [event, eventId]);
 
   const dailyMode = useMemo(() => {
     if (!hasChosenRange) return false;
@@ -632,8 +676,6 @@ export default function EventSummaryPage() {
     return stableDummyTotal(eventId ?? "no-event");
   }, [eventId]);
 
-  const monthYearUpper = useMemo(() => currentMonthYearUpper(), []);
-
   const genderSegments = useMemo<DonutSegment[]>(() => {
     const total = breakdownTotal;
     const [male, female, other] = splitByPercent(total, [66, 23, 11]);
@@ -668,7 +710,33 @@ export default function EventSummaryPage() {
     return buildStableAges(`${eventId ?? "no-event"}::ages`, total);
   }, [breakdownTotal, eventId]);
 
-  // ✅ TASK: show 4 at a time and paginate with arrows
+  /**
+   * ✅ Donut must ALWAYS show full dataset (all ages), and must NOT change on arrows.
+   * ✅ Pills can still carousel (4 at a time), BUT their % must be based on FULL dataset
+   *    and always sum to 100 across all ages (not just the visible 4).
+   */
+  const ageSegments = useMemo<DonutSegment[]>(() => {
+    return agePairs.map((p, idx) => ({
+      label: String(p.age),
+      value: p.count,
+      color: AGE_COLORS[idx % AGE_COLORS.length],
+    }));
+  }, [agePairs]);
+
+  const agePercentsByIndex = useMemo(() => {
+    const vals = ageSegments.map((s) => Number(s.value || 0));
+    return percentsSumTo100(vals);
+  }, [ageSegments]);
+
+  const agePercentMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (let i = 0; i < ageSegments.length; i++) {
+      m.set(ageSegments[i]!.label, agePercentsByIndex[i] ?? 0);
+    }
+    return m;
+  }, [ageSegments, agePercentsByIndex]);
+
+  // ✅ Pills carousel: keep old 4-at-a-time paging
   const [agePage, setAgePage] = useState(0);
 
   const agePages = useMemo(() => {
@@ -682,30 +750,23 @@ export default function EventSummaryPage() {
     return agePairs.slice(start, start + per);
   }, [agePairs, agePage, agePages]);
 
-  const ageSliceSegments = useMemo<DonutSegment[]>(() => {
-    return ageSlicePairs.map((p, idx) => ({
-      label: String(p.age),
-      value: p.count,
-      color: AGE_COLORS[idx % AGE_COLORS.length],
-    }));
-  }, [ageSlicePairs]);
-
-  const ageSliceTotal = useMemo(() => {
-    return ageSliceSegments.reduce((a, s) => a + Number(s.value || 0), 0);
-  }, [ageSliceSegments]);
-
   const agePills = useMemo(() => {
-    return ageSliceSegments.map((s) => ({
-      key: s.label,
-      label: `Age ${s.label}`,
-      value: Number(s.value || 0),
-      pct:
-        ageSliceTotal > 0
-          ? Math.round((Number(s.value || 0) / ageSliceTotal) * 100)
-          : 0,
-      color: s.color,
-    }));
-  }, [ageSliceSegments, ageSliceTotal]);
+    return ageSlicePairs.map((p, idx) => {
+      const label = String(p.age);
+      const pct = agePercentMap.get(label) ?? 0;
+
+      // match pill-dot color to the donut segment color for that item’s position in the slice
+      const color = AGE_COLORS[idx % AGE_COLORS.length];
+
+      return {
+        key: label,
+        label: `Age ${label}`,
+        value: Number(p.count || 0),
+        pct,
+        color,
+      };
+    });
+  }, [ageSlicePairs, agePercentMap]);
 
   const kpiRevenueValue = useMemo(() => {
     const v = metrics.revenue;
@@ -822,9 +883,6 @@ export default function EventSummaryPage() {
                 <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
                   Gender Breakdown
                 </div>
-                <div className="mt-1 text-2xl font-extrabold">
-                  {monthYearUpper}
-                </div>
               </div>
 
               <Button
@@ -861,9 +919,6 @@ export default function EventSummaryPage() {
                 <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
                   Age Breakdown
                 </div>
-                <div className="mt-1 text-2xl font-extrabold">
-                  {monthYearUpper}
-                </div>
               </div>
 
               <Button
@@ -879,8 +934,9 @@ export default function EventSummaryPage() {
             </div>
 
             <div className="mt-4">
+              {/* ✅ Donut always shows full dataset */}
               <DonutFull
-                segments={ageSliceSegments}
+                segments={ageSegments}
                 height={300}
                 thickness={60}
                 padAngle={5}
@@ -889,6 +945,7 @@ export default function EventSummaryPage() {
                 showSliceBadges
               />
 
+              {/* ✅ Pills keep carousel, but % is based on FULL dataset (sum=100 across all ages) */}
               <StatPillsRow
                 items={agePills}
                 withArrows
@@ -905,7 +962,12 @@ export default function EventSummaryPage() {
         />
       </section>
 
-      <TrackingLinksTable scope="event" eventId={eventId} showViewAll />
+      <TrackingLinksTable
+        scope="event"
+        eventId={eventId}
+        showViewAll
+        currentEventMeta={currentEventMeta}
+      />
     </div>
   );
 }

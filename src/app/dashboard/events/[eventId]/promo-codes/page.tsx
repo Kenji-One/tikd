@@ -456,7 +456,7 @@ function PromoCodeWizard({
         <button
           type="button"
           onClick={onCancel}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50 cursor-pointer"
         >
           <X className="h-4 w-4" />
         </button>
@@ -538,15 +538,15 @@ function PromoCodeWizard({
                 className={clsx(
                   "flex flex-col items-center gap-3 rounded-lg border px-4 py-4 text-center transition-all bg-neutral-900",
                   kind === "discount"
-                    ? "border-success-500 "
+                    ? "border-primary-500"
                     : "border-white/10 hover:border-white/30",
                 )}
               >
                 <span
                   className={clsx(
-                    "flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-0 ",
+                    "flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-0",
                     kind === "discount"
-                      ? "text-success-500"
+                      ? "text-primary-500"
                       : "text-neutral-400",
                   )}
                 >
@@ -571,15 +571,15 @@ function PromoCodeWizard({
                 className={clsx(
                   "flex flex-col items-center gap-3 rounded-lg border px-4 py-4 text-center transition-all bg-neutral-900",
                   kind === "special_access"
-                    ? "border-success-500 "
+                    ? "border-primary-500"
                     : "border-white/10 hover:border-white/30",
                 )}
               >
                 <span
                   className={clsx(
-                    "flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-0 ",
+                    "flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-0",
                     kind === "special_access"
-                      ? "text-success-500"
+                      ? "text-primary-500"
                       : "text-neutral-400",
                   )}
                 >
@@ -832,6 +832,9 @@ export default function PromoCodesPage() {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"list" | "create">("list");
 
+  // ✅ used for “click outside” detection (works even with full-screen scroll containers)
+  const modalShellRef = useRef<HTMLDivElement | null>(null);
+
   const {
     data: promos,
     isLoading,
@@ -865,6 +868,23 @@ export default function PromoCodesPage() {
     );
   }
 
+  const closeCreate = () => setMode("list");
+
+  const onOverlayPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // If the click is NOT inside the modal shell -> close
+    const shell = modalShellRef.current;
+    const target = e.target as Node | null;
+
+    if (!shell || !target) {
+      closeCreate();
+      return;
+    }
+
+    if (!shell.contains(target)) {
+      closeCreate();
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -882,7 +902,7 @@ export default function PromoCodesPage() {
           animation={true}
         >
           <Plus className="h-4 w-4" />
-          New promo code
+          Create Promo Code
         </Button>
       </header>
 
@@ -953,7 +973,7 @@ export default function PromoCodesPage() {
                       className={clsx(
                         "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
                         p.active
-                          ? "border border-success-700/40 bg-success-900/40 text-success-300"
+                          ? "border border-primary-700/40 bg-primary-900/30 text-primary-300"
                           : "border border-white/10 bg-neutral-900 text-neutral-200",
                       )}
                     >
@@ -969,17 +989,28 @@ export default function PromoCodesPage() {
 
       {/* Modal overlay for creation (same shell styling as ticket-types) */}
       {mode === "create" && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm">
-          <div className="flex min-h-full items-start justify-center px-3 py-10">
-            <div className="tikd-ttw-modalShell w-full max-w-[550px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950">
-              <PromoCodeWizard
-                eventId={eventId}
-                onCancel={() => setMode("list")}
-                onCreated={async () => {
-                  await refetch();
-                  setMode("list");
-                }}
-              />
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          // ✅ one handler that works even when a scroll container covers the overlay
+          onPointerDown={onOverlayPointerDown}
+        >
+          <div className="h-full overflow-y-auto">
+            <div className="flex min-h-full items-start justify-center px-3 py-10">
+              <div
+                ref={modalShellRef}
+                className="tikd-ttw-modalShell w-full max-w-[550px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950"
+              >
+                <PromoCodeWizard
+                  eventId={eventId}
+                  onCancel={closeCreate}
+                  onCreated={async () => {
+                    await refetch();
+                    closeCreate();
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>

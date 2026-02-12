@@ -147,7 +147,7 @@ export default function MyTeamTable({
   /* Clamp + fade like RecentSalesTable */
   const clipRef = useRef<HTMLDivElement | null>(null);
   const [isClamped, setIsClamped] = useState(false);
-  const MAX = 383;
+  const MAX = 435;
 
   useEffect(() => {
     if (!clipRef.current) return;
@@ -466,5 +466,12 @@ export const DEMO_MY_TEAM: TeamMember[] = [
     views: 98,
     earned: 4806.81,
     avatarText: "MF",
+  },
+  {
+    name: "Morgan Jordan",
+    tickets: 9,
+    views: 98,
+    earned: 4806.81,
+    avatarText: "MJ",
   },
 ];

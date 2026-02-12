@@ -92,17 +92,19 @@ export default function Toggle({
           "w-[var(--w)] h-[var(--h)]",
 
           // OFF
-          "border bg-neutral-900 border-neutral-600",
+          "border border-white/10 bg-white/5",
 
-          // ON
-          "peer-checked:bg-success-950 peer-checked:border-success-700",
+          // ON (✅ purple brand gradients like your PermissionToggle snippet)
+          "peer-checked:border-primary-500/60",
+          "peer-checked:bg-[radial-gradient(56px_36px_at_30%_20%,rgba(154,70,255,0.32),transparent_60%),radial-gradient(60px_36px_at_90%_80%,rgba(66,139,255,0.22),transparent_60%)]",
 
-          // focus ring
-          "outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-400/60",
+          // focus ring (✅ purple)
+          "outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500/55",
 
-          // optional soft glow when ON
-          "after:content-[''] after:absolute after:inset-0 after:rounded-full after:pointer-events-none after:opacity-0",
-          "peer-checked:after:opacity-100",
+          // optional soft inner sheen
+          "after:content-[''] after:absolute after:inset-0 after:rounded-full after:pointer-events-none after:opacity-100",
+          "after:bg-[radial-gradient(60px_36px_at_20%_20%,rgba(255,255,255,0.08),transparent_55%)]",
+          "peer-checked:after:opacity-0",
 
           className,
         )}
@@ -112,12 +114,15 @@ export default function Toggle({
           className={clsx(
             "absolute top-1/2 -translate-y-1/2 rounded-full",
             "w-[var(--k)] h-[var(--k)] left-[var(--p)]",
-            "transition-transform transition-colors duration-300 ease-in-out",
+            "transition-transform duration-200 ease-out",
             "translate-x-[var(--tx)]",
-            // knob color (use React state to toggle; peer-checked can’t reach a descendant)
-            isOn ? "bg-success-500" : "bg-neutral-600",
-            // optional sheen
-            "after:content-[''] after:absolute after:inset-0 after:rounded-full after:pointer-events-none",
+
+            // knob look (neutral, premium)
+            "bg-neutral-0/95",
+            "shadow-[0_8px_18px_rgba(0,0,0,0.35)]",
+
+            // subtle glow when ON
+            isOn && "shadow-[0_10px_24px_rgba(154,70,255,0.22)]",
           )}
         />
       </span>

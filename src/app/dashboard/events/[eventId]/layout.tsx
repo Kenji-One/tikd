@@ -1103,7 +1103,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           height: 100%;
           border: none;
           border-radius: 999px;
-          background-color: rgba(24, 24, 40, 0.86);
+          /* background-color: rgba(24, 24, 40, 0.86); */
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -1111,7 +1111,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           cursor: pointer;
           position: relative;
           transition-duration: 0.3s;
-          box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.11);
+          /* box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.11); */
           user-select: none;
           -webkit-tap-highlight-color: transparent;
           padding: 0px;

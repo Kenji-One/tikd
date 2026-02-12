@@ -338,6 +338,35 @@ function buildStableAges(seedStr: string, total: number) {
   return pairs.filter((p) => p.count > 0);
 }
 
+/**
+ * ✅ Integer percents that ALWAYS sum to 100 (largest remainder method).
+ * - Uses floors, then distributes the remainder to biggest fractional parts.
+ */
+function percentsSumTo100(values: number[]) {
+  const v = values.map((x) => Math.max(0, Number.isFinite(x) ? x : 0));
+  const total = v.reduce((a, b) => a + b, 0);
+
+  if (total <= 0 || v.length === 0) return v.map(() => 0);
+
+  const raw = v.map((x) => (x / total) * 100);
+  const floors = raw.map((x) => Math.floor(x));
+  let remainder = 100 - floors.reduce((a, b) => a + b, 0);
+
+  const order = raw
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a, b) => b.frac - a.frac)
+    .map((o) => o.i);
+
+  const out = [...floors];
+  let k = 0;
+  while (remainder > 0 && order.length > 0) {
+    out[order[k % order.length]] += 1;
+    remainder -= 1;
+    k += 1;
+  }
+  return out;
+}
+
 const AGE_COLORS = [
   "#FF7A45",
   "#FF3B4A",
@@ -703,6 +732,33 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     return buildStableAges(`${orgId ?? "no-org"}::ages`, total);
   }, [breakdownTotal, orgId]);
 
+  /**
+   * ✅ Donut must ALWAYS show full dataset (all ages), and must NOT change on arrows.
+   * ✅ Pills can still carousel (4 at a time), BUT their % must be based on FULL dataset
+   *    and always sum to 100 across all ages (not just the visible 4).
+   */
+  const ageSegments = useMemo<DonutSegment[]>(() => {
+    return agePairs.map((p, idx) => ({
+      label: String(p.age),
+      value: p.count,
+      color: AGE_COLORS[idx % AGE_COLORS.length],
+    }));
+  }, [agePairs]);
+
+  const agePercentsByIndex = useMemo(() => {
+    const vals = ageSegments.map((s) => Number(s.value || 0));
+    return percentsSumTo100(vals);
+  }, [ageSegments]);
+
+  const agePercentMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (let i = 0; i < ageSegments.length; i++) {
+      m.set(ageSegments[i]!.label, agePercentsByIndex[i] ?? 0);
+    }
+    return m;
+  }, [ageSegments, agePercentsByIndex]);
+
+  // ✅ Pills carousel: keep old 4-at-a-time paging
   const [agePage, setAgePage] = useState(0);
 
   const agePages = useMemo(() => {
@@ -716,35 +772,25 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     return agePairs.slice(start, start + per);
   }, [agePairs, agePage, agePages]);
 
-  const ageSliceSegments = useMemo<DonutSegment[]>(() => {
-    return ageSlicePairs.map((p, idx) => ({
-      label: String(p.age),
-      value: p.count,
-      color: AGE_COLORS[idx % AGE_COLORS.length],
-    }));
-  }, [ageSlicePairs]);
-
-  const ageSliceTotal = useMemo(() => {
-    return ageSliceSegments.reduce((a, s) => a + Number(s.value || 0), 0);
-  }, [ageSliceSegments]);
-
   const agePills = useMemo(() => {
-    return ageSliceSegments.map((s) => ({
-      key: s.label,
-      label: `Age ${s.label}`,
-      value: Number(s.value || 0),
-      pct:
-        ageSliceTotal > 0
-          ? Math.round((Number(s.value || 0) / ageSliceTotal) * 100)
-          : 0,
-      color: s.color,
-    }));
-  }, [ageSliceSegments, ageSliceTotal]);
+    return ageSlicePairs.map((p, idx) => {
+      const label = String(p.age);
+      const pct = agePercentMap.get(label) ?? 0;
+
+      // Keep the “feel” you already had: dots cycle using AGE_COLORS per visible slice
+      const color = AGE_COLORS[idx % AGE_COLORS.length];
+
+      return {
+        key: label,
+        label: `Age ${label}`,
+        value: Number(p.count || 0),
+        pct,
+        color,
+      };
+    });
+  }, [ageSlicePairs, agePercentMap]);
 
   // ✅ Match Event Dashboard sizing/feel: make the 3 cards stretch to equal height.
-  // - Force grid to stretch items
-  // - Give each card a consistent min-height + flex column layout
-  // - Let the chart area flex so donut/pills sit like Event Dashboard
   const panelClass =
     "rounded-lg border border-neutral-700 bg-neutral-900 p-5 h-full min-h-[520px] flex flex-col";
 
@@ -856,9 +902,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
                 <div className="text-[16px] font-extrabold uppercase leading-none text-neutral-400">
                   Gender Breakdown
                 </div>
-                <div className="mt-1 text-2xl font-extrabold">
-                  {monthYearUpper}
-                </div>
               </div>
 
               <Button
@@ -894,9 +937,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
                 <div className="text-[16px] font-extrabold uppercase leading-none text-neutral-400">
                   Age Breakdown
                 </div>
-                <div className="mt-1 text-2xl font-extrabold">
-                  {monthYearUpper}
-                </div>
               </div>
 
               <Button
@@ -912,8 +952,9 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
             </div>
 
             <div className="mt-4 flex flex-1 flex-col justify-center">
+              {/* ✅ Donut always shows full dataset */}
               <DonutFull
-                segments={ageSliceSegments}
+                segments={ageSegments}
                 height={320}
                 thickness={60}
                 padAngle={5}
@@ -922,6 +963,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
                 showSliceBadges
               />
 
+              {/* ✅ Pills carousel kept; % is for full dataset */}
               <StatPillsRow
                 items={agePills}
                 withArrows

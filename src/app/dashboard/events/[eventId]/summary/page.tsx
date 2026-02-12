@@ -1,9 +1,8 @@
 // src/app/dashboard/events/[eventId]/summary/page.tsx
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Eye, Ticket } from "lucide-react";
 
@@ -24,6 +23,19 @@ import DateRangePicker, {
 import DonutFull, {
   type DonutSegment,
 } from "@/components/dashboard/charts/DonutFull";
+
+/* ----------------------------- Small TS-safe helpers ----------------------------- */
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(v: unknown): UnknownRecord | null {
+  return v !== null && typeof v === "object" ? (v as UnknownRecord) : null;
+}
+
+function getString(rec: UnknownRecord | null, key: string): string | null {
+  if (!rec) return null;
+  const v = rec[key];
+  return typeof v === "string" ? v : null;
+}
 
 /* ----------------------------- Date helpers (same logic style as main dashboard) ----------------------------- */
 function clampToDay(d: Date) {
@@ -444,7 +456,7 @@ function StatPillsRow(opts: {
                           boxShadow: `0 0 0 1px rgba(0,0,0,0.15), 0 0 18px rgba(154,70,255,0.10)`,
                         }}
                       />
-                      <span className="min-w-0 text-[12.5px] font-semibold tracking-[-0.01em] leading-tight text-white/80 break-words">
+                      <span className="min-w-0 break-words text-[12.5px] font-semibold leading-tight tracking-[-0.01em] text-white/80">
                         {it.label}
                       </span>
                     </div>
@@ -476,8 +488,7 @@ function StatPillsRow(opts: {
 
 export default function EventSummaryPage() {
   const router = useRouter();
-
-  const { eventId } = useParams() as { eventId?: string };
+  const { eventId } = useParams<{ eventId?: string }>();
 
   const { data: event } = useQuery<EventWithMeta>({
     queryKey: ["event", eventId],
@@ -521,35 +532,35 @@ export default function EventSummaryPage() {
     [effectiveStart, effectiveEnd],
   );
 
-  // --- NEW: safely pick common event fields (defensive) ---
+  // --- ✅ TS-safe pick common event fields (defensive, no `any`) ---
   const currentEventMeta = useMemo(() => {
     if (!eventId) return null;
 
-    const e = event as unknown as Record<string, any> | undefined;
+    const e = asRecord(event);
 
     const title =
-      (typeof e?.title === "string" && e.title) ||
-      (typeof e?.name === "string" && e.name) ||
-      "Current Event";
+      getString(e, "title") ?? getString(e, "name") ?? "Current Event";
 
     const image =
-      (typeof e?.image === "string" && e.image) ||
-      (typeof e?.poster === "string" && e.poster) ||
-      (typeof e?.photo === "string" && e.photo) ||
-      (typeof e?.coverImage === "string" && e.coverImage) ||
+      getString(e, "image") ??
+      getString(e, "poster") ??
+      getString(e, "photo") ??
+      getString(e, "coverImage") ??
       null;
 
     const date =
-      (typeof e?.date === "string" && e.date) ||
-      (typeof e?.startDate === "string" && e.startDate) ||
-      (typeof e?.startsAt === "string" && e.startsAt) ||
-      (typeof e?.startTime === "string" && e.startTime) ||
+      getString(e, "date") ??
+      getString(e, "startDate") ??
+      getString(e, "startsAt") ??
+      getString(e, "startTime") ??
       null;
 
-    const orgName =
-      (typeof e?.orgName === "string" && e.orgName) ||
-      (typeof e?.organization?.name === "string" && e.organization.name) ||
-      null;
+    const orgNameDirect = getString(e, "orgName");
+
+    const orgRec = asRecord(e?.organization);
+    const orgNameNested = getString(orgRec, "name");
+
+    const orgName = orgNameDirect ?? orgNameNested ?? null;
 
     return { title, image, date, orgName };
   }, [event, eventId]);

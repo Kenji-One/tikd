@@ -30,7 +30,7 @@ import CopyButton from "@/components/ui/CopyButton";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { Button } from "@/components/ui/Button";
 import Image from "next/image";
-import titleInitial from "@/app/dashboard/events/[eventId]/layout";
+import { titleInitial } from "@/lib/utils";
 
 /* ------------------------------- Types ------------------------------ */
 type DestinationKind = "Event" | "Organization";

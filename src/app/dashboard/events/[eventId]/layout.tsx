@@ -42,6 +42,7 @@ import { gsap } from "gsap";
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 import { Button } from "@/components/ui/Button";
 import DownloadCsvModal from "@/components/dashboard/data/DownloadCsvModal";
+import { titleInitial } from "@/lib/utils";
 
 type EventLayoutProps = {
   children: ReactNode;
@@ -88,14 +89,6 @@ function formatDateTime(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-// NOTE: layouts/pages in Next App Router cannot export arbitrary named exports.
-// Keep this helper local to the module.
-function titleInitial(title?: string) {
-  const t = (title ?? "").trim();
-  if (!t) return "E";
-  return t[0]!.toUpperCase();
 }
 
 function mapTicketTypeApiToRow(api: {

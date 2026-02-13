@@ -470,7 +470,7 @@ function TicketTypeWizard({
                       }}
                       className={clsx(
                         "group relative z-10 flex items-center justify-center outline-none",
-                        "h-10 w-10 rounded-full",
+                        "h-10 w-10 rounded-full cursor-pointer",
                         isActive
                           ? "tikd-ttw-dot tikd-ttw-dot--active"
                           : isCompleted
@@ -558,7 +558,7 @@ function TicketTypeWizard({
         <button
           type="button"
           onClick={onCancel}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50 cursor-pointer transition-colors outline-none"
         >
           <X className="h-4 w-4" />
         </button>

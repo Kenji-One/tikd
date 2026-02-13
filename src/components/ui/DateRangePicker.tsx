@@ -1,6 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  src/components/ui/DateRangePicker.tsx                             */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -34,12 +31,29 @@ type Props = {
   /** Popover alignment (defaults to right like before) */
   align?: "left" | "right";
 
+  /** Popover side (defaults to bottom) */
+  side?: "top" | "bottom";
+
   /** Optional class overrides */
   buttonClassName?: string;
   popoverClassName?: string;
 
   /** Marks trigger as errored (only affects variant="field") */
   error?: boolean;
+
+  /** ✅ controlled open support (optional) */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+
+  /** ✅ hide built-in trigger button (popover still renders/works) */
+  hideTrigger?: boolean;
+
+  /**
+   * ✅ Selection mode:
+   * - range (default): pick start + end, confirm via Done
+   * - single: pick one day, apply + close immediately (no To, no Done)
+   */
+  selectionMode?: "range" | "single";
 };
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -176,8 +190,6 @@ function addMonths(d: Date, delta: number) {
 
   x.setMonth(x.getMonth() + delta);
 
-  // If we overflowed into the next month (e.g., Feb doesn't have 31),
-  // snap to the last day of the previous month.
   if (x.getDate() !== day) {
     x.setDate(0);
   }
@@ -212,13 +224,32 @@ export default function DateRangePicker({
   maxDate: maxDateProp,
   variant = "compact",
   align = "right",
+  side = "bottom",
   buttonClassName,
   popoverClassName,
   error,
+  open: openProp,
+  onOpenChange,
+  hideTrigger,
+  selectionMode = "range",
 }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const isSingle = selectionMode === "single";
 
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
+  const isControlled = typeof openProp === "boolean";
+  const open = isControlled ? (openProp as boolean) : openInternal;
+
+  const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
+    const resolved =
+      typeof next === "function"
+        ? (next as (p: boolean) => boolean)(open)
+        : next;
+
+    if (!isControlled) setOpenInternal(resolved);
+    onOpenChange?.(resolved);
+  };
+
   const [monthOpen, setMonthOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
 
@@ -227,8 +258,6 @@ export default function DateRangePicker({
 
   const hardMin = useMemo(() => new Date(2020, 0, 1), []);
 
-  // ✅ compact: up to current year
-  // ✅ field: up to current year + 3
   const hardMax = useMemo(() => {
     const maxYear = variant === "field" ? currentYear + 3 : currentYear;
     return new Date(maxYear, 11, 31);
@@ -252,17 +281,15 @@ export default function DateRangePicker({
   const [viewYear, setViewYear] = useState(initialAnchor.getFullYear());
   const [viewMonth, setViewMonth] = useState(initialAnchor.getMonth());
 
-  // Draft selection (only applied on "Done")
+  // Draft selection (only applied on "Done" for range mode)
   const [draft, setDraft] = useState<DateRangeValue>({
     start: value.start ? clampToDay(value.start) : null,
     end: value.end ? clampToDay(value.end) : null,
   });
 
-  // Committed values (from props)
   const committedStart = value.start ? clampToDay(value.start) : null;
   const committedEnd = value.end ? clampToDay(value.end) : null;
 
-  // Draft values (used while popover is open)
   const start = draft.start ? clampToDay(draft.start) : null;
   const end = draft.end ? clampToDay(draft.end) : null;
 
@@ -290,7 +317,6 @@ export default function DateRangePicker({
         setOpen(false);
         setMonthOpen(false);
         setYearOpen(false);
-        // ✅ closing without "Done" should NOT apply anything
       }
     }
     document.addEventListener("mousedown", onDocDown);
@@ -304,7 +330,6 @@ export default function DateRangePicker({
         setOpen(false);
         setMonthOpen(false);
         setYearOpen(false);
-        // ✅ closing without "Done" should NOT apply anything
       }
     }
     document.addEventListener("keydown", onKey);
@@ -362,17 +387,31 @@ export default function DateRangePicker({
     setViewMonth(d.getMonth());
   }
 
+  function applyRange(next: DateRangeValue) {
+    const normalized = normalizeRange(next, effMin, effMax);
+    onChange(normalized);
+
+    setOpen(false);
+    setMonthOpen(false);
+    setYearOpen(false);
+  }
+
   function commitPick(day: number) {
     const picked = clampToDay(new Date(viewYear, viewMonth, day));
     if (isDisabled(picked, effMin, effMax)) return;
 
-    // ✅ Draft-only selection. "Done" applies.
+    // ✅ single mode: apply immediately + close
+    if (isSingle) {
+      applyRange({ start: picked, end: picked });
+      return;
+    }
+
+    // range mode (existing behavior)
     if (!start || (start && end)) {
       setDraft({ start: picked, end: null });
       return;
     }
 
-    // start exists and end is null => set end
     let a = start;
     let b = picked;
 
@@ -386,24 +425,13 @@ export default function DateRangePicker({
   }
 
   function clear() {
-    // Keep existing behavior: clear applies immediately
     setDraft({ start: null, end: null });
     onChange({ start: null, end: null });
-  }
-
-  function applyRange(next: DateRangeValue) {
-    const normalized = normalizeRange(next, effMin, effMax);
-    onChange(normalized);
-
-    setOpen(false);
-    setMonthOpen(false);
-    setYearOpen(false);
   }
 
   function applyDone() {
     if (!draft.start) return;
 
-    // ✅ Single-day selection should apply immediately via Done (end = start)
     const next: DateRangeValue = draft.end
       ? draft
       : { start: draft.start, end: draft.start };
@@ -411,7 +439,6 @@ export default function DateRangePicker({
     applyRange(next);
   }
 
-  // ✅ Presets are ONLY for compact variant (field variant should NOT show them at all)
   const presets = useMemo(() => {
     if (variant !== "compact") return [] as const;
 
@@ -453,8 +480,9 @@ export default function DateRangePicker({
   }, [variant, presets, value]);
 
   const popover = clsx(
-    "absolute z-30 mt-2 rounded-xl border border-white/10 bg-neutral-950/92 p-2.5 backdrop-blur-md",
+    "absolute z-30 rounded-xl border border-white/10 bg-neutral-950/92 p-2.5 backdrop-blur-md",
     variant === "compact" ? "w-[min(420px,calc(100vw-24px))]" : "w-[292px]",
+    side === "top" ? "bottom-full mb-2" : "mt-2",
     align === "right" ? "right-0" : "left-0",
     popoverClassName,
   );
@@ -478,6 +506,8 @@ export default function DateRangePicker({
     );
 
   const showSidebar = variant === "compact";
+
+  const hasRange = !!start && !!end;
 
   return (
     <div ref={rootRef} className={clsx("relative", className)}>
@@ -508,54 +538,58 @@ export default function DateRangePicker({
         }
       `}</style>
 
-      {variant === "compact" ? (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className={clsx(compactBtn, buttonClassName)}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-        >
-          <CalendarIcon size={13} className="opacity-80" />
-          <span className="truncate">{label}</span>
-          <ChevronDown
-            size={13}
-            className={clsx(
-              "ml-auto opacity-70 transition-transform",
-              open && "rotate-180",
-            )}
-          />
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className={clsx(fieldBtn, buttonClassName)}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-        >
-          <div className="min-w-0 text-left">
-            {committedStart && committedEnd ? (
-              <div className="truncate text-base font-medium leading-none text-white/85 tabular-nums">
-                {label}
+      {!hideTrigger && (
+        <>
+          {variant === "compact" ? (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className={clsx(compactBtn, buttonClassName)}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            >
+              <CalendarIcon size={13} className="opacity-80" />
+              <span className="truncate">{label}</span>
+              <ChevronDown
+                size={13}
+                className={clsx(
+                  "ml-auto opacity-70 transition-transform",
+                  open && "rotate-180",
+                )}
+              />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className={clsx(fieldBtn, buttonClassName)}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+            >
+              <div className="min-w-0 text-left">
+                {committedStart && committedEnd ? (
+                  <div className="truncate text-base font-medium leading-none text-white/85 tabular-nums">
+                    {label}
+                  </div>
+                ) : (
+                  <div className="truncate text-base font-medium leading-none text-white/35">
+                    Select Dates
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="truncate text-base font-medium leading-none text-white/35">
-                Select Dates
-              </div>
-            )}
-          </div>
 
-          <div className="flex items-center gap-2">
-            <CalendarIcon className="h-5 w-5 text-primary-300" />
-            <ChevronDown
-              className={clsx(
-                "h-5 w-5 text-white/50 transition-transform",
-                open && "rotate-180",
-              )}
-            />
-          </div>
-        </button>
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="h-5 w-5 text-primary-300" />
+                <ChevronDown
+                  className={clsx(
+                    "h-5 w-5 text-white/50 transition-transform",
+                    open && "rotate-180",
+                  )}
+                />
+              </div>
+            </button>
+          )}
+        </>
       )}
 
       {open && (
@@ -566,7 +600,6 @@ export default function DateRangePicker({
               showSidebar ? "grid grid-cols-[124px_1fr]" : "grid grid-cols-1",
             )}
           >
-            {/* ✅ Sidebar ONLY for compact variant (presets + year quick ranges) */}
             {showSidebar && (
               <div className="rounded-xl border border-white/10 bg-neutral-900/60 p-1.5">
                 <div
@@ -614,7 +647,6 @@ export default function DateRangePicker({
               </div>
             )}
 
-            {/* Calendar */}
             <div>
               <div className="flex items-center justify-between gap-2">
                 <button
@@ -630,7 +662,6 @@ export default function DateRangePicker({
                 </button>
 
                 <div className="relative flex items-center gap-2">
-                  {/* Month */}
                   <button
                     type="button"
                     onClick={() => {
@@ -654,7 +685,6 @@ export default function DateRangePicker({
                     />
                   </button>
 
-                  {/* Year */}
                   <button
                     type="button"
                     onClick={() => {
@@ -786,7 +816,6 @@ export default function DateRangePicker({
 
                   const isStart = !!start && sameDay(d, start);
                   const isEnd = !!end && sameDay(d, end);
-                  const hasRange = !!start && !!end;
 
                   const between =
                     hasRange &&
@@ -838,11 +867,15 @@ export default function DateRangePicker({
                   <span className="text-white/85">
                     {start ? fmtFull(start) : "—"}
                   </span>
-                  <span className="mx-2 text-white/25">•</span>
-                  <span className="text-white/50">To:</span>{" "}
-                  <span className="text-white/85">
-                    {end ? fmtFull(end) : "—"}
-                  </span>
+                  {!isSingle && (
+                    <>
+                      <span className="mx-2 text-white/25">•</span>
+                      <span className="text-white/50">To:</span>{" "}
+                      <span className="text-white/85">
+                        {end ? fmtFull(end) : "—"}
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 <div className="shrink-0 flex items-center gap-2">
@@ -854,21 +887,23 @@ export default function DateRangePicker({
                     Clear
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={applyDone}
-                    disabled={!draft.start}
-                    className={clsx(
-                      "rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition",
-                      "border",
-                      draft.start
-                        ? "cursor-pointer border-primary-500/35 bg-primary-500/20 text-primary-100 hover:bg-primary-500/26 hover:border-primary-500/55"
-                        : "cursor-not-allowed border-white/10 bg-white/5 text-white/30 opacity-80",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
-                    )}
-                  >
-                    Done
-                  </button>
+                  {!isSingle && (
+                    <button
+                      type="button"
+                      onClick={applyDone}
+                      disabled={!draft.start}
+                      className={clsx(
+                        "rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition",
+                        "border",
+                        draft.start
+                          ? "cursor-pointer border-primary-500/35 bg-primary-500/20 text-primary-100 hover:bg-primary-500/26 hover:border-primary-500/55"
+                          : "cursor-not-allowed border-white/10 bg-white/5 text-white/30 opacity-80",
+                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                      )}
+                    >
+                      Done
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

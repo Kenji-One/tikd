@@ -90,7 +90,7 @@ function formatDateTime(value?: string) {
   });
 }
 
-function titleInitial(title?: string) {
+export function titleInitial(title?: string) {
   const t = (title ?? "").trim();
   if (!t) return "E";
   return t[0]!.toUpperCase();

@@ -57,6 +57,7 @@ type EventLean = {
   image?: string;
   pageViews?: number;
   views?: number;
+  status?: "published" | "draft";
 };
 
 type TicketAggRow = {
@@ -157,11 +158,13 @@ export async function GET(req: NextRequest) {
       ],
     };
 
+    // ✅ FIX: only published events should appear in Upcoming Events
     const events = await Event.find({
       createdByUserId: userId,
+      status: "published",
       ...upcomingFilter,
     })
-      .select("_id title date endDate image pageViews views")
+      .select("_id title date endDate image pageViews views status")
       .sort({ date: 1 })
       .limit(limit)
       .lean<EventLean[]>();

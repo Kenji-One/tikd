@@ -1,4 +1,3 @@
-// src/components/bits/InviteTeamModal.tsx
 "use client";
 
 import Image from "next/image";
@@ -12,6 +11,8 @@ import {
   type ReactNode,
   type ComponentType,
   type SVGProps,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import clsx from "clsx";
 import {
@@ -256,14 +257,6 @@ function resolveRoleIconNodeSmall(role: OrgRoleRow): ReactNode {
 }
 
 /* ---------------------------- Icons map -------------------------- */
-/**
- * Backend sends:
- * - iconKey: RoleIconKey
- * - iconUrl: optional uploaded URL
- *
- * Render iconUrl if present, else map iconKey -> lucide icon.
- * If neither exists, deterministic fallback so EVERY role still has an icon.
- */
 const ICONS_BY_KEY: Record<
   RoleIconKey,
   ComponentType<SVGProps<SVGSVGElement>>
@@ -356,49 +349,42 @@ function resolveRoleIconNode(role: OrgRoleRow): ReactNode {
   return <FallbackIcon className="h-5 w-5" />;
 }
 
-/* ---------------------------- System roles ----------------------- */
-const ROLE_ORDER: Role[] = ["admin", "promoter", "scanner", "collaborator"];
+/* ---------------------------- System roles (API-driven) ----------------------- */
+const ALLOWED_SYSTEM_KEYS = [
+  "admin",
+  "promoter",
+  "scanner",
+  "collaborator",
+] as const;
+type AllowedSystemKey = (typeof ALLOWED_SYSTEM_KEYS)[number];
 
-/**
- * NOTE: Owner should NOT be shown here.
- * If you ever add "owner" as a system role key in backend, keep excluding it.
- */
-type RoleAccentMeta = {
-  title: string;
-  subtitle: string;
-  hint: string;
-  color: string;
-  Icon: ComponentType<SVGProps<SVGSVGElement>>;
-};
+function isAllowedSystemKey(key: string): key is AllowedSystemKey {
+  return (ALLOWED_SYSTEM_KEYS as readonly string[]).includes(key);
+}
 
-const SYSTEM_ROLE_ACCENTS: Record<Role, RoleAccentMeta> = {
+const SYSTEM_FALLBACK_UI: Record<
+  AllowedSystemKey,
+  { subtitle: string; hint: string; color: string }
+> = {
   admin: {
-    title: "Admin",
     subtitle: "Full organization control",
     hint: "Best for owners / managers",
     color: "#9A46FF",
-    Icon: ShieldCheck,
   },
   promoter: {
-    title: "Promoter",
     subtitle: "Links & promo tools",
     hint: "Best for marketing",
     color: "#428BFF",
-    Icon: Megaphone,
   },
   scanner: {
-    title: "Scanner",
     subtitle: "Door check-in (QR tools)",
     hint: "Best for entry team",
     color: "#34D399",
-    Icon: ScanLine,
   },
   collaborator: {
-    title: "Collaborator",
     subtitle: "Limited collaboration",
     hint: "Best for helpers",
     color: "#A855F7",
-    Icon: UsersIcon,
   },
 };
 
@@ -644,7 +630,6 @@ function RoleTile({
               </div>
             </div>
 
-            {/* keep DOM/layout stable to avoid height jumps on selection */}
             <span
               className={clsx(
                 "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
@@ -695,7 +680,6 @@ export default function InviteTeamModal({
 }: Props) {
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
-  // step burst (same UX candy as promo stepper)
   const [stepBurst, setStepBurst] = useState(false);
   const burstTimerRef = useRef<number | null>(null);
 
@@ -711,17 +695,14 @@ export default function InviteTeamModal({
     burstTimerRef.current = window.setTimeout(() => setStepBurst(false), 260);
   }, []);
 
-  // selection:
-  // - system role: selectedRole
-  // - custom role: selectedRoleId
-  const [selectedRole, setSelectedRole] = useState<Role>("collaborator");
+  const [selectedSystemRoleKey, setSelectedSystemRoleKey] =
+    useState<Role>("collaborator");
   const [selectedRoleId, setSelectedRoleId] = useState<string>("");
 
   const [email, setEmail] = useState("");
   const [temporary, setTemporary] = useState(false);
   const [expiresAt, setExpiresAt] = useState<string>("");
 
-  // Apply to which events?
   const [applyExisting, setApplyExisting] = useState(true);
   const [applyFuture, setApplyFuture] = useState(true);
 
@@ -736,19 +717,48 @@ export default function InviteTeamModal({
     staleTime: 30_000,
   });
 
-  const customRoles = useMemo(() => {
+  const sortedRoles = useMemo(() => {
     const list = roles ?? [];
-    return list
-      .filter((r) => !r.isSystem)
-      .slice()
-      .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+    return list.slice().sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
   }, [roles]);
 
+  const systemRoles = useMemo(() => {
+    return sortedRoles.filter(
+      (r) =>
+        r.isSystem === true && r.key !== "owner" && isAllowedSystemKey(r.key),
+    );
+  }, [sortedRoles]);
+
+  const customRoles = useMemo(() => {
+    return sortedRoles.filter((r) => !r.isSystem);
+  }, [sortedRoles]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (selectedRoleId) return;
+
+    const preferred =
+      systemRoles.find((r) => r.key === "collaborator") ??
+      systemRoles[0] ??
+      null;
+
+    if (!preferred) return;
+
+    const currentExists = systemRoles.some(
+      (r) => r.key === selectedSystemRoleKey,
+    );
+    if (!currentExists) {
+      setSelectedSystemRoleKey(preferred.key as Role);
+    }
+  }, [open, systemRoles, selectedRoleId, selectedSystemRoleKey]);
+
   const emailValid = validateEmail(email);
-  const hasRoleSelection = Boolean(selectedRoleId) || Boolean(selectedRole);
+  const hasRoleSelection =
+    Boolean(selectedRoleId) || Boolean(selectedSystemRoleKey);
 
   const canGoNextFromStep0 = hasRoleSelection;
   const canGoNextFromStep1 = emailValid;
+
   const canSubmit =
     step === 2 &&
     emailValid &&
@@ -759,16 +769,30 @@ export default function InviteTeamModal({
   const goNext = () => setStep((s) => (s < 2 ? ((s + 1) as 0 | 1 | 2) : s));
   const goPrev = () => setStep((s) => (s > 0 ? ((s - 1) as 0 | 1 | 2) : s));
 
+  const selectedSystemRoleRow = useMemo(() => {
+    return systemRoles.find((r) => r.key === selectedSystemRoleKey) ?? null;
+  }, [systemRoles, selectedSystemRoleKey]);
+
   const selectedLabel = useMemo(() => {
     if (selectedRoleId) {
       const found = customRoles.find((r) => r._id === selectedRoleId);
       return found?.name ?? "Custom role";
     }
-    return SYSTEM_ROLE_ACCENTS[selectedRole]?.title ?? "Role";
-  }, [selectedRoleId, selectedRole, customRoles]);
+
+    if (selectedSystemRoleRow?.name) return selectedSystemRoleRow.name;
+
+    const fallback =
+      SYSTEM_FALLBACK_UI[selectedSystemRoleKey]?.subtitle ??
+      "System permissions role";
+    return fallback;
+  }, [
+    selectedRoleId,
+    customRoles,
+    selectedSystemRoleRow,
+    selectedSystemRoleKey,
+  ]);
 
   const selectedRoleMeta = useMemo<RolePillMeta>(() => {
-    // custom role selected
     if (selectedRoleId) {
       const found = customRoles.find((r) => r._id === selectedRoleId);
       if (found) {
@@ -779,7 +803,6 @@ export default function InviteTeamModal({
           iconNode: resolveRoleIconNodeSmall(found),
         };
       }
-      // fallback
       return {
         key: "custom",
         name: selectedLabel,
@@ -788,34 +811,48 @@ export default function InviteTeamModal({
       };
     }
 
-    // system role selected
-    const sys = SYSTEM_ROLE_ACCENTS[selectedRole];
+    const row = selectedSystemRoleRow;
+    const key = selectedSystemRoleKey;
+
+    const fallbackUi = SYSTEM_FALLBACK_UI[key];
+    const name = row?.name || key.charAt(0).toUpperCase() + key.slice(1);
+    const color = row?.color || fallbackUi?.color;
+
+    const iconNode = row ? (
+      resolveRoleIconNodeSmall(row)
+    ) : (
+      <UsersIcon className="h-4 w-4" />
+    );
+
     return {
-      key: selectedRole,
-      name: sys?.title ?? selectedLabel,
-      color: sys?.color,
-      iconNode: sys?.Icon ? (
-        <sys.Icon className="h-4 w-4" />
-      ) : (
-        <UsersIcon className="h-4 w-4" />
-      ),
+      key,
+      name,
+      color,
+      iconNode,
     };
-  }, [selectedRoleId, customRoles, selectedRole, selectedLabel]);
+  }, [
+    selectedRoleId,
+    customRoles,
+    selectedSystemRoleRow,
+    selectedSystemRoleKey,
+    selectedLabel,
+  ]);
 
   const submit = () =>
     onInvite({
       email: email.trim(),
-      ...(selectedRoleId ? { roleId: selectedRoleId } : { role: selectedRole }),
+      ...(selectedRoleId
+        ? { roleId: selectedRoleId }
+        : { role: selectedSystemRoleKey }),
       temporaryAccess: temporary,
       expiresAt: temporary ? expiresAt || undefined : undefined,
       applyTo: { existing: applyExisting, future: applyFuture },
     });
 
-  // Reset most fields when the modal closes
   useEffect(() => {
     if (!open) {
       setStep(0);
-      setSelectedRole("collaborator");
+      setSelectedSystemRoleKey("collaborator");
       setSelectedRoleId("");
       setEmail("");
       setTemporary(false);
@@ -823,7 +860,6 @@ export default function InviteTeamModal({
     }
   }, [open]);
 
-  // Ensure both checkboxes are checked whenever the modal opens
   useEffect(() => {
     if (open) {
       setApplyExisting(true);
@@ -831,7 +867,6 @@ export default function InviteTeamModal({
     }
   }, [open]);
 
-  // ESC + scroll lock
   useEffect(() => {
     if (!open) return;
 
@@ -848,7 +883,6 @@ export default function InviteTeamModal({
     };
   }, [open, onClose]);
 
-  // stepper aura position (same formula, adjusted for 3 steps)
   const activeLeftExpr =
     steps.length === 1
       ? "50%"
@@ -861,6 +895,19 @@ export default function InviteTeamModal({
       : step === 1
         ? "We’ll send an invite link immediately."
         : "Set duration + how it applies to events.";
+
+  const onEmailKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+
+    // Prevent Enter from submitting the form (which was causing instant invite)
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (step === 1 && canGoNextFromStep1 && !isSubmitting) {
+      goNext();
+      triggerStepBurst();
+    }
+  };
 
   if (!open) return null;
 
@@ -892,7 +939,6 @@ export default function InviteTeamModal({
           "mx-3",
         )}
       >
-        {/* background wash */}
         <div
           className="pointer-events-none absolute inset-0 opacity-100"
           style={{
@@ -901,7 +947,6 @@ export default function InviteTeamModal({
           }}
         />
 
-        {/* Stepper header at the very top, full width */}
         <div className="relative">
           <div
             className={clsx(
@@ -911,7 +956,6 @@ export default function InviteTeamModal({
             )}
           >
             <div className="tikd-ttw-stepperInner px-6 md:px-8 py-4">
-              {/* active aura */}
               <div className="pointer-events-none absolute inset-0 z-0">
                 <div
                   style={{ left: activeLeftExpr }}
@@ -925,7 +969,6 @@ export default function InviteTeamModal({
                 </div>
               </div>
 
-              {/* dots + connectors */}
               <div className="relative z-10 flex w-full items-center">
                 {steps.map((s, idx) => {
                   const Icon = s.icon;
@@ -983,7 +1026,6 @@ export default function InviteTeamModal({
                 })}
               </div>
 
-              {/* labels row */}
               <div className="relative mt-2 h-6">
                 {steps.map((s, idx) => {
                   const isActive = step === idx;
@@ -1008,7 +1050,7 @@ export default function InviteTeamModal({
                       }}
                       style={{ left: leftExpr }}
                       className={clsx(
-                        "absolute top-0 -translate-x-1/2 text-center font-medium tracking-[0.01em] outline-none",
+                        "absolute top-0 -translate-x-1/2 text-center font-medium tracking-[0.01em] outline-none cursor-pointer",
                         "w-[92px]",
                         isActive
                           ? "text-neutral-0"
@@ -1025,7 +1067,6 @@ export default function InviteTeamModal({
             </div>
           </div>
 
-          {/* Close button BELOW the stepper header */}
           <div className="relative px-5 pt-3">
             <div className="flex items-center justify-end">
               <button
@@ -1034,7 +1075,7 @@ export default function InviteTeamModal({
                 aria-label="Close modal"
                 className={clsx(
                   "inline-flex h-9 w-9 items-center justify-center rounded-full",
-                  "border border-white/12 bg-neutral-950/55 text-neutral-100",
+                  "border border-white/12 bg-neutral-950/55 text-neutral-100 cursor-pointer transition-colors duration-200",
                   "hover:bg-neutral-950/80",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                 )}
@@ -1045,27 +1086,19 @@ export default function InviteTeamModal({
           </div>
         </div>
 
-        {/* Body (no big inner container) */}
+        {/* ✅ IMPORTANT: Form submit now ONLY submits on step 2 (Apply) */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (step === 0) {
-              if (canGoNextFromStep0) goNext();
-              return;
-            }
-            if (step === 1) {
-              if (canGoNextFromStep1) goNext();
-              return;
-            }
-            if (step === 2) {
-              if (canSubmit) submit();
-              return;
-            }
+
+            // Only the last step is allowed to submit.
+            if (step !== 2) return;
+
+            if (canSubmit) submit();
           }}
           className="relative flex-1 overflow-y-auto no-scrollbar px-5 pb-4 pt-2"
           noValidate
         >
-          {/* Title + helper (compact) */}
           <div className="mb-3">
             <h2 className="text-[15px] font-semibold text-neutral-0">
               {title}
@@ -1073,7 +1106,6 @@ export default function InviteTeamModal({
             <p className="mt-1 text-[12px] text-neutral-400">{subtitle}</p>
           </div>
 
-          {/* Summary */}
           <SummaryCard
             roleMeta={selectedRoleMeta}
             email={email}
@@ -1081,9 +1113,7 @@ export default function InviteTeamModal({
             expiresAt={expiresAt}
           />
 
-          {/* Step content */}
           <div className="mt-4 min-w-0">
-            {/* STEP 0: Role */}
             {step === 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -1095,23 +1125,30 @@ export default function InviteTeamModal({
                   </div>
                 </div>
 
-                {/* System roles (exclude Owner implicitly) */}
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {ROLE_ORDER.map((r) => {
-                    const meta = SYSTEM_ROLE_ACCENTS[r];
-                    const active = !selectedRoleId && selectedRole === r;
+                  {systemRoles.map((r) => {
+                    const key = r.key as Role;
+                    const active =
+                      !selectedRoleId && selectedSystemRoleKey === key;
+
+                    const fallback = SYSTEM_FALLBACK_UI[key];
+                    const subtitleText =
+                      fallback?.subtitle ?? "System permissions role";
+                    const hintText = fallback?.hint;
 
                     return (
                       <RoleTile
-                        key={r}
+                        key={r._id}
                         active={active}
-                        title={meta.title}
-                        subtitle={meta.subtitle}
-                        hint={meta.hint}
-                        icon={<meta.Icon className="h-5 w-5" />}
-                        accentHex={meta.color}
+                        title={
+                          r.name || key.charAt(0).toUpperCase() + key.slice(1)
+                        }
+                        subtitle={subtitleText}
+                        hint={hintText}
+                        icon={resolveRoleIconNode(r)}
+                        accentHex={r.color || fallback?.color}
                         onPick={() => {
-                          setSelectedRole(r);
+                          setSelectedSystemRoleKey(key);
                           setSelectedRoleId("");
                         }}
                       />
@@ -1119,7 +1156,13 @@ export default function InviteTeamModal({
                   })}
                 </div>
 
-                {/* Custom roles */}
+                {systemRoles.length === 0 && (
+                  <div className="rounded-xl border border-white/10 bg-neutral-950/35 px-3 py-2.5 text-[12px] text-neutral-400">
+                    No system roles returned from the API (owner is hidden).
+                    Create or check your default roles in Roles & Permissions.
+                  </div>
+                )}
+
                 <div className="pt-1">
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-[12px] font-semibold text-neutral-200">
@@ -1152,7 +1195,9 @@ export default function InviteTeamModal({
                               </div>
                             </div>
                           }
-                          onPick={() => setSelectedRoleId(r._id)}
+                          onPick={() => {
+                            setSelectedRoleId(r._id);
+                          }}
                         />
                       );
                     })}
@@ -1161,7 +1206,6 @@ export default function InviteTeamModal({
               </div>
             )}
 
-            {/* STEP 1: Email */}
             {step === 1 && (
               <div className="space-y-3">
                 <div className="text-[12px] font-semibold text-neutral-200">
@@ -1171,6 +1215,7 @@ export default function InviteTeamModal({
                 <Input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={onEmailKeyDown}
                   placeholder="name@example.com"
                   variant="full"
                   size="md"
@@ -1190,10 +1235,8 @@ export default function InviteTeamModal({
               </div>
             )}
 
-            {/* STEP 2: Apply */}
             {step === 2 && (
               <div className="space-y-4">
-                {/* Temporary access */}
                 <div className="rounded-xl border border-white/10 bg-white/4 p-3">
                   <label className="group flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
                     <input
@@ -1274,7 +1317,6 @@ export default function InviteTeamModal({
                   )}
                 </div>
 
-                {/* Apply to events */}
                 <div className="rounded-xl border border-white/10 bg-white/4 p-3">
                   <div className="mb-2">
                     <h4 className="text-[12.5px] font-semibold text-neutral-0">
@@ -1347,7 +1389,6 @@ export default function InviteTeamModal({
             )}
           </div>
 
-          {/* Footer actions */}
           <div className="mt-6 border-t border-white/10 pt-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -1391,7 +1432,11 @@ export default function InviteTeamModal({
                       "hover:bg-[linear-gradient(90deg,rgba(154,70,255,1),rgba(66,139,255,0.62))]",
                       "shadow-[0_18px_40px_rgba(154,70,255,0.18)]",
                     )}
-                    onClick={() => {
+                    onClick={(e?: ReactMouseEvent) => {
+                      // Extra safety: even if Button renders as submit somehow, we block it.
+                      e?.preventDefault?.();
+                      e?.stopPropagation?.();
+
                       if (step === 0 && !canGoNextFromStep0) return;
                       if (step === 1 && !canGoNextFromStep1) return;
                       goNext();

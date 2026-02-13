@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
 import {
   Search,
@@ -22,18 +22,18 @@ import {
    ──────────────────────────────────────────────────────────────── */
 type Filter = "all" | "event" | "org" | "team" | "friend";
 type ItemType = "event" | "org" | "team" | "friend";
+type Scope = "auto" | "public" | "dashboard";
 
 type Item = {
   id: string;
   type: ItemType;
   title: string;
-  subtitle?: string; // for orgs/teams/friends, and can also be orgName for events
+  subtitle?: string;
   orgName?: string | null;
-  date?: string | null; // ISO string
-  image?: string | null; // poster/avatar/logo
+  date?: string | null;
+  image?: string | null;
   href: string;
 
-  // optional, if your API provides it (safe to ignore)
   orgId?: string | null;
 };
 
@@ -157,12 +157,6 @@ function pickAccentFromOrgResponse(json: unknown): string | null {
   return null;
 }
 
-/**
- * EXACT same “Destination” column pill style as TrackingLinksTable:
- * - Event: always default event hex
- * - Org: uses org accent color if available (fallback to default org hex)
- * - Event icon: Ticket
- */
 function SearchDestinationPill({
   type,
   accentColor,
@@ -223,10 +217,6 @@ function SearchDestinationPill({
   );
 }
 
-/**
- * NEW: Friends pill redesigned to match the Event/Organization pill vibe.
- * (Also used for Team for consistency.)
- */
 function SearchTypePill({ type }: { type: "team" | "friend" }) {
   const meta =
     type === "friend"
@@ -281,13 +271,30 @@ function SearchTypePill({ type }: { type: "team" | "friend" }) {
 export default function SearchModal({
   open,
   onClose,
+  scope = "auto",
 }: {
   open: boolean;
   onClose: () => void;
+  scope?: Scope;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+
+  const resolvedScope: Exclude<Scope, "auto"> = useMemo(() => {
+    if (scope === "dashboard") return "dashboard";
+    if (scope === "public") return "public";
+    return pathname?.startsWith("/dashboard") ? "dashboard" : "public";
+  }, [scope, pathname]);
+
+  const publicMode = resolvedScope === "public";
+
+  const allowedFilters: Filter[] = useMemo(() => {
+    return publicMode
+      ? ["all", "event", "org"]
+      : ["all", "event", "org", "team", "friend"];
+  }, [publicMode]);
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -301,25 +308,35 @@ export default function SearchModal({
   const [active, setActive] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  // org accent cache (same idea as TrackingLinksTable)
   const [orgAccentById, setOrgAccentById] = useState<Record<string, string>>(
     {},
   );
 
+  const filteredResults: Results = useMemo(() => {
+    if (!publicMode) return results;
+    // hard clamp in UI too (even though API also clamps)
+    return {
+      events: results.events,
+      orgs: results.orgs,
+      teams: [],
+      friends: [],
+    };
+  }, [results, publicMode]);
+
   const flatResults: Item[] = useMemo(() => {
+    const r = filteredResults;
     if (filter === "all") {
-      return [
-        ...(results.events ?? []),
-        ...(results.orgs ?? []),
-        ...(results.teams ?? []),
-        ...(results.friends ?? []),
-      ];
+      const base = [...(r.events ?? []), ...(r.orgs ?? [])];
+      if (!publicMode) {
+        base.push(...(r.teams ?? []), ...(r.friends ?? []));
+      }
+      return base;
     }
-    if (filter === "event") return results.events ?? [];
-    if (filter === "org") return results.orgs ?? [];
-    if (filter === "team") return results.teams ?? [];
-    return results.friends ?? [];
-  }, [results, filter]);
+    if (filter === "event") return r.events ?? [];
+    if (filter === "org") return r.orgs ?? [];
+    if (filter === "team") return publicMode ? [] : (r.teams ?? []);
+    return publicMode ? [] : (r.friends ?? []);
+  }, [filteredResults, filter, publicMode]);
 
   /* recent search history */
   const HISTORY_KEY = "tikd:recent-searches:v1";
@@ -333,8 +350,8 @@ export default function SearchModal({
     }
   }, []);
 
-  function pushRecent(q: string) {
-    const trimmed = q.trim();
+  function pushRecent(qv: string) {
+    const trimmed = qv.trim();
     if (!trimmed) return;
 
     try {
@@ -360,6 +377,11 @@ export default function SearchModal({
     setFilter("all");
     setDropdownOpen(false);
   }, [open]);
+
+  // keep filter valid when switching modes (or opening on different pages)
+  useEffect(() => {
+    if (!allowedFilters.includes(filter)) setFilter("all");
+  }, [allowedFilters, filter]);
 
   /* key handling + focus */
   useEffect(() => {
@@ -396,21 +418,25 @@ export default function SearchModal({
   /* fetch (debounced) */
   useEffect(() => {
     if (!open) return;
-    const q = query.trim();
-    if (!q) {
+    const qv = query.trim();
+    if (!qv) {
       setResults({ events: [], orgs: [], teams: [], friends: [] });
       setActive(null);
       return;
     }
+
     setLoading(true);
     const ac = new AbortController();
     const t = setTimeout(async () => {
       try {
+        const safeFilter: Filter = allowedFilters.includes(filter)
+          ? filter
+          : "all";
         const typeParam =
-          filter === "all" ? "" : `&type=${encodeURIComponent(filter)}`;
+          safeFilter === "all" ? "" : `&type=${encodeURIComponent(safeFilter)}`;
 
         const res = await fetch(
-          `/api/search?q=${encodeURIComponent(q)}${typeParam}&limit=8`,
+          `/api/search?q=${encodeURIComponent(qv)}${typeParam}&limit=8&scope=${encodeURIComponent(resolvedScope)}`,
           { signal: ac.signal, cache: "no-store" },
         );
         const data: { results?: Results } = await res.json();
@@ -421,19 +447,34 @@ export default function SearchModal({
           teams: [],
           friends: [],
         };
-        setResults(safe);
+
+        // UI clamp in case anything slips through
+        const finalResults: Results = publicMode
+          ? {
+              events: safe.events || [],
+              orgs: safe.orgs || [],
+              teams: [],
+              friends: [],
+            }
+          : safe;
+
+        setResults(finalResults);
 
         const first =
-          filter === "all"
-            ? safe.events?.[0] ||
-              safe.orgs?.[0] ||
-              safe.teams?.[0] ||
-              safe.friends?.[0] ||
+          safeFilter === "all"
+            ? finalResults.events?.[0] ||
+              finalResults.orgs?.[0] ||
+              (!publicMode ? finalResults.teams?.[0] : null) ||
+              (!publicMode ? finalResults.friends?.[0] : null) ||
               null
-            : (filter === "event" ? safe.events?.[0] : null) ||
-              (filter === "org" ? safe.orgs?.[0] : null) ||
-              (filter === "team" ? safe.teams?.[0] : null) ||
-              (filter === "friend" ? safe.friends?.[0] : null) ||
+            : (safeFilter === "event" ? finalResults.events?.[0] : null) ||
+              (safeFilter === "org" ? finalResults.orgs?.[0] : null) ||
+              (!publicMode && safeFilter === "team"
+                ? finalResults.teams?.[0]
+                : null) ||
+              (!publicMode && safeFilter === "friend"
+                ? finalResults.friends?.[0]
+                : null) ||
               null;
 
         setActive(first ? itemKey(first) : null);
@@ -445,15 +486,17 @@ export default function SearchModal({
         setLoading(false);
       }
     }, 220);
+
     return () => {
       clearTimeout(t);
       ac.abort();
     };
-  }, [query, filter, open]);
+  }, [query, filter, open, publicMode, allowedFilters, resolvedScope]);
 
-  // load org accent colors for org pills (match TrackingLinksTable behavior)
+  // load org accent colors for org pills (dashboard-only API route)
   useEffect(() => {
     if (!open) return;
+    if (publicMode) return;
 
     const orgIds = Array.from(
       new Set(
@@ -495,9 +538,8 @@ export default function SearchModal({
 
         const next: Record<string, string> = {};
         for (const [id, accent] of pairs) {
-          if (typeof accent === "string" && accent.trim()) {
+          if (typeof accent === "string" && accent.trim())
             next[id] = accent.trim();
-          }
         }
 
         if (Object.keys(next).length > 0) {
@@ -511,9 +553,13 @@ export default function SearchModal({
     return () => {
       alive = false;
     };
-  }, [open, flatResults, orgAccentById]);
+  }, [open, flatResults, orgAccentById, publicMode]);
 
   if (!open || typeof window === "undefined") return null;
+
+  const placeholder = publicMode
+    ? "Search events, organizations…"
+    : "Search events, organizations, teams, friends…";
 
   /* ─────────────────────────── UI ─────────────────────────── */
   return createPortal(
@@ -524,9 +570,7 @@ export default function SearchModal({
       )}
       onPointerDown={(e) => {
         const target = e.target as Node;
-        if (cardRef.current && !cardRef.current.contains(target)) {
-          onClose();
-        }
+        if (cardRef.current && !cardRef.current.contains(target)) onClose();
       }}
       aria-modal="true"
       role="dialog"
@@ -552,10 +596,9 @@ export default function SearchModal({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onPointerDown={() => {
-                  if (filter !== "all") setFilter("all");
                   setDropdownOpen(false);
                 }}
-                placeholder="Search events, organizations, teams, friends…"
+                placeholder={placeholder}
                 aria-label="Search"
                 inputMode="search"
                 className={clsx(
@@ -612,38 +655,38 @@ export default function SearchModal({
 
                     <div className="h-px w-full bg-white/8" />
 
-                    {(["event", "org", "team", "friend"] as Filter[]).map(
-                      (f) => (
-                        <button
-                          key={f}
-                          role="option"
-                          aria-selected={filter === f}
-                          onClick={() => {
-                            setFilter(f);
-                            setDropdownOpen(false);
-                            inputRef.current?.focus();
-                          }}
-                          className={clsx(
-                            "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none cursor-pointer",
-                            filter === f && "bg-white/7",
-                          )}
-                        >
-                          {f === "event" && (
-                            <Ticket className="h-4 w-4 opacity-80" />
-                          )}
-                          {f === "org" && (
-                            <Building2 className="h-4 w-4 opacity-80" />
-                          )}
-                          {f === "team" && (
-                            <Users2 className="h-4 w-4 opacity-80" />
-                          )}
-                          {f === "friend" && (
-                            <UserRound className="h-4 w-4 opacity-80" />
-                          )}
-                          <span>{FILTER_LABEL[f]}</span>
-                        </button>
-                      ),
-                    )}
+                    {(
+                      allowedFilters.filter((f) => f !== "all") as Filter[]
+                    ).map((f) => (
+                      <button
+                        key={f}
+                        role="option"
+                        aria-selected={filter === f}
+                        onClick={() => {
+                          setFilter(f);
+                          setDropdownOpen(false);
+                          inputRef.current?.focus();
+                        }}
+                        className={clsx(
+                          "flex w-full items-center gap-2 px-3 sm:px-3.5 py-2.5 text-xs sm:text-sm hover:bg-white/5 focus:outline-none cursor-pointer",
+                          filter === f && "bg-white/7",
+                        )}
+                      >
+                        {f === "event" && (
+                          <Ticket className="h-4 w-4 opacity-80" />
+                        )}
+                        {f === "org" && (
+                          <Building2 className="h-4 w-4 opacity-80" />
+                        )}
+                        {f === "team" && (
+                          <Users2 className="h-4 w-4 opacity-80" />
+                        )}
+                        {f === "friend" && (
+                          <UserRound className="h-4 w-4 opacity-80" />
+                        )}
+                        <span>{FILTER_LABEL[f]}</span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -664,7 +707,6 @@ export default function SearchModal({
 
             {/* Results panel */}
             <div className="max-h-[70vh] sm:max-h-[60vh] overflow-auto rounded-b-2xl sm:rounded-b-[1.5rem]">
-              {/* Empty query → Recent (ONLY when there are recents) */}
               {!query.trim() && recent.length > 0 && (
                 <div className="p-3.5 sm:p-5">
                   <div className="flex items-center justify-between">
@@ -693,7 +735,6 @@ export default function SearchModal({
                 </div>
               )}
 
-              {/* Loading */}
               {query.trim() && loading && (
                 <div className="flex items-center gap-3 px-3.5 sm:px-4 py-5 text-neutral-300">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -701,7 +742,6 @@ export default function SearchModal({
                 </div>
               )}
 
-              {/* Results */}
               {query.trim() && !loading && flatResults.length > 0 && (
                 <ul role="listbox" className="divide-y divide-white/5">
                   {flatResults.map((item) => {
@@ -763,14 +803,12 @@ export default function SearchModal({
                               </div>
                             </div>
 
-                            {/* EXACT tracking-links destination pill style */}
                             <SearchDestinationPill type="event" />
                           </button>
                         </li>
                       );
                     }
 
-                    // Orgs / Teams / Friends
                     return (
                       <li key={key}>
                         <button
@@ -828,11 +866,14 @@ export default function SearchModal({
                             </div>
                           </div>
 
-                          {/* Right pill */}
                           {item.type === "org" ? (
                             <SearchDestinationPill
                               type="org"
-                              accentColor={orgAccentById[item.id] ?? null}
+                              accentColor={
+                                !publicMode
+                                  ? (orgAccentById[item.id] ?? null)
+                                  : null
+                              }
                             />
                           ) : item.type === "team" ? (
                             <SearchTypePill type="team" />
@@ -846,7 +887,6 @@ export default function SearchModal({
                 </ul>
               )}
 
-              {/* Empty state */}
               {query.trim() && !loading && flatResults.length === 0 && (
                 <div className="p-8 text-center">
                   <div className="inline-flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-neutral-300">
@@ -857,15 +897,21 @@ export default function SearchModal({
                     <span className="text-neutral-0">“{query}”</span>
                   </p>
                   <p className="mt-1 text-sm text-neutral-400">
-                    Try a different spelling, or use the filter for events,
-                    organizations, teams, or friends.
+                    {publicMode
+                      ? "Try a different spelling, or search events and organizations."
+                      : "Try a different spelling, or use the filter for events, organizations, teams, or friends."}
                   </p>
+
                   <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                     <Chip onClick={() => setFilter("all")}>All</Chip>
                     <Chip onClick={() => setFilter("event")}>Events</Chip>
                     <Chip onClick={() => setFilter("org")}>Organizations</Chip>
-                    <Chip onClick={() => setFilter("team")}>Teams</Chip>
-                    <Chip onClick={() => setFilter("friend")}>Friends</Chip>
+                    {!publicMode && (
+                      <>
+                        <Chip onClick={() => setFilter("team")}>Teams</Chip>
+                        <Chip onClick={() => setFilter("friend")}>Friends</Chip>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

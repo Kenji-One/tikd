@@ -30,6 +30,7 @@ import CopyButton from "@/components/ui/CopyButton";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { Button } from "@/components/ui/Button";
 import Image from "next/image";
+import { titleInitial } from "@/app/dashboard/events/[eventId]/layout";
 
 /* ------------------------------- Types ------------------------------ */
 type DestinationKind = "Event" | "Organization";
@@ -1009,7 +1010,7 @@ function DestinationThumb({
       aria-hidden
       title={title}
     >
-      <Icon className="h-5 w-5 text-white/70" />
+      {titleInitial(title)}
     </div>
   );
 }
@@ -1102,27 +1103,29 @@ function SelectedDestinationCard({
         <div className="shrink-0 flex items-center gap-2">
           <DestinationPill kind={dest.kind} />
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClear();
-            }}
-            disabled={disabled}
-            className={clsx(
-              "inline-flex h-8 w-8 items-center justify-center rounded-md border cursor-pointer",
-              "transition",
-              disabled
-                ? "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
-                : "border-primary-500/30 bg-primary-500/15 text-primary-200 hover:bg-primary-500/22",
-              "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
-            )}
-            title={disabled ? "Locked" : "Clear selection"}
-            aria-label="Clear selection"
-          >
-            <X size={14} />
-          </button>
+          {!disabled && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClear();
+              }}
+              disabled={disabled}
+              className={clsx(
+                "inline-flex h-8 w-8 items-center justify-center rounded-md border cursor-pointer",
+                "transition",
+                disabled
+                  ? "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
+                  : "border-primary-500/30 bg-primary-500/15 text-primary-200 hover:bg-primary-500/22",
+                "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+              )}
+              title={disabled ? "Locked" : "Clear selection"}
+              aria-label="Clear selection"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>

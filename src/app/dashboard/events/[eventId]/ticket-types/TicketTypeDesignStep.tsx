@@ -327,7 +327,7 @@ export default function TicketTypeDesignStep({
   const commonInputClasses =
     "w-full rounded-lg border-none bg-neutral-900 px-3 py-2.5 text-sm text-neutral-0 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-primary-500";
   const commonButtonClasses =
-    "inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-neutral-800 px-6 py-3 text-sm font-medium text-neutral-0 hover:bg-neutral-700 transition-colors";
+    "inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-neutral-800 px-6 py-3 text-sm font-medium text-neutral-0 hover:bg-neutral-700 transition-colors cursor-pointer";
 
   return (
     <div className="space-y-6">
@@ -348,7 +348,7 @@ export default function TicketTypeDesignStep({
               onClick={() => setValue("layout", value, { shouldDirty: true })}
               className={clsx(
                 "flex flex-col items-center justify-between gap-3 rounded-lg border px-2.5 py-3 text-xs capitalize transition-colors",
-                "bg-neutral-900 text-neutral-0",
+                "bg-neutral-900 text-neutral-0 cursor-pointer",
                 isActive
                   ? "border-primary-500"
                   : "border-neutral-950 hover:border-primary-500",

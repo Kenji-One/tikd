@@ -42,6 +42,7 @@ import {
   X,
   RotateCcw,
   Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
@@ -488,6 +489,14 @@ export default function RolesPermissionsModal({
     y: 0,
   });
 
+  // ✅ Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    roleId: string;
+    roleName: string;
+  } | null>(null);
+
+  const confirmOpen = !!deleteConfirm;
+
   function openColorPickerAt(e: React.PointerEvent | React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -590,6 +599,7 @@ export default function RolesPermissionsModal({
     setUploadErr(null);
     setColorPickerOpen(false);
     setActiveRoleId(null);
+    setDeleteConfirm(null);
 
     requestAnimationFrame(() => {
       bodyScrollRef.current?.scrollTo({ top: 0 });
@@ -633,6 +643,12 @@ export default function RolesPermissionsModal({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // ✅ If confirm is open, close it first (don’t close the whole Roles modal)
+        if (confirmOpen) {
+          setDeleteConfirm(null);
+          return;
+        }
+
         if (view === "editor") {
           setView("list");
           setEditorTab("manager");
@@ -648,7 +664,7 @@ export default function RolesPermissionsModal({
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [open, onClose, view]);
+  }, [open, onClose, view, confirmOpen]);
 
   /* -------------------------- Mutations -------------------------- */
   const createRoleMutation = useMutation({
@@ -734,6 +750,9 @@ export default function RolesPermissionsModal({
         setView("list");
         setEditorTab("manager");
       }
+
+      // ✅ close confirm if it was open for this role
+      setDeleteConfirm((cur) => (cur?.roleId === roleId ? null : cur));
     },
   });
 
@@ -802,6 +821,17 @@ export default function RolesPermissionsModal({
       },
     });
   };
+
+  function openDeleteConfirmationForRole(r: OrgRoleRow) {
+    if (!canDelete(r)) return;
+    setDeleteConfirm({ roleId: r._id, roleName: r.name });
+  }
+
+  function confirmDeleteNow() {
+    if (!deleteConfirm) return;
+    deleteRoleMutation.mutate(deleteConfirm.roleId);
+    setDeleteConfirm(null);
+  }
 
   async function uploadRoleIcon(file: File) {
     setUploadErr(null);
@@ -1053,7 +1083,7 @@ export default function RolesPermissionsModal({
             aria-label="Close modal"
             className={clsx(
               "inline-flex h-9 w-9 items-center justify-center rounded-full",
-              "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
+              "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10 cursor-pointer",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
             )}
           >
@@ -1233,7 +1263,7 @@ export default function RolesPermissionsModal({
 
                               <button
                                 type="button"
-                                onClick={() => deleteRoleMutation.mutate(r._id)}
+                                onClick={() => openDeleteConfirmationForRole(r)}
                                 title={
                                   r.isSystem
                                     ? "System roles cannot be deleted"
@@ -1798,7 +1828,7 @@ export default function RolesPermissionsModal({
                                 type="button"
                                 disabled={saving}
                                 onClick={() =>
-                                  deleteRoleMutation.mutate(activeRole._id)
+                                  openDeleteConfirmationForRole(activeRole)
                                 }
                                 className={clsx(
                                   "inline-flex items-center gap-2 rounded-xl px-3 py-2",
@@ -1918,6 +1948,114 @@ export default function RolesPermissionsModal({
             </div>
           ) : null}
         </div>
+
+        {/* ✅ Delete confirmation popup */}
+        {confirmOpen ? (
+          <div
+            className="absolute inset-0 z-[95] flex items-center justify-center px-3"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete role confirmation"
+          >
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => setDeleteConfirm(null)}
+              className="absolute inset-0 bg-black/55 backdrop-blur-[8px]"
+            />
+
+            <div
+              className={clsx(
+                "relative w-full max-w-[460px] overflow-hidden rounded-2xl",
+                "border border-white/10 bg-neutral-950/92",
+                "shadow-[0_25px_90px_rgba(0,0,0,0.75)]",
+              )}
+            >
+              <div
+                className="pointer-events-none absolute inset-0 opacity-100"
+                style={{
+                  background:
+                    "radial-gradient(700px 240px at 18% -10%, rgba(154,70,255,0.16), transparent 60%), radial-gradient(700px 240px at 100% 30%, rgba(66,139,255,0.10), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                }}
+              />
+
+              <div className="relative flex items-start justify-between gap-3 px-5 py-4">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={clsx(
+                      "mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                      "border border-white/10 bg-white/5 text-warning-200 flex-shrink-0",
+                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                    )}
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="text-[16px] font-semibold text-neutral-0">
+                      Delete Role
+                    </div>
+                    <div className="mt-1 text-[12px] text-neutral-400">
+                      Are you sure you want to delete the{" "}
+                      <span className="font-semibold text-neutral-200">
+                        {deleteConfirm?.roleName ?? "this"}
+                      </span>{" "}
+                      role? This action cannot be undone.
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirm(null)}
+                  aria-label="Close confirmation"
+                  className={clsx(
+                    "inline-flex flex-shrink-0 h-9 w-9 items-center justify-center rounded-full",
+                    "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10 cursor-pointer",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                  )}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="relative px-5 pb-5">
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    className={clsx(
+                      "rounded-xl",
+                      "border border-white/10 bg-white/5",
+                      "hover:bg-white/10",
+                    )}
+                    disabled={saving}
+                    onClick={() => setDeleteConfirm(null)}
+                  >
+                    Cancel
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="md"
+                    className={clsx(
+                      "rounded-xl",
+                      "bg-[linear-gradient(90deg,rgba(154,70,255,0.95),rgba(66,139,255,0.55))]",
+                      "hover:bg-[linear-gradient(90deg,rgba(154,70,255,1),rgba(66,139,255,0.62))]",
+                      "shadow-[0_18px_40px_rgba(154,70,255,0.18)]",
+                    )}
+                    disabled={saving}
+                    onClick={confirmDeleteNow}
+                  >
+                    Okay
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

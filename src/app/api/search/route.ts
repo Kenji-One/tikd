@@ -1,9 +1,19 @@
 /* ------------------------------------------------------------------ *
  *  /api/search  – global search for events / organizations / teams / friends
+ *
  *  Query params:
  *    q=<string>                          (required, trimmed)
  *    type=event|org|team|friend|all      (default: all)
  *    limit=<1..20>                       (default: 6 per type)
+ *    scope=public|dashboard              (default: auto)
+ *
+ *  Behavior:
+ *   - public:   search Events + Orgs only (no auth required)
+ *              hrefs go to public pages (/events/:id, /organizations/:slug-or-id)
+ *   - dashboard: search Events + Orgs + Teams + Friends (auth required)
+ *              results are scoped to membership/ownership (OrgTeam/EventTeam/TeamMember)
+ *              hrefs go to dashboard pages
+ *
  *  Returns:
  *    { success: true, results: { events:[], orgs:[], teams:[], friends:[] } }
  * ------------------------------------------------------------------ */
@@ -12,6 +22,7 @@ import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
 import { Types } from "mongoose";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 
 import Event from "@/models/Event";
@@ -19,6 +30,10 @@ import Organization from "@/models/Organization";
 import Team from "@/models/Team";
 import User from "@/models/User";
 import Friendship from "@/models/Friendship";
+
+import OrgTeam from "@/models/OrgTeam";
+import EventTeam from "@/models/EventTeam";
+import TeamMember from "@/models/TeamMember";
 
 /* ---------- shared result item types (client shape) ---------------- */
 type SearchItemEvent = {
@@ -45,7 +60,7 @@ type SearchItemTeam = {
   id: string;
   type: "team";
   title: string;
-  subtitle: string; // location or short descriptor
+  subtitle: string;
   image: string | null;
   href: string;
 };
@@ -53,8 +68,8 @@ type SearchItemTeam = {
 type SearchItemFriend = {
   id: string;
   type: "friend";
-  title: string; // display name
-  subtitle: string; // job/company or email
+  title: string;
+  subtitle: string;
   image: string | null;
   href: string;
 };
@@ -70,6 +85,7 @@ type SearchPayload = {
 };
 
 type Kind = "event" | "org" | "team" | "friend" | "all";
+type Scope = "auto" | "public" | "dashboard";
 
 /* ---------- minimal lean projections (typed) ----------------------- */
 type ObjId = Types.ObjectId | string;
@@ -79,7 +95,7 @@ interface OrgLean {
   name: string;
   slug?: string;
   logo?: string | null;
-  city?: string | null;
+  location?: string | null; // ✅ your model uses location (not city)
 }
 
 interface EventLean {
@@ -89,6 +105,7 @@ interface EventLean {
   date?: Date | string | null;
   location?: string | null;
   organizationId?: ObjId | OrgLean | null;
+  createdByUserId?: ObjId | null;
 }
 
 interface TeamLean {
@@ -110,20 +127,57 @@ interface FriendLean {
 }
 
 /* ------------------------------------------------------------------ */
-const clamp = (n: number, lo: number, hi: number) =>
-  Math.max(lo, Math.min(hi, n));
+const qsSchema = z.object({
+  q: z.string().trim().min(1),
+  type: z.enum(["event", "org", "team", "friend", "all"]).default("all"),
+  limit: z.coerce.number().int().min(1).max(20).default(6),
+  scope: z.enum(["auto", "public", "dashboard"]).default("auto"),
+});
 
-const isObjectId = (v: string) => /^[a-f\d]{24}$/i.test(v);
+function isObjectIdString(v: string) {
+  return /^[a-f\d]{24}$/i.test(v);
+}
+
+function safeIso(d: unknown): string | null {
+  try {
+    if (!d) return null;
+    const dt = d instanceof Date ? d : new Date(String(d));
+    if (Number.isNaN(dt.getTime())) return null;
+    return dt.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+function escapeRegex(q: string) {
+  return q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function uniqObjectIds(ids: Array<Types.ObjectId | string>) {
+  const seen = new Set<string>();
+  const out: Types.ObjectId[] = [];
+  for (const id of ids) {
+    const s = String(id);
+    if (!isObjectIdString(s)) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(new Types.ObjectId(s));
+  }
+  return out;
+}
 
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const q = (url.searchParams.get("q") || "").trim();
-    const type = (url.searchParams.get("type") || "all") as Kind;
-    const limitParam = parseInt(url.searchParams.get("limit") || "6", 10);
-    const perType = clamp(Number.isNaN(limitParam) ? 6 : limitParam, 1, 20);
 
-    if (!q) {
+    const parsed = qsSchema.safeParse({
+      q: url.searchParams.get("q") ?? "",
+      type: url.searchParams.get("type") ?? "all",
+      limit: url.searchParams.get("limit") ?? "6",
+      scope: url.searchParams.get("scope") ?? "auto",
+    });
+
+    if (!parsed.success) {
       const empty: SearchPayload = {
         success: true,
         results: { events: [], orgs: [], teams: [], friends: [] },
@@ -131,55 +185,230 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(empty, { status: 200 });
     }
 
-    // Safe regex (escape special chars)
-    const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const rx = new RegExp(pattern, "i");
+    const { q, type, limit: perType, scope } = parsed.data;
 
-    // Only used when searching friends (or all)
+    const rx = new RegExp(escapeRegex(q), "i");
+
+    // Resolve scope:
+    // - public: no auth required, only events/orgs
+    // - dashboard: auth required, scoped by membership
+    let resolvedScope: Exclude<Scope, "auto"> = "public";
+
+    if (scope === "dashboard") resolvedScope = "dashboard";
+    else if (scope === "public") resolvedScope = "public";
+    else {
+      // auto: if user is authed => dashboard behavior, else public behavior
+      const session = await auth();
+      resolvedScope = session?.user?.id ? "dashboard" : "public";
+    }
+
+    // -----------------------------------------
+    // PUBLIC SCOPE
+    // -----------------------------------------
+    if (resolvedScope === "public") {
+      const [eventsRaw, orgsRaw] = await Promise.all([
+        type === "event" || type === "all"
+          ? Event.find<EventLean>(
+              { $or: [{ title: rx }, { location: rx }] },
+              { _id: 1, title: 1, image: 1, date: 1, organizationId: 1 },
+            )
+              .sort({ date: 1 })
+              .limit(perType)
+              .populate({
+                path: "organizationId",
+                select: "_id name slug logo location",
+                model: Organization,
+              })
+              .lean()
+          : ([] as EventLean[]),
+
+        type === "org" || type === "all"
+          ? Organization.find<OrgLean>(
+              { $or: [{ name: rx }, { location: rx }] },
+              { _id: 1, name: 1, slug: 1, logo: 1, location: 1 },
+            )
+              .limit(perType)
+              .lean()
+          : ([] as OrgLean[]),
+      ]);
+
+      const toEvent = (e: EventLean): SearchItemEvent => {
+        const org =
+          e.organizationId && typeof e.organizationId === "object"
+            ? (e.organizationId as OrgLean)
+            : null;
+
+        return {
+          id: String(e._id),
+          type: "event",
+          title: e.title,
+          subtitle: org?.name || "",
+          orgName: org?.name || null,
+          date: safeIso(e.date),
+          image: e.image ?? null,
+          href: `/events/${e._id}`, // ✅ public
+        };
+      };
+
+      const toOrg = (o: OrgLean): SearchItemOrg => ({
+        id: String(o._id),
+        type: "org",
+        title: o.name,
+        subtitle: o.location || "",
+        image: o.logo ?? null,
+        href: `/organizations/${o.slug || o._id}`, // ✅ public
+      });
+
+      const payload: SearchPayload = {
+        success: true,
+        results: {
+          events: (eventsRaw as EventLean[]).map(toEvent),
+          orgs: (orgsRaw as OrgLean[]).map(toOrg),
+          teams: [],
+          friends: [],
+        },
+      };
+
+      return NextResponse.json(payload, { status: 200 });
+    }
+
+    // -----------------------------------------
+    // DASHBOARD SCOPE (membership-scoped)
+    // -----------------------------------------
     const session = await auth();
-    const me =
-      session?.user?.id && isObjectId(session.user.id) ? session.user.id : null;
-    const meId = me ? new Types.ObjectId(me) : null;
+    const meRaw =
+      session?.user?.id && isObjectIdString(session.user.id)
+        ? session.user.id
+        : null;
+
+    if (!meRaw) {
+      const empty: SearchPayload = {
+        success: true,
+        results: { events: [], orgs: [], teams: [], friends: [] },
+      };
+      return NextResponse.json(empty, { status: 200 });
+    }
+
+    const meId = new Types.ObjectId(meRaw);
+    const meEmail =
+      typeof session?.user?.email === "string"
+        ? session.user.email.toLowerCase().trim()
+        : null;
+
+    // 1) Allowed orgs: owner OR OrgTeam.active (by userId OR email)
+    const [ownedOrgs, orgMemberships] = await Promise.all([
+      Organization.find({ ownerId: meId }, { _id: 1 }).lean<
+        Array<{ _id: Types.ObjectId }>
+      >(),
+      OrgTeam.find(
+        {
+          status: "active",
+          $or: [{ userId: meId }, ...(meEmail ? [{ email: meEmail }] : [])],
+        },
+        { organizationId: 1 },
+      ).lean<Array<{ organizationId: Types.ObjectId }>>(),
+    ]);
+
+    const allowedOrgIds = uniqObjectIds([
+      ...ownedOrgs.map((x) => x._id),
+      ...orgMemberships.map((x) => x.organizationId),
+    ]);
+
+    // 2) Allowed events: createdByUserId OR in allowedOrgIds OR EventTeam.active
+    const eventMemberships = await EventTeam.find(
+      {
+        status: "active",
+        $or: [{ userId: meId }, ...(meEmail ? [{ email: meEmail }] : [])],
+      },
+      { eventId: 1 },
+    ).lean<Array<{ eventId: Types.ObjectId }>>();
+
+    const allowedEventIds = uniqObjectIds(
+      eventMemberships.map((x) => x.eventId),
+    );
+
+    // 3) Allowed teams: owner OR TeamMember.active
+    const teamMemberships = await TeamMember.find(
+      {
+        status: "active",
+        $or: [{ userId: meId }, ...(meEmail ? [{ email: meEmail }] : [])],
+      },
+      { teamId: 1 },
+    ).lean<Array<{ teamId: Types.ObjectId }>>();
+
+    const allowedTeamIds = uniqObjectIds(teamMemberships.map((x) => x.teamId));
 
     const [eventsRaw, orgsRaw, teamsRaw, friendsRaw] = await Promise.all([
       type === "event" || type === "all"
         ? Event.find<EventLean>(
-            { $or: [{ title: rx }, { location: rx }] },
+            {
+              $and: [
+                { $or: [{ title: rx }, { location: rx }] },
+                {
+                  $or: [
+                    { createdByUserId: meId },
+                    ...(allowedOrgIds.length > 0
+                      ? [{ organizationId: { $in: allowedOrgIds } }]
+                      : []),
+                    ...(allowedEventIds.length > 0
+                      ? [{ _id: { $in: allowedEventIds } }]
+                      : []),
+                  ],
+                },
+              ],
+            },
             { _id: 1, title: 1, image: 1, date: 1, organizationId: 1 },
           )
             .sort({ date: 1 })
             .limit(perType)
             .populate({
               path: "organizationId",
-              select: "_id name slug logo city",
+              select: "_id name slug logo location",
               model: Organization,
             })
             .lean()
         : ([] as EventLean[]),
 
       type === "org" || type === "all"
-        ? Organization.find<OrgLean>(
-            { $or: [{ name: rx }, { city: rx }] },
-            { _id: 1, name: 1, slug: 1, logo: 1, city: 1 },
-          )
-            .limit(perType)
-            .lean()
+        ? allowedOrgIds.length > 0
+          ? Organization.find<OrgLean>(
+              {
+                $and: [
+                  { _id: { $in: allowedOrgIds } },
+                  { $or: [{ name: rx }, { location: rx }] },
+                ],
+              },
+              { _id: 1, name: 1, slug: 1, logo: 1, location: 1 },
+            )
+              .limit(perType)
+              .lean()
+          : ([] as OrgLean[])
         : ([] as OrgLean[]),
 
       type === "team" || type === "all"
         ? Team.find<TeamLean>(
-            { $or: [{ name: rx }, { location: rx }] },
+            {
+              $and: [
+                { $or: [{ name: rx }, { location: rx }] },
+                {
+                  $or: [
+                    { ownerId: meId },
+                    ...(allowedTeamIds.length > 0
+                      ? [{ _id: { $in: allowedTeamIds } }]
+                      : []),
+                  ],
+                },
+              ],
+            },
             { _id: 1, name: 1, location: 1, logo: 1 },
           )
             .limit(perType)
             .lean()
         : ([] as TeamLean[]),
 
-      // ✅ Friends: ONLY accepted friendships for the logged-in user.
+      // Friends only exist in dashboard scope, and only accepted friendships
       type === "friend" || type === "all"
         ? (async (): Promise<FriendLean[]> => {
-            if (!meId) return [];
-
             const rels = (await Friendship.find(
               {
                 status: "accepted",
@@ -191,23 +420,18 @@ export async function GET(req: NextRequest) {
               recipientId: Types.ObjectId;
             }>;
 
-            const friendIds = Array.from(
-              new Set(
-                rels
-                  .map((r) =>
-                    String(r.requesterId) === String(meId)
-                      ? String(r.recipientId)
-                      : String(r.requesterId),
-                  )
-                  .filter(Boolean),
-              ),
-            ).map((id) => new Types.ObjectId(id));
+            const friendIds = uniqObjectIds(
+              rels
+                .map((r) =>
+                  String(r.requesterId) === String(meId)
+                    ? r.recipientId
+                    : r.requesterId,
+                )
+                .filter(Boolean),
+            );
 
             if (friendIds.length === 0) return [];
 
-            // NOTE:
-            // Mongoose's TS types for `.lean()` can return FlattenMaps<unknown> for _id.
-            // Runtime is correct because we control the projection, so we cast the lean output.
             const raw = await User.find(
               {
                 _id: { $in: friendIds },
@@ -239,7 +463,6 @@ export async function GET(req: NextRequest) {
         : ([] as FriendLean[]),
     ]);
 
-    // Uniform client shape + hrefs
     const toEvent = (e: EventLean): SearchItemEvent => {
       const org =
         e.organizationId && typeof e.organizationId === "object"
@@ -252,9 +475,9 @@ export async function GET(req: NextRequest) {
         title: e.title,
         subtitle: org?.name || "",
         orgName: org?.name || null,
-        date: e.date ? new Date(e.date).toISOString() : null,
+        date: safeIso(e.date),
         image: e.image ?? null,
-        href: `/events/${e._id}`,
+        href: `/dashboard/events/${e._id}`, // ✅ dashboard
       };
     };
 
@@ -262,9 +485,9 @@ export async function GET(req: NextRequest) {
       id: String(o._id),
       type: "org",
       title: o.name,
-      subtitle: o.city || "",
+      subtitle: o.location || "",
       image: o.logo ?? null,
-      href: `/organizations/${o.slug || o._id}`,
+      href: `/dashboard/organizations/${o._id}`, // ✅ dashboard
     });
 
     const toTeam = (t: TeamLean): SearchItemTeam => ({
@@ -273,7 +496,7 @@ export async function GET(req: NextRequest) {
       title: t.name,
       subtitle: t.location || "",
       image: t.logo ?? null,
-      href: `/dashboard/teams/${t._id}`,
+      href: `/dashboard/teams/${t._id}`, // ✅ dashboard
     });
 
     const friendDisplayName = (u: FriendLean) => {
@@ -318,10 +541,3 @@ export async function GET(req: NextRequest) {
     );
   }
 }
-
-/* Index suggestions (create in Mongo/Atlas for perf)
-  db.events.createIndex({ title: "text", location: "text", date: 1 })
-  db.organizations.createIndex({ name: "text", city: "text" })
-  db.teams.createIndex({ name: "text", location: "text" })
-  db.friendships.createIndex({ requesterId: 1, recipientId: 1, status: 1 })
-*/

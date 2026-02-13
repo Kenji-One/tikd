@@ -467,7 +467,6 @@ function StatPillsRow(opts: {
                 key={it.key}
                 className={[
                   "min-w-[160px] flex-1",
-                  "sm:min-w-[170px] md:min-w-[180px]",
                   "group relative rounded-xl p-[1px]",
                 ].join(" ")}
                 style={{ background: borderBg }}
@@ -791,8 +790,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
   }, [ageSlicePairs, agePercentMap]);
 
   // ✅ Match Event Dashboard sizing/feel: make the 3 cards stretch to equal height.
-  const panelClass =
-    "rounded-lg border border-neutral-700 bg-neutral-900 p-5 h-full min-h-[520px] flex flex-col";
+  const panelClass = "rounded-lg border border-neutral-700 bg-neutral-900 p-5";
 
   return (
     <div className="space-y-5 px-4 md:px-6 lg:px-8">
@@ -893,8 +891,8 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
       </section>
 
       {/* ✅ This section now matches Event Dashboard sizing */}
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr] items-stretch">
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 items-stretch">
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* Gender Breakdown */}
           <div className={panelClass}>
             <div className="flex items-start justify-between">
@@ -919,7 +917,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
             <div className="mt-4 flex flex-1 flex-col justify-center">
               <DonutFull
                 segments={genderSegments}
-                height={320}
+                height={300}
                 thickness={60}
                 padAngle={4}
                 minSliceAngle={6}
@@ -955,7 +953,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
               {/* ✅ Donut always shows full dataset */}
               <DonutFull
                 segments={ageSegments}
-                height={320}
+                height={300}
                 thickness={60}
                 padAngle={5}
                 minSliceAngle={8}
@@ -974,15 +972,12 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
           </div>
         </div>
 
-        {/* My Members (force same height envelope as donuts) */}
-        <div className="h-full min-h-[520px]">
-          <MyTeamTable
-            members={DEMO_MY_TEAM}
-            onDetailedView={() => {
-              // later: /dashboard/organizations/:id/team
-            }}
-          />
-        </div>
+        <MyTeamTable
+          members={DEMO_MY_TEAM}
+          onDetailedView={() => {
+            // later: /dashboard/organizations/:id/team
+          }}
+        />
       </section>
 
       <TrackingLinksTable

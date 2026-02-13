@@ -423,7 +423,6 @@ function StatPillsRow(opts: {
                 key={it.key}
                 className={[
                   "min-w-[160px] flex-1",
-                  "sm:min-w-[170px] md:min-w-[180px]",
                   "group relative rounded-xl p-[1px]",
                 ].join(" ")}
                 style={{ background: borderBg }}
@@ -945,7 +944,6 @@ export default function EventSummaryPage() {
             </div>
 
             <div className="mt-4">
-              {/* ✅ Donut always shows full dataset */}
               <DonutFull
                 segments={ageSegments}
                 height={300}
@@ -956,7 +954,6 @@ export default function EventSummaryPage() {
                 showSliceBadges
               />
 
-              {/* ✅ Pills keep carousel, but % is based on FULL dataset (sum=100 across all ages) */}
               <StatPillsRow
                 items={agePills}
                 withArrows

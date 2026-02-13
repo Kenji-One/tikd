@@ -451,7 +451,7 @@ export default function Topbar({ hideLogo = false }: TopbarProps) {
                             >
                               <g transform="translate(-5.1429 -5.1429) scale(1.4286)">
                                 <path d="M5 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V7z" />
-                                <path d="M9 7.5v9" stroke-dasharray="1 2" />
+                                <path d="M9 7.5v9" strokeDasharray="1 2" />
                                 <path d="M11 9h7" />
                                 <path d="M14.5 9v8" />
                               </g>

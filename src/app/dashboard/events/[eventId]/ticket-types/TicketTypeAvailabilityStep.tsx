@@ -1,14 +1,16 @@
-// src/app/dashboard/organizations/[id]/events/[eventId]/ticket-types/TicketTypeAvailabilityStep.tsx
 "use client";
 
 import type { TicketTypeFormValues, TicketAvailabilityStatus } from "./types";
 import type { UseFormRegister, UseFormSetValue } from "react-hook-form";
-import { useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import clsx from "clsx";
 import { ChevronDown, Globe, Link2, Lock, Eye, EyeOff } from "lucide-react";
 
 import Checkbox from "@/components/ui/Checkbox";
+import DateRangePicker, {
+  type DateRangeValue,
+} from "@/components/ui/DateRangePicker";
 
 type Props = {
   register: UseFormRegister<TicketTypeFormValues>;
@@ -126,11 +128,9 @@ function QuantityCard(props: {
           "h-[44px] rounded-lg px-4",
           "border border-white/10 bg-white/5",
           "transition-[border-color,box-shadow] duration-150",
-          // ✅ card highlight when any inner input is focused
           "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/35",
         )}
       >
-        {/* ✅ icon slot supports raw <svg /> now */}
         <span className="inline-flex h-6 w-6 items-center justify-center text-neutral-200 [&_svg]:h-5 [&_svg]:w-5">
           {Icon}
         </span>
@@ -181,7 +181,7 @@ function StatusDropdown({ value, onChange }: StatusDropdownProps) {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex min-w-[122px] items-center justify-between rounded-lg border border-primary-400/70 bg-neutral-900 px-4 py-2 font-medium text-neutral-0 hover:border-primary-300"
+        className="flex min-w-[122px] items-center justify-between rounded-lg border border-primary-400/70 bg-neutral-900 px-4 py-2 font-medium text-neutral-0 hover:border-primary-300 transition-colors cursor-pointer"
       >
         <span>{active.label}</span>
         <span className="text-[11px] text-neutral-400">▾</span>
@@ -378,7 +378,7 @@ function PasswordPanel(props: {
                 "absolute right-2 top-1/2 -translate-y-1/2",
                 "inline-flex h-9 w-9 items-center justify-center rounded-md",
                 "text-neutral-300 hover:text-neutral-0",
-                "hover:bg-white/5 transition-colors",
+                "hover:bg-white/5 transition-colors cursor-pointer",
               )}
             >
               {show ? (
@@ -394,7 +394,7 @@ function PasswordPanel(props: {
             onClick={onSubmitClick}
             className={clsx(
               "h-11 w-full rounded-lg border border-[#FFFFFF14] bg-primary-500 text-[13px] font-semibold text-white",
-              "transition-colors hover:bg-primary-400",
+              "transition-colors hover:bg-primary-400 cursor-pointer",
             )}
           >
             {saved ? "Saved" : "Submit"}
@@ -440,13 +440,25 @@ function formatScheduleHeading(raw: string | null | undefined): string {
   return `${date} at ${time}`;
 }
 
+function toLocalDatetimeInputValue(d: Date) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+function combineDayWithExistingTime(
+  day: Date,
+  existingSalesEndAt: string | null,
+) {
+  const base = existingSalesEndAt ? new Date(existingSalesEndAt) : new Date();
+  const combined = new Date(day);
+  combined.setHours(base.getHours(), base.getMinutes(), 0, 0);
+  return toLocalDatetimeInputValue(combined);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main component                                                    */
 /* ------------------------------------------------------------------ */
-
-type PickerCapableInput = HTMLInputElement & {
-  showPicker?: () => void;
-};
 
 export default function TicketTypeAvailabilityStep({
   register,
@@ -478,10 +490,17 @@ export default function TicketTypeAvailabilityStep({
 
   const hasSchedule = !!salesEndAt;
 
-  // hidden datetime-local input (for RHF) + ref so "Edit date" can open it
-  const scheduleInputRef = useRef<HTMLInputElement | null>(null);
-
+  // keep RHF field registered, but use our picker for the date part
   const { ref: salesEndAtRef, ...salesEndAtField } = register("salesEndAt");
+
+  const [schedulePickerOpen, setSchedulePickerOpen] = useState(false);
+
+  const schedulePickerValue: DateRangeValue = useMemo(() => {
+    if (!salesEndAt) return { start: null, end: null };
+    const dt = new Date(salesEndAt);
+    if (Number.isNaN(dt.getTime())) return { start: null, end: null };
+    return { start: dt, end: dt };
+  }, [salesEndAt]);
 
   /* ---------- keep numeric fields registered (hidden) ---------- */
 
@@ -510,15 +529,13 @@ export default function TicketTypeAvailabilityStep({
     <div className="space-y-6">
       {hiddenNumericInputs}
 
-      {/* Intro text */}
       <p className="leading-snug text-neutral-300">
         Set a total number of tickets for this ticket type.
       </p>
 
-      {/* Quantities (compact) */}
+      {/* Quantities */}
       <div className="space-y-3">
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {/* Total */}
           <QuantityCard
             title="Total Number Of Tickets"
             Icon={
@@ -551,14 +568,12 @@ export default function TicketTypeAvailabilityStep({
               }
             }}
             onValueChange={(next) => {
-              if (unlimitedQuantity) {
+              if (unlimitedQuantity)
                 setValue("unlimitedQuantity", false, { shouldDirty: true });
-              }
               setValue("totalQuantity", next, { shouldDirty: true });
             }}
           />
 
-          {/* Min */}
           <QuantityCard
             title="Minimum Tickets Per Order"
             Icon={
@@ -579,25 +594,22 @@ export default function TicketTypeAvailabilityStep({
                 />
               </svg>
             }
-            isUnlimited={hasNoMinimum}
+            isUnlimited={minPerOrder == null}
             value={minPerOrder ?? 0}
             unlimitedAriaLabel="Set minimum tickets per order to unlimited"
             valueAriaLabel="Minimum tickets per order"
             onUnlimitedChange={(next) => {
-              if (next) {
-                setValue("minPerOrder", null, { shouldDirty: true });
-              } else {
+              if (next) setValue("minPerOrder", null, { shouldDirty: true });
+              else
                 setValue("minPerOrder", minPerOrder ?? 0, {
                   shouldDirty: true,
                 });
-              }
             }}
             onValueChange={(next) =>
               setValue("minPerOrder", next, { shouldDirty: true })
             }
           />
 
-          {/* Max */}
           <QuantityCard
             title="Maximum Tickets Per Order"
             Icon={
@@ -618,18 +630,16 @@ export default function TicketTypeAvailabilityStep({
                 />
               </svg>
             }
-            isUnlimited={isMaxUnlimited}
+            isUnlimited={maxPerOrder == null}
             value={maxPerOrder ?? 0}
             unlimitedAriaLabel="Set maximum tickets per order to unlimited"
             valueAriaLabel="Maximum tickets per order"
             onUnlimitedChange={(next) => {
-              if (next) {
-                setValue("maxPerOrder", null, { shouldDirty: true });
-              } else {
+              if (next) setValue("maxPerOrder", null, { shouldDirty: true });
+              else
                 setValue("maxPerOrder", maxPerOrder ?? 0, {
                   shouldDirty: true,
                 });
-              }
             }}
             onValueChange={(next) =>
               setValue("maxPerOrder", next, { shouldDirty: true })
@@ -653,7 +663,6 @@ export default function TicketTypeAvailabilityStep({
           accessibility settings
         </p>
 
-        {/* keep fields registered for RHF */}
         <input type="hidden" {...register("accessMode")} />
         <input type="hidden" {...register("password")} />
 
@@ -733,24 +742,18 @@ export default function TicketTypeAvailabilityStep({
           </p>
         </div>
 
-        {/* Hidden datetime-local registered for salesEndAt */}
         <input
           type="datetime-local"
           className="sr-only"
           {...salesEndAtField}
-          ref={(el) => {
-            salesEndAtRef(el);
-            scheduleInputRef.current = el;
-          }}
+          ref={salesEndAtRef}
         />
 
         <div className="relative mx-auto mt-8 flex max-w-[227px] flex-col items-stretch gap-6">
-          {/* vertical line */}
           <div className="pointer-events-none absolute left-1/2 top-[92px] bottom-[92px] -z-10 -translate-x-1/2">
             <div className="mx-auto h-full w-[2px] bg-gradient-to-b from-primary-500/60 via-primary-500/20 to-primary-500/0" />
           </div>
 
-          {/* Current status card */}
           <div className="rounded-xl border border-primary-500/70 bg-neutral-950/70 px-6 py-5 shadow-[0_0_0_1px_rgba(88,28,135,0.4)]">
             <p className="text-center text-[14px] font-semibold text-neutral-0">
               Current Status
@@ -765,7 +768,6 @@ export default function TicketTypeAvailabilityStep({
             </div>
           </div>
 
-          {/* Plus button */}
           <div className="flex justify-center">
             <button
               type="button"
@@ -774,16 +776,11 @@ export default function TicketTypeAvailabilityStep({
                 if (hasSchedule) return;
                 const base = new Date();
                 base.setHours(base.getHours() + 1);
-                const local = new Date(
-                  base.getTime() - base.getTimezoneOffset() * 60000,
-                )
-                  .toISOString()
-                  .slice(0, 16);
-
+                const local = toLocalDatetimeInputValue(base);
                 setValue("salesEndAt", local, { shouldDirty: true });
               }}
               className={clsx(
-                "flex h-9 w-9 items-center justify-center rounded-full bg-primary-500 text-[20px] font-semibold text-white shadow-[0_0_0_4px_rgba(88,28,135,0.5)] transition-transform",
+                "flex h-9 w-9 items-center justify-center rounded-full bg-primary-500 text-[20px] font-semibold text-white shadow-[0_0_0_4px_rgba(88,28,135,0.5)] transition-transform cursor-pointer hover:bg-primary-400",
                 hasSchedule && "cursor-not-allowed opacity-35 shadow-none",
               )}
             >
@@ -791,7 +788,6 @@ export default function TicketTypeAvailabilityStep({
             </button>
           </div>
 
-          {/* Scheduled change card */}
           {hasSchedule && (
             <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-6 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]">
               <p className="text-center text-[14px] font-semibold text-neutral-0">
@@ -808,31 +804,49 @@ export default function TicketTypeAvailabilityStep({
               </div>
 
               <div className="mt-5 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const input = scheduleInputRef.current;
-                    if (!input) return;
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setSchedulePickerOpen(true)}
+                    className={clsx(
+                      "flex items-center gap-2 rounded-full border border-primary-500/70 bg-neutral-900 px-4 py-2",
+                      "text-[13px] font-medium text-neutral-0 hover:bg-neutral-800 cursor-pointer",
+                      "whitespace-nowrap leading-none",
+                    )}
+                  >
+                    Edit date
+                  </button>
 
-                    const pickerInput: PickerCapableInput = input;
-                    if (typeof pickerInput.showPicker === "function") {
-                      pickerInput.showPicker();
-                    } else {
-                      input.focus();
-                      input.click();
-                    }
-                  }}
-                  className="flex items-center gap-2 rounded-full border border-primary-500/70 bg-neutral-900 px-4 py-2 text-[13px] font-medium text-neutral-0 hover:bg-neutral-800"
-                >
-                  Edit date
-                </button>
+                  <DateRangePicker
+                    variant="field"
+                    hideTrigger
+                    side="top"
+                    open={schedulePickerOpen}
+                    onOpenChange={setSchedulePickerOpen}
+                    selectionMode="single"
+                    value={schedulePickerValue}
+                    onChange={(next) => {
+                      if (!next.start) {
+                        setValue("salesEndAt", null, { shouldDirty: true });
+                        return;
+                      }
+                      const combined = combineDayWithExistingTime(
+                        next.start,
+                        salesEndAt,
+                      );
+                      setValue("salesEndAt", combined, { shouldDirty: true });
+                    }}
+                    align="right"
+                    className="absolute left-0 bottom-8"
+                  />
+                </div>
 
                 <button
                   type="button"
                   onClick={() =>
                     setValue("salesEndAt", null, { shouldDirty: true })
                   }
-                  className="flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900 px-4 py-2 text-[13px] text-neutral-200 hover:border-red-500 hover:text-red-300"
+                  className="flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900 px-4 py-2 text-[13px] text-neutral-200 hover:border-red-500 hover:text-red-300 cursor-pointer whitespace-nowrap leading-none"
                 >
                   Delete
                 </button>
@@ -842,7 +856,6 @@ export default function TicketTypeAvailabilityStep({
         </div>
       </div>
 
-      {/* Navigation */}
       <div className="mt-8 flex items-center justify-end gap-4">
         <button
           type="button"

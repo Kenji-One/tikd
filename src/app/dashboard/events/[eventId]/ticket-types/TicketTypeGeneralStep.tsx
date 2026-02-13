@@ -188,7 +188,7 @@ export default function TicketTypeGeneralStep({
               type="button"
               onClick={() => onPriceStep(-PRICE_STEP)}
               disabled={isEditingPrice}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#11111A] text-lg leading-none text-neutral-100 hover:bg-[#181824] disabled:opacity-60"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#11111A] text-lg leading-none text-neutral-100 hover:bg-[#181824] disabled:opacity-60 cursor-pointer"
             >
               –
             </button>

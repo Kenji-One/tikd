@@ -90,7 +90,9 @@ function formatDateTime(value?: string) {
   });
 }
 
-export function titleInitial(title?: string) {
+// NOTE: layouts/pages in Next App Router cannot export arbitrary named exports.
+// Keep this helper local to the module.
+function titleInitial(title?: string) {
   const t = (title ?? "").trim();
   if (!t) return "E";
   return t[0]!.toUpperCase();

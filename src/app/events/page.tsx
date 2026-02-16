@@ -1,3 +1,4 @@
+// src/app/events/page.tsx
 "use client";
 
 import { useMemo, useState, useCallback, useEffect } from "react";
@@ -10,260 +11,14 @@ import CategoryFilter from "@/components/ui/CategoryFilter";
 import EventCarouselSection, {
   type Event,
 } from "@/components/sections/Landing/EventCarouselSection";
-import { EventCard } from "@/components/ui/EventCard";
-import { Search, Zap } from "lucide-react";
+import {
+  EventCard,
+  EVENT_CARD_DEFAULT_POSTER,
+} from "@/components/ui/EventCard";
+import { Search } from "lucide-react";
 
-/* -------------------------------------------------------------------------- */
-/*  Demo data – plug your real API response here                              */
-/* -------------------------------------------------------------------------- */
-const events: Event[] = [
-  {
-    id: "1657675",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Shows",
-  },
-  {
-    id: "1765756",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Shows",
-  },
-  {
-    id: "1843534",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Shows",
-  },
-  {
-    id: "19867",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Shows",
-  },
-  {
-    id: "1234214",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Shows",
-  },
-
-  {
-    id: "24",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Party",
-  },
-  {
-    id: "25",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Party",
-  },
-  {
-    id: "26",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Party",
-  },
-  {
-    id: "27",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Party",
-  },
-  {
-    id: "28",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Party",
-  },
-  {
-    id: "29",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Party",
-  },
-  {
-    id: "21",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Party",
-  },
-  {
-    id: "32",
-    title: "Swim Good Open Air",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Comedy",
-  },
-  {
-    id: "33",
-    title: "Swim Good Open Air",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Comedy",
-  },
-  {
-    id: "34",
-    title: "Swim Good Open Air",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Comedy",
-  },
-  {
-    id: "35",
-    title: "Swim Good Open Air",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Comedy",
-  },
-  {
-    id: "36",
-    title: "Swim Good Open Air",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Comedy",
-  },
-  {
-    id: "37",
-    title: "Swim Good Open Air",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Comedy",
-  },
-  {
-    id: "4",
-    title: "Summer Kickoff",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Listing Party",
-  },
-  {
-    id: "42",
-    title: "Summer Kickoff",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Listing Party",
-  },
-  {
-    id: "41",
-    title: "Summer Kickoff",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Listing Party",
-  },
-  {
-    id: "47",
-    title: "Summer Kickoff",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Listing Party",
-  },
-  {
-    id: "43",
-    title: "Summer Kickoff",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Listing Party",
-  },
-  {
-    id: "48",
-    title: "Summer Kickoff",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Listing Party",
-  },
-  {
-    id: "5",
-    title: "Evol Saturdays",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Social",
-  },
-  {
-    id: "52",
-    title: "Evol Saturdays",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Social",
-  },
-  {
-    id: "53",
-    title: "Evol Saturdays",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Social",
-  },
-  {
-    id: "54",
-    title: "Evol Saturdays",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Social",
-  },
-  {
-    id: "55",
-    title: "Evol Saturdays",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Social",
-  },
-  {
-    id: "56",
-    title: "Evol Saturdays",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Social",
-  },
-];
-
-/* optional: map a bespoke icon per category */ const categoryIcon: Record<
-  string,
-  ReactNode
-> = {
+/* optional: map a bespoke icon per category */
+const categoryIcon: Record<string, ReactNode> = {
   Shows: (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -353,14 +108,16 @@ const events: Event[] = [
 };
 
 /* -------------------------------------------------------------------------- */
-/*  Helpers for Live Events (API → Carousel adapter)                          */
+/*  Helpers for API → UI adapter                                              */
 /* -------------------------------------------------------------------------- */
 type BackendEvent = {
   _id: string;
   title: string;
   date: string; // ISO from Mongo
+  endDate?: string | null;
   location: string;
   image?: string;
+  categories?: string[];
 };
 
 const fmtDateLabel = (iso: string) =>
@@ -372,15 +129,30 @@ const fmtDateLabel = (iso: string) =>
     minute: "2-digit",
   }).format(new Date(iso));
 
-const toCarouselEvent = (e: BackendEvent): Event => ({
+const primaryCategoryOf = (cats: unknown): string => {
+  if (!Array.isArray(cats)) return "Uncategorized";
+  const first = cats.find((c) => typeof c === "string" && c.trim().length > 0);
+  return typeof first === "string" ? first.trim() : "Uncategorized";
+};
+
+const posterOf = (img: unknown): string => {
+  if (typeof img !== "string") return EVENT_CARD_DEFAULT_POSTER;
+  const s = img.trim();
+  return s ? s : EVENT_CARD_DEFAULT_POSTER;
+};
+
+const toUiEvent = (e: BackendEvent): Event => ({
   id: e._id,
   title: e.title,
   dateLabel: fmtDateLabel(e.date),
   venue: e.location,
-  img: e.image || "/dummy/event-1.png",
-  category: "Live",
+  img: posterOf(e.image),
+  category: primaryCategoryOf(e.categories),
 });
 
+/* -------------------------------------------------------------------------- */
+/*  Grid sizing                                                               */
+/* -------------------------------------------------------------------------- */
 const GRID_MIN_CARD_W = 220;
 const GRID_GAP_PX = 16; // gap-4
 const GRID_MAX_COLS = 6;
@@ -396,18 +168,16 @@ const calcGridCols = (winW: number) => {
   const side = getSidePadding(winW);
   const safe = Math.max(0, winW - side * 2);
 
-  // how many columns can fit at the MIN card width (including gaps)
   const colsAtMin = Math.floor(
-    (safe + GRID_GAP_PX) / (GRID_MIN_CARD_W + GRID_GAP_PX)
+    (safe + GRID_GAP_PX) / (GRID_MIN_CARD_W + GRID_GAP_PX),
   );
 
-  // clamp: 1..6
   return Math.min(GRID_MAX_COLS, Math.max(1, colsAtMin));
 };
 
 export default function EventsPage() {
   const [winW, setWinW] = useState(() =>
-    typeof window === "undefined" ? 1200 : window.innerWidth
+    typeof window === "undefined" ? 1200 : window.innerWidth,
   );
 
   useEffect(() => {
@@ -419,38 +189,33 @@ export default function EventsPage() {
 
   const gridTemplateColumns = useMemo(() => {
     const cols = calcGridCols(winW);
-
-    // ✅ Fixed column count (<=6), so cards never stretch when there are fewer items.
-    // ✅ Uses minmax(220px, 1fr), so when cols drops (5/4/3...), it wraps naturally.
     return `repeat(${cols}, minmax(${GRID_MIN_CARD_W}px, 1fr))`;
   }, [winW]);
 
-  // 1️⃣ live events from API (auth required; hide if 401/no data)
-  const { data: liveEvents = [] } = useQuery({
-    queryKey: ["live-events"],
+  // ✅ real events (published + upcoming/ongoing) from API
+  const { data: events = [] } = useQuery({
+    queryKey: ["events-public"],
     queryFn: async (): Promise<Event[]> => {
       const res = await fetch("/api/events", { method: "GET" });
-      if (!res.ok) {
-        if (res.status === 401) return [];
-        throw new Error(await res.text());
-      }
+      if (!res.ok) throw new Error(await res.text());
       const json = (await res.json()) as BackendEvent[];
+
       return json
         .slice()
         .sort((a, b) => +new Date(a.date) - +new Date(b.date))
-        .map(toCarouselEvent);
+        .map(toUiEvent);
     },
     staleTime: 60_000,
   });
 
-  // 2️⃣ track which category is active
+  // track which category is active
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
   const setCategoryAndScrollTop = useCallback((cat: string) => {
     setSelectedCategory(cat);
 
     const behavior: ScrollBehavior = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
+      "(prefers-reduced-motion: reduce)",
     ).matches
       ? "auto"
       : "smooth";
@@ -462,19 +227,28 @@ export default function EventsPage() {
     });
   }, []);
 
-  // 3️⃣ memoize grouping for the “All” case (dummy dataset)
+  // group by category (real dataset)
   const eventsByCategory = useMemo(() => {
     return events.reduce<Record<string, Event[]>>((acc, ev) => {
       (acc[ev.category] ??= []).push(ev);
       return acc;
     }, {});
-  }, []);
+  }, [events]);
 
-  // 4️⃣ grab all items when a single category is picked (dummy dataset)
+  const orderedCategoryEntries = useMemo(() => {
+    // stable ordering: largest categories first; ties alphabetical
+    return Object.entries(eventsByCategory).sort((a, b) => {
+      const lenDiff = b[1].length - a[1].length;
+      if (lenDiff !== 0) return lenDiff;
+      return a[0].localeCompare(b[0]);
+    });
+  }, [eventsByCategory]);
+
+  // grab all items when a single category is picked (real dataset)
   const filteredEvents =
     selectedCategory === "All"
       ? []
-      : events.filter((ev) => ev.category === selectedCategory);
+      : (eventsByCategory[selectedCategory] ?? []);
 
   return (
     <>
@@ -489,21 +263,10 @@ export default function EventsPage() {
         />
       </div>
 
-      {/* carousels */}
+      {/* categories only (no Live Events section) */}
       <main className="w-full py-12">
-        {/* ─── Live Events (real data) – shown when available ───────── */}
-        {liveEvents.length > 0 && (
-          <EventCarouselSection
-            title="Live Events"
-            icon={<Zap className="text-white" size={22} />}
-            events={liveEvents}
-            onViewAll={() => setCategoryAndScrollTop("All")}
-            isCarousel={false}
-          />
-        )}
-
         {selectedCategory === "All" ? (
-          Object.entries(eventsByCategory).map(([cat, list]) => (
+          orderedCategoryEntries.map(([cat, list]) => (
             <EventCarouselSection
               key={cat}
               title={cat}

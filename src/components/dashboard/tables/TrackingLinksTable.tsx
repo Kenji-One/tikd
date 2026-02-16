@@ -119,6 +119,201 @@ type ApiSearchPayload = {
   };
 };
 
+// ✅ ADD (near other fetch helpers)
+
+/** Best-effort extraction of org display fields (logo/title) */
+function pickOrgBasicsFromResponse(json: unknown): {
+  title: string | null;
+  image: string | null;
+} {
+  if (!json || typeof json !== "object") return { title: null, image: null };
+  const r = json as Record<string, unknown>;
+
+  const org =
+    (r.organization && typeof r.organization === "object"
+      ? (r.organization as Record<string, unknown>)
+      : null) ||
+    (r.org && typeof r.org === "object"
+      ? (r.org as Record<string, unknown>)
+      : null) ||
+    r;
+
+  const title =
+    (typeof org.title === "string" && org.title.trim()
+      ? org.title.trim()
+      : null) ||
+    (typeof org.name === "string" && org.name.trim() ? org.name.trim() : null);
+
+  const image =
+    (typeof org.image === "string" && org.image.trim()
+      ? org.image.trim()
+      : null) ||
+    (typeof org.logo === "string" && org.logo.trim()
+      ? org.logo.trim()
+      : null) ||
+    (typeof org.logoUrl === "string" && org.logoUrl.trim()
+      ? org.logoUrl.trim()
+      : null) ||
+    (typeof org.avatar === "string" && org.avatar.trim()
+      ? org.avatar.trim()
+      : null) ||
+    (typeof org.avatarUrl === "string" && org.avatarUrl.trim()
+      ? org.avatarUrl.trim()
+      : null);
+
+  return { title, image };
+}
+
+/** Best-effort extraction of event display fields (poster/title/date/orgName) */
+function pickEventBasicsFromResponse(json: unknown): {
+  title: string | null;
+  image: string | null;
+  date: string | null;
+  orgName: string | null;
+} {
+  if (!json || typeof json !== "object")
+    return { title: null, image: null, date: null, orgName: null };
+
+  const r = json as Record<string, unknown>;
+  const evt =
+    (r.event && typeof r.event === "object"
+      ? (r.event as Record<string, unknown>)
+      : null) ||
+    (r.data && typeof r.data === "object"
+      ? (r.data as Record<string, unknown>)
+      : null) ||
+    r;
+
+  const title =
+    (typeof evt.title === "string" && evt.title.trim()
+      ? evt.title.trim()
+      : null) ||
+    (typeof evt.name === "string" && evt.name.trim() ? evt.name.trim() : null);
+
+  const image =
+    (typeof evt.image === "string" && evt.image.trim()
+      ? evt.image.trim()
+      : null) ||
+    (typeof evt.poster === "string" && evt.poster.trim()
+      ? evt.poster.trim()
+      : null) ||
+    (typeof evt.posterUrl === "string" && evt.posterUrl.trim()
+      ? evt.posterUrl.trim()
+      : null) ||
+    (typeof evt.coverImage === "string" && evt.coverImage.trim()
+      ? evt.coverImage.trim()
+      : null) ||
+    (typeof evt.coverImageUrl === "string" && evt.coverImageUrl.trim()
+      ? evt.coverImageUrl.trim()
+      : null);
+
+  const date =
+    (typeof evt.date === "string" && evt.date.trim()
+      ? evt.date.trim()
+      : null) ||
+    (typeof evt.startsAt === "string" && evt.startsAt.trim()
+      ? evt.startsAt.trim()
+      : null) ||
+    (typeof evt.startDate === "string" && evt.startDate.trim()
+      ? evt.startDate.trim()
+      : null) ||
+    (typeof evt.startTime === "string" && evt.startTime.trim()
+      ? evt.startTime.trim()
+      : null);
+
+  let orgName: string | null =
+    (typeof evt.orgName === "string" && evt.orgName.trim()
+      ? evt.orgName.trim()
+      : null) ||
+    (typeof evt.organizationName === "string" && evt.organizationName.trim()
+      ? evt.organizationName.trim()
+      : null);
+
+  if (!orgName && evt.organization && typeof evt.organization === "object") {
+    const o = evt.organization as Record<string, unknown>;
+    orgName =
+      (typeof o.name === "string" && o.name.trim() ? o.name.trim() : null) ||
+      (typeof o.title === "string" && o.title.trim() ? o.title.trim() : null);
+  }
+
+  return { title, image, date, orgName };
+}
+
+/**
+ * ✅ Hydrate the "selected destination" card in EDIT mode so it uses the same
+ * styling as freshly-selected items (poster/logo instead of letter).
+ */
+async function fetchDestinationMetaById(opts: {
+  kind: DestinationKind;
+  id: string;
+  titleHint?: string;
+  signal?: AbortSignal;
+}): Promise<DestinationResult | null> {
+  const { kind, id, titleHint, signal } = opts;
+
+  // 1) Prefer direct resource endpoints (most reliable)
+  if (kind === "Organization") {
+    try {
+      const res = await fetch(`/api/organizations/${encodeURIComponent(id)}`, {
+        method: "GET",
+        cache: "no-store",
+        signal,
+      });
+      if (res.ok) {
+        const json = (await res.json().catch(() => null)) as unknown;
+        const basics = pickOrgBasicsFromResponse(json);
+        return {
+          kind: "Organization",
+          id,
+          title: basics.title ?? titleHint ?? "Organization",
+          subtitle: "Organization",
+          image: basics.image ?? null,
+          date: null,
+          orgName: null,
+        };
+      }
+    } catch {
+      // ignore -> fallback
+    }
+  } else {
+    // Event
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(id)}`, {
+        method: "GET",
+        cache: "no-store",
+        signal,
+      });
+      if (res.ok) {
+        const json = (await res.json().catch(() => null)) as unknown;
+        const basics = pickEventBasicsFromResponse(json);
+        return {
+          kind: "Event",
+          id,
+          title: basics.title ?? titleHint ?? "Event",
+          subtitle: "Event",
+          image: basics.image ?? null,
+          date: basics.date ?? null,
+          orgName: basics.orgName ?? null,
+        };
+      }
+    } catch {
+      // ignore -> fallback
+    }
+  }
+
+  // 2) Fallback: search by titleHint and then match by id (works even if direct endpoint differs)
+  const q = (titleHint || "").trim();
+  if (!q) return null;
+
+  try {
+    const list = await fetchDestinations(q, signal);
+    const found = list.find((x) => x.kind === kind && x.id === id);
+    return found ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchDestinations(q: string, signal?: AbortSignal) {
   // Use the global search API because it already returns:
   // - events[].image (event poster)
@@ -1041,10 +1236,12 @@ function SelectedDestinationCard({
   dest,
   disabled,
   onClear,
+  loading,
 }: {
   dest: DestinationResult;
   disabled?: boolean;
   onClear: () => void;
+  loading?: boolean;
 }) {
   return (
     <div
@@ -1054,52 +1251,70 @@ function SelectedDestinationCard({
       )}
     >
       <div className="flex items-center gap-3 px-3 py-3">
-        <DestinationThumb
-          kind={dest.kind}
-          image={dest.image}
-          title={dest.title}
-        />
-
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
-            {dest.title}
-          </p>
-
-          <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
-            {dest.kind === "Event" ? (
-              <>
-                {dest.orgName ? (
-                  <>
-                    <span className="truncate">{dest.orgName}</span>
-                    {dest.date ? (
-                      <>
-                        <span className="text-neutral-600">•</span>
-                        <span className="inline-flex items-center gap-1 text-neutral-400">
-                          <Calendar className="h-3.5 w-3.5 text-neutral-500" />
-                          <span>{formatShortDate(dest.date)}</span>
-                        </span>
-                      </>
-                    ) : null}
-                  </>
-                ) : dest.date ? (
-                  <span className="inline-flex items-center gap-1 text-neutral-400">
-                    <Calendar className="h-3.5 w-3.5 text-neutral-500" />
-                    <span>{formatShortDate(dest.date)}</span>
-                  </span>
-                ) : (
-                  <span className="truncate">Event</span>
-                )}
-              </>
-            ) : (
-              <span className="truncate">{dest.subtitle}</span>
+        {/* Thumb */}
+        {loading ? (
+          <div
+            className={clsx(
+              "h-12 w-12 shrink-0 rounded-xl border border-white/10 bg-white/5",
+              "animate-pulse",
             )}
-          </p>
+            aria-hidden
+          />
+        ) : (
+          <DestinationThumb
+            kind={dest.kind}
+            image={dest.image}
+            title={dest.title}
+          />
+        )}
 
-          {/* <div className="mt-2 text-[12px] text-primary-200/80">
-            Selected — click X to unselect
-          </div> */}
+        {/* Title + subtitle */}
+        <div className="min-w-0 flex-1">
+          {loading ? (
+            <>
+              <div className="h-4 w-[62%] rounded-md bg-white/10 animate-pulse" />
+              <div className="mt-2 h-3 w-[46%] rounded-md bg-white/10 animate-pulse" />
+            </>
+          ) : (
+            <>
+              <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
+                {dest.title}
+              </p>
+
+              <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
+                {dest.kind === "Event" ? (
+                  <>
+                    {dest.orgName ? (
+                      <>
+                        <span className="truncate">{dest.orgName}</span>
+                        {dest.date ? (
+                          <>
+                            <span className="text-neutral-600">•</span>
+                            <span className="inline-flex items-center gap-1 text-neutral-400">
+                              <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                              <span>{formatShortDate(dest.date)}</span>
+                            </span>
+                          </>
+                        ) : null}
+                      </>
+                    ) : dest.date ? (
+                      <span className="inline-flex items-center gap-1 text-neutral-400">
+                        <Calendar className="h-3.5 w-3.5 text-neutral-500" />
+                        <span>{formatShortDate(dest.date)}</span>
+                      </span>
+                    ) : (
+                      <span className="truncate">Event</span>
+                    )}
+                  </>
+                ) : (
+                  <span className="truncate">{dest.subtitle}</span>
+                )}
+              </p>
+            </>
+          )}
         </div>
 
+        {/* Right side pills + clear */}
         <div className="shrink-0 flex items-center gap-2">
           <DestinationPill kind={dest.kind} />
 
@@ -1186,11 +1401,13 @@ function TrackingLinkDialog({
   const [destResults, setDestResults] = useState<DestinationResult[]>([]);
   const [selectedDestMeta, setSelectedDestMeta] =
     useState<DestinationResult | null>(null);
+  const [hydratingSelectedDest, setHydratingSelectedDest] = useState(false);
 
   const destWrapRef = useRef<HTMLDivElement | null>(null);
   const destInputRef = useRef<HTMLInputElement | null>(null);
   const destAbortRef = useRef<AbortController | null>(null);
   const destDebounceRef = useRef<number | null>(null);
+  const hydrateAbortRef = useRef<AbortController | null>(null);
 
   const [destOrgAccentById, setDestOrgAccentById] = useState<
     Record<string, string>
@@ -1298,6 +1515,7 @@ function TrackingLinkDialog({
     setDestResults([]);
     setStatusOpen(false);
     setIconQuery("");
+    setHydratingSelectedDest(false);
 
     if (lastObjectUrlRef.current) {
       URL.revokeObjectURL(lastObjectUrlRef.current);
@@ -1375,7 +1593,15 @@ function TrackingLinkDialog({
       if (el && "focus" in el) (el as HTMLInputElement).focus();
     }, 0);
 
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+
+      // ✅ add this
+      if (hydrateAbortRef.current) {
+        hydrateAbortRef.current.abort();
+        hydrateAbortRef.current = null;
+      }
+    };
   }, [open, mode, initial, isEventScope, eventId, currentEventMeta]);
 
   useEffect(() => {
@@ -1566,6 +1792,86 @@ function TrackingLinkDialog({
       alive = false;
     };
   }, [open, destResults, destOrgAccentById]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (mode !== "edit") return;
+    if (!initial) return;
+    if (isEventScope) return; // event-scope already uses currentEventMeta
+
+    const kind = initial.destinationKind;
+    const id = initial.destinationId;
+    if (!kind || !id) return;
+
+    // If we already have an image (or useful meta), don't waste a fetch
+    const needsHydration =
+      !selectedDestMeta ||
+      selectedDestMeta.kind !== kind ||
+      selectedDestMeta.id !== id ||
+      (selectedDestMeta.image == null &&
+        (kind === "Organization" || kind === "Event"));
+
+    if (!needsHydration) return;
+
+    if (hydrateAbortRef.current) {
+      hydrateAbortRef.current.abort();
+      hydrateAbortRef.current = null;
+    }
+
+    const ac = new AbortController();
+    hydrateAbortRef.current = ac;
+    setHydratingSelectedDest(true);
+
+    (async () => {
+      const hydrated = await fetchDestinationMetaById({
+        kind,
+        id,
+        titleHint: initial.destinationTitle,
+        signal: ac.signal,
+      });
+
+      if (ac.signal.aborted) return;
+      if (!hydrated) {
+        setHydratingSelectedDest(false);
+        return;
+      }
+
+      // Only apply if we're still editing the same row
+      setSelectedDestMeta((prev) => {
+        if (
+          prev &&
+          prev.kind === initial.destinationKind &&
+          prev.id === initial.destinationId &&
+          prev.image // already hydrated meanwhile
+        ) {
+          return prev;
+        }
+        return hydrated;
+      });
+
+      // Keep title in sync (optional but nice)
+      setDraft((prev) => {
+        if (
+          prev.destinationKind === kind &&
+          prev.destinationId === id &&
+          (prev.destinationTitle || "").trim() ===
+            (initial.destinationTitle || "").trim()
+        ) {
+          return {
+            ...prev,
+            destinationTitle: hydrated.title,
+          };
+        }
+        return prev;
+      });
+      setHydratingSelectedDest(false);
+    })();
+
+    return () => {
+      ac.abort();
+      setHydratingSelectedDest(false);
+    };
+  }, [open, mode, initial, isEventScope, selectedDestMeta]);
 
   const title =
     mode === "create" ? "Create Tracking Link" : "Edit Tracking Link";
@@ -1916,6 +2222,7 @@ function TrackingLinkDialog({
                     dest={selectedDestMeta}
                     disabled={saving || isEventScope}
                     onClear={clearDestination}
+                    loading={mode === "edit" && hydratingSelectedDest}
                   />
                 ) : (
                   <>

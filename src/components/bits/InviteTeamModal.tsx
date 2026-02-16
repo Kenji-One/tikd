@@ -1,3 +1,4 @@
+// src/components/bits/InviteTeamModal.tsx
 "use client";
 
 import Image from "next/image";
@@ -50,6 +51,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { RoleIconKey } from "@/lib/roleIcons";
+import DateRangePicker, {
+  type DateRangeValue,
+} from "@/components/ui/DateRangePicker";
 
 /* ----------------------------- Types ----------------------------- */
 export type Role = "admin" | "promoter" | "scanner" | "collaborator";
@@ -670,6 +674,43 @@ function RoleTile({
   );
 }
 
+/* ----------------------- Date/time helpers (custom picker) ---------------------- */
+function clampToDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function formatDateYmd(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function parseLocalDateTime(v: string): { date: Date | null; time: string } {
+  if (!v) return { date: null, time: "12:00" };
+
+  const [datePart, timePartRaw] = v.split("T");
+  if (!datePart) return { date: null, time: "12:00" };
+
+  const [yy, mm, dd] = datePart.split("-").map((x) => Number(x));
+  if (!yy || !mm || !dd) return { date: null, time: "12:00" };
+
+  const date = clampToDay(new Date(yy, mm - 1, dd));
+  const timePart = (timePartRaw || "").slice(0, 5);
+  const timeOk = /^\d{2}:\d{2}$/.test(timePart);
+
+  return { date, time: timeOk ? timePart : "12:00" };
+}
+
+function buildLocalDateTimeString(date: Date | null, time: string) {
+  if (!date) return "";
+  const t = /^\d{2}:\d{2}$/.test(time) ? time : "12:00";
+  return `${formatDateYmd(date)}T${t}`;
+}
+
 /* ------------------------------ Modal ---------------------------- */
 export default function InviteTeamModal({
   open,
@@ -701,7 +742,15 @@ export default function InviteTeamModal({
 
   const [email, setEmail] = useState("");
   const [temporary, setTemporary] = useState(false);
+
+  // ✅ We still store the payload string in the same format as before (datetime-local).
   const [expiresAt, setExpiresAt] = useState<string>("");
+
+  // ✅ UI state for custom date picker + time input.
+  const [{ date: expiresDate, time: expiresTime }, setExpiresUi] = useState<{
+    date: Date | null;
+    time: string;
+  }>({ date: null, time: "12:00" });
 
   const [applyExisting, setApplyExisting] = useState(true);
   const [applyFuture, setApplyFuture] = useState(true);
@@ -857,6 +906,7 @@ export default function InviteTeamModal({
       setEmail("");
       setTemporary(false);
       setExpiresAt("");
+      setExpiresUi({ date: null, time: "12:00" });
     }
   }, [open]);
 
@@ -882,6 +932,13 @@ export default function InviteTeamModal({
       document.body.style.overflow = "";
     };
   }, [open, onClose]);
+
+  // ✅ Keep UI state in sync if expiresAt is set externally (or restored).
+  useEffect(() => {
+    const parsed = parseLocalDateTime(expiresAt);
+    setExpiresUi(parsed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [temporary]);
 
   const activeLeftExpr =
     steps.length === 1
@@ -988,7 +1045,7 @@ export default function InviteTeamModal({
                           triggerStepBurst();
                         }}
                         className={clsx(
-                          "group relative z-10 flex items-center justify-center outline-none",
+                          "group relative z-10 flex items-center justify-center outline-none cursor-pointer transition-colors duration-300",
                           "h-10 w-10 rounded-full",
                           isActive
                             ? "tikd-ttw-dot tikd-ttw-dot--active"
@@ -1242,7 +1299,27 @@ export default function InviteTeamModal({
                     <input
                       type="checkbox"
                       checked={temporary}
-                      onChange={(e) => setTemporary(e.target.checked)}
+                      onChange={(e) => {
+                        const next = e.target.checked;
+                        setTemporary(next);
+
+                        if (!next) {
+                          setExpiresAt("");
+                          setExpiresUi({ date: null, time: "12:00" });
+                        } else {
+                          // If enabling and nothing selected yet, default to tomorrow at 12:00.
+                          if (!expiresAt) {
+                            const t = new Date();
+                            t.setDate(t.getDate() + 1);
+                            const nextDate = clampToDay(t);
+                            const nextTime = "12:00";
+                            setExpiresUi({ date: nextDate, time: nextTime });
+                            setExpiresAt(
+                              buildLocalDateTimeString(nextDate, nextTime),
+                            );
+                          }
+                        }
+                      }}
                       className="peer sr-only"
                     />
 
@@ -1270,44 +1347,69 @@ export default function InviteTeamModal({
                         Expires at
                       </div>
 
-                      <div className="mt-2 relative">
-                        <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-500" />
-                        <input
-                          id="expires"
-                          type="datetime-local"
-                          value={expiresAt}
-                          onChange={(e) => setExpiresAt(e.target.value)}
-                          className={clsx(
-                            "h-11 w-full rounded-lg border bg-neutral-950/55 pl-11 pr-12 text-[13px] text-neutral-0 outline-none",
-                            "border-white/10 focus:ring-1 focus:ring-primary-500",
-                            "appearance-none",
-                            "[&::-webkit-calendar-picker-indicator]:hidden",
-                            "[&::-webkit-clear-button]:hidden",
-                            "[&::-webkit-inner-spin-button]:hidden",
-                            "[&::-webkit-datetime-edit]:text-neutral-0",
-                          )}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const el = document.getElementById(
-                              "expires",
-                            ) as HTMLInputElement | null;
-                            if (!el) return;
+                      {/* ✅ Custom Tikd date picker + time (past days are disabled/greyed out) */}
+                      <div className="mt-2 grid gap-2.5 sm:grid-cols-[1fr_140px]">
+                        <div className="relative">
+                          <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-500" />
+                          <DateRangePicker
+                            variant="field"
+                            selectionMode="single"
+                            minDate={new Date()} // ✅ past days disabled/greyed out
+                            value={
+                              {
+                                start: expiresDate,
+                                end: expiresDate,
+                              } satisfies DateRangeValue
+                            }
+                            onChange={(next) => {
+                              const picked = next.start
+                                ? clampToDay(next.start)
+                                : null;
 
-                            const withPicker = el as HTMLInputElement & {
-                              showPicker?: () => void;
-                            };
-                            if (typeof withPicker.showPicker === "function")
-                              withPicker.showPicker();
-                            else el.focus();
-                          }}
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 grid size-8 place-items-center rounded-md bg-white/5 ring-1 ring-inset ring-white/10 hover:ring-primary-700/40"
-                          aria-label="Open date & time picker"
-                          title="Open date & time picker"
-                        >
-                          <CalendarIcon className="h-[18px] w-[18px] text-neutral-100" />
-                        </button>
+                              setExpiresUi((prev) => {
+                                const ui = { date: picked, time: prev.time };
+                                setExpiresAt(
+                                  buildLocalDateTimeString(ui.date, ui.time),
+                                );
+                                return ui;
+                              });
+                            }}
+                            buttonClassName={clsx(
+                              "h-11 w-full",
+                              "pl-11 pr-4",
+                              "bg-neutral-950/55",
+                              "border-white/10 focus:ring-1 focus:ring-primary-500",
+                              "text-[13px] text-neutral-0",
+                              "rounded-lg",
+                            )}
+                          />
+                        </div>
+
+                        <div className="relative">
+                          <Clock3 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-500" />
+                          <input
+                            type="time"
+                            value={expiresTime}
+                            onChange={(e) => {
+                              const nextTime = e.target.value;
+                              setExpiresUi((prev) => {
+                                const ui = { date: prev.date, time: nextTime };
+                                setExpiresAt(
+                                  buildLocalDateTimeString(ui.date, ui.time),
+                                );
+                                return ui;
+                              });
+                            }}
+                            className={clsx(
+                              "h-11 w-full rounded-lg border bg-neutral-950/55 pl-11 pr-3",
+                              "text-[13px] text-neutral-0 outline-none",
+                              "border-white/10 focus:ring-1 focus:ring-primary-500",
+                              "appearance-none",
+                              "[&::-webkit-calendar-picker-indicator]:hidden",
+                            )}
+                            aria-label="Expiration time"
+                          />
+                        </div>
                       </div>
 
                       <p className="mt-2 text-[12px] text-neutral-500">

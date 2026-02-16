@@ -1,19 +1,18 @@
-/* ------------------------------------------------------------------ */
-/*  src/app/page.tsx – public landing page for Tikd.                  */
-/*  Figma: "Tickets Made Easy"                                        */
-/* ------------------------------------------------------------------ */
+// src/app/page.tsx
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState, type CSSProperties } from "react";
+import { useId, useMemo, useState, type CSSProperties, useEffect } from "react";
 import clsx from "clsx";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import Image from "next/image";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
 import EventCarouselSection, {
   type Event,
 } from "@/components/sections/Landing/EventCarouselSection";
+import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
 
 /* ------------------------------------------------------------------ */
 /*  Background (mesh + old grid)                                       */
@@ -32,75 +31,48 @@ const gridOverlayStyle: CSSProperties = {
   maskImage: "radial-gradient(1100px 680px at 50% 18%, black, transparent 70%)",
 };
 
-/* ------------------------------------------------------------------ */
-/*  Demo data (swap with real API)                                     */
-/* ------------------------------------------------------------------ */
-const trendingEvents: Event[] = [
-  {
-    id: "24",
-    title: "Senior Rave",
-    dateLabel: "May 23, 2025 · 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-2.png",
-    category: "Trending",
-  },
-  {
-    id: "32",
-    title: "Swim Good Open Air",
-    dateLabel: "May 23, 2025 · 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-3.png",
-    category: "Trending",
-  },
-  {
-    id: "4",
-    title: "Summer Kickoff",
-    dateLabel: "May 23, 2025 · 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-4.png",
-    category: "Trending",
-  },
-  {
-    id: "5",
-    title: "Evol Saturdays",
-    dateLabel: "May 23, 2025 · 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-5.png",
-    category: "Trending",
-  },
-  {
-    id: "1765756",
-    title: "Sunset Rooftop Session",
-    dateLabel: "Jun 02, 2025 · 7:30 PM",
-    venue: "Downtown LA",
-    img: "/dummy/event-2.png",
-    category: "Trending",
-  },
-  {
-    id: "2453453",
-    title: "Basement Techno Night",
-    dateLabel: "Jun 11, 2025 · 11:00 PM",
-    venue: "Berlin, DE",
-    img: "/dummy/event-3.png",
-    category: "Trending",
-  },
-  {
-    id: "1657675",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 · 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Trending",
-  },
-  {
-    id: "19867",
-    title: "After Prom RSVP",
-    dateLabel: "May 23, 2025 · 6:00 PM",
-    venue: "Mepham",
-    img: "/dummy/event-4.png",
-    category: "Trending",
-  },
-];
+/* -------------------------------------------------------------------------- */
+/*  API → UI adapter                                                          */
+/* -------------------------------------------------------------------------- */
+type BackendEvent = {
+  _id: string;
+  title: string;
+  date: string; // ISO from Mongo
+  endDate?: string | null;
+  location: string;
+  image?: string;
+  categories?: string[];
+};
+
+const fmtDateLabel = (iso: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+
+const primaryCategoryOf = (cats: unknown): string => {
+  if (!Array.isArray(cats)) return "Uncategorized";
+  const first = cats.find((c) => typeof c === "string" && c.trim().length > 0);
+  return typeof first === "string" ? first.trim() : "Uncategorized";
+};
+
+const posterOf = (img: unknown): string => {
+  if (typeof img !== "string") return EVENT_CARD_DEFAULT_POSTER;
+  const s = img.trim();
+  return s ? s : EVENT_CARD_DEFAULT_POSTER;
+};
+
+const toUiEvent = (e: BackendEvent): Event => ({
+  id: e._id,
+  title: e.title,
+  dateLabel: fmtDateLabel(e.date),
+  venue: e.location,
+  img: posterOf(e.image),
+  category: primaryCategoryOf(e.categories),
+});
 
 type FaqItem = { q: string; a: string };
 
@@ -256,7 +228,6 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
         // Figma-ish “deep navy card”
         "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.00))] bg-neutral-948",
         "shadow-[0_30px_80px_-60px_rgba(0,0,0,.9)] min-h-[280px] sm:min-h-[321px]",
-
         className,
       )}
     >
@@ -448,6 +419,24 @@ export default function LandingPage() {
     [],
   );
 
+  // ✅ real public events (published + upcoming/ongoing)
+  const { data: trendingEvents = [] } = useQuery({
+    queryKey: ["events-public"],
+    queryFn: async (): Promise<Event[]> => {
+      const res = await fetch("/api/events", { method: "GET" });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as BackendEvent[];
+
+      // soonest first, take 8 for the landing carousel
+      return json
+        .slice()
+        .sort((a, b) => +new Date(a.date) - +new Date(b.date))
+        .map(toUiEvent)
+        .slice(0, 8);
+    },
+    staleTime: 60_000,
+  });
+
   return (
     <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       {/* ------------------------------------------------------------------ */}
@@ -592,14 +581,10 @@ export default function LandingPage() {
           {/* Row 1: two big cards */}
           <div className="grid gap-4 lg:grid-cols-[2.44fr_1.73fr]">
             <FeatureCard size="lg" title={"Control everything\nin one place"}>
-              {/* Replace with your real image later:
-                  <div className="absolute ... bg-cover" style={{backgroundImage:'url(...)'}} />
-               */}
               <MediaLaptopPlaceholder />
             </FeatureCard>
 
             <FeatureCard size="md" title={"Event page\nset-up"}>
-              {/* Replace with your real collage image later */}
               <MediaEventSetupPlaceholder />
             </FeatureCard>
           </div>
@@ -614,7 +599,6 @@ export default function LandingPage() {
             </FeatureCard>
 
             <FeatureCard size="sm" title={"Promotion &\nmarketing"}>
-              {/* Replace with real illustration image later */}
               <MediaMegaphonePlaceholder />
             </FeatureCard>
 

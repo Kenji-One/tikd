@@ -793,7 +793,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
   const panelClass = "rounded-lg border border-neutral-700 bg-neutral-900 p-5";
 
   return (
-    <div className="space-y-5 px-4 md:px-6 lg:px-8">
+    <div className="space-y-5 ">
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
         <div className="grid grid-cols-1 rounded-lg border border-neutral-700 bg-neutral-900 pl-4 lg:grid-cols-[3.15fr_1.74fr]">
           <KpiCard

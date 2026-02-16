@@ -13,6 +13,7 @@ import Organization, { IOrganization } from "@/models/Organization";
 import Ticket from "@/models/Ticket";
 import OrgTeam from "@/models/OrgTeam";
 import EventTeam from "@/models/EventTeam";
+import TicketType from "@/models/TicketType";
 import type { HydratedDocument, Types } from "mongoose";
 import { createNotification } from "@/lib/notifications";
 
@@ -223,12 +224,66 @@ export async function GET(
     { $project: { _id: "$user._id", image: "$user.image" } },
   ]);
 
+  /* -------- NEW: public ticket types (so public event page works) -- */
+  const now = new Date();
+
+  const ticketTypesDocs = await TicketType.find({
+    eventId: event._id,
+    // Public page should not expose locked/password ticket types
+    accessMode: "public",
+    // Only show types that are currently on sale
+    availabilityStatus: "on_sale",
+    // If salesStartAt / salesEndAt are set, respect them
+    $and: [
+      {
+        $or: [{ salesStartAt: null }, { salesStartAt: { $lte: now } }],
+      },
+      {
+        $or: [{ salesEndAt: null }, { salesEndAt: { $gte: now } }],
+      },
+    ],
+  })
+    .sort({ sortOrder: 1, createdAt: 1 })
+    .select("name price currency feeMode totalQuantity soldCount design")
+    .lean<
+      Array<{
+        _id: Types.ObjectId;
+        name: string;
+        price: number;
+        currency: string;
+        feeMode: "pass_on" | "absorb";
+        totalQuantity: number | null;
+        soldCount: number;
+        design?: { backgroundUrl?: string | null } | null;
+      }>
+    >()
+    .exec();
+
+  // Shape to match what the public page expects (legacy shape)
+  const ticketTypes = ticketTypesDocs.map((t) => {
+    const remaining =
+      t.totalQuantity === null
+        ? 999999 // "unlimited" fallback (keeps UI simple without changing components)
+        : Math.max((t.totalQuantity ?? 0) - (t.soldCount ?? 0), 0);
+
+    return {
+      _id: String(t._id),
+      label: t.name,
+      price: t.price,
+      quantity: remaining,
+      currency: t.currency,
+      feesIncluded: t.feeMode === "absorb",
+      image: t.design?.backgroundUrl || "",
+    };
+  });
+
   /* -------- shape response ---------------------------------------- */
   return NextResponse.json({
     ...event,
     organization: event.organizationId, // front-end friendly key
     attendingCount,
     attendeesPreview,
+    ticketTypes, // ✅ restore for public page
   });
 }
 

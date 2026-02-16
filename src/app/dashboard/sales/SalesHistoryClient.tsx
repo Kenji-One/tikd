@@ -290,6 +290,19 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+/**
+ * Dashboard event page exists, but these are mock events.
+ * Sending a non-existent eventId will naturally land on the 404 flow.
+ */
+function eventDashboardHref(sale: Pick<Sale, "id">) {
+  const raw =
+    String(sale.id || "")
+      .replace("#", "")
+      .trim() || "unknown";
+  const fakeEventId = `mock-${raw}`;
+  return `/dashboard/events/${encodeURIComponent(fakeEventId)}`;
+}
+
 function statusPill(status: SaleStatus) {
   switch (status) {
     case "Completed":
@@ -1011,7 +1024,7 @@ function PosterThumb({ alt, src }: { alt: string; src?: string | null }) {
     return (
       <div
         aria-hidden
-        className="h-7 w-7 rounded-md bg-white/10 ring-1 ring-white/10"
+        className="h-7 w-7 rounded-md bg-white/10 ring-1 ring-white/10 transition-[box-shadow] duration-150 group-hover:ring-primary-500/70"
       />
     );
   }
@@ -1021,7 +1034,7 @@ function PosterThumb({ alt, src }: { alt: string; src?: string | null }) {
       src={src}
       alt={alt}
       referrerPolicy="no-referrer"
-      className="h-7 w-7 rounded-md object-cover ring-1 ring-white/10"
+      className="h-7 w-7 rounded-md object-cover ring-1 ring-white/10 transition-[box-shadow] duration-150 group-hover:ring-primary-500/70"
       onError={(e) => {
         const el = e.currentTarget;
         el.style.display = "none";
@@ -1334,20 +1347,34 @@ export default function SalesHistoryClient() {
                               </div>
                             </td>
 
-                            {/* Event */}
+                            {/* Event (poster + title clickable -> Event Dashboard -> 404 for mock) */}
                             <td className={tdLeft}>
-                              <div className="flex min-w-0 items-center justify-start gap-2">
+                              <Link
+                                href={eventDashboardHref(s)}
+                                className={clsx(
+                                  "group flex min-w-0 items-center justify-start gap-2",
+                                  "rounded-md outline-none",
+                                  "focus-visible:ring-2 focus-visible:ring-primary-500/35",
+                                )}
+                                title={`Open "${s.event}" dashboard`}
+                                aria-label={`Open ${s.event} dashboard`}
+                              >
                                 <PosterThumb
                                   alt={s.event}
                                   src={s.eventPosterUrl}
                                 />
                                 <span
-                                  className="min-w-0 truncate"
+                                  className={clsx(
+                                    "min-w-0 truncate",
+                                    "text-white/90",
+                                    "group-hover:text-white group-hover:underline group-hover:decoration-primary-500",
+                                    "underline-offset-2",
+                                  )}
                                   title={s.event}
                                 >
                                   {s.event}
                                 </span>
-                              </div>
+                              </Link>
                             </td>
 
                             {/* Date */}

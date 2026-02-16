@@ -8,7 +8,7 @@ export default function OrgTrackingLinksPage() {
   const { id } = useParams() as { id?: string };
 
   return (
-    <div className="mx-auto px-4 pb-8">
+    <div className="mx-auto pb-8">
       <div className="space-y-4">
         <div className="flex items-end justify-between gap-3">
           <div>

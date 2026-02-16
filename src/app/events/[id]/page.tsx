@@ -50,7 +50,10 @@ interface ApiEvent {
   attendingCount: number;
   attendeesPreview: { _id: string; image?: string }[];
   artists: Artist[];
-  ticketTypes: TicketType[];
+
+  // ✅ Ticket types may be missing if backend changes again; never crash
+  ticketTypes?: TicketType[];
+
   organization: {
     _id: string;
     name: string;
@@ -58,6 +61,24 @@ interface ApiEvent {
     website?: string;
   };
 }
+
+/** Public feed event shape (from GET /api/events) */
+type ApiPublicEvent = {
+  _id: string;
+  title?: string;
+  date?: string | Date;
+  endDate?: string | Date | null;
+  location?: string;
+  image?: string;
+  categories?: string[];
+  organization?: {
+    _id: string;
+    name?: string;
+    logo?: string;
+    website?: string;
+  } | null;
+  organizationId?: string | { toString?: () => string } | null;
+};
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -77,7 +98,7 @@ const formatDate = (iso: string): string =>
 const getStaticMapUrl = (
   address: string,
   width = 800,
-  height = 400
+  height = 400,
 ): string | null => {
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
   if (!key) return null;
@@ -134,27 +155,41 @@ function AvatarStack({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Dummy “similar events”                                            */
-/* ------------------------------------------------------------------ */
-const similarEvents: CarouselEvent[] = [
-  {
-    id: "1",
-    title: "NYC Highschool Party",
-    dateLabel: "May 23, 2025 6:00 PM",
-    venue: "Brooklyn, NY",
-    img: "/dummy/event-1.png",
-    category: "Shows",
-  },
-  {
-    id: "17",
-    title: "Summer Cruise",
-    dateLabel: "Jun 01, 2025 9:00 PM",
-    venue: "Manhattan, NY",
-    img: "/dummy/event-2.png",
-    category: "Shows",
-  },
-];
+function toMsMaybe(d: unknown): number | null {
+  if (!d) return null;
+  const dt = typeof d === "string" || d instanceof Date ? new Date(d) : null;
+  const ms = dt ? dt.getTime() : NaN;
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function getOrgIdFromPublicEvent(e: ApiPublicEvent): string {
+  if (e.organization?._id) return String(e.organization._id);
+  const v = e.organizationId;
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object" && typeof v.toString === "function")
+    return v.toString();
+  return "";
+}
+
+function toCarouselEvent(e: ApiPublicEvent): CarouselEvent | null {
+  const id = String(e._id || "");
+  if (!id) return null;
+
+  const title = String(e.title || "").trim() || "Untitled Event";
+  const venue = String(e.location || "").trim() || "TBA";
+  const dateRaw = e.date ? String(e.date) : "";
+  const dateLabel = dateRaw ? formatDate(dateRaw) : "TBA";
+
+  const img =
+    (typeof e.image === "string" && e.image.trim()) || "/dummy/event.png";
+
+  const category =
+    Array.isArray(e.categories) && e.categories.length
+      ? String(e.categories[0] || "Event")
+      : "Event";
+
+  return { id, title, dateLabel, venue, img, category };
+}
 
 /* ------------------------------------------------------------------ */
 /*  Skeleton while loading                                            */
@@ -218,11 +253,18 @@ export default function EventDetailPage() {
     enabled: Boolean(id),
   });
 
+  // Public feed for “Similar Events”
+  const { data: publicEvents } = useQuery<ApiPublicEvent[]>({
+    queryKey: ["events", "public"],
+    queryFn: () => fetchJSON<ApiPublicEvent[]>(`/api/events`),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+  });
+
   /* ---------- Cart qty per ticket type ---------- */
   const EMPTY_QTY_MAP: Readonly<Record<string, number>> = Object.freeze({});
 
-  // inside component
-  const eventId = event?._id?.toString() ?? ""; // handles Mongo ObjectId or string
+  const eventId = event?._id?.toString() ?? "";
 
   const qtyByTicket = useMemo<Record<string, number>>(() => {
     if (!eventId) return EMPTY_QTY_MAP;
@@ -238,8 +280,52 @@ export default function EventDetailPage() {
 
   const selectedCount = useMemo(
     () => Object.values(qtyByTicket).reduce((a, b) => a + b, 0),
-    [qtyByTicket]
+    [qtyByTicket],
   );
+
+  /* ---------- Similar events (real) ---------- */
+  // ✅ IMPORTANT: This hook MUST run on every render (no early-return above it).
+  const similarEvents: CarouselEvent[] = useMemo(() => {
+    const current = event;
+    const list = Array.isArray(publicEvents) ? publicEvents : [];
+
+    if (!current || !list.length) return [];
+
+    const currentId = String(current._id);
+    const currentOrgId = String(current.organization?._id || "");
+    const currentStartMs = toMsMaybe(current.date);
+
+    const candidates = list
+      .filter((e) => String(e._id) !== currentId)
+      .map((e) => {
+        const startMs = toMsMaybe(e.date);
+        const orgId = getOrgIdFromPublicEvent(e);
+
+        const sameOrg =
+          Boolean(currentOrgId) && Boolean(orgId) && orgId === currentOrgId;
+
+        const distance =
+          currentStartMs !== null && startMs !== null
+            ? Math.abs(startMs - currentStartMs)
+            : Number.MAX_SAFE_INTEGER;
+
+        return { e, sameOrg, distance };
+      });
+
+    candidates.sort((a, b) => {
+      if (a.sameOrg !== b.sameOrg) return a.sameOrg ? -1 : 1;
+      return a.distance - b.distance;
+    });
+
+    const out: CarouselEvent[] = [];
+    for (const c of candidates) {
+      const mapped = toCarouselEvent(c.e);
+      if (mapped) out.push(mapped);
+      if (out.length >= 8) break;
+    }
+
+    return out;
+  }, [publicEvents, event]);
 
   /* ---------- Early returns ---------- */
   if (isLoading) return <EventDetailSkeleton />;
@@ -252,32 +338,36 @@ export default function EventDetailPage() {
     );
   }
 
+  // ✅ From here on, `event` is guaranteed (fixes TS “possibly undefined” warnings)
+  const eventData: ApiEvent = event;
+
   /* ---------- Date / map ---------- */
-  const dateLabel = formatDate(event.date);
+  const dateLabel = formatDate(eventData.date);
 
   const MAP_W = 800;
   const MAP_H = 400;
   const mapUrl =
-    getStaticMapUrl(event.location, MAP_W, MAP_H) || "/dummy/map.png";
+    getStaticMapUrl(eventData.location, MAP_W, MAP_H) || "/dummy/map.png";
+
+  const safeTicketTypes = eventData.ticketTypes ?? [];
 
   /* ---------- Handle qty change -> Cart ---------- */
   function handleTicketQtyChange(ticketTypeId: string, nextQty: number) {
-    if (!event) return;
-    const tt = event.ticketTypes.find((t) => t._id === ticketTypeId);
+    const tt = safeTicketTypes.find((t) => t._id === ticketTypeId);
     if (!tt) return;
 
-    const key = `${event._id}:${ticketTypeId}`;
+    const key = `${eventData._id}:${ticketTypeId}`;
     const existing = items.find((i) => i.key === key);
 
     if (!existing && nextQty > 0) {
       addItem({
-        eventId: event._id,
-        eventTitle: event.title,
+        eventId: eventData._id,
+        eventTitle: eventData.title,
         ticketTypeId,
         ticketLabel: tt.label,
         unitPrice: tt.price,
         currency: tt.currency,
-        image: tt.image ?? event.image,
+        image: tt.image ?? eventData.image,
         qty: nextQty,
       });
     } else if (existing && nextQty > 0) {
@@ -292,31 +382,31 @@ export default function EventDetailPage() {
     <>
       {/* ───────── Hero Section ───────── */}
       <EventHero
-        poster={event.image ?? "/dummy/event.png"}
-        title={event.title}
-        venue={event.location}
+        poster={eventData.image ?? "/dummy/event.png"}
+        title={eventData.title}
+        venue={eventData.location}
         dateLabel={dateLabel}
-        ticketOptions={event.ticketTypes.map((t) => ({
+        ticketOptions={safeTicketTypes.map((t) => ({
           id: t._id,
           label: t.label,
           price: t.price,
           currency: t.currency,
           qty: qtyByTicket[t._id] ?? 0,
-          image: t.image ?? event.image,
+          image: t.image ?? eventData.image,
         }))}
         onTicketQtyChange={handleTicketQtyChange}
-        artists={event.artists.slice(0, 3)}
-        attendingCount={event.attendingCount}
+        artists={eventData.artists.slice(0, 3)}
+        attendingCount={eventData.attendingCount}
         selectedCount={selectedCount}
         onCheckout={() => router.push("/checkout")}
       />
 
       <article className="mx-auto w-full max-w-[1232px] px-4 pb-[70px] pt-8">
         {/* ───────── Artists Attending ───────── */}
-        {event.artists.length > 0 && (
+        {eventData.artists.length > 0 && (
           <InfoRow title="Artists Attending" splitTitle>
             <ul className="flex flex-wrap gap-2">
-              {event.artists.map((artist) => (
+              {eventData.artists.map((artist) => (
                 <li
                   key={artist._id}
                   className="flex items-center gap-2 p-1 pr-4 rounded-full bg-neutral-800"
@@ -338,7 +428,7 @@ export default function EventDetailPage() {
         )}
 
         {/* ───────── Description ───────── */}
-        {event.description && (
+        {eventData.description && (
           <InfoRow title="Description">
             <div className="flex flex-col gap-4">
               <div className="flex flex-wrap gap-2">
@@ -360,7 +450,12 @@ export default function EventDetailPage() {
                   }
                 />
                 <Pill
-                  text={`Doors open at ${new Date(event.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`}
+                  text={`Doors open at ${new Date(
+                    eventData.date,
+                  ).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}`}
                   icon={
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -408,12 +503,12 @@ export default function EventDetailPage() {
                 />
               </div>
               <p className="whitespace-pre-wrap text-neutral-0 font-light leading-[130%]">
-                {event.description}
+                {eventData.description}
               </p>
-              {event.attendingCount > 0 && (
+              {eventData.attendingCount > 0 && (
                 <AvatarStack
-                  images={event.attendeesPreview}
-                  total={event.attendingCount}
+                  images={eventData.attendeesPreview}
+                  total={eventData.attendingCount}
                 />
               )}
             </div>
@@ -426,7 +521,7 @@ export default function EventDetailPage() {
             <div className="relative w-full overflow-hidden rounded-lg">
               <Image
                 src={mapUrl}
-                alt={`Map for ${event.location}`}
+                alt={`Map for ${eventData.location}`}
                 width={MAP_W}
                 height={MAP_H}
                 className="h-[210px] w-full object-cover sm:h-[250px] lg:h-[328px]"
@@ -434,11 +529,13 @@ export default function EventDetailPage() {
               />
             </div>
             <p className="text-base font-light leading-[130%] tracking-[-0.32px] text-neutral-0">
-              {event.location}
+              {eventData.location}
             </p>
             <Button asChild variant="secondary">
               <a
-                href={`https://maps.google.com/?q=${encodeURIComponent(event.location)}`}
+                href={`https://maps.google.com/?q=${encodeURIComponent(
+                  eventData.location,
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -455,29 +552,29 @@ export default function EventDetailPage() {
         >
           <div className="flex items-center gap-4 py-3">
             <Link
-              href={`/org/${event.organization._id}`}
+              href={`/org/${eventData.organization._id}`}
               className="relative size-13 overflow-hidden rounded-full bg-neutral-800"
             >
               <Image
                 src={
-                  event.organization.logo ||
+                  eventData.organization.logo ||
                   "/dummy/organization-placeholder.png"
                 }
-                alt={`${event.organization.name} logo`}
+                alt={`${eventData.organization.name} logo`}
                 fill
                 sizes="52px"
                 className="object-cover"
               />
             </Link>
             <p className="font-semibold text-neutral-0">
-              {event.organization.name}
+              {eventData.organization.name}
             </p>
           </div>
 
-          {event.organization.website && (
+          {eventData.organization.website && (
             <Button variant="secondary" asChild>
               <a
-                href={event.organization.website}
+                href={eventData.organization.website}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-[10px]"
@@ -513,9 +610,11 @@ export default function EventDetailPage() {
       <InstagramGallery />
 
       {/* ───────── Similar Events ───────── */}
-      <section className="mx-auto w-full max-w-[1201px] px-4 py-12">
-        <EventCarouselSection events={similarEvents} title="Similar Events" />
-      </section>
+      {similarEvents.length > 0 && (
+        <section className="mx-auto w-full max-w-[1201px] px-4 py-12">
+          <EventCarouselSection events={similarEvents} title="Similar Events" />
+        </section>
+      )}
     </>
   );
 }

@@ -691,6 +691,14 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     [eventId, qc],
   );
 
+  const invalidateDashboardUpcoming = useCallback(() => {
+    // ✅ Key fix: this makes the dashboard “Upcoming Events” update immediately.
+    qc.invalidateQueries({
+      queryKey: ["dashboard-upcoming-events"],
+      refetchType: "active",
+    });
+  }, [qc]);
+
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!eventId) throw new Error("Missing event id");
@@ -699,6 +707,10 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     onSuccess: () => {
       setEventStatusInCache("published");
       qc.invalidateQueries({ queryKey: ["event", eventId] });
+
+      // ✅ important: update dashboard upcoming list immediately
+      invalidateDashboardUpcoming();
+
       setPublishSuccessOpen(true);
     },
   });
@@ -711,6 +723,9 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     onSuccess: () => {
       setEventStatusInCache("draft");
       qc.invalidateQueries({ queryKey: ["event", eventId] });
+
+      // ✅ important: remove it from dashboard upcoming list immediately
+      invalidateDashboardUpcoming();
     },
   });
 

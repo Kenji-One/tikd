@@ -149,7 +149,7 @@ async function ensureSystemRoles(orgId: string, actorId: string) {
     {
       key: "admin",
       name: "Admin",
-      color: "#8B5CF6",
+      color: "#EF4444",
       order: 1,
       iconKey: "shield",
       permissions: defaults.admin,
@@ -157,7 +157,7 @@ async function ensureSystemRoles(orgId: string, actorId: string) {
     {
       key: "promoter",
       name: "Promoter",
-      color: "#A855F7",
+      color: "#06B6D4",
       order: 2,
       iconKey: "megaphone",
       permissions: defaults.promoter,
@@ -165,7 +165,7 @@ async function ensureSystemRoles(orgId: string, actorId: string) {
     {
       key: "scanner",
       name: "Scanner",
-      color: "#7C3AED",
+      color: "#22C55E",
       order: 3,
       iconKey: "scanner",
       permissions: defaults.scanner,
@@ -173,7 +173,7 @@ async function ensureSystemRoles(orgId: string, actorId: string) {
     {
       key: "collaborator",
       name: "Collaborator",
-      color: "#6D28D9",
+      color: "#F97316",
       order: 4,
       iconKey: "users",
       permissions: defaults.collaborator,

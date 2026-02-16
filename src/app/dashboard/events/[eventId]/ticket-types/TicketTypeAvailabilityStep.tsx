@@ -1,3 +1,4 @@
+// src/app/dashboard/organizations/[id]/events/[eventId]/ticket-types/TicketTypeAvailabilityStep.tsx
 "use client";
 
 import type { TicketTypeFormValues, TicketAvailabilityStatus } from "./types";
@@ -502,6 +503,13 @@ export default function TicketTypeAvailabilityStep({
     return { start: dt, end: dt };
   }, [salesEndAt]);
 
+  // ✅ Only for this file: prevent selecting past days (greyed out/disabled)
+  const minScheduleDate = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
   /* ---------- keep numeric fields registered (hidden) ---------- */
 
   const hiddenNumericInputs = (
@@ -594,7 +602,7 @@ export default function TicketTypeAvailabilityStep({
                 />
               </svg>
             }
-            isUnlimited={minPerOrder == null}
+            isUnlimited={hasNoMinimum}
             value={minPerOrder ?? 0}
             unlimitedAriaLabel="Set minimum tickets per order to unlimited"
             valueAriaLabel="Minimum tickets per order"
@@ -630,7 +638,7 @@ export default function TicketTypeAvailabilityStep({
                 />
               </svg>
             }
-            isUnlimited={maxPerOrder == null}
+            isUnlimited={isMaxUnlimited}
             value={maxPerOrder ?? 0}
             unlimitedAriaLabel="Set maximum tickets per order to unlimited"
             valueAriaLabel="Maximum tickets per order"
@@ -825,6 +833,7 @@ export default function TicketTypeAvailabilityStep({
                     onOpenChange={setSchedulePickerOpen}
                     selectionMode="single"
                     value={schedulePickerValue}
+                    minDate={minScheduleDate}
                     onChange={(next) => {
                       if (!next.start) {
                         setValue("salesEndAt", null, { shouldDirty: true });
@@ -846,7 +855,7 @@ export default function TicketTypeAvailabilityStep({
                   onClick={() =>
                     setValue("salesEndAt", null, { shouldDirty: true })
                   }
-                  className="flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900 px-4 py-2 text-[13px] text-neutral-200 hover:border-red-500 hover:text-red-300 cursor-pointer whitespace-nowrap leading-none"
+                  className="flex items-center gap-2 rounded-full border border-red-500 bg-neutral-900 px-4 py-2 text-[13px] text-red-300 hover:border-red-600 hover:text-red-400 cursor-pointer whitespace-nowrap leading-none"
                 >
                   Delete
                 </button>

@@ -1952,7 +1952,7 @@ export default function RolesPermissionsModal({
         {/* ✅ Delete confirmation popup */}
         {confirmOpen ? (
           <div
-            className="absolute inset-0 z-[95] flex items-center justify-center px-3"
+            className="absolute inset-0 z-[95] flex items-center justify-center px-4 sm:px-6"
             role="dialog"
             aria-modal="true"
             aria-label="Delete role confirmation"
@@ -1961,41 +1961,41 @@ export default function RolesPermissionsModal({
               type="button"
               aria-label="Close"
               onClick={() => setDeleteConfirm(null)}
-              className="absolute inset-0 bg-black/55 backdrop-blur-[8px]"
+              className="absolute inset-0 bg-black/55 backdrop-blur-[10px]"
             />
 
             <div
               className={clsx(
-                "relative w-full max-w-[460px] overflow-hidden rounded-2xl",
+                "relative w-full max-w-[620px] overflow-hidden rounded-3xl",
                 "border border-white/10 bg-neutral-950/92",
-                "shadow-[0_25px_90px_rgba(0,0,0,0.75)]",
+                "shadow-[0_35px_140px_rgba(0,0,0,0.78)]",
               )}
             >
               <div
                 className="pointer-events-none absolute inset-0 opacity-100"
                 style={{
                   background:
-                    "radial-gradient(700px 240px at 18% -10%, rgba(154,70,255,0.16), transparent 60%), radial-gradient(700px 240px at 100% 30%, rgba(66,139,255,0.10), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                    "radial-gradient(900px 320px at 18% -10%, rgba(154,70,255,0.18), transparent 60%), radial-gradient(900px 320px at 100% 30%, rgba(66,139,255,0.12), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
                 }}
               />
 
-              <div className="relative flex items-start justify-between gap-3 px-5 py-4">
-                <div className="flex items-start gap-3">
+              <div className="relative flex items-start justify-between gap-4 px-7 py-6">
+                <div className="flex items-start gap-4">
                   <div
                     className={clsx(
-                      "mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                      "mt-0.5 inline-flex h-12 w-12 items-center justify-center rounded-2xl",
                       "border border-white/10 bg-white/5 text-warning-200 flex-shrink-0",
                       "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
                     )}
                   >
-                    <AlertTriangle className="h-5 w-5" />
+                    <AlertTriangle className="h-6 w-6" />
                   </div>
 
                   <div className="min-w-0">
-                    <div className="text-[16px] font-semibold text-neutral-0">
+                    <div className="text-[18px] font-semibold text-neutral-0">
                       Delete Role
                     </div>
-                    <div className="mt-1 text-[12px] text-neutral-400">
+                    <div className="mt-2 text-[13px] leading-[1.45] text-neutral-400">
                       Are you sure you want to delete the{" "}
                       <span className="font-semibold text-neutral-200">
                         {deleteConfirm?.roleName ?? "this"}
@@ -2010,23 +2010,23 @@ export default function RolesPermissionsModal({
                   onClick={() => setDeleteConfirm(null)}
                   aria-label="Close confirmation"
                   className={clsx(
-                    "inline-flex flex-shrink-0 h-9 w-9 items-center justify-center rounded-full",
+                    "inline-flex flex-shrink-0 h-10 w-10 items-center justify-center rounded-full",
                     "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10 cursor-pointer",
                     "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                   )}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="relative px-5 pb-5">
-                <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="relative px-7 pb-7">
+                <div className="mt-5 grid grid-cols-2 gap-4">
                   <Button
                     type="button"
                     variant="secondary"
                     size="md"
                     className={clsx(
-                      "rounded-xl",
+                      "rounded-2xl h-11 text-[14px]",
                       "border border-white/10 bg-white/5",
                       "hover:bg-white/10",
                     )}
@@ -2041,10 +2041,10 @@ export default function RolesPermissionsModal({
                     variant="primary"
                     size="md"
                     className={clsx(
-                      "rounded-xl",
+                      "rounded-2xl h-11 text-[14px]",
                       "bg-[linear-gradient(90deg,rgba(154,70,255,0.95),rgba(66,139,255,0.55))]",
                       "hover:bg-[linear-gradient(90deg,rgba(154,70,255,1),rgba(66,139,255,0.62))]",
-                      "shadow-[0_18px_40px_rgba(154,70,255,0.18)]",
+                      "shadow-[0_22px_55px_rgba(154,70,255,0.20)]",
                     )}
                     disabled={saving}
                     onClick={confirmDeleteNow}

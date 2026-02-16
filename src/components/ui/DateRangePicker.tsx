@@ -1,3 +1,4 @@
+// src/components/ui/DateRangePicker.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -216,6 +217,13 @@ function normalizeRange(next: DateRangeValue, effMin: Date, effMax: Date) {
   return { start: cs, end: ce };
 }
 
+function setYearPreserveMonthDay(d: Date, nextYear: number) {
+  const month = d.getMonth();
+  const day = d.getDate();
+  const maxDay = daysInMonth(nextYear, month);
+  return clampToDay(new Date(nextYear, month, Math.min(day, maxDay)));
+}
+
 export default function DateRangePicker({
   value,
   onChange,
@@ -287,6 +295,10 @@ export default function DateRangePicker({
     end: value.end ? clampToDay(value.end) : null,
   });
 
+  // Tracks whether the user actually clicked a day during the current open session.
+  // If they didn't, changing the year selector should shift the draft year (expected UX).
+  const [didPickInThisOpen, setDidPickInThisOpen] = useState(false);
+
   const committedStart = value.start ? clampToDay(value.start) : null;
   const committedEnd = value.end ? clampToDay(value.end) : null;
 
@@ -300,6 +312,7 @@ export default function DateRangePicker({
     const e = value.end ? clampToDay(value.end) : null;
 
     setDraft({ start: s, end: e });
+    setDidPickInThisOpen(false);
 
     const anchor = s ?? e ?? today;
     setViewYear(anchor.getFullYear());
@@ -397,6 +410,8 @@ export default function DateRangePicker({
   }
 
   function commitPick(day: number) {
+    setDidPickInThisOpen(true);
+
     const picked = clampToDay(new Date(viewYear, viewMonth, day));
     if (isDisabled(picked, effMin, effMax)) return;
 
@@ -759,6 +774,29 @@ export default function DateRangePicker({
                             key={y}
                             type="button"
                             onClick={() => {
+                              // ✅ Fix: if user changes year but doesn't click a day,
+                              // they expect "Done" to apply that year (same month/day).
+                              if (
+                                !didPickInThisOpen &&
+                                (draft.start || draft.end)
+                              ) {
+                                const nextStart = draft.start
+                                  ? setYearPreserveMonthDay(draft.start, y)
+                                  : null;
+
+                                const nextEnd = draft.end
+                                  ? setYearPreserveMonthDay(draft.end, y)
+                                  : null;
+
+                                setDraft(
+                                  normalizeRange(
+                                    { start: nextStart, end: nextEnd },
+                                    effMin,
+                                    effMax,
+                                  ),
+                                );
+                              }
+
                               setViewYear(y);
                               setYearOpen(false);
                             }}

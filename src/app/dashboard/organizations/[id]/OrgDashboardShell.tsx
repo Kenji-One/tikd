@@ -197,7 +197,7 @@ export default function OrgDashboardShell({
       {showOrgHero ? (
         <section className="pb-8">
           {/* Banner */}
-          <div className="px-4 pt-4">
+          <div className="pt-4">
             {/* ✅ wrapper prevents clipping of the overlapping logo */}
             <div className="relative">
               <div

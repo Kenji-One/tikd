@@ -67,12 +67,17 @@ function revenueToNumber(rev: string) {
 }
 
 /* -------------------------- Data fetching -------------------------- */
+const UPCOMING_LIMIT = 4;
+
 async function fetchUpcomingEvents(): Promise<ApiResponse> {
-  const res = await fetch("/api/dashboard/upcoming-events?limit=4", {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    cache: "no-store",
-  });
+  const res = await fetch(
+    `/api/dashboard/upcoming-events?limit=${UPCOMING_LIMIT}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+    },
+  );
 
   if (!res.ok) {
     throw new Error("Failed to load upcoming events");
@@ -472,10 +477,26 @@ function SortControls({
 
 export default function UpcomingEventsTable() {
   const router = useRouter();
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard-upcoming-events"],
+    // include limit in the key so cache is never “wrong shape” if reused elsewhere
+    queryKey: ["dashboard-upcoming-events", UPCOMING_LIMIT],
     queryFn: fetchUpcomingEvents,
-    staleTime: 20_000,
+
+    /**
+     * ✅ Critical: this data must update quickly after publish/unpublish.
+     * - staleTime: 0  -> always stale (refetch on mount after navigation)
+     * - refetchOnMount: "always" -> even if something marks it fresh later
+     * - refetchOnWindowFocus: true -> coming back to the tab refreshes it
+     */
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+
+    /**
+     * Keeps the UI stable while refetching (no empty flicker),
+     * but with staleTime=0 it will still refetch immediately.
+     */
     placeholderData: keepPreviousData,
   });
 

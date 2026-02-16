@@ -1,4 +1,3 @@
-// src/app/api/events/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
@@ -66,7 +65,6 @@ async function getSessionIdentity(
     .trim()
     .toLowerCase();
 
-  // Prefer a friendly name for team rows
   const sessionName = String(session?.user?.name || "").trim();
 
   if (!email) {
@@ -123,7 +121,6 @@ async function assertCanCreateEventForOrg(
   const isOwner = String(org.ownerId) === String(userId);
   if (isOwner) return { ok: true, isOwner: true };
 
-  // ✅ Only org admins can create events (active admins)
   const admin = await OrgTeam.findOne({
     organizationId: org._id,
     userId,
@@ -156,13 +153,9 @@ const bodySchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
 
-  // start datetime in ISO, required
   date: z.coerce.date(),
-
-  // end datetime (supports multi-day events)
   endDate: z.coerce.date().optional(),
 
-  // legacy / fallback
   duration: z
     .string()
     .regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/)
@@ -182,25 +175,23 @@ const bodySchema = z.object({
 
   artists: z.array(artistInputSchema).default([]),
 
-  // ✅ IMPORTANT: default new events to "draft" (Unpublished)
   status: z.enum(["published", "draft"]).default("draft"),
 });
 
 /* --------------------------- GET --------------------------- */
 export async function GET(req: NextRequest) {
-  const session = (await auth()) as SessionLike;
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { searchParams } = new URL(req.url);
   const owned = searchParams.get("owned");
 
-  // ✅ If "owned=1", include:
-  // - events created by me
-  // - events where I’m active on EventTeam
-  // - events inside orgs where I’m an active org admin
+  // ✅ Public events feed (published & upcoming/ongoing) does NOT require auth
+  // ✅ Owned feed still requires auth
+  const session = (await auth()) as SessionLike;
+
   if (owned === "1") {
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const me = String(session.user.id);
 
     const [eventTeamRows, orgAdminRows] = await Promise.all([
@@ -225,7 +216,6 @@ export async function GET(req: NextRequest) {
 
     const events = await Event.find(filter).lean<unknown[]>();
 
-    // hydrate org payload
     const orgIdsHydrate = Array.from(
       new Set(
         events.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean),
@@ -274,16 +264,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(hydrated);
   }
 
-  // Default: published & upcoming/ongoing
+  // Default: published & upcoming/ongoing (PUBLIC)
   const now = new Date();
 
   const filter = {
     status: "published",
     $or: [
-      // Ongoing multi-day event
       { endDate: { $gte: now } },
-
-      // Single-day event: endDate missing OR explicitly null, and start date in future
       { endDate: { $exists: false }, date: { $gte: now } },
       { endDate: null, date: { $gte: now } },
     ],
@@ -291,7 +278,6 @@ export async function GET(req: NextRequest) {
 
   const events = await Event.find(filter).lean<unknown[]>();
 
-  // hydrate org payload
   const orgIds = Array.from(
     new Set(events.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean)),
   );
@@ -358,7 +344,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // ✅ Permission: Org Owner OR Org Admin (active)
   const perm = await assertCanCreateEventForOrg(
     parsed.data.organizationId,
     String(session.user.id),
@@ -373,7 +358,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Create Artist docs
   const artistIds = await Promise.all(
     parsed.data.artists.map(async (a) => {
       const doc = await Artist.create({
@@ -384,7 +368,6 @@ export async function POST(req: Request) {
     }),
   );
 
-  // Duration minutes:
   const durationMinutes = (() => {
     if (parsed.data.endDate) {
       const ms = parsed.data.endDate.getTime() - parsed.data.date.getTime();
@@ -427,7 +410,6 @@ export async function POST(req: Request) {
     status: parsed.data.status,
   });
 
-  // ✅ Create a starter notification (type: event.created)
   await createNotification({
     recipientUserId: identity.userId,
     type: "event.created",
@@ -436,8 +418,6 @@ export async function POST(req: Request) {
     href: `/dashboard/events/${String(event._id)}`,
   });
 
-  // ✅ Auto-add creator to EventTeam as ADMIN + ACTIVE
-  // Use $unset so re-creating doesn't leave old expiresAt/inviteToken hanging around.
   await EventTeam.findOneAndUpdate(
     { eventId: event._id, email: identity.email },
     {

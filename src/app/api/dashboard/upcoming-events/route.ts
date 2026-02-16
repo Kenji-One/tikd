@@ -158,7 +158,7 @@ export async function GET(req: NextRequest) {
       ],
     };
 
-    // ✅ FIX: only published events should appear in Upcoming Events
+    // ✅ only published events should appear in Upcoming Events
     const events = await Event.find({
       createdByUserId: userId,
       status: "published",
@@ -199,12 +199,12 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Small private cache helps refresh/back without risking shared-user caching
+    // ✅ No caching — this must reflect publish/unpublish immediately.
     return NextResponse.json(
       { rows },
       {
         headers: {
-          "Cache-Control": "private, max-age=15, stale-while-revalidate=60",
+          "Cache-Control": "no-store",
         },
       },
     );

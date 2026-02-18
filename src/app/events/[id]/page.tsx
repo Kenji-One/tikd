@@ -4,21 +4,18 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { useMemo } from "react";
 
 import { Button } from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { EventHero } from "@/components/sections/event/EventHero";
 import InfoRow from "@/components/ui/InfoRow";
-import EventCarouselSection, {
-  type Event as CarouselEvent,
-} from "@/components/sections/Landing/EventCarouselSection";
-import InstagramGallery from "@/components/sections/event/InstagramGallery";
+import { EventHero } from "@/components/sections/event/EventHero";
 import { useCart } from "@/store/useCart";
+import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
 
 /* ------------------------------------------------------------------ */
 /*  Remote types                                                      */
@@ -62,24 +59,6 @@ interface ApiEvent {
   };
 }
 
-/** Public feed event shape (from GET /api/events) */
-type ApiPublicEvent = {
-  _id: string;
-  title?: string;
-  date?: string | Date;
-  endDate?: string | Date | null;
-  location?: string;
-  image?: string;
-  categories?: string[];
-  organization?: {
-    _id: string;
-    name?: string;
-    logo?: string;
-    website?: string;
-  } | null;
-  organizationId?: string | { toString?: () => string } | null;
-};
-
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
@@ -113,6 +92,12 @@ const getStaticMapUrl = (
     `&key=${key}`,
   ].join("");
 };
+
+function posterOrDefault(src: unknown): string {
+  if (typeof src !== "string") return EVENT_CARD_DEFAULT_POSTER;
+  const s = src.trim();
+  return s ? s : EVENT_CARD_DEFAULT_POSTER;
+}
 
 function AvatarStack({
   images,
@@ -150,45 +135,9 @@ function AvatarStack({
         )}
       </div>
 
-      <span className="text-xl font-medium text-white">Attending</span>
+      <span className="text-sm font-medium text-white/90">Attending</span>
     </div>
   );
-}
-
-function toMsMaybe(d: unknown): number | null {
-  if (!d) return null;
-  const dt = typeof d === "string" || d instanceof Date ? new Date(d) : null;
-  const ms = dt ? dt.getTime() : NaN;
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function getOrgIdFromPublicEvent(e: ApiPublicEvent): string {
-  if (e.organization?._id) return String(e.organization._id);
-  const v = e.organizationId;
-  if (typeof v === "string") return v;
-  if (v && typeof v === "object" && typeof v.toString === "function")
-    return v.toString();
-  return "";
-}
-
-function toCarouselEvent(e: ApiPublicEvent): CarouselEvent | null {
-  const id = String(e._id || "");
-  if (!id) return null;
-
-  const title = String(e.title || "").trim() || "Untitled Event";
-  const venue = String(e.location || "").trim() || "TBA";
-  const dateRaw = e.date ? String(e.date) : "";
-  const dateLabel = dateRaw ? formatDate(dateRaw) : "TBA";
-
-  const img =
-    (typeof e.image === "string" && e.image.trim()) || "/dummy/event.png";
-
-  const category =
-    Array.isArray(e.categories) && e.categories.length
-      ? String(e.categories[0] || "Event")
-      : "Event";
-
-  return { id, title, dateLabel, venue, img, category };
 }
 
 /* ------------------------------------------------------------------ */
@@ -196,41 +145,35 @@ function toCarouselEvent(e: ApiPublicEvent): CarouselEvent | null {
 /* ------------------------------------------------------------------ */
 function EventDetailSkeleton() {
   return (
-    <>
-      {/* ─── Hero skeleton ─── */}
-      <section className="relative w-full overflow-hidden">
-        <div className="absolute inset-0 z-0 bg-neutral-900 blur-[24px]" />
-        <div className="absolute inset-0 z-0 bg-neutral-950/70" />
-        <div className="relative mx-auto w-full max-w-[848px] px-4 pt-[72px] pb-[82px] lg:flex lg:items-center lg:gap-[70px] lg:py-[186px]">
-          <Skeleton className="h-[275px] w-[220px] rounded-xl sm:h-[325px] sm:w-[260px] md:h-[375px] md:w-[300px] lg:h-[428px] lg:w-[342px]" />
-          <div className="mt-4 flex w-full max-w-[436px] flex-col gap-4 lg:mt-0">
+    <div className="relative">
+      <div className="fixed inset-0 -z-10 bg-neutral-950" />
+
+      <div className="mx-auto w-full max-w-[1360px] px-4 pt-[112px] pb-16 md:pt-[124px]">
+        <div className="grid gap-8 lg:grid-cols-12 lg:gap-x-8 xl:gap-x-10">
+          {/* left poster */}
+          <div className="lg:col-span-4 xl:col-span-5">
+            <div className="lg:sticky lg:top-[112px] md:lg:top-[124px] lg:flex lg:justify-end">
+              <Skeleton className="h-[275px] w-[220px] rounded-xl sm:h-[325px] sm:w-[260px] md:h-[375px] md:w-[300px] lg:h-[428px] lg:w-[342px]" />
+            </div>
+          </div>
+
+          {/* right content */}
+          <div className="lg:col-span-8 xl:col-span-7 space-y-6">
             <Skeleton className="h-12 w-3/4" />
+            <Skeleton className="h-5 w-44" />
             <div className="flex gap-2">
-              <Skeleton className="h-6 w-20 rounded-full" />
-              <Skeleton className="h-6 w-28 rounded-full" />
+              <Skeleton className="h-7 w-28 rounded-full" />
+              <Skeleton className="h-7 w-48 rounded-full" />
             </div>
-            <div className="flex gap-3">
-              {[...Array(3)].map((_, i) => (
-                <Skeleton key={i} className="h-8 w-24 rounded-full" />
-              ))}
-            </div>
-            <Skeleton className="mt-6 h-[140px] rounded-2xl" />
+
+            <Skeleton className="h-[260px] rounded-2xl" />
+            <Skeleton className="h-[170px] rounded-2xl" />
+            <Skeleton className="h-[170px] rounded-2xl" />
+            <Skeleton className="h-[240px] rounded-2xl" />
           </div>
         </div>
-      </section>
-
-      {/* ─── Body skeleton ─── */}
-      <article className="mx-auto w-full max-w-[1232px] px-4 py-12 space-y-12">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="space-y-4">
-            <Skeleton className="h-7 w-32" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-            <Skeleton className="h-4 w-2/3" />
-          </div>
-        ))}
-      </article>
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -253,27 +196,22 @@ export default function EventDetailPage() {
     enabled: Boolean(id),
   });
 
-  // Public feed for “Similar Events”
-  const { data: publicEvents } = useQuery<ApiPublicEvent[]>({
-    queryKey: ["events", "public"],
-    queryFn: () => fetchJSON<ApiPublicEvent[]>(`/api/events`),
-    staleTime: 60_000,
-    gcTime: 5 * 60_000,
-  });
-
-  /* ---------- Cart qty per ticket type ---------- */
-  const EMPTY_QTY_MAP: Readonly<Record<string, number>> = Object.freeze({});
-
+  /**
+   * ✅ IMPORTANT: Hooks must run on every render in the same order.
+   * We compute memoized values *before* early returns, using safe fallbacks.
+   */
   const eventId = event?._id?.toString() ?? "";
+  const safeTicketTypes = event?.ticketTypes ?? [];
+  const heroPoster = posterOrDefault(event?.image);
+
+  const EMPTY_QTY_MAP: Readonly<Record<string, number>> = Object.freeze({});
 
   const qtyByTicket = useMemo<Record<string, number>>(() => {
     if (!eventId) return EMPTY_QTY_MAP;
 
     const map: Record<string, number> = {};
     for (const it of items) {
-      if (it.eventId === eventId) {
-        map[it.ticketTypeId] = it.qty;
-      }
+      if (it.eventId === eventId) map[it.ticketTypeId] = it.qty;
     }
     return map;
   }, [items, eventId]);
@@ -282,50 +220,6 @@ export default function EventDetailPage() {
     () => Object.values(qtyByTicket).reduce((a, b) => a + b, 0),
     [qtyByTicket],
   );
-
-  /* ---------- Similar events (real) ---------- */
-  // ✅ IMPORTANT: This hook MUST run on every render (no early-return above it).
-  const similarEvents: CarouselEvent[] = useMemo(() => {
-    const current = event;
-    const list = Array.isArray(publicEvents) ? publicEvents : [];
-
-    if (!current || !list.length) return [];
-
-    const currentId = String(current._id);
-    const currentOrgId = String(current.organization?._id || "");
-    const currentStartMs = toMsMaybe(current.date);
-
-    const candidates = list
-      .filter((e) => String(e._id) !== currentId)
-      .map((e) => {
-        const startMs = toMsMaybe(e.date);
-        const orgId = getOrgIdFromPublicEvent(e);
-
-        const sameOrg =
-          Boolean(currentOrgId) && Boolean(orgId) && orgId === currentOrgId;
-
-        const distance =
-          currentStartMs !== null && startMs !== null
-            ? Math.abs(startMs - currentStartMs)
-            : Number.MAX_SAFE_INTEGER;
-
-        return { e, sameOrg, distance };
-      });
-
-    candidates.sort((a, b) => {
-      if (a.sameOrg !== b.sameOrg) return a.sameOrg ? -1 : 1;
-      return a.distance - b.distance;
-    });
-
-    const out: CarouselEvent[] = [];
-    for (const c of candidates) {
-      const mapped = toCarouselEvent(c.e);
-      if (mapped) out.push(mapped);
-      if (out.length >= 8) break;
-    }
-
-    return out;
-  }, [publicEvents, event]);
 
   /* ---------- Early returns ---------- */
   if (isLoading) return <EventDetailSkeleton />;
@@ -338,18 +232,16 @@ export default function EventDetailPage() {
     );
   }
 
-  // ✅ From here on, `event` is guaranteed (fixes TS “possibly undefined” warnings)
+  // ✅ From here on, `event` is guaranteed
   const eventData: ApiEvent = event;
 
   /* ---------- Date / map ---------- */
   const dateLabel = formatDate(eventData.date);
 
-  const MAP_W = 800;
-  const MAP_H = 400;
+  const MAP_W = 900;
+  const MAP_H = 520;
   const mapUrl =
     getStaticMapUrl(eventData.location, MAP_W, MAP_H) || "/dummy/map.png";
-
-  const safeTicketTypes = eventData.ticketTypes ?? [];
 
   /* ---------- Handle qty change -> Cart ---------- */
   function handleTicketQtyChange(ticketTypeId: string, nextQty: number) {
@@ -367,7 +259,7 @@ export default function EventDetailPage() {
         ticketLabel: tt.label,
         unitPrice: tt.price,
         currency: tt.currency,
-        image: tt.image ?? eventData.image,
+        image: heroPoster, // ticket photos removed; use event poster only
         qty: nextQty,
       });
     } else if (existing && nextQty > 0) {
@@ -377,61 +269,40 @@ export default function EventDetailPage() {
     }
   }
 
-  /* ---------- Render ------------------ */
+  /* ---------- Render ---------- */
   return (
-    <>
-      {/* ───────── Hero Section ───────── */}
-      <EventHero
-        poster={eventData.image ?? "/dummy/event.png"}
-        title={eventData.title}
-        venue={eventData.location}
-        dateLabel={dateLabel}
-        ticketOptions={safeTicketTypes.map((t) => ({
-          id: t._id,
-          label: t.label,
-          price: t.price,
-          currency: t.currency,
-          qty: qtyByTicket[t._id] ?? 0,
-          image: t.image ?? eventData.image,
-        }))}
-        onTicketQtyChange={handleTicketQtyChange}
-        artists={eventData.artists.slice(0, 3)}
-        attendingCount={eventData.attendingCount}
-        selectedCount={selectedCount}
-        onCheckout={() => router.push("/checkout")}
-      />
-
-      <article className="mx-auto w-full max-w-[1232px] px-4 pb-[70px] pt-8">
-        {/* ───────── Artists Attending ───────── */}
-        {eventData.artists.length > 0 && (
-          <InfoRow title="Artists Attending" splitTitle>
-            <ul className="flex flex-wrap gap-2">
-              {eventData.artists.map((artist) => (
-                <li
-                  key={artist._id}
-                  className="flex items-center gap-2 p-1 pr-4 rounded-full bg-neutral-800"
-                >
-                  <div className="relative size-8 overflow-hidden rounded-full bg-neutral-800">
-                    <Image
-                      src={artist.avatar || "/dummy/avatar.png"}
-                      alt={artist.stageName}
-                      fill
-                      sizes="32px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <span className="text-neutral-0">{artist.stageName}</span>
-                </li>
-              ))}
-            </ul>
-          </InfoRow>
-        )}
-
-        {/* ───────── Description ───────── */}
+    <EventHero
+      poster={heroPoster}
+      title={eventData.title}
+      venue={eventData.location}
+      dateLabel={dateLabel}
+      organization={{
+        id: eventData.organization._id,
+        name: eventData.organization.name,
+        logo: eventData.organization.logo,
+        website: eventData.organization.website,
+      }}
+      ticketOptions={safeTicketTypes.map((t) => ({
+        id: t._id,
+        label: t.label,
+        price: t.price,
+        currency: t.currency,
+        qty: qtyByTicket[t._id] ?? 0,
+        feesIncluded: t.feesIncluded,
+      }))}
+      onTicketQtyChange={handleTicketQtyChange}
+      selectedCount={selectedCount}
+      onCheckout={() => router.push("/checkout")}
+    >
+      {/* ---------------- Right column content ---------------- */}
+      <div className="space-y-6">
+        {/* Details */}
         {eventData.description && (
-          <InfoRow title="Description">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap gap-2">
+          <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
+            <div className="p-5 sm:p-6">
+              <h2 className="text-lg font-semibold text-white">Details</h2>
+
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Pill
                   text="All ages"
                   icon={
@@ -471,150 +342,142 @@ export default function EventDetailPage() {
                     </svg>
                   }
                 />
-                <Pill
-                  text={dateLabel}
-                  color="#9A51FF"
-                  textColor="#C7A0FF"
-                  icon={
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                    >
-                      <path
-                        d="M12.6667 4H3.33333C2.59695 4 2 4.59695 2 5.33333V12.6667C2 13.403 2.59695 14 3.33333 14H12.6667C13.403 14 14 13.403 14 12.6667V5.33333C14 4.59695 13.403 4 12.6667 4Z"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                      <path
-                        d="M2 6.66667C2 5.40933 2 4.78133 2.39067 4.39067C2.78133 4 3.40933 4 4.66667 4H11.3333C12.5907 4 13.2187 4 13.6093 4.39067C14 4.78133 14 5.40933 14 6.66667H2Z"
-                        fill="currentColor"
-                      />
-                      <path
-                        d="M4.66669 2V4M11.3334 2V4"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  }
-                />
               </div>
-              <p className="whitespace-pre-wrap text-neutral-0 font-light leading-[130%]">
+
+              <p className="mt-4 whitespace-pre-wrap text-white/90 font-light leading-[150%]">
                 {eventData.description}
               </p>
+
               {eventData.attendingCount > 0 && (
-                <AvatarStack
-                  images={eventData.attendeesPreview}
-                  total={eventData.attendingCount}
-                />
+                <div className="mt-5">
+                  <AvatarStack
+                    images={eventData.attendeesPreview}
+                    total={eventData.attendingCount}
+                  />
+                </div>
               )}
             </div>
-          </InfoRow>
+          </section>
         )}
 
-        {/* ───────── Location ───────── */}
-        <InfoRow title="Location">
-          <div className="flex flex-col items-start gap-4">
-            <div className="relative w-full overflow-hidden rounded-lg">
+        {/* Lineup */}
+        {eventData.artists.length > 0 && (
+          <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
+            <div className="p-5 sm:p-6">
+              <h2 className="text-lg font-semibold text-white">Lineup</h2>
+
+              <ul className="mt-4 flex flex-wrap gap-2">
+                {eventData.artists.map((artist) => (
+                  <li
+                    key={artist._id}
+                    className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-1 py-1 pr-3"
+                  >
+                    <div className="relative size-8 overflow-hidden rounded-full bg-neutral-800">
+                      <Image
+                        src={artist.avatar || "/dummy/avatar.png"}
+                        alt={artist.stageName}
+                        fill
+                        sizes="32px"
+                        className="object-cover"
+                      />
+                    </div>
+                    <span className="text-white/90">{artist.stageName}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
+
+        {/* Venue */}
+        <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
+          <div className="p-5 sm:p-6">
+            <h2 className="text-lg font-semibold text-white">Venue</h2>
+            <p className="mt-3 text-white/85 font-light leading-[150%]">
+              {eventData.location}
+            </p>
+            <p className="mt-2 text-sm text-white/55">
+              Map is shown at the bottom of this page.
+            </p>
+          </div>
+        </section>
+
+        {/* Terms */}
+        <InfoRow title="Terms">
+          <p className="whitespace-pre-line text-neutral-0 font-light leading-[150%]">
+            All tickets are final sale and cannot be exchanged or refunded…
+          </p>
+        </InfoRow>
+
+        {/* Bottom banner (Org + Map) */}
+        <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md overflow-hidden">
+          <div className="grid gap-0 md:grid-cols-2">
+            {/* Org panel */}
+            <div className="relative p-6 sm:p-7">
+              <div
+                className="pointer-events-none absolute inset-0 opacity-90"
+                style={{
+                  background:
+                    "radial-gradient(680px 240px at 16% 10%, rgba(154,70,255,0.22), transparent 55%)," +
+                    "radial-gradient(520px 220px at 92% 34%, rgba(167,112,255,0.16), transparent 55%)",
+                }}
+              />
+              <div className="relative flex flex-col items-center justify-center text-center h-full">
+                <div className="relative size-[54px] overflow-hidden rounded-full bg-white/10 border border-white/10">
+                  <Image
+                    src={
+                      eventData.organization.logo ||
+                      "/dummy/organization-placeholder.png"
+                    }
+                    alt={`${eventData.organization.name} logo`}
+                    fill
+                    sizes="54px"
+                    className="object-cover"
+                  />
+                </div>
+
+                <p className="mt-3 text-sm text-white/60">Hosted by</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {eventData.organization.name}
+                </p>
+
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <Button asChild variant="secondary">
+                    <Link href={`/org/${eventData.organization._id}`}>
+                      More Events
+                    </Link>
+                  </Button>
+
+                  {eventData.organization.website && (
+                    <Button asChild variant="secondary">
+                      <a
+                        href={eventData.organization.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Visit Website
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Map panel */}
+            <div className="relative min-h-[220px] md:min-h-[260px]">
               <Image
                 src={mapUrl}
                 alt={`Map for ${eventData.location}`}
                 width={MAP_W}
                 height={MAP_H}
-                className="h-[210px] w-full object-cover sm:h-[250px] lg:h-[328px]"
+                className="h-full w-full object-cover"
                 unoptimized
               />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
             </div>
-            <p className="text-base font-light leading-[130%] tracking-[-0.32px] text-neutral-0">
-              {eventData.location}
-            </p>
-            <Button asChild variant="secondary">
-              <a
-                href={`https://maps.google.com/?q=${encodeURIComponent(
-                  eventData.location,
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open in Maps
-              </a>
-            </Button>
           </div>
-        </InfoRow>
-
-        {/* ───────── Contact ───────── */}
-        <InfoRow
-          title="Contact"
-          classNameCont="flex items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-4 py-3">
-            <Link
-              href={`/org/${eventData.organization._id}`}
-              className="relative size-13 overflow-hidden rounded-full bg-neutral-800"
-            >
-              <Image
-                src={
-                  eventData.organization.logo ||
-                  "/dummy/organization-placeholder.png"
-                }
-                alt={`${eventData.organization.name} logo`}
-                fill
-                sizes="52px"
-                className="object-cover"
-              />
-            </Link>
-            <p className="font-semibold text-neutral-0">
-              {eventData.organization.name}
-            </p>
-          </div>
-
-          {eventData.organization.website && (
-            <Button variant="secondary" asChild>
-              <a
-                href={eventData.organization.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-[10px]"
-              >
-                Visit Website
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                >
-                  <path
-                    d="M3 11L11 3M11 3H3M11 3V11"
-                    stroke="white"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </a>
-            </Button>
-          )}
-        </InfoRow>
-
-        {/* ───────── Terms (placeholder) ───────── */}
-        <InfoRow title="Terms">
-          <p className="whitespace-pre-line text-neutral-0 font-light leading-[130%]">
-            All tickets are final sale and cannot be exchanged or refunded…
-          </p>
-        </InfoRow>
-      </article>
-
-      <InstagramGallery />
-
-      {/* ───────── Similar Events ───────── */}
-      {similarEvents.length > 0 && (
-        <section className="mx-auto w-full max-w-[1201px] px-4 py-12">
-          <EventCarouselSection events={similarEvents} title="Similar Events" />
         </section>
-      )}
-    </>
+      </div>
+    </EventHero>
   );
 }

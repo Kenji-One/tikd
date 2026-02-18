@@ -2,77 +2,13 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState, type CSSProperties, useEffect } from "react";
+import { useId, useMemo, useState } from "react";
 import clsx from "clsx";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
+import { MotionConfig, motion, type Variants } from "framer-motion";
 
 import { Button } from "@/components/ui/Button";
-import EventCarouselSection, {
-  type Event,
-} from "@/components/sections/Landing/EventCarouselSection";
-import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
-
-/* ------------------------------------------------------------------ */
-/*  Background (mesh + old grid)                                       */
-/* ------------------------------------------------------------------ */
-const pageMesh: CSSProperties = {
-  background:
-    "radial-gradient(1100px 640px at 8% 12%, rgba(130, 46, 255, .35), transparent 62%)," +
-    "radial-gradient(1000px 560px at 92% 10%, rgba(130, 46, 255, .28), transparent 62%)," +
-    "radial-gradient(900px 560px at 50% 110%, rgba(196, 181, 253, .16), transparent 60%)",
-};
-
-const gridOverlayStyle: CSSProperties = {
-  backgroundImage:
-    "linear-gradient(to right, rgba(255,255,255,.65) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.65) 1px, transparent 1px)",
-  backgroundSize: "60px 60px",
-  maskImage: "radial-gradient(1100px 680px at 50% 18%, black, transparent 70%)",
-};
-
-/* -------------------------------------------------------------------------- */
-/*  API → UI adapter                                                          */
-/* -------------------------------------------------------------------------- */
-type BackendEvent = {
-  _id: string;
-  title: string;
-  date: string; // ISO from Mongo
-  endDate?: string | null;
-  location: string;
-  image?: string;
-  categories?: string[];
-};
-
-const fmtDateLabel = (iso: string) =>
-  new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(iso));
-
-const primaryCategoryOf = (cats: unknown): string => {
-  if (!Array.isArray(cats)) return "Uncategorized";
-  const first = cats.find((c) => typeof c === "string" && c.trim().length > 0);
-  return typeof first === "string" ? first.trim() : "Uncategorized";
-};
-
-const posterOf = (img: unknown): string => {
-  if (typeof img !== "string") return EVENT_CARD_DEFAULT_POSTER;
-  const s = img.trim();
-  return s ? s : EVENT_CARD_DEFAULT_POSTER;
-};
-
-const toUiEvent = (e: BackendEvent): Event => ({
-  id: e._id,
-  title: e.title,
-  dateLabel: fmtDateLabel(e.date),
-  venue: e.location,
-  img: posterOf(e.image),
-  category: primaryCategoryOf(e.categories),
-});
 
 type FaqItem = { q: string; a: string };
 
@@ -96,34 +32,8 @@ const faqItems: FaqItem[] = [
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Small UI blocks                                                    */
+/*  FAQ                                                                */
 /* ------------------------------------------------------------------ */
-function SectionKicker({ children }: { children: string }) {
-  return (
-    <p className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-300">
-      {children}
-    </p>
-  );
-}
-
-function HeroPhones() {
-  return (
-    <div className="relative mx-auto w-full max-w-[560px]">
-      {/* Keep the same aspect as before so layout stays stable */}
-      <div className="relative aspect-[5/4]">
-        <Image
-          src="/landing/hero-phones.svg"
-          alt="Tikd app preview"
-          fill
-          priority
-          sizes="(min-width: 1024px) 560px, 92vw"
-          className="select-none object-contain"
-        />
-      </div>
-    </div>
-  );
-}
-
 function Faq({ items }: { items: FaqItem[] }) {
   const baseId = useId();
   const [openIdx, setOpenIdx] = useState<number | null>(0);
@@ -188,23 +98,8 @@ function Faq({ items }: { items: FaqItem[] }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  HERO Ellipses (Figma)                                              */
-/* ------------------------------------------------------------------ */
-const heroEllipseBase: CSSProperties = {
-  width: "251px",
-  height: "413px",
-  borderRadius: "413px",
-  background: "#9a46ff", // Exact --color-primary-500 from your theme
-  filter: "blur(232px)",
-  transform: "rotate(-26.157deg)",
-  opacity: 0.85, // Matches the soft glow in Figma
-  pointerEvents: "none" as const,
-};
-
-/* ------------------------------------------------------------------ */
 /*  Features (pixel-layout like Figma)                                 */
 /* ------------------------------------------------------------------ */
-
 function FeatureTag() {
   return (
     <span className="inline-flex h-7 items-center rounded-sm bg-primary-800/70 px-4 text-[14px] font-medium text-primary-200 ring-1 ring-white/5">
@@ -214,7 +109,7 @@ function FeatureTag() {
 }
 
 type FeatureCardProps = {
-  title: string; // use \n for line breaks
+  title: string;
   size: "lg" | "md" | "sm";
   className?: string;
   children?: React.ReactNode;
@@ -225,13 +120,11 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
     <div
       className={clsx(
         "relative overflow-hidden rounded-2xl border border-white/5",
-        // Figma-ish “deep navy card”
         "bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.00))] bg-neutral-948",
         "shadow-[0_30px_80px_-60px_rgba(0,0,0,.9)] min-h-[280px] sm:min-h-[321px]",
         className,
       )}
     >
-      {/* soft top glow */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-70"
@@ -241,14 +134,13 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
         }}
       />
 
-      <div className={"relative z-10 pt-8 pl-8 w-full"}>
+      <div className="relative z-10 w-full pt-8 pl-8">
         <FeatureTag />
-
         <h3
           className={clsx(
             "mt-4 whitespace-pre-line font-black italic uppercase text-white leading-[90%]",
             size === "lg" || size === "md"
-              ? "text-[32px] tracking-[-0.64px] "
+              ? "text-[32px] tracking-[-0.64px]"
               : "text-[24px] tracking-[-0.48px]",
           )}
         >
@@ -256,22 +148,19 @@ function FeatureCard({ title, size, className, children }: FeatureCardProps) {
         </h3>
       </div>
 
-      {/* media/placeholder */}
       {children}
     </div>
   );
 }
 
 /* ------------------- Feature media placeholders (no assets) ------------------- */
-/* Replace any of these blocks later with a single <div style={{backgroundImage:`url(...)`}} /> */
-
 function MediaLaptopPlaceholder() {
   return (
-    <div className="pointer-events-none flex items-end justify-end w-[397px] h-[98%] absolute bottom-0 right-0">
+    <div className="pointer-events-none absolute bottom-0 right-0 flex h-[98%] w-[397px] items-end justify-end">
       <img
         src="/landing/features/feature-control.png"
         alt=""
-        className="object-cover w-full h-full"
+        className="h-full w-full object-cover"
       />
     </div>
   );
@@ -279,11 +168,11 @@ function MediaLaptopPlaceholder() {
 
 function MediaEventSetupPlaceholder() {
   return (
-    <div className="pointer-events-none flex items-end justify-end w-[290px] h-[90%] absolute bottom-0 right-0">
+    <div className="pointer-events-none absolute bottom-0 right-0 flex h-[90%] w-[290px] items-end justify-end">
       <img
         src="/landing/features/feature-event-setup.png"
         alt=""
-        className="w-full h-full"
+        className="h-full w-full"
       />
     </div>
   );
@@ -291,39 +180,37 @@ function MediaEventSetupPlaceholder() {
 
 function MediaWideScreenshotPlaceholder({
   src,
-  align = "center",
 }: {
   src: string;
   align?: "center" | "right";
 }) {
   return (
-    <div className="pointer-events-none flex items-end justify-end w-full h-[90%] absolute bottom-0 right-0 pl-8">
-      <img src={src} alt="" className="w-full h-auto" />
+    <div className="pointer-events-none absolute bottom-0 right-0 flex h-[90%] w-full items-end justify-end pl-8">
+      <img src={src} alt="" className="h-auto w-full" />
     </div>
   );
 }
 
 function HelpCenterPagePlaceholder({
   src,
-  align = "center",
 }: {
   src: string;
   align?: "center" | "right";
 }) {
   return (
-    <div className="pointer-events-none flex items-end justify-end w-full h-[72%] absolute bottom-0 right-0 pl-8">
-      <img src={src} alt="" className="w-auto h-full" />
+    <div className="pointer-events-none absolute bottom-0 right-0 flex h-[72%] w-full items-end justify-end pl-8">
+      <img src={src} alt="" className="h-full w-auto" />
     </div>
   );
 }
 
 function MediaMegaphonePlaceholder() {
   return (
-    <div className="pointer-events-none flex items-end justify-end w-[87%] h-full absolute bottom-0 right-0 pl-8">
+    <div className="pointer-events-none absolute bottom-0 right-0 flex h-full w-[87%] items-end justify-end pl-8">
       <img
         src="/landing/features/feature-promo-marketing.png"
         alt=""
-        className="w-full h-auto"
+        className="h-auto w-full"
       />
     </div>
   );
@@ -338,9 +225,7 @@ const allInOneImages = {
 function AllInOneCollage() {
   return (
     <div className="relative mx-auto w-full max-w-[490px]">
-      {/* Fixed height so overlap stays consistent like Figma */}
       <div className="relative h-[330px] sm:h-[390px] lg:h-[430px]">
-        {/* TOP (back image) */}
         <div className="absolute right-0 top-0 h-[42%] w-[52%] overflow-hidden rounded-lg ring-1 ring-white/10 shadow-[0_30px_80px_-55px_rgba(0,0,0,.9)]">
           <Image
             src={allInOneImages.top}
@@ -348,24 +233,20 @@ function AllInOneCollage() {
             fill
             sizes="(min-width:1024px) 360px, 60vw"
             className="object-cover"
-            priority={false}
           />
           <div className="absolute inset-0 bg-black/45" />
         </div>
 
-        {/* MAIN (front image with purple border) */}
-        <div className="absolute left-0 top-[18%] h-[55%] w-[68%] overflow-hidden rounded-lg border-2 border-primary-500 shadow-[0_40px_110px_-70px_rgba(154,70,255,.65)] z-10">
+        <div className="absolute left-0 top-[18%] z-10 h-[55%] w-[68%] overflow-hidden rounded-lg border-2 border-primary-500 shadow-[0_40px_110px_-70px_rgba(154,70,255,.65)]">
           <Image
             src={allInOneImages.main}
             alt="Ticket scanning on mobile"
             fill
             sizes="(min-width:1024px) 420px, 75vw"
             className="object-cover"
-            priority={false}
           />
         </div>
 
-        {/* BOTTOM (dimmed image) */}
         <div className="absolute bottom-0 -right-8 h-[44%] w-[52%] overflow-hidden rounded-lg ring-1 ring-white/10 shadow-[0_30px_80px_-55px_rgba(0,0,0,.9)]">
           <Image
             src={allInOneImages.bottom}
@@ -373,7 +254,6 @@ function AllInOneCollage() {
             fill
             sizes="(min-width:1024px) 360px, 60vw"
             className="object-cover"
-            priority={false}
           />
           <div className="absolute inset-0 bg-black/60" />
         </div>
@@ -407,6 +287,137 @@ function UnlockLabel({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Motion (typed to avoid TS “variants” warnings)                     */
+/* ------------------------------------------------------------------ */
+const EASE: [number, number, number, number] = [0.2, 0.85, 0.2, 1];
+
+const heroContainer: Variants = {
+  hidden: {},
+  show: {
+    transition: {
+      staggerChildren: 0.12,
+      delayChildren: 0.08,
+    },
+  },
+};
+
+const heroItem: Variants = {
+  hidden: { opacity: 0, y: 12, scale: 0.995 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.78, ease: EASE },
+  },
+};
+
+const heroDeviceWrap: Variants = {
+  hidden: { opacity: 0, y: 18, scale: 0.97 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.9, ease: EASE },
+  },
+};
+
+const scrollReveal: Variants = {
+  hidden: { opacity: 0, y: 18 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.75, ease: EASE },
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/*  Procreate-style Devices block + “shine floor”                      */
+/* ------------------------------------------------------------------ */
+function ProcreateStyleHeroDevices() {
+  return (
+    <motion.div
+      variants={heroDeviceWrap}
+      className="relative mx-auto w-full max-w-[560px] sm:max-w-[660px]"
+    >
+      <div className="relative">
+        {/* -------------------------------------------------------------- */}
+        {/* Procreate-like bottom “shine” (Tikd colors)                    */}
+        {/* -------------------------------------------------------------- */}
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute left-1/2 top-[62%] -z-10 h-[360px] w-[620px] -translate-x-1/2 rounded-full blur-[105px] sm:h-[420px] sm:w-[720px]"
+          style={{
+            background:
+              "radial-gradient(closest-side, rgba(154,70,255,0.26), transparent 70%), radial-gradient(closest-side, rgba(199,160,255,0.16), transparent 74%)",
+          }}
+          animate={{ opacity: [0.62, 0.9, 0.62] }}
+          transition={{ duration: 4.6, ease: "easeInOut", repeat: Infinity }}
+        />
+
+        {/* “Specular” sheen ring (sharper glow like the Procreate floor) */}
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute left-1/2 top-[70%] -z-10 h-[140px] w-[520px] -translate-x-1/2 rounded-full"
+          style={{
+            background:
+              "radial-gradient(closest-side, rgba(255,255,255,0.10), transparent 62%)",
+            filter: "blur(18px)",
+            maskImage:
+              "radial-gradient(closest-side, black 35%, transparent 78%)",
+            WebkitMaskImage:
+              "radial-gradient(closest-side, black 35%, transparent 78%)",
+          }}
+          animate={{ opacity: [0.25, 0.45, 0.25] }}
+          transition={{ duration: 3.8, ease: "easeInOut", repeat: Infinity }}
+        />
+
+        {/* Extra thin colored rim */}
+        <motion.div
+          aria-hidden
+          className="pointer-events-none absolute left-1/2 top-[73%] -z-10 h-[110px] w-[480px] -translate-x-1/2 rounded-full"
+          style={{
+            background:
+              "conic-gradient(from 180deg, rgba(154,70,255,0.0), rgba(154,70,255,0.20), rgba(199,160,255,0.12), rgba(154,70,255,0.0))",
+            filter: "blur(26px)",
+            opacity: 0.65,
+          }}
+          animate={{ opacity: [0.45, 0.75, 0.45] }}
+          transition={{ duration: 5.2, ease: "easeInOut", repeat: Infinity }}
+        />
+
+        {/* Soft vignette behind devices */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-20"
+          style={{
+            background:
+              "radial-gradient(520px 340px at 50% 45%, rgba(255,255,255,0.06), transparent 70%)",
+          }}
+        />
+
+        {/* Float wrapper (very subtle) */}
+        <motion.div
+          className="relative mx-auto w-full"
+          animate={{ y: [0, -6, 0] }}
+          transition={{ duration: 6.0, ease: "easeInOut", repeat: Infinity }}
+        >
+          <div className="relative mx-auto aspect-[5/4] w-full">
+            <Image
+              src="/landing/hero-phones.svg"
+              alt="Tikd iPhone previews"
+              fill
+              priority
+              sizes="(min-width: 1024px) 660px, 92vw"
+              className="select-none object-contain drop-shadow-[0_60px_140px_rgba(0,0,0,0.75)]"
+            />
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 export default function LandingPage() {
@@ -419,327 +430,293 @@ export default function LandingPage() {
     [],
   );
 
-  // ✅ real public events (published + upcoming/ongoing)
-  const { data: trendingEvents = [] } = useQuery({
-    queryKey: ["events-public"],
-    queryFn: async (): Promise<Event[]> => {
-      const res = await fetch("/api/events", { method: "GET" });
-      if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as BackendEvent[];
-
-      // soonest first, take 8 for the landing carousel
-      return json
-        .slice()
-        .sort((a, b) => +new Date(a.date) - +new Date(b.date))
-        .map(toUiEvent)
-        .slice(0, 8);
-    },
-    staleTime: 60_000,
-  });
-
   return (
-    <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
-      {/* ------------------------------------------------------------------ */}
-      {/* HERO (Tickets Made Easy)                                           */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="relative">
-        {/* Figma ellipses (left + right) */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
-          {/* Left ellipse */}
-          <div
-            className="absolute"
-            style={{
-              ...heroEllipseBase,
-              left: "80px",
-              bottom: "240px",
-            }}
-          />
+    <MotionConfig reducedMotion="user">
+      <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
+        {/* ------------------------------------------------------------------ */}
+        {/* HERO (Procreate-style: centered devices + centered copy)            */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.section
+          className="relative overflow-hidden"
+          initial="hidden"
+          animate="show"
+          variants={heroContainer}
+        >
+          {/* Background wash (dark spotlight + faint Tikd purple) */}
+          <div aria-hidden className="pointer-events-none absolute inset-0">
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(900px 520px at 50% 18%, rgba(255,255,255,0.06), transparent 62%), radial-gradient(860px 520px at 50% 92%, rgba(0,0,0,0.65), transparent 60%)",
+              }}
+            />
+            <div
+              className="absolute inset-0 opacity-70"
+              style={{
+                background:
+                  "radial-gradient(820px 440px at 18% 30%, rgba(154,70,255,0.14), transparent 64%), radial-gradient(820px 440px at 82% 30%, rgba(154,70,255,0.10), transparent 66%)",
+              }}
+            />
+            <div className="absolute inset-0 bg-neutral-950/40" />
+          </div>
 
-          {/* Right ellipse – mirrored rotation for symmetry */}
-          <div
-            className="absolute"
-            style={{
-              ...heroEllipseBase,
-              right: "-31px",
-              top: "171px",
-              transform: "rotate(26.157deg)", // flipped for right side
-            }}
-          />
-        </div>
+          <div className="relative mx-auto max-w-[980px] px-4 pb-16 pt-20 sm:pb-20 sm:pt-24 lg:pb-24 lg:pt-28">
+            <div className="flex flex-col items-center text-center">
+              <ProcreateStyleHeroDevices />
 
-        <div className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 lg:pt-24 z-10 relative">
-          <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_.95fr] lg:gap-14">
-            {/* left */}
-            <div className="text-left space-y-4 sm:space-y-6 ">
-              {/* Figma: 2-line title: "TICKETS" / "MADE EASY." */}
-              <h1 className="font-black italic uppercase leading-[90%] tracking-[-1.6px] text-[52px] sm:text-[72px] lg:text-[80px]">
-                <span className="block">Tickets</span>
-                <span className="block">
-                  Made{" "}
-                  <span
-                    className="bg-gradient-to-r from-primary-300 via-primary-500 to-primary-600 bg-clip-text text-transparent underline decoration-primary-500/30 underline-offset-4"
-                    style={{ textShadow: "0 0 60px rgba(154, 70, 255, 0.6)" }} // optional extra glow
-                  >
-                    Easy.
-                  </span>
-                </span>
-              </h1>
+              <motion.h1
+                variants={heroItem}
+                className="mt-10 text-balance text-[44px] font-extrabold leading-[1.02] tracking-[-1.2px] sm:mt-12 sm:text-[64px] sm:tracking-[-1.6px] lg:text-[76px]"
+              >
+                Tickets Made Easy.
+              </motion.h1>
 
-              <p className="max-w-[390px] text-pretty text-[13px] leading-[1.45] text-white sm:text-[14px]">
+              <motion.p
+                variants={heroItem}
+                className="mt-4 max-w-[620px] text-pretty text-[15px] leading-[1.55] text-white/70 sm:mt-5 sm:text-[20px]"
+              >
                 Buy, sell, and discover tickets effortlessly. Fast, secure, and
                 hassle-free, so you can focus on the event — not the process.
-              </p>
+              </motion.p>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <Button asChild size="md" variant="primary" animation>
+              <motion.div variants={heroItem} className="mt-8">
+                <Button asChild size="xl" variant="primary" animation>
                   <Link href="/events">Browse Events</Link>
                 </Button>
+              </motion.div>
+            </div>
+          </div>
+        </motion.section>
 
+        {/* ------------------------------------------------------------------ */}
+        {/* ALL-IN-ONE PLATFORM                                                */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.section
+          className="mx-auto max-w-[1232px] px-4 py-16 sm:py-20"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.25 }}
+          variants={scrollReveal}
+        >
+          <div className="grid items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-24">
+            <AllInOneCollage />
+
+            <div className="max-w-[560px] space-y-6">
+              <h2 className="font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
+                ALL-IN-ONE
+                <br />
+                PLATFORM
+              </h2>
+
+              <p className="max-w-[390px] text-[13px] leading-[1.3] tracking-[-0.28px] text-white/70 sm:text-[14px]">
+                From ticket creation to seamless check-ins, promotion, and
+                payouts, Tikd gives you everything you need to run a successful
+                event—whether you’re hosting a nightclub party, concert, or
+                private gathering—all in one place.
+              </p>
+
+              <div className="flex flex-wrap gap-x-8 gap-y-8">
+                {stats.map((s) => (
+                  <div key={s.label}>
+                    <div className="text-[28px] font-semibold leading-none tracking-[-0.64px] text-white sm:text-[32px]">
+                      {s.k}
+                    </div>
+                    <div className="mt-1 text-[14px] leading-[1.3] tracking-[-0.28px] text-white/55">
+                      {s.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* FEATURES                                                           */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.section
+          className="mx-auto max-w-[1232px] px-4 pb-16 sm:pb-20"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
+          variants={scrollReveal}
+        >
+          <div className="grid gap-4">
+            <div className="grid gap-4 lg:grid-cols-[2.44fr_1.73fr]">
+              <FeatureCard size="lg" title={"Control everything\nin one place"}>
+                <MediaLaptopPlaceholder />
+              </FeatureCard>
+
+              <FeatureCard size="md" title={"Event page\nset-up"}>
+                <MediaEventSetupPlaceholder />
+              </FeatureCard>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              <FeatureCard size="sm" title={"Ticket creation"}>
+                <MediaWideScreenshotPlaceholder
+                  src="/landing/features/feature-ticket-creation.png"
+                  align="center"
+                />
+              </FeatureCard>
+
+              <FeatureCard size="sm" title={"Promotion &\nmarketing"}>
+                <MediaMegaphonePlaceholder />
+              </FeatureCard>
+
+              <FeatureCard size="sm" title={"Attendee\nmanagement\n& check-in"}>
+                <HelpCenterPagePlaceholder
+                  src="/landing/features/feature-attendee-checkin.png"
+                  align="right"
+                />
+              </FeatureCard>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* UNLOCK YOUR FULL POTENTIAL                                         */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.section
+          className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 -mb-4.5"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.22 }}
+          variants={scrollReveal}
+        >
+          <h2 className="text-center font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
+            UNLOCK YOUR FULL
+            <br className="hidden sm:block" />
+            POTENTIAL
+          </h2>
+
+          <div className="relative mt-10 grid items-center gap-10 lg:mt-14 lg:grid-cols-[1fr_auto_1fr]">
+            <div className="relative hidden h-[560px] lg:block">
+              <UnlockLabel emphasize className="absolute left-0 top-[90px]">
+                FRIENDLY DASHBOARD
+              </UnlockLabel>
+
+              <UnlockLabel className="absolute left-[110px] top-[275px]">
+                SCORE STREAKS
+              </UnlockLabel>
+
+              <UnlockLabel className="absolute left-[-40px] bottom-[40px]">
+                PERSONALIZED ACHIEVEMENTS
+              </UnlockLabel>
+            </div>
+
+            <div className="relative mx-auto">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 -bottom-[52%] h-[429px] w-[765px] -translate-x-1/2 rounded-full"
+                style={{
+                  background: "rgba(255,255,255,0.20)",
+                  filter: "blur(267px)",
+                }}
+              />
+
+              <div className="relative mx-auto aspect-[9/16] w-[280px] sm:w-[340px] lg:w-[380px]">
+                <Image
+                  src={unlockPhoneSrc}
+                  alt="Tikd app preview"
+                  fill
+                  sizes="(min-width: 1024px) 380px, (min-width: 640px) 340px, 280px"
+                  className="drop-shadow-[0_60px_140px_rgba(0,0,0,.75)]"
+                />
+              </div>
+            </div>
+
+            <div className="relative hidden h-[560px] text-right lg:block">
+              <UnlockLabel className="absolute right-0 top-[90px]">
+                OPTIMIZE RECOVERY
+              </UnlockLabel>
+
+              <UnlockLabel className="absolute right-0 top-[245px]">
+                DAILY VIDEOS TAILORED FOR YOU
+              </UnlockLabel>
+
+              <UnlockLabel className="absolute right-0 bottom-[70px]">
+                MONITOR YOUR PROGRESS
+              </UnlockLabel>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2 lg:hidden">
+              <UnlockLabel emphasize className="text-center sm:text-left">
+                FRIENDLY DASHBOARD
+              </UnlockLabel>
+              <UnlockLabel className="text-center sm:text-right">
+                OPTIMIZE RECOVERY
+              </UnlockLabel>
+
+              <UnlockLabel className="text-center sm:text-left">
+                SCORE STREAKS
+              </UnlockLabel>
+              <UnlockLabel className="text-center sm:text-right">
+                DAILY VIDEOS TAILORED FOR YOU
+              </UnlockLabel>
+
+              <UnlockLabel className="text-center sm:text-left">
+                PERSONALIZED ACHIEVEMENTS
+              </UnlockLabel>
+              <UnlockLabel className="text-center sm:text-right">
+                MONITOR YOUR PROGRESS
+              </UnlockLabel>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* FAQ                                                                */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.section
+          className="relative isolate px-4 py-16 sm:py-20"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.22 }}
+          variants={scrollReveal}
+        >
+          <div
+            className="absolute inset-0 -z-10 bg-gradient-to-br from-primary-700/35 via-primary-900/25 to-neutral-950"
+            aria-hidden
+          />
+          <Faq items={faqItems} />
+        </motion.section>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Final CTA                                                          */}
+        {/* ------------------------------------------------------------------ */}
+        <motion.section
+          className="relative isolate px-8 pb-16 sm:py-[80px]"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.22 }}
+          variants={scrollReveal}
+        >
+          <div
+            className="
+              relative overflow-hidden rounded-2xl border border-white/10
+              bg-[url('/landing/gg-frame.png')]
+              bg-cover bg-center bg-no-repeat
+              p-10 sm:p-[64px]
+            "
+          >
+            <div className="relative flex flex-col items-center text-center">
+              <h3 className="text-5xl font-black italic leading-[0.9] tracking-[-1.04px] sm:text-[64px] max-w-[490px]">
+                LET&apos;S GET TO PARTY!
+              </h3>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <Button asChild size="md" animation>
+                  <Link href="/events">Browse Events</Link>
+                </Button>
                 <Button asChild size="md" variant="secondary">
                   <Link href="/book-demo">Book a Demo</Link>
                 </Button>
               </div>
             </div>
-
-            {/* right */}
-            <div className="pb-2 lg:pb-0">
-              <HeroPhones />
-            </div>
           </div>
-        </div>
-
-        {/* Trending Events slider */}
-        <div className="mt-20 z-10">
-          <EventCarouselSection
-            title="Trending Events"
-            icon={
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="22"
-                height="22"
-                viewBox="0 0 22 22"
-                fill="none"
-              >
-                <path
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M7.46368 2.74881C6.58141 2.74871 5.71681 2.99618 4.96821 3.46308C4.21961 3.92998 3.61703 4.59757 3.22902 5.38994C2.841 6.18231 2.68311 7.06766 2.77329 7.94531C2.86348 8.82297 3.19813 9.6577 3.73918 10.3546L10.3549 3.73887C9.52855 3.09562 8.51087 2.74713 7.46368 2.74881ZM11.6266 3.29216C10.8913 2.5587 9.97527 2.03258 8.97121 1.76709C7.96715 1.5016 6.91076 1.50617 5.90903 1.78034C4.9073 2.0545 3.99582 2.58853 3.26689 3.32832C2.53797 4.06812 2.01749 4.9874 1.75818 5.99308C1.49887 6.99876 1.50993 8.05511 1.79025 9.05514C2.07057 10.0552 2.61018 10.9633 3.35444 11.6877C4.0987 12.4121 5.02117 12.9269 6.02842 13.18C7.03567 13.4331 8.09192 13.4156 9.0902 13.1291L17.0896 20.2788C17.202 20.3791 17.3486 20.4326 17.4992 20.4282C17.6498 20.4238 17.793 20.3619 17.8994 20.2552L20.2566 17.8979C20.3628 17.7915 20.4243 17.6484 20.4284 17.4981C20.4326 17.3478 20.3792 17.2016 20.279 17.0894L13.1294 9.08992C13.2779 8.57367 13.3569 8.02796 13.3569 7.46339C13.3581 6.68927 13.2062 5.92256 12.9101 5.20732C12.614 4.49208 12.1794 3.84243 11.6314 3.2957C11.629 3.2957 11.6278 3.29334 11.6266 3.29216ZM11.1882 4.57217L4.57248 11.1879C5.47954 11.893 6.61288 12.2427 7.75955 12.1712C8.90623 12.0996 9.98733 11.6118 10.7997 10.7994C11.6121 9.98704 12.0999 8.90594 12.1714 7.75926C12.243 6.61258 11.8933 5.47924 11.1882 4.57217ZM12.6308 10.3004C12.0902 11.2819 11.2822 12.09 10.3007 12.6306L17.4597 19.0282L19.0285 17.4595L12.6308 10.3004Z"
-                  fill="white"
-                />
-              </svg>
-            }
-            events={trendingEvents}
-            isCarousel={true}
-          />
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* ALL-IN-ONE PLATFORM                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="mx-auto max-w-[1232px] px-4 py-16 sm:py-20">
-        <div className="grid items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-24">
-          {/* left: collage */}
-          <AllInOneCollage />
-
-          {/* right: copy */}
-          <div className="max-w-[560px] space-y-6">
-            <h2 className="font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
-              ALL-IN-ONE
-              <br />
-              PLATFORM
-            </h2>
-
-            <p className="max-w-[390px] text-[13px] leading-[1.3] tracking-[-0.28px] text-white/70 sm:text-[14px]">
-              From ticket creation to seamless check-ins, promotion, and
-              payouts, Tikd gives you everything you need to run a successful
-              event—whether you’re hosting a nightclub party, concert, or
-              private gathering—all in one place.
-            </p>
-
-            <div className="flex flex-wrap gap-x-8 gap-y-8">
-              {stats.map((s) => (
-                <div key={s.label}>
-                  <div className="text-[28px] font-semibold leading-none tracking-[-0.64px] text-white sm:text-[32px]">
-                    {s.k}
-                  </div>
-                  <div className="mt-1 text-[14px] text-white/55 leading-[1.3] tracking-[-0.28px]">
-                    {s.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* FEATURES (match Figma layout)                                      */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="mx-auto max-w-[1232px] px-4 pb-16 sm:pb-20">
-        <div className="grid gap-4">
-          {/* Row 1: two big cards */}
-          <div className="grid gap-4 lg:grid-cols-[2.44fr_1.73fr]">
-            <FeatureCard size="lg" title={"Control everything\nin one place"}>
-              <MediaLaptopPlaceholder />
-            </FeatureCard>
-
-            <FeatureCard size="md" title={"Event page\nset-up"}>
-              <MediaEventSetupPlaceholder />
-            </FeatureCard>
-          </div>
-
-          {/* Row 2: three smaller cards */}
-          <div className="grid gap-4 lg:grid-cols-3">
-            <FeatureCard size="sm" title={"Ticket creation"}>
-              <MediaWideScreenshotPlaceholder
-                src="/landing/features/feature-ticket-creation.png"
-                align="center"
-              />
-            </FeatureCard>
-
-            <FeatureCard size="sm" title={"Promotion &\nmarketing"}>
-              <MediaMegaphonePlaceholder />
-            </FeatureCard>
-
-            <FeatureCard size="sm" title={"Attendee\nmanagement\n& check-in"}>
-              <HelpCenterPagePlaceholder
-                src="/landing/features/feature-attendee-checkin.png"
-                align="right"
-              />
-            </FeatureCard>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* UNLOCK YOUR FULL POTENTIAL                                         */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 -mb-4.5">
-        <h2 className="text-center font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
-          UNLOCK YOUR FULL
-          <br className="hidden sm:block" />
-          POTENTIAL
-        </h2>
-
-        <div className="relative mt-10 grid items-center gap-10 lg:mt-14 lg:grid-cols-[1fr_auto_1fr]">
-          {/* LEFT labels (desktop) */}
-          <div className="relative hidden h-[560px] lg:block">
-            <UnlockLabel emphasize className="absolute left-0 top-[90px]">
-              FRIENDLY DASHBOARD
-            </UnlockLabel>
-
-            <UnlockLabel className="absolute left-[110px] top-[275px]">
-              SCORE STREAKS
-            </UnlockLabel>
-
-            <UnlockLabel className="absolute left-[-40px] bottom-[40px]">
-              PERSONALIZED ACHIEVEMENTS
-            </UnlockLabel>
-          </div>
-
-          {/* CENTER phone */}
-          <div className="relative mx-auto">
-            {/* Figma ellipse glow */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute left-1/2 -bottom-[52%] h-[429px] w-[765px] -translate-x-1/2 rounded-full"
-              style={{
-                background: "rgba(255,255,255,0.20)",
-                filter: "blur(267px)",
-              }}
-            />
-
-            <div className="relative mx-auto aspect-[9/16] w-[280px] sm:w-[340px] lg:w-[380px]">
-              <Image
-                src={unlockPhoneSrc}
-                alt="Tikd app preview"
-                fill
-                sizes="(min-width: 1024px) 380px, (min-width: 640px) 340px, 280px"
-                className=" drop-shadow-[0_60px_140px_rgba(0,0,0,.75)]"
-              />
-            </div>
-          </div>
-
-          {/* RIGHT labels (desktop) */}
-          <div className="relative hidden h-[560px] text-right lg:block">
-            <UnlockLabel className="absolute right-0 top-[90px]">
-              OPTIMIZE RECOVERY
-            </UnlockLabel>
-
-            <UnlockLabel className="absolute right-0 top-[245px]">
-              DAILY VIDEOS TAILORED FOR YOU
-            </UnlockLabel>
-
-            <UnlockLabel className="absolute right-0 bottom-[70px]">
-              MONITOR YOUR PROGRESS
-            </UnlockLabel>
-          </div>
-
-          {/* Mobile labels */}
-          <div className="grid gap-5 sm:grid-cols-2 lg:hidden">
-            <UnlockLabel emphasize className="text-center sm:text-left">
-              FRIENDLY DASHBOARD
-            </UnlockLabel>
-            <UnlockLabel className="text-center sm:text-right">
-              OPTIMIZE RECOVERY
-            </UnlockLabel>
-
-            <UnlockLabel className="text-center sm:text-left">
-              SCORE STREAKS
-            </UnlockLabel>
-            <UnlockLabel className="text-center sm:text-right">
-              DAILY VIDEOS TAILORED FOR YOU
-            </UnlockLabel>
-
-            <UnlockLabel className="text-center sm:text-left">
-              PERSONALIZED ACHIEVEMENTS
-            </UnlockLabel>
-            <UnlockLabel className="text-center sm:text-right">
-              MONITOR YOUR PROGRESS
-            </UnlockLabel>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* FAQ                                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="relative isolate px-4 py-16 sm:py-20">
-        <div
-          className="absolute inset-0 -z-10 bg-gradient-to-br from-primary-700/35 via-primary-900/25 to-neutral-950"
-          aria-hidden
-        />
-        <Faq items={faqItems} />
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Final CTA                                                          */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="relative isolate px-8 pb-16 sm:py-[80px]">
-        <div
-          className="
-    relative overflow-hidden rounded-2xl border border-white/10
-    bg-[url('/landing/gg-frame.png')]
-    bg-cover bg-center bg-no-repeat
-    p-10 sm:p-[64px]
-  "
-        >
-          <div className="relative flex flex-col items-center text-center">
-            <h3 className="text-5xl font-black italic leading-[0.9] tracking-[-1.04px] sm:text-[64px] max-w-[490px]">
-              LET&apos;S GET TO PARTY!
-            </h3>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <Button asChild size="md" animation>
-                <Link href="/events">Browse Events</Link>
-              </Button>
-              <Button asChild size="md" variant="secondary">
-                <Link href="/book-demo">Book a Demo</Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
+        </motion.section>
+      </main>
+    </MotionConfig>
   );
 }

@@ -1,3 +1,4 @@
+// src/components/features/settings/NotificationSettings.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -49,7 +50,6 @@ const toggleMeta: Record<MarketingKey, { title: string; desc: string }> = {
   outlet: { title: "Outlet", desc: "Email Notifications of our Outlet" },
 };
 
-/* strict fetch so 4xx/5xx throw (no silent fallback) */
 async function fetchJSON(url: string) {
   const r = await fetch(url, { credentials: "same-origin" });
   if (!r.ok) {
@@ -81,7 +81,6 @@ export default function NotificationSettings() {
     outlet: true,
   });
 
-  /* hydrate from server once loaded */
   useEffect(() => {
     if (data?.channels) setMatrix(data.channels);
     if (data?.marketing) setToggles(data.marketing);
@@ -111,22 +110,20 @@ export default function NotificationSettings() {
       toast.error(
         typeof err.message === "string"
           ? err.message
-          : "Could not update preference."
+          : "Could not update preference.",
       );
     },
   });
 
   function onMatrixChange(row: RowKey, channel: Channel, next: boolean) {
-    // optimistic
     setMatrix((m) => ({ ...m, [row]: { ...m[row], [channel]: next } }));
     patchMutation.mutate(
       { type: "matrix", row, channel, value: next },
       {
         onError: () => {
-          // rollback
           setMatrix((m) => ({ ...m, [row]: { ...m[row], [channel]: !next } }));
         },
-      }
+      },
     );
   }
 
@@ -136,91 +133,117 @@ export default function NotificationSettings() {
       { type: "toggle", key, value: next },
       {
         onError: () => setToggles((t) => ({ ...t, [key]: !next })),
-      }
+      },
     );
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-surface p-4 md:p-6">
-      <h3 className="mb-4 text-xl font-semibold text-white">Notifications</h3>
+    <div className="w-full">
+      <h3 className="text-[16px] font-extrabold tracking-[-0.02em] text-neutral-0">
+        Notifications
+      </h3>
 
       {isLoading ? (
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 w-40 rounded bg-white/10" />
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-10 rounded bg-white/5" />
-          ))}
-          <div className="h-px bg-white/10" />
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-14 rounded bg-white/5" />
-          ))}
+        <div className="mt-6 animate-pulse space-y-4">
+          <div className="h-10 w-44 rounded-xl bg-white/8" />
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="h-4 w-56 rounded bg-white/10" />
+            <div className="mt-4 space-y-2">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-10 rounded-xl bg-white/6" />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="h-4 w-40 rounded bg-white/10" />
+            <div className="mt-4 space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-14 rounded-xl bg-white/6" />
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <>
-          {/* Matrix */}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm text-white/90">
-              <thead className="text-white/70">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Notifications</th>
-                  <th className="px-3 py-2 font-medium">Call</th>
-                  <th className="px-3 py-2 font-medium">Email</th>
-                  <th className="px-3 py-2 font-medium">SMS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rowMeta.map(({ key, label }) => (
-                  <tr key={key} className="border-t border-white/10">
-                    <td className="px-3 py-3">{label}</td>
-                    {(["call", "email", "sms"] as Channel[]).map((ch) => (
-                      <td key={ch} className="px-3 py-3">
-                        <Checkbox
-                          size="lg"
-                          aria-label={`${label} via ${ch}`}
-                          checked={matrix[key][ch]}
-                          onCheckedChange={(val) =>
-                            onMatrixChange(key, ch, !!val)
-                          }
-                          className="!h-6 !w-6"
-                        />
-                      </td>
-                    ))}
+          {/* Matrix panel */}
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-[13px] text-neutral-200">
+                <thead className="text-[12px] text-neutral-400">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Notifications</th>
+                    <th className="px-3 py-2 text-center font-semibold">
+                      Call
+                    </th>
+                    <th className="px-3 py-2 text-center font-semibold">
+                      Email
+                    </th>
+                    <th className="px-3 py-2 text-center font-semibold">SMS</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rowMeta.map(({ key, label }) => (
+                    <tr
+                      key={key}
+                      className="border-t border-white/10 hover:bg-white/[0.02]"
+                    >
+                      <td className="px-3 py-3">{label}</td>
+                      {(["call", "email", "sms"] as Channel[]).map((ch) => (
+                        <td key={ch} className="px-3 py-3">
+                          <div className="flex justify-center">
+                            <Checkbox
+                              size="md"
+                              aria-label={`${label} via ${ch}`}
+                              checked={matrix[key][ch]}
+                              onCheckedChange={(val) =>
+                                onMatrixChange(key, ch, !!val)
+                              }
+                            />
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-3 text-[11px] text-neutral-400">
+              Tip: “Email” channel is recommended for critical alerts.
+            </p>
           </div>
 
-          <p className="mt-3 text-xs text-white/60">
-            Tip: “Email” channel is recommended for critical alerts.
-          </p>
+          {/* Marketing panel */}
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div className="divide-y divide-white/10">
+              {(Object.keys(toggleMeta) as MarketingKey[]).map((key) => {
+                const { title, desc } = toggleMeta[key];
+                return (
+                  <div
+                    key={key}
+                    className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <h4 className="truncate text-[13px] font-semibold text-neutral-0">
+                        {title}
+                      </h4>
+                      <p className="mt-0.5 truncate text-[11px] text-neutral-400">
+                        {desc}
+                      </p>
+                    </div>
 
-          <div className="my-6 h-px w-full bg-white/10" />
-
-          {/* Marketing toggles */}
-          <div className="divide-y divide-white/10">
-            {(Object.keys(toggleMeta) as MarketingKey[]).map((key) => {
-              const { title, desc } = toggleMeta[key];
-              return (
-                <div
-                  key={key}
-                  className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <h4 className="text-base font-semibold text-white">
-                      {title}
-                    </h4>
-                    <p className="text-sm text-white/60">{desc}</p>
+                    <Toggle
+                      size="sm"
+                      checked={toggles[key]}
+                      onCheckedChange={(v) => onToggleChange(key, v)}
+                      aria-label={`${title} toggle`}
+                    />
                   </div>
-                  <Toggle
-                    size="sm"
-                    checked={toggles[key]}
-                    onCheckedChange={(v) => onToggleChange(key, v)}
-                    aria-label={`${title} toggle`}
-                  />
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </>
       )}

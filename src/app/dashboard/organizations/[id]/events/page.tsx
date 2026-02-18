@@ -5,7 +5,6 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -14,16 +13,11 @@ import clsx from "clsx";
 import {
   CalendarPlus,
   ChevronDown,
-  CheckCircle2,
-  Plus,
-  Search,
-  ArrowDownNarrowWide,
-  ArrowDownWideNarrow,
   ChevronRight,
   Eye,
   Ticket,
   DollarSign,
-  X,
+  Building2,
 } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -33,6 +27,7 @@ import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
 import GridListToggle, {
   type GridListValue,
 } from "@/components/ui/GridListToggle";
+import SortControl from "@/components/ui/SortControl";
 
 /* ------------------------------ Types ------------------------------ */
 type Org = {
@@ -297,7 +292,8 @@ function MiniSelect<T extends string>({
         onClick={() => setOpen((v) => !v)}
         className={clsx(
           "inline-flex items-center gap-2 rounded-full border border-white/10",
-          "bg-neutral-900 px-3 py-2 font-medium text-neutral-200",
+          // ✅ match main Events page controls color
+          "bg-[#12141f] px-3 py-2 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
           "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer",
           btnClassName,
@@ -349,368 +345,23 @@ function MiniSelect<T extends string>({
   );
 }
 
-/* ---------------------- Sort Controls (MERGED) ---------------------- */
-function SortControls({
-  options,
-  sortField,
-  sortDir,
-  setSortField,
-  setSortDir,
-  defaultDirFor,
-  dropdownWidthClass = "w-[200px]",
-}: {
-  options: { key: SortField; label: string }[];
-  sortField: SortField | null;
-  sortDir: SortDir;
-  setSortField: (v: SortField | null) => void;
-  setSortDir: (v: SortDir) => void;
-  defaultDirFor: (f: SortField) => SortDir;
-  dropdownWidthClass?: string;
-}) {
-  const [open, setOpen] = useState(false);
-
-  // wrapper still holds the button (used for outside click)
-  const ref = useRef<HTMLDivElement>(null);
-
-  // portal panel ref (because it won't be inside `ref` anymore)
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const sortLabel = useMemo(() => {
-    if (!sortField) return "";
-    return options.find((o) => o.key === sortField)?.label ?? "Sort";
-  }, [options, sortField]);
-
-  const [pos, setPos] = useState<{ top: number; left: number }>({
-    top: 0,
-    left: 0,
-  });
-
-  const inferWidthFallback = useCallback(() => {
-    // best-effort parse: "w-[220px]" => 220
-    const m = /w-\[(\d+)px\]/.exec(dropdownWidthClass);
-    const n = m?.[1] ? Number(m[1]) : NaN;
-    return Number.isFinite(n) ? n : 220;
-  }, [dropdownWidthClass]);
-
-  const recalc = useCallback(() => {
-    const btnEl = ref.current;
-    if (!btnEl) return;
-
-    // button is the first child inside wrapper
-    const button = btnEl.querySelector("button");
-    if (!button) return;
-
-    const r = button.getBoundingClientRect();
-    const vw = window.innerWidth;
-
-    const panelW =
-      panelRef.current?.getBoundingClientRect().width ?? inferWidthFallback();
-
-    // align dropdown to the button's right edge (like before)
-    let left = r.right - panelW;
-    const top = r.bottom + 8;
-
-    // clamp into viewport so it never goes off-screen
-    left = Math.max(12, Math.min(left, vw - 12 - panelW));
-
-    setPos({ top, left });
-  }, [inferWidthFallback]);
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      const t = e.target as Node;
-
-      const inButton = !!ref.current?.contains(t);
-      const inPanel = !!panelRef.current?.contains(t);
-
-      if (!inButton && !inPanel) setOpen(false);
-    }
-
-    if (open) document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    // position immediately + after the panel measures itself
-    recalc();
-    const raf = requestAnimationFrame(recalc);
-
-    const onScrollOrResize = () => recalc();
-
-    window.addEventListener("resize", onScrollOrResize);
-    window.addEventListener("scroll", onScrollOrResize, true);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onScrollOrResize);
-      window.removeEventListener("scroll", onScrollOrResize, true);
-    };
-  }, [open, recalc]);
-
-  function apply(field: SortField) {
-    // Clicking the active option again clears sorting (back to default state)
-    if (sortField === field) {
-      setSortField(null);
-      return;
-    }
-
-    setSortField(field);
-    setSortDir(defaultDirFor(field));
-  }
-
-  function setDir(dir: SortDir) {
-    if (!sortField) return;
-    setSortDir(dir);
-  }
-
-  const DirIcon = sortDir === "asc" ? ArrowDownNarrowWide : ArrowDownWideNarrow;
-
-  const dropdown = (
-    <div
-      ref={panelRef}
-      className="fixed z-[99999]"
-      style={{ top: pos.top, left: pos.left }}
-    >
-      <div className="relative">
-        <span className="pointer-events-none absolute -top-1 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-[#121420]" />
-        <div
-          className={clsx(
-            "overflow-hidden rounded-2xl border border-white/10",
-            "bg-[#121420] backdrop-blur",
-            "shadow-[0_18px_40px_rgba(0,0,0,0.45)]",
-            dropdownWidthClass,
-          )}
-        >
-          <div role="listbox" aria-label="Sort" className="p-2">
-            {options.map((opt) => {
-              const active = opt.key === sortField;
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => apply(opt.key)}
-                  title={active ? "Click again to clear sort" : undefined}
-                  className={clsx(
-                    "flex w-full items-center justify-between",
-                    "rounded-lg px-3 py-2.5",
-                    "text-left text-sm outline-none",
-                    "hover:bg-white/5 focus:bg-white/5",
-                    active ? "bg-white/5 text-white" : "text-white/90",
-                  )}
-                >
-                  <span className="truncate">{opt.label}</span>
-                  {active ? (
-                    <span className="text-xs font-semibold text-white/80">
-                      ✓
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="h-px w-full bg-white/10" />
-
-          <div className="p-2">
-            <div
-              className={clsx(
-                "grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35",
-                !sortField && "opacity-60",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setDir("asc")}
-                disabled={!sortField}
-                className={clsx(
-                  "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
-                  "outline-none transition",
-                  "hover:bg-white/6 focus-visible:bg-white/6",
-                  sortField && sortDir === "asc"
-                    ? "bg-white/8 text-white"
-                    : "text-white/80",
-                  "disabled:cursor-not-allowed",
-                )}
-                aria-label="Ascending"
-              >
-                <ArrowDownNarrowWide className="h-4 w-4 opacity-90" />
-                Asc
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDir("desc")}
-                disabled={!sortField}
-                className={clsx(
-                  "flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium",
-                  "outline-none transition",
-                  "hover:bg-white/6 focus-visible:bg-white/6",
-                  sortField && sortDir === "desc"
-                    ? "bg-white/8 text-white"
-                    : "text-white/80",
-                  "disabled:cursor-not-allowed",
-                )}
-                aria-label="Descending"
-              >
-                <ArrowDownWideNarrow className="h-4 w-4 opacity-90" />
-                Desc
-              </button>
-            </div>
-
-            {!sortField ? (
-              <p className="mt-2 px-1 text-[11px] text-white/45">
-                Select a sort type first
-              </p>
-            ) : null}
-
-            {sortField ? (
-              <div className="mt-2 flex items-center justify-between rounded-xl border border-white/10 bg-neutral-950/25 px-3 py-2">
-                <p className="truncate text-[11px] text-white/70">
-                  <span className="text-white/45">Sorting:</span> {sortLabel}
-                </p>
-                <DirIcon className="h-4 w-4 text-white/70" />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={
-          !sortField
-            ? "Sort"
-            : `Sort by ${sortLabel} ${
-                sortDir === "asc" ? "ascending" : "descending"
-              }`
-        }
-        data-open={open ? "1" : "0"}
-        data-active={sortField ? "1" : "0"}
-        className={clsx(
-          "tikd-sort-btn group inline-flex select-none items-center justify-center",
-          "h-9.5 w-9.5 rounded-[4px] border border-white/10",
-          "bg-neutral-700/90 text-neutral-100",
-          "shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45)]",
-          "transition-[transform,box-shadow,border-color,background-color] duration-150",
-          "hover:bg-neutral-700 hover:border-white/14",
-          "active:scale-[0.985]",
-          "focus:outline-none focus-visible:border-primary-500",
-          "focus-visible:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_28px_rgba(0,0,0,0.45),0_0_0_2px_rgba(154,81,255,0.35)]",
-          open && "border-primary-500/70",
-          "cursor-pointer",
-        )}
-      >
-        <span className="tikd-sort-bars" aria-hidden="true">
-          <span className="tikd-sort-bar tikd-sort-bar1">
-            <span className="tikd-sort-dot" />
-          </span>
-          <span className="tikd-sort-bar tikd-sort-bar2">
-            <span className="tikd-sort-dot" />
-          </span>
-          <span className="tikd-sort-bar tikd-sort-bar1">
-            <span className="tikd-sort-dot" />
-          </span>
-        </span>
-
-        {sortField ? (
-          <span
-            aria-hidden="true"
-            className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white/20 bg-neutral-500 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
-          />
-        ) : null}
-      </button>
-
-      {/* ✅ Portal dropdown so parent overflow can’t clip it */}
-      {mounted && open ? createPortal(dropdown, document.body) : null}
-
-      <style jsx>{`
-        .tikd-sort-bars {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-        }
-
-        .tikd-sort-bar {
-          width: 50%;
-          height: 1.5px;
-          background: rgba(229, 229, 229, 0.9);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          position: relative;
-          border-radius: 2px;
-        }
-
-        .tikd-sort-dot {
-          width: 4px;
-          height: 4px;
-          position: absolute;
-          border-radius: 999px;
-          border: 1.5px solid rgba(255, 255, 255, 0.92);
-          background: rgba(140, 140, 166, 0.95);
-          box-shadow: 0 0 6px rgba(255, 255, 255, 0.28);
-          transition: transform 0.3s ease;
-        }
-
-        .tikd-sort-bar1 .tikd-sort-dot {
-          transform: translateX(-4px);
-        }
-        .tikd-sort-bar2 .tikd-sort-dot {
-          transform: translateX(4px);
-        }
-
-        .tikd-sort-btn:hover .tikd-sort-bar1 .tikd-sort-dot {
-          transform: translateX(4px);
-        }
-        .tikd-sort-btn:hover .tikd-sort-bar2 .tikd-sort-dot {
-          transform: translateX(-4px);
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .tikd-sort-dot {
-            transition: none !important;
-          }
-        }
-      `}</style>
-    </div>
-  );
-}
-
 /* ---------------------- Info Tooltip (same as Events) -------------- */
 function InfoIcon({ className }: { className?: string }) {
   return (
     <svg
-      className={clsx(
-        "h-[15px] w-[15px]",
-        "duration-500 will-change-transform",
-        "group-hover/info-btn:rotate-[360deg] group-hover/info-btn:scale-110",
-        className,
-      )}
-      viewBox="0 0 24 24"
       xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
+      shapeRendering="geometricPrecision"
+      textRendering="geometricPrecision"
+      imageRendering="optimizeQuality"
+      fillRule="evenodd"
+      clipRule="evenodd"
+      viewBox="0 0 512 512"
+      className={clsx("h-[15px] w-[15px]", className)}
     >
       <path
-        d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 22c-5.518 0-10-4.482-10-10s4.482-10 10-10 10 4.482 10 10-4.482 10-10 10zm-1-16h2v6h-2zm0 8h2v2h-2z"
+        fillRule="nonzero"
         fill="currentColor"
+        d="M256 0c70.69 0 134.69 28.66 181.02 74.98C483.34 121.3 512 185.31 512 256c0 70.69-28.66 134.7-74.98 181.02C390.69 483.34 326.69 512 256 512c-70.69 0-134.69-28.66-181.02-74.98C28.66 390.69 0 326.69 0 256c0-70.69 28.66-134.69 74.98-181.02C121.31 28.66 185.31 0 256 0zm-9.96 161.03c0-4.28.76-8.26 2.27-11.91 1.5-3.63 3.77-6.94 6.79-9.91 3-2.95 6.29-5.2 9.84-6.7 3.57-1.5 7.41-2.28 11.52-2.28 4.12 0 7.96.78 11.49 2.27 3.54 1.51 6.78 3.76 9.75 6.73 2.95 2.97 5.16 6.26 6.64 9.91 1.49 3.63 2.22 7.61 2.22 11.89 0 4.17-.73 8.08-2.21 11.69-1.48 3.6-3.68 6.94-6.65 9.97-2.94 3.03-6.18 5.32-9.72 6.84-3.54 1.51-7.38 2.29-11.52 2.29-4.22 0-8.14-.76-11.75-2.26-3.58-1.51-6.86-3.79-9.83-6.79-2.94-3.02-5.16-6.34-6.63-9.97-1.48-3.62-2.21-7.54-2.21-11.77zm13.4 178.16c-1.11 3.97-3.35 11.76 3.3 11.76 1.44 0 3.27-.81 5.46-2.4 2.37-1.71 5.09-4.31 8.13-7.75 3.09-3.5 6.32-7.65 9.67-12.42 3.33-4.76 6.84-10.22 10.49-16.31.37-.65 1.23-.87 1.89-.48l12.36 9.18c.6.43.73 1.25.35 1.86-5.69 9.88-11.44 18.51-17.26 25.88-5.85 7.41-11.79 13.57-17.8 18.43l-.1.06c-6.02 4.88-12.19 8.55-18.51 11.01-17.58 6.81-45.36 5.7-53.32-14.83-5.02-12.96-.9-27.69 3.06-40.37l19.96-60.44c1.28-4.58 2.89-9.62 3.47-14.33.97-7.87-2.49-12.96-11.06-12.96h-17.45c-.76 0-1.38-.62-1.38-1.38l.08-.48 4.58-16.68c.16-.62.73-1.04 1.35-1.02l89.12-2.79c.76-.03 1.41.57 1.44 1.33l-.07.43-37.76 124.7zm158.3-244.93c-41.39-41.39-98.58-67-161.74-67-63.16 0-120.35 25.61-161.74 67-41.39 41.39-67 98.58-67 161.74 0 63.16 25.61 120.35 67 161.74 41.39 41.39 98.58 67 161.74 67 63.16 0 120.35-25.61 161.74-67 41.39-41.39 67-98.58 67-161.74 0-63.16-25.61-120.35-67-161.74z"
       />
     </svg>
   );
@@ -752,7 +403,7 @@ function StatChip({
           {icon}
         </span>
 
-        <span className="truncate text-[13px] font-semibold leading-none text-white">
+        <span className="truncate text-[13px] font-semibold leading-[1.2] text-white">
           {value}
         </span>
 
@@ -792,20 +443,18 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
 
-  // track for hover/tilt motion
   const trackRafRef = useRef<number | null>(null);
   const trackUntilRef = useRef<number>(0);
 
   const closeTimer = useRef<number | null>(null);
 
-  // cache tooltip height just to decide top/bottom (NOT for positioning)
   const heightCacheRef = useRef<number>(170);
 
   const [pos, setPos] = useState<{
     top: number;
     left: number;
     placement: "top" | "bottom";
-    arrowLeft: number; // px inside tooltip
+    arrowLeft: number;
   }>({ top: 0, left: 0, placement: "top", arrowLeft: 146 });
 
   useEffect(() => setMounted(true), []);
@@ -819,12 +468,11 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
 
     const r = btn.getBoundingClientRect();
 
-    const tooltipW = 222; // keep as-is
+    const tooltipW = 222;
     const gap = 10;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // update cached height when we can (only used to choose top/bottom)
     const measuredH =
       tipRef.current?.getBoundingClientRect().height ?? heightCacheRef.current;
     heightCacheRef.current = measuredH;
@@ -834,12 +482,10 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
 
     const centerX = r.left + r.width / 2;
 
-    // clamp CENTER, because we will use translateX(-50%)
     const minCenter = 12 + tooltipW / 2;
     const maxCenter = vw - 12 - tooltipW / 2;
     const clampedCenterX = clamp(centerX, minCenter, maxCenter);
 
-    // decide top/bottom
     const spaceTop = r.top;
     const spaceBottom = vh - r.bottom;
 
@@ -850,7 +496,6 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
     const top = placement === "top" ? r.top - gap : r.bottom + gap;
     const left = clampedCenterX;
 
-    // arrow points to icon center even when clamped
     const tooltipLeftEdge = left - tooltipW / 2;
     const arrowLeftRaw = centerX - tooltipLeftEdge;
     const arrowLeft = clamp(arrowLeftRaw, 18, tooltipW - 18);
@@ -1071,7 +716,6 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
             </div>
           </div>
 
-          {/* Arrow */}
           <div
             className={clsx(
               "pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 rotate-45",
@@ -1239,24 +883,103 @@ function EventRowCard({
   const rowImg =
     ev.image && ev.image.trim() ? ev.image.trim() : EVENT_CARD_DEFAULT_POSTER;
 
+  const org = ev.organization ?? ev.org;
+  const orgName = org?.name ?? "—";
+
+  const revenue = revenueOf(ev);
+  const tickets = ticketsOf(ev);
+  const views = viewsOf(ev);
+
+  function MobileChip({
+    label,
+    value,
+    icon,
+  }: {
+    label: string;
+    value: string;
+    icon: React.ReactNode;
+  }) {
+    return (
+      <span
+        className={clsx(
+          "inline-flex items-center gap-1.5 rounded-full",
+          "border border-white/10 bg-white/[0.04] px-2.5 py-1",
+          "text-[11px] font-medium text-neutral-200",
+          "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]",
+        )}
+      >
+        <span className="text-primary-200" aria-hidden="true">
+          {icon}
+        </span>
+        <span className="tabular-nums text-neutral-0">{value}</span>
+        <span className="text-neutral-400">{label}</span>
+      </span>
+    );
+  }
+
+  function MetricCell({
+    label,
+    value,
+    icon,
+    align = "center",
+    divider = false,
+  }: {
+    label: string;
+    value: string;
+    icon: React.ReactNode;
+    align?: "left" | "center";
+    divider?: boolean;
+  }) {
+    return (
+      <div
+        className={clsx(
+          "min-w-0",
+          align === "center" ? "text-center" : "text-left",
+          divider &&
+            "relative pl-6 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-px before:bg-white/10",
+        )}
+      >
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+          {label}
+        </div>
+
+        <div
+          className={clsx(
+            "mt-1 flex items-center gap-2",
+            align === "center" ? "justify-center" : "justify-start",
+          )}
+        >
+          <span className="text-primary-200" aria-hidden="true">
+            {icon}
+          </span>
+          <span className="truncate text-[13px] font-semibold text-neutral-0 tabular-nums">
+            {value}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Link
       href={href}
       className={clsx(
-        "group relative flex w-full items-center justify-between gap-4",
-        "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
-        "hover:border-primary-500 hover:bg-white/7 transition-colors",
+        "group relative flex w-full items-center gap-4",
+        "rounded-[14px] border border-white/10",
+        "bg-white/[0.04] px-4 py-3.5",
+        "shadow-[0_18px_55px_rgba(0,0,0,0.35)]",
+        "transition-colors",
+        "hover:border-primary-500/55 hover:bg-white/[0.06]",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
       )}
     >
-      {/* Left */}
       <div className="flex min-w-0 items-center gap-3">
-        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[12px] bg-white/5 ring-1 ring-white/10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={rowImg}
             alt=""
-            className="h-10 w-10 object-cover"
+            className="h-11 w-11 object-cover"
             onError={(e) => {
               const img = e.currentTarget;
               if (img.src !== EVENT_CARD_DEFAULT_POSTER) {
@@ -1268,27 +991,70 @@ function EventRowCard({
         </div>
 
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold text-neutral-50">
-            {ev.title}
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="truncate text-[14px] font-semibold text-neutral-50">
+              {ev.title}
+            </div>
           </div>
+
           <div className="mt-0.5 truncate text-[12px] text-neutral-400">
-            {clampText(`${formatDateLine(ev.date)} • ${ev.location ?? ""}`, 64)}
+            {clampText(`${formatDateLine(ev.date)} • ${ev.location ?? ""}`, 68)}
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2 md:hidden">
+            <MobileChip
+              label="Sold"
+              value={tickets.toLocaleString()}
+              icon={<Ticket className="h-3.5 w-3.5" />}
+            />
+            <MobileChip
+              label="Views"
+              value={views.toLocaleString()}
+              icon={<Eye className="h-3.5 w-3.5" />}
+            />
+            <MobileChip
+              label="Revenue"
+              value={money(revenue)}
+              icon={<DollarSign className="h-3.5 w-3.5" />}
+            />
           </div>
         </div>
       </div>
 
-      {/* Center (desktop only) */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex items-center gap-6">
-        <div className="text-[12px] text-neutral-300">
-          {ev.category ? clampText(ev.category, 22) : "—"}
-        </div>
-        <div className="text-[12px] text-neutral-400">
-          {formatEventDate(ev.date)}
-        </div>
+      <div
+        className={clsx(
+          "hidden md:grid flex-1 items-center",
+          "grid-cols-[minmax(220px,1fr)_110px_110px_140px]",
+          "gap-6 px-2",
+        )}
+      >
+        <MetricCell
+          label="Host"
+          value={orgName}
+          icon={<Building2 className="h-4 w-4" />}
+          align="left"
+        />
+        <MetricCell
+          label="Sold"
+          value={tickets.toLocaleString()}
+          icon={<Ticket className="h-4 w-4" />}
+          divider
+        />
+        <MetricCell
+          label="Views"
+          value={views.toLocaleString()}
+          icon={<Eye className="h-4 w-4" />}
+          divider
+        />
+        <MetricCell
+          label="Revenue"
+          value={money(revenue)}
+          icon={<DollarSign className="h-4 w-4" />}
+          divider
+        />
       </div>
 
-      {/* Right */}
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={(e) => {
@@ -1299,9 +1065,12 @@ function EventRowCard({
           className={clsx(
             "inline-flex h-9 w-9 items-center justify-center rounded-lg",
             pinned
-              ? "border-primary-500/45 bg-primary-500/10 text-neutral-0"
+              ? "border border-primary-500/45 bg-primary-500/10 text-neutral-0"
               : "border border-white/10 bg-white/5 text-neutral-200",
-            "hover:border-primary-500 hover:bg-white/10 transition",
+            "shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_22px_rgba(0,0,0,0.35)]",
+            "transition",
+            "hover:border-primary-500/60 hover:bg-white/10",
+            "active:scale-[0.97]",
           )}
           aria-label={pinned ? "Unpin event" : "Pin event"}
           title={pinned ? "Unpin" : "Pin"}
@@ -1328,20 +1097,20 @@ export default function OrgEventsPage() {
 
   const [view, setView] = useState<EventViewId>("upcoming");
 
-  // ✅ layout view (grid/list) like main Events page
+  // layout view (grid/list) like main Events page
   const [layout, setLayout] = useState<GridListValue>("grid");
   const [lastUpcomingLayout, setLastUpcomingLayout] =
     useState<GridListValue>("grid");
   const prevViewRef = useRef<EventViewId>("upcoming");
 
-  // ✅ header search (events)
+  // header search (events)
   const [eventsQuery, setEventsQuery] = useState("");
 
-  // ✅ header sort
+  // header sort (match main Events page)
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  // ✅ org + events (org-scoped only)
+  // org + events (org-scoped only)
   const { data: orgPayload, isLoading: eventsLoading } =
     useQuery<OrgWithEvents>({
       queryKey: ["orgEvents", orgId],
@@ -1375,7 +1144,7 @@ export default function OrgEventsPage() {
     }));
   }, [orgPayload, org]);
 
-  // ✅ pins (same system, still useful inside org scope)
+  // pins (same system, still useful inside org scope)
   const { data: pinnedIdsResp } = useQuery<{ ids: string[] }>({
     queryKey: ["eventPins"],
     queryFn: () =>
@@ -1457,7 +1226,7 @@ export default function OrgEventsPage() {
     prevViewRef.current = view;
   }, [view, layout, lastUpcomingLayout]);
 
-  // ✅ Reset to page-appropriate default sort direction when choosing a new field.
+  // Reset to page-appropriate default sort direction when choosing a new field.
   const defaultDirFor = useMemo(() => {
     return (field: SortField): SortDir => {
       if (field === "title") return "asc";
@@ -1482,13 +1251,13 @@ export default function OrgEventsPage() {
     { key: "drafts", label: "Drafts" },
   ];
 
-  // ✅ Create event goes straight to org creation (NO org picker modal)
+  // Create event goes straight to org creation (NO org picker modal)
   function handleCreateEvent() {
     if (!orgId) return;
     router.push(`/dashboard/organizations/${orgId}/events/create`);
   }
 
-  // ✅ Apply header search to whichever view is active
+  // Apply header search to whichever view is active
   const upcomingFiltered = useMemo(
     () => upcomingBase.filter((e) => matchesEventQuery(e, eventsQuery)),
     [upcomingBase, eventsQuery],
@@ -1536,7 +1305,7 @@ export default function OrgEventsPage() {
     [draftsFiltered, sortField, sortDir],
   );
 
-  // ✅ Keep EventCard sizes EXACTLY as main page
+  // Keep EventCard sizes EXACTLY as main page
   const gridCols =
     "grid-cols-[repeat(auto-fill,minmax(170px,170px))] " +
     "sm:grid-cols-[repeat(auto-fill,minmax(190px,190px))] " +
@@ -1565,7 +1334,7 @@ export default function OrgEventsPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* ✅ Header layout EXACTLY like main Events page */}
+            {/* Header layout EXACTLY like main Events page */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300">
@@ -1574,7 +1343,6 @@ export default function OrgEventsPage() {
                 <div className="mt-1 text-neutral-400">
                   Track performance, manage drafts, and jump into event setup.
                 </div>
-                {/* (Copy-only) subtle org context — does not change layout */}
                 {org?.name ? (
                   <div className="mt-1 text-[12px] text-white/45">
                     {org.name}
@@ -1587,10 +1355,29 @@ export default function OrgEventsPage() {
                 <div
                   className={clsx(
                     "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 bg-white/5 h-10",
+                    // ✅ match main Events page controls color
+                    "rounded-lg border border-white/10 bg-[#12141f] h-10",
                   )}
                 >
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
+                  <svg
+                    className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
+                    <path
+                      d="M16.5 16.5 21 21"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+
                   <input
                     value={eventsQuery}
                     onChange={(e) => setEventsQuery(e.target.value)}
@@ -1614,7 +1401,8 @@ export default function OrgEventsPage() {
                     ariaLabel="Layout view toggle"
                   />
 
-                  <SortControls
+                  {/* ✅ use the same SortControl as main Events page */}
+                  <SortControl
                     options={SORT_FIELDS}
                     sortField={sortField}
                     sortDir={sortDir}
@@ -1707,7 +1495,6 @@ export default function OrgEventsPage() {
                             className="w-full"
                           />
 
-                          {/* ✅ Info icon appears ONLY when hovering the card */}
                           <div
                             className={clsx(
                               "absolute left-3 top-3 z-30",
@@ -1997,11 +1784,6 @@ export default function OrgEventsPage() {
           </div>
         </section>
       </section>
-
-      {/* keep file consistent with the main page (no-op, but prevents layout shift on SSR) */}
-      <div className="sr-only" aria-hidden="true">
-        <X className="h-0 w-0" />
-      </div>
     </div>
   );
 }

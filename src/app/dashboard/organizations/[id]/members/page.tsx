@@ -1283,9 +1283,6 @@ export default function OrgMembersPage() {
                                       {badge}
                                     </div>
                                   </div>
-                                  <div className="absolute -right-2 -bottom-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-                                    {badge}
-                                  </div>
                                 </div>
 
                                 <div className="min-w-0">

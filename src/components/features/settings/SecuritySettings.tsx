@@ -1,46 +1,63 @@
+// src/components/features/settings/SecuritySettings.tsx
 "use client";
 
 import { Button } from "@/components/ui/Button";
 
-export default function SecuritySettings() {
+type Item = {
+  title: string;
+  desc: string;
+  cta: string;
+  onClick?: () => void;
+};
+
+function Row({ item }: { item: Item }) {
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div className="space-y-3 rounded-xl border border-white/10 bg-surface p-4">
-        <h3 className="text-lg font-semibold">Security Settings</h3>
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-neutral-0">
+          {item.title}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] text-neutral-400">
+          {item.desc}
+        </p>
+      </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-white/10 p-3">
-          <div>
-            <p className="font-medium">2-Factor Auth App</p>
-            <p className="text-sm text-white/60">
-              Google Authenticator or similar
-            </p>
-          </div>
-          <Button size="sm" variant="secondary">
-            Setup
-          </Button>
-        </div>
+      <Button size="sm" variant="secondary" onClick={item.onClick}>
+        {item.cta}
+      </Button>
+    </div>
+  );
+}
 
-        <div className="flex items-center justify-between rounded-lg border border-white/10 p-3">
-          <div>
-            <p className="font-medium">Notifications Email</p>
-            <p className="text-sm text-white/60">Used to send alerts</p>
-          </div>
-          <Button size="sm" variant="secondary">
-            Setup
-          </Button>
-        </div>
+export default function SecuritySettings() {
+  const items: Item[] = [
+    {
+      title: "2-Factor Auth App",
+      desc: "Google Authenticator or similar",
+      cta: "Setup",
+    },
+    {
+      title: "Notifications Email",
+      desc: "Used to send alerts",
+      cta: "Setup",
+    },
+    {
+      title: "SMS Recovery",
+      desc: "Phone number for account recovery",
+      cta: "Setup",
+    },
+  ];
 
-        <div className="flex items-center justify-between rounded-lg border border-white/10 p-3">
-          <div>
-            <p className="font-medium">SMS Recovery</p>
-            <p className="text-sm text-white/60">
-              Phone number for account recovery
-            </p>
-          </div>
-          <Button size="sm" variant="secondary">
-            Setup
-          </Button>
-        </div>
+  return (
+    <div className="w-full">
+      <h3 className="text-[16px] font-extrabold tracking-[-0.02em] text-neutral-0">
+        Security Settings
+      </h3>
+
+      <div className="mt-6 space-y-3">
+        {items.map((item) => (
+          <Row key={item.title} item={item} />
+        ))}
       </div>
     </div>
   );

@@ -15,6 +15,10 @@ import { Button } from "@/components/ui/Button";
 import GridListToggle, {
   type GridListValue,
 } from "@/components/ui/GridListToggle";
+import SortControl, {
+  type SortDir,
+  type SortOption,
+} from "@/components/ui/SortControl";
 import ConnectionProfileCard, {
   type ConnectionProfileKind,
   type RoleBadgeMeta,
@@ -39,6 +43,9 @@ type CardRow = {
 
   /** ✅ org/team accent color */
   accentColor?: string;
+
+  /** ✅ used for sorting */
+  createdAt?: string;
 };
 
 type TeamApi = {
@@ -117,6 +124,11 @@ function formatMembers(n?: number) {
   } catch {
     return String(n);
   }
+}
+
+function safeNumber(v: unknown) {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function roleLabelFromTeam(t: TeamApi): string {
@@ -355,6 +367,19 @@ function TeamListRow({ item }: { item: CardRow }) {
   );
 }
 
+/* ------------------------------ Sort ------------------------------ */
+/**
+ * “Same filter button as Organizations page”
+ * -> reuse SortControl and place it LEFT of "Create Team"
+ */
+type TeamSortField = "title" | "totalMembers" | "createdAt";
+
+const TEAM_SORT_OPTIONS: SortOption<TeamSortField>[] = [
+  { key: "title", label: "Title" },
+  { key: "totalMembers", label: "Total Members" },
+  { key: "createdAt", label: "Created Date" },
+];
+
 export default function TeamsClient() {
   const router = useRouter();
 
@@ -362,6 +387,10 @@ export default function TeamsClient() {
   const [teamsPage, setTeamsPage] = useState(1);
 
   const [teamsView, setTeamsView] = useState<GridListValue>("grid");
+
+  // ✅ Teams sort state (for the filter button)
+  const [sortField, setSortField] = useState<TeamSortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const {
     data: teams,
@@ -393,6 +422,8 @@ export default function TeamsClient() {
       roleLabel: roleLabelFromTeam(t),
       userRoleMeta: roleMetaFromTeam(t),
       accentColor: resolveTeamAccentColor(t),
+
+      createdAt: t.createdAt,
     }));
   }, [teams]);
 
@@ -407,10 +438,38 @@ export default function TeamsClient() {
     });
   }, [rows, teamsQuery]);
 
-  const teamsTotal = teamsFiltered.length;
+  const teamsSorted = useMemo(() => {
+    const base = [...teamsFiltered];
+    if (!sortField) return base;
+
+    const dirMul = sortDir === "asc" ? 1 : -1;
+
+    base.sort((a, b) => {
+      if (sortField === "title") {
+        const av = String(a.title || "").toLowerCase();
+        const bv = String(b.title || "").toLowerCase();
+        return av.localeCompare(bv) * dirMul;
+      }
+
+      if (sortField === "totalMembers") {
+        return (
+          (safeNumber(a.totalMembers) - safeNumber(b.totalMembers)) * dirMul
+        );
+      }
+
+      // createdAt
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return (at - bt) * dirMul;
+    });
+
+    return base;
+  }, [teamsFiltered, sortField, sortDir]);
+
+  const teamsTotal = teamsSorted.length;
   const teamsTotalPages = Math.max(1, Math.ceil(teamsTotal / teamsPageSize));
 
-  useEffect(() => setTeamsPage(1), [teamsQuery]);
+  useEffect(() => setTeamsPage(1), [teamsQuery, sortField, sortDir]);
   useEffect(() => {
     setTeamsPage((p) => clamp(p, 1, teamsTotalPages));
   }, [teamsTotalPages]);
@@ -419,8 +478,8 @@ export default function TeamsClient() {
 
   const teamsSlice = useMemo(() => {
     const start = (teamsPageSafe - 1) * teamsPageSize;
-    return teamsFiltered.slice(start, start + teamsPageSize);
-  }, [teamsFiltered, teamsPageSafe]);
+    return teamsSorted.slice(start, start + teamsPageSize);
+  }, [teamsSorted, teamsPageSafe]);
 
   const teamsShowingLabel = useMemo(() => {
     if (!teamsTotal) return "Showing 0-0 from 0 data";
@@ -487,6 +546,16 @@ export default function TeamsClient() {
                     ariaLabel="Teams view toggle"
                   />
 
+                  {/* ✅ Same filter/sort button as Organizations (LEFT of Create Team) */}
+                  <SortControl<TeamSortField>
+                    options={TEAM_SORT_OPTIONS}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    setSortField={setSortField}
+                    setSortDir={setSortDir}
+                    defaultDirFor={(f) => (f === "title" ? "asc" : "desc")}
+                  />
+
                   <Button
                     onClick={() => router.push("/dashboard/teams/new")}
                     type="button"
@@ -494,7 +563,7 @@ export default function TeamsClient() {
                     icon={<Plus className="h-4 w-4" />}
                     animation
                   >
-                    New team
+                    Create Team
                   </Button>
                 </div>
               </div>

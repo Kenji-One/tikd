@@ -3,9 +3,8 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
-import { Ticket as TicketIcon, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import SettingsShell from "@/components/features/settings/SettingsShell";
@@ -22,11 +21,11 @@ function EmptyState({
   cta?: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto mt-10 max-w-md rounded-2xl border border-white/10 bg-neutral-950/70 p-10 text-center">
-      <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-primary-900/50 ring-1 ring-primary-700/40">
+    <div className="mx-auto mt-10 max-w-md rounded-xl border border-white/10 bg-neutral-950/65 p-8 text-center backdrop-blur-[10px]">
+      <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-lg bg-primary-900/40 ring-1 ring-primary-700/30">
         {icon}
       </div>
-      <h3 className="text-lg font-semibold">{title}</h3>
+      <h3 className="text-lg font-semibold text-neutral-0">{title}</h3>
       {sub ? <p className="mt-2 text-sm text-neutral-300">{sub}</p> : null}
       {cta ? <div className="mt-5">{cta}</div> : null}
     </div>
@@ -39,35 +38,29 @@ export default function AccountSettingsPage() {
 
   return (
     <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
-      {/* Subtle page mesh */}
+      {/* Page mesh (cleaner / less muddy) */}
       <div
-        className="pointer-events-none absolute inset-0 -z-10 opacity-80"
+        className="pointer-events-none absolute inset-0 -z-10 opacity-95"
         style={{
           background:
-            "radial-gradient(1100px 520px at 10% 5%, rgba(130,46,255,.22), transparent 60%), radial-gradient(900px 520px at 90% 0%, rgba(88,101,242,.18), transparent 60%)",
+            "radial-gradient(900px 420px at 12% 4%, rgba(154,70,255,.16), transparent 60%)," +
+            "radial-gradient(820px 420px at 92% 0%, rgba(88,101,242,.10), transparent 58%)," +
+            "radial-gradient(900px 520px at 50% 115%, rgba(154,70,255,.08), transparent 62%)",
         }}
       />
 
-      <section className="mx-auto max-w-[1232px] px-4 pb-20 pt-6 md:pt-8">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-extrabold md:text-3xl">
-              Profile & Settings
-            </h1>
-            <p className="mt-2 max-w-prose text-sm text-neutral-300">
-              Update your profile, security, notifications, password, and
-              payment methods.
-            </p>
-          </div>
+      {/* Vignette */}
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(900px_520px_at_50%_-10%,rgba(0,0,0,0.35),transparent_62%),radial-gradient(1200px_700px_at_50%_120%,rgba(0,0,0,0.58),transparent_60%)]" />
 
-          <div className="flex items-center gap-2">
-            <Link href="/account/my-tickets">
-              <Button variant="ghost" size="sm">
-                <TicketIcon className="mr-2 h-4 w-4" />
-                My Tickets
-              </Button>
-            </Link>
-          </div>
+      <section className="mx-auto max-w-[1232px] px-4 pb-20 pt-6 md:pt-8">
+        <div className="mb-5">
+          <h1 className="text-2xl font-extrabold tracking-[-0.02em] md:text-3xl">
+            Profile & Settings
+          </h1>
+          <p className="mt-2 max-w-prose text-sm text-neutral-300">
+            Update your profile, security, notifications, password, and payment
+            methods.
+          </p>
         </div>
 
         {!authed ? (

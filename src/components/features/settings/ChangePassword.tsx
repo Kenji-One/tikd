@@ -1,7 +1,7 @@
 // src/components/features/settings/ChangePassword.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { validatePassword } from "@/lib/password";
@@ -69,16 +69,19 @@ export default function ChangePassword() {
         e.preventDefault();
         if (canSubmit) onSave();
       }}
-      className="grid gap-6 "
+      className="w-full"
     >
-      <div className="space-y-4 rounded-xl border border-white/10 bg-surface p-4">
-        <h3 className="text-lg font-semibold">Change Password</h3>
+      <h3 className="text-[16px] font-extrabold tracking-[-0.02em] text-neutral-0">
+        Change Password
+      </h3>
 
+      {/* Inner panel (matches client screenshot “big card inside”) */}
+      <div className="mt-7">
         {/* Global messages */}
         {error && (
           <div
             role="alert"
-            className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+            className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-300"
           >
             {error}
           </div>
@@ -86,7 +89,7 @@ export default function ChangePassword() {
         {okMsg && (
           <div
             role="status"
-            className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
+            className="mb-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300"
           >
             {okMsg}
           </div>
@@ -100,14 +103,14 @@ export default function ChangePassword() {
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
           placeholder="Enter current password"
-          autoComplete="off" // don't invite autofill here
-          readOnly={!unlockCurrent} // anti-autofill guard
+          autoComplete="off"
+          readOnly={!unlockCurrent}
           onFocus={() => setUnlockCurrent(true)}
           variant="full"
           size="sm"
         />
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <LabelledInput
             id="password-new"
             label="New Password"
@@ -116,7 +119,7 @@ export default function ChangePassword() {
             value={next}
             onChange={(e) => setNext(e.target.value)}
             placeholder="Enter new password"
-            autoComplete="new-password" // correct token for new
+            autoComplete="new-password"
             variant="full"
             size="sm"
             hint="8+ chars, upper/lower, number & symbol."
@@ -137,14 +140,10 @@ export default function ChangePassword() {
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={!canSubmit}>
+        <div className="mt-4 flex justify-end">
+          <Button type="submit" disabled={!canSubmit} animation>
             {saving ? "Saving..." : "Save Changes"}
           </Button>
-          <p className="text-xs text-white/60">
-            Tip: You’ll stay signed in. If you want forced logout on all
-            devices, we can add a token version check later.
-          </p>
         </div>
       </div>
     </form>

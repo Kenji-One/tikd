@@ -374,6 +374,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     gcTime: 30 * 60_000,
   });
 
+  const actionsLocked = !eventId || isLoading;
+
   const status = event?.status as "draft" | "published" | undefined;
   const isPublished = status === "published";
 
@@ -509,7 +511,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     const resizeCanvas = () => {
       const c = publishCanvasRef.current;
       if (!c) return;
-      // Canvas-confetti reads client sizes; ensure we have them
       const w = window.innerWidth;
       const h = window.innerHeight;
       c.style.width = "100%";
@@ -521,14 +522,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
-    // Defer one frame so DOM is definitely painted before we animate
     const raf = window.requestAnimationFrame(() => {
       const modal = publishModalRef.current;
       const icon = publishIconRef.current;
 
       if (!modal) return;
 
-      // Animate content lines (title/subtext/button) without changing design classes
       const lines = Array.from(
         modal.querySelectorAll<HTMLElement>("[data-publish-anim='line']"),
       );
@@ -566,14 +565,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
         );
       }
 
-      // Fire confetti once per open
       if (!hasFiredRef.current) {
         hasFiredRef.current = true;
 
         const shoot = confettiApiRef.current;
 
         if (shoot) {
-          // Tikd purple vibe
           const colors = [
             "#9A46FF",
             "#C7A0FF",
@@ -582,7 +579,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
             "#A855F7",
           ];
 
-          // Burst 1
           shoot({
             particleCount: 95,
             spread: 78,
@@ -594,7 +590,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
             colors,
           });
 
-          // Burst 2 (follow-up “party” feel)
           confettiTimeoutRef.current = window.setTimeout(() => {
             shoot({
               particleCount: 65,
@@ -692,7 +687,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
   );
 
   const invalidateDashboardUpcoming = useCallback(() => {
-    // ✅ Key fix: this makes the dashboard “Upcoming Events” update immediately.
     qc.invalidateQueries({
       queryKey: ["dashboard-upcoming-events"],
       refetchType: "active",
@@ -707,10 +701,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     onSuccess: () => {
       setEventStatusInCache("published");
       qc.invalidateQueries({ queryKey: ["event", eventId] });
-
-      // ✅ important: update dashboard upcoming list immediately
       invalidateDashboardUpcoming();
-
       setPublishSuccessOpen(true);
     },
   });
@@ -723,8 +714,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     onSuccess: () => {
       setEventStatusInCache("draft");
       qc.invalidateQueries({ queryKey: ["event", eventId] });
-
-      // ✅ important: remove it from dashboard upcoming list immediately
       invalidateDashboardUpcoming();
     },
   });
@@ -751,14 +740,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
   return (
     <main className="relative min-h-screen bg-neutral-950 text-neutral-0">
-      {/* Download CSV modal */}
       <DownloadCsvModal
         open={downloadOpen}
         onOpenChange={setDownloadOpen}
         eventName={event?.title ?? ""}
       />
 
-      {/* Publish success modal */}
       {publishSuccessOpen && (
         <div
           className={clsx(
@@ -772,20 +759,17 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
             if (e.target === e.currentTarget) setPublishSuccessOpen(false);
           }}
         >
-          {/* Confetti canvas pinned to overlay (ALWAYS visible above backdrop) */}
           <canvas
             ref={publishCanvasRef}
             className="tikd-publish-confetti-canvas"
             aria-hidden="true"
           />
 
-          {/* Modal (design class unchanged; only adds animation + spacing helpers) */}
           <div
             ref={publishModalRef}
             className={clsx(
               "tikd-publish-modal",
               "tikd-publish-modal-anim",
-              // spacing/sizing fix (no visual redesign; just less cramped)
               "px-8 py-7 sm:px-10 sm:py-8",
             )}
           >
@@ -799,12 +783,10 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
               <X className="h-4 w-4" />
             </button>
 
-            {/* icon pop target (design class unchanged) */}
             <div ref={publishIconRef} className="tikd-publish-modal-icon">
               <Check className="h-6 w-6" />
             </div>
 
-            {/* spacing + stagger targets */}
             <div className="mt-5 space-y-2 text-center">
               <h3 data-publish-anim="line" className="tikd-publish-modal-title">
                 Event Published!
@@ -837,20 +819,19 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
       <section className="tikd-event-hero pb-14">
         {/* Sticky TOP HEADER ONLY (tabs NOT included) */}
-        <div className="tikd-event-header-sticky">
+        <div className="sticky top-0 z-40">
           <header
             className={clsx(
               "tikd-event-header-surface",
               isScrolled && "tikd-event-header-surface-scrolled",
+              "relative",
             )}
           >
             {/* Full-width header always */}
-            <div className="p-4 md:p-6 lg:p-8 z-2">
+            <div className="relative z-50 p-4 md:p-6 lg:p-8 pointer-events-auto">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  {/* Title row with poster thumbnail */}
                   <div className="flex items-start gap-3">
-                    {/* Poster thumbnail */}
                     <div className="mt-0.5 shrink-0">
                       {isLoading ? (
                         <div className="h-16 w-16 animate-pulse rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60" />
@@ -872,9 +853,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       )}
                     </div>
 
-                    {/* Title + chips */}
                     <div className="min-w-0">
-                      <h1 className="tikd-event-title z-2">
+                      <h1 className="tikd-event-title">
                         {isLoading
                           ? "Loading event…"
                           : (event?.title ?? "Event")}
@@ -933,12 +913,13 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                     className="tikd-action-icon tikdDownloadWrap"
                     title="Download CSV"
                     aria-label="Download CSV"
+                    disabled={actionsLocked}
+                    onClick={() => {
+                      if (actionsLocked) return;
+                      setDownloadOpen(true);
+                    }}
                   >
-                    <button
-                      type="button"
-                      className="tikdDownloadBtn"
-                      onClick={() => setDownloadOpen(true)}
-                    >
+                    <span className="tikdDownloadBtn" aria-hidden="true">
                       <svg
                         className="tikdDownloadBtn__svgIcon"
                         viewBox="0 0 384 512"
@@ -950,12 +931,9 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       >
                         <path d="M169.4 470.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 370.8 224 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 306.7L54.6 265.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z" />
                       </svg>
-                      <span
-                        className="tikdDownloadBtn__icon2"
-                        aria-hidden="true"
-                      />
+                      <span className="tikdDownloadBtn__icon2" />
                       <span className="tikdDownloadBtn__tooltip">Download</span>
-                    </button>
+                    </span>
                   </Button>
 
                   <Button
@@ -963,12 +941,26 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                     variant="ghost"
                     size="icon"
                     onClick={handleCopyPublicLink}
+                    disabled={actionsLocked}
                     className={clsx(
                       "tikd-action-icon",
                       copied && "tikd-action-icon-success",
+                      actionsLocked && "cursor-not-allowed",
                     )}
-                    title={copied ? "Link copied" : "Copy public link"}
-                    aria-label={copied ? "Link copied" : "Copy public link"}
+                    title={
+                      actionsLocked
+                        ? "Loading event…"
+                        : copied
+                          ? "Link copied"
+                          : "Copy public link"
+                    }
+                    aria-label={
+                      actionsLocked
+                        ? "Loading event…"
+                        : copied
+                          ? "Link copied"
+                          : "Copy public link"
+                    }
                     icon={
                       copied ? (
                         <Check className="h-4 w-4" />
@@ -983,21 +975,30 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       asChild
                       variant="ghost"
                       size="md"
-                      className="tikd-action-pill"
-                      title="View public page"
+                      className={clsx(
+                        "tikd-action-pill",
+                        actionsLocked && "pointer-events-none opacity-60",
+                      )}
+                      title={
+                        actionsLocked ? "Loading event…" : "View public page"
+                      }
                       icon={<Eye className="h-4 w-4" />}
                     >
                       <Link
                         href={`/events/${eventId}`}
                         target="_blank"
                         rel="noreferrer"
+                        aria-disabled={actionsLocked ? "true" : "false"}
+                        tabIndex={actionsLocked ? -1 : 0}
+                        onClick={(e) => {
+                          if (actionsLocked) e.preventDefault();
+                        }}
                       >
                         View
                       </Link>
                     </Button>
                   )}
 
-                  {/* Publish / Unpublish */}
                   {eventId && (
                     <>
                       {isPublished ? (
@@ -1105,7 +1106,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
         </div>
       </section>
 
-      {/* Always-on CSS for the Uiverse download button (scoped to classnames) */}
       <style jsx global>{`
         /* From Uiverse.io by vinodjangid07 (adapted to Tikd tokens) */
         .tikdDownloadBtn {
@@ -1113,7 +1113,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           height: 100%;
           border: none;
           border-radius: 999px;
-          /* background-color: rgba(24, 24, 40, 0.86); */
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -1121,17 +1120,10 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           cursor: pointer;
           position: relative;
           transition-duration: 0.3s;
-          /* box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.11); */
           user-select: none;
           -webkit-tap-highlight-color: transparent;
           padding: 0px;
-        }
-
-        .tikdDownloadBtn:focus-visible {
-          outline: none;
-          box-shadow:
-            0 0 0 2px rgba(154, 70, 255, 0.35),
-            2px 2px 10px rgba(0, 0, 0, 0.11);
+          pointer-events: none; /* important: wrapper button receives the click */
         }
 
         .tikdDownloadBtn__svgIcon {
@@ -1150,7 +1142,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           margin-top: 2px;
         }
 
-        /* Tooltip appears to the LEFT (we're on the right side of the header) */
         .tikdDownloadBtn__tooltip {
           position: absolute;
           right: calc(100% + 12px);
@@ -1190,30 +1181,18 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
 
-        .tikdDownloadWrap:hover .tikdDownloadBtn__tooltip,
-        .tikdDownloadBtn:hover .tikdDownloadBtn__tooltip {
+        .tikdDownloadWrap:hover .tikdDownloadBtn__tooltip {
           opacity: 1;
           transition-duration: 0.3s;
         }
 
-        .tikdDownloadWrap:hover .tikdDownloadBtn,
-        .tikdDownloadBtn:hover {
-          transition-duration: 0.3s;
-        }
-
-        .tikdDownloadBtn:active {
-          transform: translateY(0px);
-        }
-
-        .tikdDownloadWrap:hover .tikdDownloadBtn__icon2,
-        .tikdDownloadBtn:hover .tikdDownloadBtn__icon2 {
+        .tikdDownloadWrap:hover .tikdDownloadBtn__icon2 {
           border-bottom: 2px solid rgba(235, 235, 235, 0.95);
           border-left: 2px solid rgba(235, 235, 235, 0.95);
           border-right: 2px solid rgba(235, 235, 235, 0.95);
         }
 
-        tikdDownloadWrap:hover .tikdDownloadBtn__svgIcon,
-        .tikdDownloadBtn:hover .tikdDownloadBtn__svgIcon {
+        .tikdDownloadWrap:hover .tikdDownloadBtn__svgIcon {
           fill: rgb(255, 255, 255);
           animation: tikd-slide-in-top 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)
             both;
@@ -1231,10 +1210,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .tikdDownloadBtn {
-            transition-duration: 0.01ms;
-          }
-          .tikdDownloadBtn:hover .tikdDownloadBtn__svgIcon {
+          .tikdDownloadWrap:hover .tikdDownloadBtn__svgIcon {
             animation: none;
           }
         }
@@ -1268,7 +1244,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           }
         }
 
-        /* Confetti should be above backdrop but BELOW the modal */
         .tikd-publish-confetti-canvas {
           position: fixed;
           inset: 0;
@@ -1278,7 +1253,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           z-index: 3;
         }
 
-        /* Ensure modal is above confetti */
         .tikd-publish-modal {
           position: relative;
           z-index: 2;

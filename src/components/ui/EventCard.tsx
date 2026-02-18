@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Calendar } from "lucide-react";
 import clsx from "classnames";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Tilt3d } from "@/components/ui/Tilt3d";
 
 /* -------------------------------------------------------------------------- */
 /*  Props                                                                     */
@@ -35,7 +34,7 @@ export interface EventCardProps {
   };
 
   /**
-   * Optional overlay slots that will be placed INSIDE the Tilt surface.
+   * Optional overlay slots that will be placed INSIDE the card surface.
    * Useful for dashboard overlays like info tooltip + pin button.
    */
   topLeftOverlay?: ReactNode;
@@ -131,7 +130,7 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
           font-size="20"
           font-weight="700"
           letter-spacing="4">
-      TIKD
+      TIXSY
     </text>
   </g>
 </svg>
@@ -185,7 +184,6 @@ export function EventCard({
   topRightOverlayClassName,
 }: EventCardProps) {
   const dateColour = "text-primary-951";
-  const borderHover = "hover:border-primary-951";
 
   const initialSrc = useMemo(() => {
     const s = (img ?? "").trim();
@@ -200,19 +198,13 @@ export function EventCard({
 
   const isDefaultPoster = imgSrc === DEFAULT_POSTER;
 
-  const cardClasses = clsx(
-    "group/card relative flex w-full flex-col gap-2 transition-opacity",
-    "group-hover/row:opacity-60 hover:opacity-100",
-    className,
-  );
-
   const targetHref = href ?? `/events/${id}`;
 
   const pinButton = pin ? (
     pin.pinned ? (
       <div
         className={clsx(
-          "absolute right-3 top-3 z-20",
+          "absolute right-3 top-3 z-30",
           "pointer-events-none select-none",
           "inline-flex items-center gap-1.5",
           "rounded-full border border-primary-500/35",
@@ -235,8 +227,8 @@ export function EventCard({
           pin.onToggle();
         }}
         className={clsx(
-          "absolute right-3 top-3 z-20",
-          "opacity-0 transition-opacity duration-200",
+          "absolute right-3 top-3 z-30",
+          "opacity-0 transition-opacity duration-150",
           "group-hover/card:opacity-100 focus-visible:opacity-100",
           "text-white/85 hover:text-white",
           "focus-visible:outline-none",
@@ -273,77 +265,67 @@ export function EventCard({
     </>
   );
 
-  const inner = (
+  const cardClasses = clsx(
+    "group/card relative flex w-full flex-col gap-2 transition-opacity",
+    "group-hover/row:opacity-60 hover:opacity-100",
+    "tikd-steamCard",
+    className,
+  );
+
+  const Cover = (
+    <div className="tikd-steamCard__float">
+      <div className="tikd-steamCard__cover">
+        <div className="tikd-steamCard__rim">
+          <div className="tikd-steamCard__poster relative w-full overflow-hidden rounded-lg aspect-[171/214] sm:aspect-[79/95] bg-neutral-900">
+            <Image
+              src={imgSrc}
+              alt={title}
+              fill
+              sizes="(max-width: 768px) 100vw, 260px"
+              className={clsx(
+                "object-cover object-center",
+                isDefaultPoster &&
+                  "brightness-[1.06] contrast-[1.04] saturate-[1.05]",
+              )}
+              onError={() => {
+                if (imgSrc !== DEFAULT_POSTER) setImgSrc(DEFAULT_POSTER);
+              }}
+            />
+
+            {/* resting glow (CSS controls it on hover) */}
+            <div aria-hidden className="tikd-steamCard__restGlow" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const Meta = (
+    <div className="tikd-steamCard__meta space-y-1 px-1 text-left">
+      <h3 className="text-sm font-bold uppercase text-neutral-0">{title}</h3>
+      <div className={clsx("flex items-center gap-1 text-xs", dateColour)}>
+        <Calendar className="h-4 w-4" />
+        {dateLabel}
+      </div>
+    </div>
+  );
+
+  const Inner = (
     <>
-      {/* ✅ overlays INSIDE the tilt surface */}
       {overlays}
-
-      {/* legacy pin system (optional) */}
       {pinButton}
-
-      <div
-        className={clsx(
-          "p-[2px] w-full h-full rounded-[10px] border border-transparent transition duration-300 group-hover:border-primary-500",
-          borderHover,
-        )}
-      >
-        <div className="relative w-full overflow-hidden rounded-lg aspect-[171/214] sm:aspect-[79/95] bg-neutral-900">
-          <Image
-            src={imgSrc}
-            alt={title}
-            fill
-            sizes="(max-width: 768px) 100vw, 260px"
-            className={clsx(
-              "object-cover object-center transition duration-300",
-              "group-hover:brightness-75",
-              isDefaultPoster &&
-                "brightness-[1.06] contrast-[1.04] saturate-[1.05]",
-            )}
-            onError={() => {
-              if (imgSrc !== DEFAULT_POSTER) setImgSrc(DEFAULT_POSTER);
-            }}
-          />
-
-          {/* Glow only affects poster area */}
-          <div
-            data-tilt-glow
-            className={clsx(
-              "pointer-events-none absolute inset-0 rounded-lg",
-              "opacity-0 transition-opacity duration-200",
-              "group-hover/card:opacity-100",
-            )}
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 50% -20%, rgba(255,255,255,0.05), rgba(0,0,0,0.14))",
-            }}
-          />
-        </div>
-      </div>
-
-      {/* meta underneath */}
-      <div className="space-y-1 px-1 text-left">
-        <h3 className="text-sm font-bold uppercase text-neutral-0">{title}</h3>
-        <div className={clsx("flex items-center gap-1 text-xs", dateColour)}>
-          <Calendar className="h-4 w-4" />
-          {dateLabel}
-        </div>
-      </div>
+      {Cover}
+      {Meta}
     </>
   );
 
   if (clickable) {
     return (
-      <Tilt3d perspective={1500} className="w-full">
-        <Link href={targetHref} className={cardClasses}>
-          {inner}
-        </Link>
-      </Tilt3d>
+      <Link href={targetHref} className={cardClasses}>
+        {Inner}
+      </Link>
     );
   }
 
-  return (
-    <Tilt3d perspective={1500} className="w-full">
-      <div className={cardClasses}>{inner}</div>
-    </Tilt3d>
-  );
+  return <div className={cardClasses}>{Inner}</div>;
 }

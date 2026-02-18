@@ -54,6 +54,7 @@ import type { RoleIconKey } from "@/lib/roleIcons";
 import DateRangePicker, {
   type DateRangeValue,
 } from "@/components/ui/DateRangePicker";
+import TimePicker from "@/components/ui/TimePicker";
 
 /* ----------------------------- Types ----------------------------- */
 export type Role = "admin" | "promoter" | "scanner" | "collaborator";
@@ -518,7 +519,7 @@ function SummaryCard({
               Email
             </div>
             <div
-              className="mt-1 truncate text-[13px] font-semibold text-neutral-0"
+              className="mt-2.5 truncate text-[13px] font-semibold text-neutral-0"
               title={email || "—"}
             >
               {email || "—"}
@@ -674,7 +675,7 @@ function RoleTile({
   );
 }
 
-/* ----------------------- Date/time helpers (custom picker) ---------------------- */
+/* ----------------------- Date/time helpers ---------------------- */
 function clampToDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -743,10 +744,10 @@ export default function InviteTeamModal({
   const [email, setEmail] = useState("");
   const [temporary, setTemporary] = useState(false);
 
-  // ✅ We still store the payload string in the same format as before (datetime-local).
+  // Payload string (datetime-local)
   const [expiresAt, setExpiresAt] = useState<string>("");
 
-  // ✅ UI state for custom date picker + time input.
+  // UI state for custom date picker + TimePicker (HH:MM 24h)
   const [{ date: expiresDate, time: expiresTime }, setExpiresUi] = useState<{
     date: Date | null;
     time: string;
@@ -933,7 +934,7 @@ export default function InviteTeamModal({
     };
   }, [open, onClose]);
 
-  // ✅ Keep UI state in sync if expiresAt is set externally (or restored).
+  // Keep UI state in sync when toggling temporary (existing behavior preserved)
   useEffect(() => {
     const parsed = parseLocalDateTime(expiresAt);
     setExpiresUi(parsed);
@@ -956,7 +957,7 @@ export default function InviteTeamModal({
   const onEmailKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
 
-    // Prevent Enter from submitting the form (which was causing instant invite)
+    // Prevent Enter from submitting the form
     e.preventDefault();
     e.stopPropagation();
 
@@ -1143,7 +1144,7 @@ export default function InviteTeamModal({
           </div>
         </div>
 
-        {/* ✅ IMPORTANT: Form submit now ONLY submits on step 2 (Apply) */}
+        {/* IMPORTANT: Form submit now ONLY submits on step 2 (Apply) */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1295,7 +1296,7 @@ export default function InviteTeamModal({
             {step === 2 && (
               <div className="space-y-4">
                 <div className="rounded-xl border border-white/10 bg-white/4 p-3">
-                  <label className="group flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
+                  <label className="group flex items-center gap-3 rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={temporary}
@@ -1323,8 +1324,8 @@ export default function InviteTeamModal({
                       className="peer sr-only"
                     />
 
-                    <span className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-neutral-100">
-                      <Clock3 className="h-4 w-4 opacity-80" />
+                    <span className="inline-flex items-center gap-2 text-[14px] font-semibold text-neutral-100">
+                      <Clock3 className="h-5 w-5 opacity-80" />
                       Temporary access
                     </span>
 
@@ -1347,14 +1348,14 @@ export default function InviteTeamModal({
                         Expires at
                       </div>
 
-                      {/* ✅ Custom Tikd date picker + time (past days are disabled/greyed out) */}
-                      <div className="mt-2 grid gap-2.5 sm:grid-cols-[1fr_140px]">
-                        <div className="relative">
+                      {/* DateRangePicker (single) + custom TimePicker (AM/PM) */}
+                      <div className="mt-2 grid gap-2.5 sm:grid-cols-[1fr_180px]">
+                        <div className="relative text-[14px]">
                           <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-500" />
                           <DateRangePicker
                             variant="field"
                             selectionMode="single"
-                            minDate={new Date()} // ✅ past days disabled/greyed out
+                            minDate={new Date()}
                             value={
                               {
                                 start: expiresDate,
@@ -1385,31 +1386,21 @@ export default function InviteTeamModal({
                           />
                         </div>
 
-                        <div className="relative">
-                          <Clock3 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-500" />
-                          <input
-                            type="time"
-                            value={expiresTime}
-                            onChange={(e) => {
-                              const nextTime = e.target.value;
-                              setExpiresUi((prev) => {
-                                const ui = { date: prev.date, time: nextTime };
-                                setExpiresAt(
-                                  buildLocalDateTimeString(ui.date, ui.time),
-                                );
-                                return ui;
-                              });
-                            }}
-                            className={clsx(
-                              "h-11 w-full rounded-lg border bg-neutral-950/55 pl-11 pr-3",
-                              "text-[13px] text-neutral-0 outline-none",
-                              "border-white/10 focus:ring-1 focus:ring-primary-500",
-                              "appearance-none",
-                              "[&::-webkit-calendar-picker-indicator]:hidden",
-                            )}
-                            aria-label="Expiration time"
-                          />
-                        </div>
+                        <TimePicker
+                          value={expiresTime}
+                          minuteStep={5}
+                          placeholder="Select End Time"
+                          onChange={(nextTime) => {
+                            setExpiresUi((prev) => {
+                              const ui = { date: prev.date, time: nextTime };
+                              setExpiresAt(
+                                buildLocalDateTimeString(ui.date, ui.time),
+                              );
+                              return ui;
+                            });
+                          }}
+                          className="w-full"
+                        />
                       </div>
 
                       <p className="mt-2 text-[12px] text-neutral-500">
@@ -1430,7 +1421,7 @@ export default function InviteTeamModal({
                   </div>
 
                   <div className="space-y-2.5">
-                    <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
+                    <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={applyExisting}
@@ -1447,7 +1438,7 @@ export default function InviteTeamModal({
                       >
                         <Check className="h-3.5 w-3.5 text-primary-400 transition-all duration-200 ease-out" />
                       </span>
-                      <span className="text-[12.5px] font-semibold text-neutral-100">
+                      <span className="text-[14px] font-semibold text-neutral-100">
                         Existing events
                       </span>
                       <span className="ml-auto text-[12px] text-neutral-500">
@@ -1455,7 +1446,7 @@ export default function InviteTeamModal({
                       </span>
                     </label>
 
-                    <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
+                    <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={applyFuture}
@@ -1472,7 +1463,7 @@ export default function InviteTeamModal({
                       >
                         <Check className="h-3.5 w-3.5 text-primary-400 transition-all duration-200 ease-out" />
                       </span>
-                      <span className="text-[12.5px] font-semibold text-neutral-100">
+                      <span className="text-[14px] font-semibold text-neutral-100">
                         Future events
                       </span>
                       <span className="ml-auto text-[12px] text-neutral-500">
@@ -1535,7 +1526,6 @@ export default function InviteTeamModal({
                       "shadow-[0_18px_40px_rgba(154,70,255,0.18)]",
                     )}
                     onClick={(e?: ReactMouseEvent) => {
-                      // Extra safety: even if Button renders as submit somehow, we block it.
                       e?.preventDefault?.();
                       e?.stopPropagation?.();
 

@@ -28,7 +28,7 @@ export interface ButtonProps
     | "default"
     | "electric"
     | "viewAction";
-  size?: "sm" | "md" | "lg" | "xs" | "icon";
+  size?: "sm" | "md" | "lg" | "xl" | "xs" | "icon";
   loading?: boolean;
   asChild?: boolean;
   /** optional leading icon (renders before children) */
@@ -70,7 +70,24 @@ const variants: Record<
     "border border-white/10 text-white bg-transparent hover:bg-white/5 hover:border-primary-500",
   ghost:
     "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffffc] border border-transparent hover:border-primary-500",
-  destructive: "bg-error-600 text-white hover:bg-error-700",
+
+  /**
+   * ✅ Warmer destructive (outline style like your screenshot)
+   * - no gradient, no shine, no shadow
+   * - clear “delete/remove” intent via warm red outline + text
+   * - subtle tinted hover/active fill (still matte)
+   * - error-tinted focus ring (overrides base ring)
+   */
+  destructive: clsx(
+    "bg-transparent",
+    "text-error-400",
+    "border border-error-500/70",
+    "hover:text-error-300 hover:border-error-400/85 hover:bg-error-500/10",
+    "active:bg-error-500/16 active:text-error-200",
+    "focus-visible:ring-2 focus-visible:ring-error-500/45",
+    "shadow-none",
+  ),
+
   brand: "bg-primary-500 text-white hover:bg-primary-700",
   social:
     "bg-neutral-800 text-white border border-white/10 hover:border-primary-500 hover:bg-neutral-700/40",
@@ -88,6 +105,7 @@ const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
   sm: "py-2.5 px-3.5",
   md: "py-3 px-4",
   lg: "py-4 px-8",
+  xl: "py-4 px-7 text-[16px]",
   xs: "py-[13px] px-4",
   icon: "p-2 w-9 h-9",
 };
@@ -106,7 +124,8 @@ const viewActionContentSizes: Record<
   xs: "py-1.5 px-3 text-[11px]",
   sm: "py-2 px-3.5 text-[12px]",
   md: "py-2.5 px-4 text-[13px]",
-  lg: "py-3 px-6 text-[14px]",
+  lg: "py-2.5 px-5 text-[14px]",
+  xl: "py-4 px-8 text-[18px]",
   icon: "p-2 w-9 h-9",
 };
 
@@ -142,10 +161,12 @@ const variantSweep: Record<NonElectricVariant, string> = {
     sweepBase("before:duration-800"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/24 before:to-transparent",
   ),
-  destructive: clsx(
-    sweepBase("before:duration-750"),
-    "before:bg-gradient-to-r before:from-transparent before:via-error-200/22 before:to-transparent",
-  ),
+
+  /**
+   * ❌ No shine for destructive even when animation={true}
+   */
+  destructive: "",
+
   secondary: clsx(
     sweepBase("before:duration-700"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/22 before:to-transparent " +

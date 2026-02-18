@@ -18,8 +18,6 @@ import {
   CheckCircle2,
   Plus,
   Search,
-  ArrowDownNarrowWide,
-  ArrowDownWideNarrow,
   ChevronRight,
   Eye,
   Ticket,

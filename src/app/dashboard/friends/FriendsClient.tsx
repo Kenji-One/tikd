@@ -360,7 +360,7 @@ function FriendsCard({
                   )}
                 </div>
 
-                <div
+                {/* <div
                   className={clsx(
                     "absolute -right-2 -bottom-2",
                     "h-7 w-7 rounded-[10px]",
@@ -377,7 +377,7 @@ function FriendsCard({
                   <span className="text-[11px] font-extrabold tracking-[-0.2px] text-neutral-0">
                     {badge}
                   </span>
-                </div>
+                </div> */}
               </div>
 
               <div
@@ -502,7 +502,7 @@ function FriendsRow({
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className="relative">
-          <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+          <div className="h-10 w-10 overflow-hidden rounded-[6px]">
             {friend.avatarUrl ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -518,9 +518,6 @@ function FriendsRow({
                 {badge}
               </div>
             )}
-          </div>
-          <div className="absolute -right-2 -bottom-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-            {badge}
           </div>
         </div>
 

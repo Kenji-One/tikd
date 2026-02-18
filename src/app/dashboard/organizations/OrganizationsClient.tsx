@@ -504,7 +504,7 @@ export default function OrganizationsClient() {
                     icon={<Plus className="h-4 w-4" />}
                     animation
                   >
-                    New organization
+                    Create Organization
                   </Button>
                 </div>
               </div>

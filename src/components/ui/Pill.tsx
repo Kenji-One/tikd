@@ -53,13 +53,20 @@ export function Pill({ icon, text, color, textColor, className }: PillProps) {
     fg || color
       ? {
           ...(fg ? { color: fg } : {}),
-          ...(color ? { backgroundColor: hexToRgba(color, 0.16) } : {}),
+          ...(color
+            ? {
+                backgroundColor: hexToRgba(color, 0.24), // stronger than 0.16
+                border: `1px solid ${hexToRgba(color, 0.34)}`, // outline for readability
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.10), 0 10px 28px rgba(0,0,0,0.32)",
+              }
+            : {}),
         }
       : undefined;
 
   /* fallback classes if nothing specified */
-  const bgClass = color ? "" : "bg-white/16";
-  const textClass = fg ? "" : "text-white";
+  const bgClass = color ? "" : "bg-white/18";
+  const textClass = fg ? "" : "text-white/95";
 
   /* make icon inherit currentColor + unified size */
   const renderedIcon =
@@ -73,9 +80,11 @@ export function Pill({ icon, text, color, textColor, className }: PillProps) {
     <span
       className={clsx(
         "inline-flex items-center gap-[6px] rounded-full px-3 py-2",
+        "text-sm font-semibold leading-none backdrop-blur-md border border-white/10",
+        "shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_10px_28px_rgba(0,0,0,0.30)]",
         bgClass,
         textClass,
-        className
+        className,
       )}
       style={style}
     >

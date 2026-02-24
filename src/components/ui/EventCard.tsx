@@ -23,6 +23,9 @@ export interface EventCardProps {
   /** optional custom href (defaults to `/events/:id`) when clickable */
   href?: string;
 
+  /** ✅ NEW: optional accent color for date row (hex) */
+  dateAccentColor?: string;
+
   /**
    * Optional: hover-only pin icon in top-right.
    * Clicking it MUST NOT navigate.
@@ -50,35 +53,27 @@ export interface EventCardProps {
 const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1280" viewBox="0 0 900 1280">
   <defs>
-    <!-- Deep neutral base -->
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#070710"/>
       <stop offset="0.55" stop-color="#101026"/>
       <stop offset="1" stop-color="#070710"/>
     </linearGradient>
-
-    <!-- Soft brand glows -->
     <radialGradient id="glowPurple" cx="18%" cy="10%" r="78%">
       <stop offset="0" stop-color="#9a46ff" stop-opacity="0.34"/>
       <stop offset="0.50" stop-color="#9a46ff" stop-opacity="0.12"/>
       <stop offset="1" stop-color="#9a46ff" stop-opacity="0"/>
     </radialGradient>
-
     <radialGradient id="glowBlue" cx="92%" cy="92%" r="85%">
       <stop offset="0" stop-color="#428bff" stop-opacity="0.26"/>
       <stop offset="0.55" stop-color="#428bff" stop-opacity="0.10"/>
       <stop offset="1" stop-color="#428bff" stop-opacity="0"/>
     </radialGradient>
-
-    <!-- Subtle diagonal sheen -->
     <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.00"/>
       <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.06"/>
       <stop offset="0.60" stop-color="#ffffff" stop-opacity="0.025"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0.00"/>
     </linearGradient>
-
-    <!-- Gentle grain -->
     <filter id="grain" x="-20%" y="-20%" width="140%" height="140%">
       <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
       <feColorMatrix type="matrix" values="
@@ -87,15 +82,11 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
         0 0 1 0 0
         0 0 0 0.12 0"/>
     </filter>
-
-    <!-- Soft vignette -->
     <radialGradient id="vignette" cx="50%" cy="45%" r="90%">
       <stop offset="0" stop-color="#000000" stop-opacity="0"/>
       <stop offset="0.68" stop-color="#000000" stop-opacity="0.18"/>
       <stop offset="1" stop-color="#000000" stop-opacity="0.44"/>
     </radialGradient>
-
-    <!-- Icon stroke -->
     <linearGradient id="iconStroke" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="#c7a0ff" stop-opacity="0.65"/>
       <stop offset="0.55" stop-color="#9a46ff" stop-opacity="0.50"/>
@@ -103,7 +94,6 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
     </linearGradient>
   </defs>
 
-  <!-- Full-bleed background -->
   <rect width="900" height="1280" fill="url(#bg)"/>
   <rect width="900" height="1280" fill="url(#glowPurple)"/>
   <rect width="900" height="1280" fill="url(#glowBlue)"/>
@@ -111,7 +101,6 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
   <rect width="900" height="1280" filter="url(#grain)" opacity="0.55"/>
   <rect width="900" height="1280" fill="url(#vignette)"/>
 
-  <!-- Tiny, subtle center glyph (NO inner big block) -->
   <g transform="translate(450 640)" opacity="0.58">
     <rect x="-120" y="-86" width="240" height="172" rx="28"
           fill="#000000" fill-opacity="0.14"
@@ -122,7 +111,6 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
     <circle cx="50" cy="-26" r="12" fill="#ffffff" fill-opacity="0.12"/>
   </g>
 
-  <!-- Tiny brand hint (bottom-right, very subtle) -->
   <g opacity="0.18">
     <text x="820" y="1216" text-anchor="end"
           fill="#ffffff"
@@ -137,6 +125,10 @@ const DEFAULT_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 `)}`;
 
 export const EVENT_CARD_DEFAULT_POSTER = DEFAULT_POSTER;
+
+function isHexColor(v: unknown): v is string {
+  return typeof v === "string" && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v);
+}
 
 function PinIcon({ className }: { className?: string }) {
   return (
@@ -177,13 +169,17 @@ export function EventCard({
   className,
   clickable = true,
   href,
+  dateAccentColor,
   pin,
   topLeftOverlay,
   topLeftOverlayClassName,
   topRightOverlay,
   topRightOverlayClassName,
 }: EventCardProps) {
-  const dateColour = "text-primary-951";
+  const dateColourClass = "text-primary-951";
+  const dateColourStyle = isHexColor(dateAccentColor)
+    ? ({ color: dateAccentColor } as const)
+    : undefined;
 
   const initialSrc = useMemo(() => {
     const s = (img ?? "").trim();
@@ -292,7 +288,6 @@ export function EventCard({
               }}
             />
 
-            {/* resting glow (CSS controls it on hover) */}
             <div aria-hidden className="tikd-steamCard__restGlow" />
           </div>
         </div>
@@ -303,7 +298,10 @@ export function EventCard({
   const Meta = (
     <div className="tikd-steamCard__meta space-y-1 px-1 text-left">
       <h3 className="text-sm font-bold uppercase text-neutral-0">{title}</h3>
-      <div className={clsx("flex items-center gap-1 text-xs", dateColour)}>
+      <div
+        className={clsx("flex items-center gap-1 text-xs", dateColourClass)}
+        style={dateColourStyle}
+      >
         <Calendar className="h-4 w-4" />
         {dateLabel}
       </div>

@@ -3,17 +3,33 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 
-type Sizing = "small" | "avatar" | "normal" | "big" | "full" | "square";
+type Sizing =
+  | "small"
+  | "avatar"
+  | "normal"
+  | "big"
+  | "full"
+  | "square"
+  | "tile";
+
+type UploadInfo = {
+  url: string;
+  publicId: string;
+  resourceType: "image" | "video" | "raw";
+  format?: string;
+};
 
 type Props = {
-  /** Current image URL coming from the form */
+  /** Current URL coming from the form */
   value?: string;
   /** Called with the new URL after successful upload */
   onChange: (url: string) => void;
+  /** Optional callback with Cloudinary upload metadata */
+  onUploaded?: (info: UploadInfo) => void;
   /** Optional label shown above the uploader */
   label?: string;
   /** Deterministic Cloudinary public_id, e.g. "events/123/poster" */
@@ -22,30 +38,61 @@ type Props = {
   sizing?: Sizing;
   /** Optional extra className on the outer wrapper */
   className?: string;
+  /** File accept string (default: image/*) */
+  accept?: string;
+  /** Max file size in MB (default: 50) */
+  maxSizeMB?: number;
+  /** Show native video controls when preview is a video */
+  videoControls?: boolean;
 };
+
+function isProbablyVideoUrl(url: string) {
+  if (!url) return false;
+  if (url.includes("/video/upload/")) return true;
+  return /\.(mp4|webm|mov|m4v|ogg)$/i.test(url);
+}
 
 export default function ImageUpload({
   value,
   onChange,
+  onUploaded,
   label,
   publicId,
   sizing = "normal",
   className,
+  accept = "image/*",
+  maxSizeMB = 50,
+  videoControls = false,
 }: Props) {
   const [preview, setPreview] = useState<string | undefined>(value);
   const [loading, setLoading] = useState(false);
+  const [lastKind, setLastKind] = useState<"image" | "video" | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // ✅ Keep local preview in sync when parent value changes (e.g. after crop commit)
+  // ✅ Keep local preview in sync when parent value changes
   useEffect(() => {
     setPreview(value || undefined);
   }, [value]);
 
   const handleSelect = () => fileInputRef.current?.click();
 
+  const isVideo = useMemo(() => {
+    if (!preview) return false;
+    if (lastKind) return lastKind === "video";
+    return isProbablyVideoUrl(preview);
+  }, [preview, lastKind]);
+
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // size guard
+    const maxBytes = Math.max(1, maxSizeMB) * 1024 * 1024;
+    if (file.size > maxBytes) {
+      alert(`File is too large. Max allowed is ${maxSizeMB}MB.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
 
     setLoading(true);
 
@@ -83,9 +130,31 @@ export default function ImageUpload({
         return;
       }
 
-      const json = await res.json();
-      setPreview(json.secure_url);
-      onChange(json.secure_url);
+      const json = (await res.json()) as {
+        secure_url?: string;
+        resource_type?: "image" | "video" | "raw";
+        format?: string;
+        public_id?: string;
+      };
+
+      const url = String(json.secure_url || "");
+      if (!url) return;
+
+      const resourceType = (json.resource_type ?? "image") as
+        | "image"
+        | "video"
+        | "raw";
+
+      setLastKind(resourceType === "video" ? "video" : "image");
+      setPreview(url);
+      onChange(url);
+
+      onUploaded?.({
+        url,
+        publicId: String(json.public_id || id),
+        resourceType,
+        format: json.format ? String(json.format) : undefined,
+      });
     } catch (err) {
       console.error("Upload error:", err);
     } finally {
@@ -125,6 +194,15 @@ export default function ImageUpload({
           button:
             "h-20 w-20 rounded-xl border border-dashed border-white/30 text-white/80 hover:bg-white/10",
           wrapper: "inline-flex flex-col gap-2",
+        };
+      case "tile":
+        return {
+          label: "text-xs text-white/80",
+          box: "relative h-40 w-full rounded-xl overflow-hidden border border-white/10",
+          img: "object-cover rounded-xl",
+          button:
+            "flex h-40 w-full items-center justify-center rounded-xl border border-dashed border-white/30 text-white/80 hover:bg-white/10",
+          wrapper: "space-y-2",
         };
       case "big":
         return {
@@ -166,14 +244,28 @@ export default function ImageUpload({
           className={clsx(variant.box, "cursor-pointer")}
           onClick={handleSelect}
         >
-          <Image
-            key={preview} // ✅ force remount when URL changes
-            src={preview}
-            alt="preview"
-            fill
-            sizes="100%"
-            className={variant.img}
-          />
+          {isVideo ? (
+            <video
+              key={preview}
+              src={preview}
+              className={clsx(variant.img, "h-full w-full")}
+              controls={videoControls}
+              muted={!videoControls}
+              loop={!videoControls}
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            <Image
+              key={preview} // ✅ force remount when URL changes
+              src={preview}
+              alt="preview"
+              fill
+              sizes="100%"
+              className={variant.img}
+            />
+          )}
+
           {loading && (
             <div className="absolute inset-0 grid place-items-center bg-black/40">
               <svg
@@ -205,7 +297,7 @@ export default function ImageUpload({
           onClick={handleSelect}
           disabled={loading}
           className={clsx(variant.button, loading && "opacity-60")}
-          aria-label="Upload image"
+          aria-label="Upload"
         >
           {loading ? "Uploading…" : "Click to upload"}
         </button>
@@ -214,7 +306,7 @@ export default function ImageUpload({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept={accept}
         className="hidden"
         onChange={handleFile}
       />

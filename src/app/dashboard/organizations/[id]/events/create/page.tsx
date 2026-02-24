@@ -1,7 +1,7 @@
 // src/app/dashboard/organizations/[id]/events/create/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Image from "next/image";
 import {
   useForm,
@@ -23,6 +23,7 @@ import {
   Sparkles,
   Info,
   FileText,
+  Film,
 } from "lucide-react";
 
 import ImageUpload from "@/components/ui/ImageUpload";
@@ -56,12 +57,21 @@ type OrgInfo = {
 
 type LocationMode = "specific" | "city" | "tbd" | "tba" | "secret" | "other";
 
+type EventMediaType = "image" | "video";
+
 /* ----------------------------- Schema ----------------------------- */
 
 const timeHHMMOrEmpty = z.union([
   z.literal(""),
   z.string().regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "Use HH:MM (e.g. 18:10)"),
 ]);
+
+const mediaItemSchema = z.object({
+  url: z.string().url(),
+  type: z.enum(["image", "video"]),
+  caption: z.string().max(120).optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+});
 
 const FormSchema = z
   .object({
@@ -89,6 +99,9 @@ const FormSchema = z
     /** Meta */
     minAge: z.coerce.number().int().min(0).max(99).optional(),
     image: z.string().url().optional(),
+
+    /** ✅ NEW: Event media (gallery) */
+    media: z.array(mediaItemSchema).max(30).default([]),
 
     /** Location (new UI fields) */
     locationMode: z
@@ -126,7 +139,6 @@ const FormSchema = z
     status: z.enum(["published", "draft"]).default("draft"),
   })
   .superRefine((v, ctx) => {
-    // ✅ Require times (but still allow empty initial UI state)
     if (!v.startTime) {
       ctx.addIssue({
         code: "custom",
@@ -142,7 +154,6 @@ const FormSchema = z
       });
     }
 
-    // Location validation
     const cityNeeded = v.locationMode === "city";
     const addressNeeded = v.locationMode === "specific";
     const otherNeeded = v.locationMode === "other";
@@ -216,7 +227,6 @@ function fmtDateRangeShort(a: Date, b: Date) {
   const b0 = clampToDay(b);
   const same = a0.getTime() === b0.getTime();
   if (same) return fmtDateShort(a0);
-
   return `${fmtDateShort(a0)} – ${fmtDateShort(b0)}`;
 }
 
@@ -234,9 +244,7 @@ function fmtDateTimeLabel(startISO: string, endISO?: string) {
   const a = new Date(startISO);
   if (Number.isNaN(a.getTime())) return "";
 
-  if (!endISO) {
-    return `${fmtDateShort(a)} • ${fmtTimeFromISO(startISO)}`;
-  }
+  if (!endISO) return `${fmtDateShort(a)} • ${fmtTimeFromISO(startISO)}`;
 
   const b = new Date(endISO);
   if (Number.isNaN(b.getTime())) {
@@ -322,12 +330,9 @@ function buildLocationString(v: FormValues) {
       const name = (v.locationName || "").trim();
       const addr = (v.locationAddress || "").trim();
       const city = (v.locationCity || "").trim();
-
       const parts = [name, addr].filter(Boolean);
       let out = parts.join(" · ");
-
       if (!out) out = city;
-
       return out;
     }
     default:
@@ -360,12 +365,9 @@ function buildLocationDisplayString(
       const name = (v.locationName || "").trim();
       const addr = (v.locationAddress || "").trim();
       const city = (v.locationCity || "").trim();
-
       const parts = [name, addr].filter(Boolean);
       let out = parts.join(" · ");
-
       if (!out) out = city;
-
       return out;
     }
     default:
@@ -460,12 +462,86 @@ export default function NewEventPage() {
   const minSelectableDate = useMemo(() => clampToDay(new Date()), []);
 
   const posterUploadRef = useRef<HTMLDivElement | null>(null);
-  const openPosterPicker = () => {
+  const [posterDragActive, setPosterDragActive] = useState(false);
+
+  const getPosterFileInput = useCallback((): HTMLInputElement | null => {
     const root = posterUploadRef.current;
-    if (!root) return;
-    const input = root.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement | null;
+    if (!root) return null;
+    return root.querySelector('input[type="file"]') as HTMLInputElement | null;
+  }, []);
+
+  const pushFileToPosterInput = useCallback(
+    (file: File) => {
+      const input = getPosterFileInput();
+      if (!input) return;
+
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    [getPosterFileInput],
+  );
+
+  const handlePosterDropFiles = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      const file = files[0];
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      if (!isImage && !isVideo) {
+        alert("Please drop an image or a video file (JPG/PNG/MP4).");
+        return;
+      }
+
+      const maxBytes = 50 * 1024 * 1024; // 50MB
+      if (file.size > maxBytes) {
+        alert("File is too large. Max size is 50MB.");
+        return;
+      }
+
+      pushFileToPosterInput(file);
+    },
+    [pushFileToPosterInput],
+  );
+
+  const onPosterDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPosterDragActive(true);
+  }, []);
+
+  const onPosterDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    setPosterDragActive(true);
+  }, []);
+
+  const onPosterDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.contains(next)) return;
+
+    setPosterDragActive(false);
+  }, []);
+
+  const onPosterDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setPosterDragActive(false);
+      handlePosterDropFiles(e.dataTransfer?.files ?? null);
+    },
+    [handlePosterDropFiles],
+  );
+
+  const openPosterPicker = () => {
+    const input = getPosterFileInput();
     input?.click();
   };
 
@@ -488,7 +564,7 @@ export default function NewEventPage() {
       categories: [],
       promoters: [],
       artists: [],
-      // ✅ default to "draft" (Unpublished)
+      media: [],
       status: "draft",
       locationMode: "specific",
       locationCity: "",
@@ -559,6 +635,14 @@ export default function NewEventPage() {
     append: addArtist,
     remove: removeArtist,
   } = useFieldArray<FormInput, "artists">({ control, name: "artists" });
+
+  /* ---------- Field arrays (media) -------------------------------- */
+  const {
+    fields: mediaFields,
+    append: addMedia,
+    remove: removeMedia,
+    move: moveMedia,
+  } = useFieldArray<FormInput, "media">({ control, name: "media" });
 
   /* ---------- Derived ISO start/end ------------------------------- */
   const dateRange = (watch("dateRange") ?? {
@@ -644,14 +728,24 @@ export default function NewEventPage() {
 
       const location = buildLocationString(data);
 
+      const cleanedMedia = (data.media ?? [])
+        .filter(
+          (m) => m && typeof m.url === "string" && m.url.trim().length > 0,
+        )
+        .map((m, i) => ({
+          url: m.url,
+          type: m.type,
+          caption: m.caption?.trim() || undefined,
+          sortOrder: i,
+        }));
+
       const payload = {
         ...data,
         status,
         date: sISO,
         endDate: eISO,
-
-        // keep API/model unchanged
         location,
+        media: cleanedMedia,
       };
 
       const res = await fetch("/api/events", {
@@ -721,17 +815,88 @@ export default function NewEventPage() {
   return (
     <main className="relative bg-neutral-950 text-neutral-0 ">
       <style jsx global>{`
-        .poster-uploader > * {
+        /* ✅ DO NOT TOUCH ImageUpload internal layout.
+           The old rule ".poster-uploader > * { position:absolute; inset:0 }"
+           was forcing ImageUpload's wrapper + label/button into absolute positioning,
+           which caused the ugly sizing during drag.
+           We only position OUR OWN overlay + a single "fill" wrapper now.
+        */
+        .tikd-dropFill {
           position: absolute;
           inset: 0;
           width: 100%;
           height: 100%;
         }
-        .poster-uploader img,
-        .poster-uploader video {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
+
+        /* Nice drop overlay: doesn't affect layout */
+        .tikd-dropOverlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0;
+          transition:
+            opacity 140ms ease,
+            transform 140ms ease;
+          transform: scale(0.996);
+          border-radius: inherit;
+        }
+
+        .tikd-dropOverlay[data-active="true"] {
+          opacity: 1;
+          transform: scale(1);
+        }
+
+        .tikd-dropOverlay__backdrop {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background:
+            radial-gradient(
+              560px 260px at 30% 20%,
+              rgba(154, 70, 255, 0.22),
+              transparent 62%
+            ),
+            rgba(5, 5, 10, 0.34);
+          backdrop-filter: blur(12px);
+          box-shadow:
+            0 18px 60px rgba(154, 70, 255, 0.14),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+
+        .tikd-dropOverlay__frame {
+          position: absolute;
+          inset: 10px;
+          border-radius: calc(inherit - 10px);
+          border: 1px dashed rgba(231, 222, 255, 0.42);
+          box-shadow: inset 0 0 0 1px rgba(154, 70, 255, 0.18);
+        }
+
+        .tikd-dropOverlay__content {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+        }
+
+        .tikd-dropOverlay__pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 14px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(0, 0, 0, 0.28);
+          box-shadow:
+            0 10px 32px rgba(0, 0, 0, 0.35),
+            0 0 0 1px rgba(154, 70, 255, 0.16);
+          color: rgba(255, 255, 255, 0.92);
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.2px;
+        }
+
+        .tikd-dropOverlay__pill svg {
+          filter: drop-shadow(0 10px 18px rgba(154, 70, 255, 0.28));
         }
       `}</style>
 
@@ -753,7 +918,6 @@ export default function NewEventPage() {
         </div>
       </div>
 
-      {/* ✅ IMPORTANT: default submit creates a DRAFT (Unpublished) */}
       <form
         onSubmit={handleSubmit(submitImpl("draft"))}
         className="grid grid-cols-1 gap-6 pt-6 pb-14 md:grid-cols-12 max-w-7xl mx-auto"
@@ -763,7 +927,6 @@ export default function NewEventPage() {
 
         {/* ------------------------- Main form ----------------------- */}
         <div className="md:col-span-7 lg:col-span-8 space-y-6">
-          {/* Required fields note */}
           <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-3">
             <div className="flex items-center gap-3">
               <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
@@ -793,7 +956,6 @@ export default function NewEventPage() {
             icon={<Sparkles className="h-5 w-5 text-primary-300" />}
           >
             <div className="space-y-7">
-              {/* Event Name (required) */}
               <div className="space-y-2">
                 <FieldLabel required>Event Name</FieldLabel>
                 <LabelledInput
@@ -813,7 +975,6 @@ export default function NewEventPage() {
               </div>
 
               <div className="space-y-2">
-                {/* Date Range + Start/End Time */}
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <FieldLabel required>Date</FieldLabel>
@@ -877,7 +1038,6 @@ export default function NewEventPage() {
                   </div>
                 </div>
 
-                {/* Microcopy summary */}
                 <p className="text-sm text-neutral-300">
                   This event will run on{" "}
                   <span className="font-medium">
@@ -899,7 +1059,6 @@ export default function NewEventPage() {
                 </p>
               </div>
 
-              {/* Categories */}
               <div className="space-y-2">
                 <FieldLabel>Choose Categories</FieldLabel>
                 <div className="flex flex-wrap gap-3">
@@ -944,7 +1103,6 @@ export default function NewEventPage() {
                   Where does the event take place?
                 </FieldLabel>
 
-                {/* pills */}
                 <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
                   {locationTabs.map((t) => {
                     const active = locationMode === t.key;
@@ -957,7 +1115,6 @@ export default function NewEventPage() {
                             shouldDirty: true,
                           });
 
-                          // reset fields when changing modes (keeps UX clean)
                           if (
                             t.key === "tbd" ||
                             t.key === "tba" ||
@@ -1010,7 +1167,6 @@ export default function NewEventPage() {
                   })}
                 </div>
 
-                {/* Fields area */}
                 <div className="space-y-4 rounded-lg border border-white/10 bg-neutral-950/60 p-4">
                   {showCity ? (
                     <div className="space-y-2">
@@ -1121,7 +1277,6 @@ export default function NewEventPage() {
                   ) : null}
                 </div>
 
-                {/* small helper preview */}
                 <p className="text-sm text-neutral-300">
                   Preview:{" "}
                   <span className="font-medium text-neutral-0">
@@ -1141,7 +1296,6 @@ export default function NewEventPage() {
               <div className="space-y-2">
                 <FieldLabel>Organization</FieldLabel>
 
-                {/* Selected organization card */}
                 <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
@@ -1231,6 +1385,7 @@ export default function NewEventPage() {
                                   onChange={field.onChange}
                                   publicId={`temp/artists/${uuid()}`}
                                   sizing="small"
+                                  accept="image/*"
                                 />
                               )}
                             />
@@ -1287,23 +1442,58 @@ export default function NewEventPage() {
             <div className="mt-3 flex justify-center pb-6">
               <div
                 ref={posterUploadRef}
-                className="poster-uploader flex relative w-full max-w-[224px] max-h-[309px] rounded-2xl aspect-[4/6]"
+                className={clsx(
+                  "relative w-full max-w-[224px] max-h-[309px] rounded-2xl aspect-[4/6]",
+                  posterDragActive &&
+                    "ring-2 ring-primary-500/70 shadow-[0_0_0_1px_rgba(154,70,255,0.18),0_22px_70px_rgba(154,70,255,0.14)]",
+                )}
+                onDragEnter={onPosterDragEnter}
+                onDragOver={onPosterDragOver}
+                onDragLeave={onPosterDragLeave}
+                onDrop={onPosterDrop}
               >
-                <Controller
-                  control={control}
-                  name="image"
-                  render={({ field }) => (
-                    <ImageUpload
-                      label="Add Event Poster"
-                      value={field.value}
-                      onChange={field.onChange}
-                      publicId={`temp/events/${uuid()}`}
-                      sizing="full"
-                    />
-                  )}
-                />
+                {/* ✅ Pretty overlay (no layout impact) */}
+                <div
+                  className="tikd-dropOverlay"
+                  data-active={posterDragActive ? "true" : "false"}
+                  aria-hidden
+                >
+                  <div className="tikd-dropOverlay__backdrop" />
+                  <div className="tikd-dropOverlay__frame" />
+                  <div className="tikd-dropOverlay__content">
+                    <span className="tikd-dropOverlay__pill">
+                      <ImagePlus className="h-4 w-4 text-primary-300" />
+                      Drop to upload poster
+                    </span>
+                  </div>
+                </div>
+
+                {/* ✅ Keep ImageUpload default design intact */}
+                <div className="tikd-dropFill">
+                  <Controller
+                    control={control}
+                    name="image"
+                    render={({ field }) => (
+                      <ImageUpload
+                        label="Add Event Poster"
+                        value={field.value}
+                        onChange={field.onChange}
+                        publicId={`temp/events/${uuid()}`}
+                        sizing="full"
+                        accept="image/*,video/*"
+                        maxSizeMB={50}
+                      />
+                    )}
+                  />
+                </div>
               </div>
             </div>
+
+            <p className="mt-4 text-xs text-neutral-400 text-center">
+              You can{" "}
+              <span className="text-neutral-200 font-medium">drag & drop</span>{" "}
+              a file onto the poster area (or the Live Preview) to upload.
+            </p>
           </Section>
 
           <Section
@@ -1322,6 +1512,139 @@ export default function NewEventPage() {
               <p className="text-xs text-neutral-400">
                 Tip: Keep it scannable — short paragraphs and key info first.
               </p>
+            </div>
+          </Section>
+
+          <Section
+            title="Event Media"
+            desc="Upload additional photos/videos for your event page gallery. JPG/PNG/MP4 up to 50MB each."
+            icon={<Film className="h-5 w-5 text-primary-300" />}
+          >
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-neutral-300">
+                  {mediaFields.length === 0
+                    ? "Optional — add a gallery to make your event page richer."
+                    : `${mediaFields.length} item(s) added`}
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    addMedia({
+                      url: "",
+                      type: "image" as EventMediaType,
+                      caption: "",
+                      sortOrder: mediaFields.length,
+                    })
+                  }
+                  disabled={mediaFields.length >= 30}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add media
+                </Button>
+              </div>
+
+              {mediaFields.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {mediaFields.map((field, idx) => {
+                    const urlName = `media.${idx}.url` as const;
+                    const typeName = `media.${idx}.type` as const;
+
+                    return (
+                      <div
+                        key={field.id}
+                        className="rounded-xl border border-white/10 bg-neutral-950/60 p-4"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold">
+                            Media #{idx + 1}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Move up"
+                              disabled={idx === 0}
+                              onClick={() => moveMedia(idx, idx - 1)}
+                              title="Move up"
+                            >
+                              ↑
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Move down"
+                              disabled={idx === mediaFields.length - 1}
+                              onClick={() => moveMedia(idx, idx + 1)}
+                              title="Move down"
+                            >
+                              ↓
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Remove media"
+                              onClick={() => removeMedia(idx)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <input type="hidden" {...register(typeName)} />
+
+                        <div className="mt-3">
+                          <Controller
+                            control={control}
+                            name={urlName}
+                            render={({ field }) => (
+                              <ImageUpload
+                                value={field.value}
+                                onChange={field.onChange}
+                                onUploaded={(info) => {
+                                  const nextType: EventMediaType =
+                                    info.resourceType === "video"
+                                      ? "video"
+                                      : "image";
+                                  setValue(typeName, nextType, {
+                                    shouldDirty: true,
+                                  });
+                                }}
+                                publicId={`temp/events/media/${uuid()}`}
+                                sizing="tile"
+                                accept="image/*,video/*"
+                                maxSizeMB={50}
+                                videoControls
+                              />
+                            )}
+                          />
+                        </div>
+
+                        <div className="mt-3 space-y-2">
+                          <FieldLabel>Caption (optional)</FieldLabel>
+                          <LabelledInput
+                            noLabel
+                            placeholder="Short caption (shows under the media)"
+                            {...register(`media.${idx}.caption` as const)}
+                            size="md"
+                            variant="transparent"
+                          />
+                          <p className="text-xs text-neutral-400">
+                            Helps accessibility and context (optional).
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           </Section>
 
@@ -1350,12 +1673,22 @@ export default function NewEventPage() {
         {/* ------------------------- Sidebar -------------------------- */}
         <aside className="md:col-span-5 lg:col-span-4">
           <div className="md:sticky md:top-20 space-y-6">
-            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+            <div
+              className={clsx(
+                "rounded-lg border border-white/10 bg-neutral-950/70 p-5",
+                posterDragActive &&
+                  "ring-1 ring-primary-500/50 shadow-[0_0_0_1px_rgba(154,70,255,0.14),0_22px_70px_rgba(154,70,255,0.10)]",
+              )}
+              onDragEnter={onPosterDragEnter}
+              onDragOver={onPosterDragOver}
+              onDragLeave={onPosterDragLeave}
+              onDrop={onPosterDrop}
+            >
               <h3 className="mb-3 text-sm font-semibold">Live Preview</h3>
-              <div className="relative group">
+
+              <div className="relative group rounded-[14px] overflow-hidden">
                 <EventCard {...preview} clickable={false} />
 
-                {/* Click poster (preview) to change it */}
                 <button
                   type="button"
                   onClick={openPosterPicker}
@@ -1364,21 +1697,36 @@ export default function NewEventPage() {
                     "absolute inset-0 rounded-[14px]",
                     "cursor-pointer",
                     "ring-1 ring-transparent",
-                    "",
                     "outline-none",
                   ].join(" ")}
                 >
                   <span className="sr-only">Change event poster</span>
                 </button>
 
-                {/* tiny hint chip (subtle, only on hover) */}
+                {/* ✅ Same pretty overlay for this drop-zone */}
+                <div
+                  className="tikd-dropOverlay"
+                  data-active={posterDragActive ? "true" : "false"}
+                  aria-hidden
+                >
+                  <div className="tikd-dropOverlay__backdrop" />
+                  <div className="tikd-dropOverlay__frame" />
+                  <div className="tikd-dropOverlay__content">
+                    <span className="tikd-dropOverlay__pill">
+                      <ImagePlus className="h-4 w-4 text-primary-300" />
+                      Drop to update poster
+                    </span>
+                  </div>
+                </div>
+
                 <div className="pointer-events-none absolute left-3 top-3 opacity-0 translate-y-[-2px] transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0">
                   <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-200">
                     <ImagePlus className="h-4 w-4 text-primary-300" />
-                    Click poster to change
+                    Click or drop to change
                   </div>
                 </div>
               </div>
+
               <div className="mt-3 flex items-center justify-end gap-2 text-xs text-neutral-300">
                 <MapPin className="h-4 w-4" />
                 {preview.venue}

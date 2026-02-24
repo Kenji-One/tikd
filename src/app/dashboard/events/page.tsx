@@ -873,12 +873,12 @@ function OrgPickerModal({
           "relative z-10 w-[92vw] max-w-[480px]",
           "rounded-2xl border border-white/12",
           "bg-neutral-950/95 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
-          " max-h-[680px]",
+          "h-[min(578px,80vh)]",
           "p-5 sm:p-6",
         )}
         onClick={handlePanelClick}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full min-h-0 flex-col">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-neutral-0">
@@ -900,6 +900,7 @@ function OrgPickerModal({
               <X className="h-4 w-4" />
             </button>
           </div>
+
           <div className="mt-4">
             <Input
               value={query}
@@ -917,15 +918,18 @@ function OrgPickerModal({
               )}
             />
           </div>
-          <div className="mt-4 flex-1 overflow-hidden">
+
+          <div className="mt-4 flex-1 min-h-0">
             {loading ? (
-              <div className="h-full space-y-3 overflow-y-auto pr-1">
-                {[...Array(6)].map((_, i) => (
-                  <Skeleton key={i} className="h-[74px] rounded-2xl" />
-                ))}
+              <div className="h-full tikd-scrollbar overflow-y-auto pr-2">
+                <div className="space-y-3">
+                  {[...Array(6)].map((_, i) => (
+                    <Skeleton key={i} className="h-[74px] rounded-2xl" />
+                  ))}
+                </div>
               </div>
             ) : orgs.length > 0 ? (
-              <div className="h-full space-y-3 overflow-y-auto pr-1">
+              <>
                 {filteredOrgs.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-white/12 bg-neutral-948/90 px-4 py-4 text-sm text-neutral-200">
                     <p className="font-medium text-neutral-0">
@@ -936,71 +940,79 @@ function OrgPickerModal({
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {filteredOrgs.map((org) => {
-                      const selected = org._id === selectedOrgId;
+                  <div className="tikd-scrollbar max-h-[312px] overflow-y-auto pr-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      {filteredOrgs.map((org) => {
+                        const selected = org._id === selectedOrgId;
 
-                      return (
-                        <div
-                          key={org._id}
-                          className={clsx(
-                            "group relative flex flex-col w-full cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-                            "bg-neutral-948/90 border-white/10 hover:border-primary-500/70 hover:bg-neutral-900/90",
-                            selected &&
-                              "border-primary-500 bg-neutral-948/95 ring-1 ring-inset ring-primary-500/80",
-                          )}
-                          onClick={(e) => handleCardClick(e, org._id)}
-                        >
+                        return (
                           <div
+                            key={org._id}
                             className={clsx(
-                              "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md",
-                              "bg-neutral-900 ring-1 ring-inset ring-white/10",
-                              selected && "ring-primary-500/80",
+                              "group relative w-full cursor-pointer rounded-xl border px-4 py-3 text-left transition-all",
+                              "bg-neutral-948/90 border-white/10 hover:border-primary-500/70 hover:bg-neutral-900/90",
+                              selected &&
+                                "border-primary-500 bg-neutral-948/95 ring-1 ring-inset ring-primary-500/80",
                             )}
+                            onClick={(e) => handleCardClick(e, org._id)}
                           >
-                            {org.logo ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={org.logo}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-sm font-semibold text-neutral-0">
-                                {org.name?.[0]?.toUpperCase() ?? "O"}
-                              </span>
-                            )}
-                          </div>
+                            {/* ✅ FIX: stable vertical layout with reserved bottom slot */}
+                            <div className="flex h-full flex-col items-center justify-between">
+                              <div className="flex w-full flex-col items-center gap-3 pt-1">
+                                <div
+                                  className={clsx(
+                                    "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md",
+                                    "bg-neutral-900 ring-1 ring-inset ring-white/10",
+                                    selected && "ring-primary-500/80",
+                                  )}
+                                >
+                                  {org.logo ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={org.logo}
+                                      alt=""
+                                      className="h-full w-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-sm font-semibold text-neutral-0">
+                                      {org.name?.[0]?.toUpperCase() ?? "O"}
+                                    </span>
+                                  )}
+                                </div>
 
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[13px] font-semibold text-neutral-0">
-                              {org.name}
-                            </p>
-                            {org.website && (
-                              <p className="mt-0.5 truncate text-[11px] text-neutral-400">
-                                {domainFromUrl(org.website)}
-                              </p>
-                            )}
-                          </div>
+                                <div className="min-w-0 text-center">
+                                  <p className="truncate text-[13px] font-semibold text-neutral-0">
+                                    {org.name}
+                                  </p>
+                                  {org.website && (
+                                    <p className="mt-0.5 truncate text-[11px] text-neutral-400">
+                                      {domainFromUrl(org.website)}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
 
-                          <div className="ml-2 shrink-0">
-                            {selected ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90 px-2.5 py-1 text-[11px] font-medium text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Selected
-                              </span>
-                            ) : (
-                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-white/5 text-[10px] text-neutral-300 group-hover:border-primary-400/80 group-hover:text-primary-200">
-                                <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 group-hover:bg-primary-300" />
-                              </span>
-                            )}
+                              {/* ✅ reserved slot (always present) */}
+                              <div className="pb-1 mt-3 h-6">
+                                {selected ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90 px-2.5 py-1 text-[11px] font-medium text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Selected
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-white/5 text-[10px] text-neutral-300 group-hover:border-primary-400/80 group-hover:text-primary-200">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-neutral-400 group-hover:bg-primary-300" />
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
-              </div>
+              </>
             ) : (
               <div className="rounded-xl border border-dashed border-white/12 bg-neutral-948/90 px-4 py-4 text-sm text-neutral-200">
                 <p className="font-medium text-neutral-0">
@@ -1041,7 +1053,6 @@ function OrgPickerModal({
     </div>
   );
 }
-
 /* -------------------- Shared sort fields --------------------------- */
 const SORT_FIELDS: { key: SortField; label: string }[] = [
   { key: "title", label: "Title" },

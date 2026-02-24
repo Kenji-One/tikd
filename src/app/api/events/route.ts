@@ -1,3 +1,4 @@
+// src/app/api/events/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
@@ -14,6 +15,34 @@ import { createNotification } from "@/lib/notifications";
 
 /* ------------------------- Helpers ------------------------- */
 const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
+
+function escapeRegex(input: string) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * For preset-like city inputs, match common variants in stored addresses.
+ * This prevents "New York City" filter from missing "NYC" / "New York, NY" / etc.
+ */
+function locationToRegex(input: string): RegExp {
+  const v = input.trim().toLowerCase();
+
+  if (v === "new york city" || v === "nyc" || v === "new york") {
+    return /(new\s*york(\s*city)?|nyc|new\s*york,\s*ny|manhattan)/i;
+  }
+
+  if (v === "los angeles, ca" || v === "los angeles" || v === "la") {
+    return /(los\s*angeles|los\s*angeles,\s*ca|\bla\b|\bla,\s*ca\b)/i;
+  }
+
+  // Brooklyn is usually present as-is in addresses
+  if (v === "brooklyn, ny" || v === "brooklyn") {
+    return /(brooklyn)/i;
+  }
+
+  // Generic: escape for safe substring match
+  return new RegExp(escapeRegex(input), "i");
+}
 
 type SessionLike = {
   user?: {
@@ -149,6 +178,13 @@ const artistInputSchema = z.object({
   image: z.string().url().optional(),
 });
 
+const mediaItemSchema = z.object({
+  url: z.string().url(),
+  type: z.enum(["image", "video"]),
+  caption: z.string().max(120).optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+});
+
 const bodySchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
@@ -165,6 +201,10 @@ const bodySchema = z.object({
 
   location: z.string().min(1),
   image: z.string().url().optional(),
+
+  // ✅ NEW
+  media: z.array(mediaItemSchema).max(30).default([]),
+
   organizationId: z.string().length(24),
 
   categories: z.array(z.string()).default([]),
@@ -178,13 +218,54 @@ const bodySchema = z.object({
   status: z.enum(["published", "draft"]).default("draft"),
 });
 
+/* ------------------------- Cursor paging (PUBLIC) ------------------------- */
+const publicPagingSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(60).default(30),
+  cursor: z.string().optional(),
+
+  sort: z.enum(["newest"]).optional(),
+  when: z.enum(["today", "week", "month", "now"]).optional(),
+  location: z.string().trim().min(1).max(120).optional(),
+});
+
+function decodeCursor(cursor: string): { d: string; id: string } | null {
+  try {
+    const raw = Buffer.from(cursor, "base64").toString("utf8");
+    const obj = JSON.parse(raw) as { d?: unknown; id?: unknown };
+    if (typeof obj?.d !== "string" || typeof obj?.id !== "string") return null;
+    if (!isObjectId(obj.id)) return null;
+    return { d: obj.d, id: obj.id };
+  } catch {
+    return null;
+  }
+}
+
+function encodeCursor(d: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify({ d: d.toISOString(), id }),
+    "utf8",
+  ).toString("base64");
+}
+
+function utcStartOfDay(d: Date) {
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+}
+
+function addDays(d: Date, days: number) {
+  return new Date(d.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function addHours(d: Date, hours: number) {
+  return new Date(d.getTime() + hours * 60 * 60 * 1000);
+}
+
 /* --------------------------- GET --------------------------- */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const owned = searchParams.get("owned");
 
-  // ✅ Public events feed (published & upcoming/ongoing) does NOT require auth
-  // ✅ Owned feed still requires auth
   const session = (await auth()) as SessionLike;
 
   if (owned === "1") {
@@ -264,11 +345,40 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(hydrated);
   }
 
-  // Default: published & upcoming/ongoing (PUBLIC)
   const now = new Date();
 
-  const filter = {
+  const wantsPaging =
+    searchParams.has("limit") ||
+    searchParams.has("cursor") ||
+    searchParams.has("page") ||
+    searchParams.has("sort") ||
+    searchParams.has("when") ||
+    searchParams.has("location");
+
+  const parsed = publicPagingSchema.safeParse({
+    limit: searchParams.get("limit") ?? undefined,
+    cursor: searchParams.get("cursor") ?? undefined,
+    sort: searchParams.get("sort") ?? undefined,
+    when: searchParams.get("when") ?? undefined,
+    location: searchParams.get("location") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return NextResponse.json(parsed.error.flatten(), { status: 400 });
+  }
+
+  const { limit, cursor, sort, when, location } = parsed.data;
+
+  const sortNewest = sort === "newest";
+  const sortSpec = sortNewest
+    ? { date: -1 as const, _id: -1 as const }
+    : { date: 1 as const, _id: 1 as const };
+
+  const baseFilter: Record<string, unknown> = {
     status: "published",
+  };
+
+  let timeFilter: Record<string, unknown> = {
     $or: [
       { endDate: { $gte: now } },
       { endDate: { $exists: false }, date: { $gte: now } },
@@ -276,10 +386,77 @@ export async function GET(req: NextRequest) {
     ],
   };
 
-  const events = await Event.find(filter).lean<unknown[]>();
+  if (when) {
+    if (when === "now") {
+      const soon = addHours(now, 2);
+      timeFilter = {
+        $or: [
+          { $and: [{ date: { $lte: now } }, { endDate: { $gte: now } }] },
+          { $and: [{ date: { $gte: now } }, { date: { $lte: soon } }] },
+        ],
+      };
+    } else if (when === "today") {
+      const start = utcStartOfDay(now);
+      const end = addDays(start, 1);
+      timeFilter = {
+        $or: [
+          { $and: [{ date: { $gte: start } }, { date: { $lt: end } }] },
+          { $and: [{ date: { $lt: end } }, { endDate: { $gte: start } }] },
+        ],
+      };
+    } else if (when === "week") {
+      const end = addDays(now, 7);
+      timeFilter = {
+        $or: [
+          { $and: [{ date: { $gte: now } }, { date: { $lte: end } }] },
+          { $and: [{ date: { $lte: end } }, { endDate: { $gte: now } }] },
+        ],
+      };
+    } else if (when === "month") {
+      const end = addDays(now, 30);
+      timeFilter = {
+        $or: [
+          { $and: [{ date: { $gte: now } }, { date: { $lte: end } }] },
+          { $and: [{ date: { $lte: end } }, { endDate: { $gte: now } }] },
+        ],
+      };
+    }
+  }
+
+  const locFilter: Record<string, unknown> | null = location
+    ? { location: { $regex: locationToRegex(location) } }
+    : null;
+
+  let filter: Record<string, unknown> = {
+    $and: [baseFilter, timeFilter, ...(locFilter ? [locFilter] : [])],
+  };
+
+  const decoded = cursor ? decodeCursor(cursor) : null;
+
+  if (decoded) {
+    const d = new Date(decoded.d);
+    const id = new Types.ObjectId(decoded.id);
+
+    const cursorClause = sortNewest
+      ? { $or: [{ date: { $lt: d } }, { date: d, _id: { $lt: id } }] }
+      : { $or: [{ date: { $gt: d } }, { date: d, _id: { $gt: id } }] };
+
+    filter = { $and: [filter, cursorClause] };
+  }
+
+  // Paged mode
+  const docs = await Event.find(filter)
+    .sort(sortSpec)
+    .limit(limit + 1)
+    .lean<unknown[]>();
+
+  const hasMore = docs.length > limit;
+  const pageItems = (hasMore ? docs.slice(0, limit) : docs) as unknown[];
 
   const orgIds = Array.from(
-    new Set(events.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean)),
+    new Set(
+      pageItems.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean),
+    ),
   );
 
   let orgById = new Map<string, OrgHydrated>();
@@ -309,7 +486,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const hydrated = events.map((e) => {
+  const hydrated = pageItems.map((e) => {
     if (hasOrganizationPayload(e)) return e;
 
     const orgId = getOrgIdFromEventLike(e);
@@ -321,11 +498,29 @@ export async function GET(req: NextRequest) {
     return e;
   });
 
-  return NextResponse.json(hydrated);
+  let nextCursor: string | null = null;
+
+  if (hasMore && hydrated.length) {
+    const last = hydrated[hydrated.length - 1] as Record<string, unknown>;
+    const lastDate = last?.date;
+    const lastId = last?._id;
+
+    const d =
+      typeof lastDate === "string"
+        ? new Date(lastDate)
+        : new Date(String(lastDate));
+    const id = typeof lastId === "string" ? lastId : String(lastId);
+
+    if (!Number.isNaN(d.getTime()) && isObjectId(id)) {
+      nextCursor = encodeCursor(d, id);
+    }
+  }
+
+  return NextResponse.json({ items: hydrated, nextCursor });
 }
 
 /* --------------------------- POST -------------------------- */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const session = (await auth()) as SessionLike;
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -396,6 +591,9 @@ export async function POST(req: Request) {
     minAge: parsed.data.minAge,
     location: parsed.data.location,
     image: parsed.data.image,
+
+    // ✅ NEW
+    media: parsed.data.media,
 
     categories: parsed.data.categories,
     coHosts: parsed.data.coHosts,

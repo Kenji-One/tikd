@@ -1,3 +1,4 @@
+// src/app/dashboard/events/[eventId]/edit/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +24,7 @@ import {
   Sparkles,
   Info,
   FileText,
+  Film,
 } from "lucide-react";
 
 import ImageUpload from "@/components/ui/ImageUpload";
@@ -57,11 +59,21 @@ type OrgInfo = {
 
 type LocationMode = "specific" | "city" | "tbd" | "tba" | "secret" | "other";
 
+type EventMediaType = "image" | "video";
+
+type EventMediaItem = {
+  url: string;
+  type: EventMediaType;
+  caption?: string;
+  sortOrder?: number;
+};
+
 type EventEditMeta = EventWithMeta & {
   endDate?: string | null;
   categories?: string[];
   promoters?: string[];
   message?: string;
+  media?: EventMediaItem[];
   artists?: Array<{
     _id?: string;
     stageName?: string;
@@ -83,6 +95,13 @@ const timeHHMMOrEmpty = z.union([
   z.literal(""),
   z.string().regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "Use HH:MM (e.g. 18:10)"),
 ]);
+
+const mediaItemSchema = z.object({
+  url: z.string().url(),
+  type: z.enum(["image", "video"]),
+  caption: z.string().max(120).optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+});
 
 const FormSchema = z
   .object({
@@ -110,6 +129,9 @@ const FormSchema = z
     /** Meta */
     minAge: z.coerce.number().int().min(0).max(99).optional(),
     image: z.string().url().optional(),
+
+    /** ✅ NEW: Event media (gallery) */
+    media: z.array(mediaItemSchema).max(30).default([]),
 
     /** Location (new UI fields) */
     locationMode: z
@@ -541,6 +563,7 @@ export default function EditEventPage() {
       categories: [],
       promoters: [],
       artists: [],
+      media: [],
       status: "published",
       locationMode: "specific",
       locationCity: "",
@@ -604,6 +627,19 @@ export default function EditEventPage() {
 
     const locGuess = guessLocationModeAndFields(event.location);
 
+    const normalizedMedia = (Array.isArray(event.media) ? event.media : [])
+      .filter((m) => m && typeof m.url === "string" && m.url.trim().length > 0)
+      .map((m, i) => ({
+        url: String(m.url),
+        type: (m.type === "video" ? "video" : "image") as EventMediaType,
+        caption: m.caption ? String(m.caption) : "",
+        sortOrder:
+          typeof m.sortOrder === "number" && Number.isFinite(m.sortOrder)
+            ? m.sortOrder
+            : i,
+      }))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
     reset({
       title: event.title ?? "",
       description: event.description ?? "",
@@ -614,6 +650,7 @@ export default function EditEventPage() {
       endDate: endISO || undefined,
       minAge: event.minAge ?? undefined,
       image: event.image ?? "",
+      media: normalizedMedia,
       categories: event.categories ?? [],
       promoters: event.promoters ?? [],
       message: event.message ?? "",
@@ -685,6 +722,14 @@ export default function EditEventPage() {
     append: addArtist,
     remove: removeArtist,
   } = useFieldArray<FormInput, "artists">({ control, name: "artists" });
+
+  /* ---------- Field arrays (media) -------------------------------- */
+  const {
+    fields: mediaFields,
+    append: addMedia,
+    remove: removeMedia,
+    move: moveMedia,
+  } = useFieldArray<FormInput, "media">({ control, name: "media" });
 
   /* ---------- Derived ISO start/end ------------------------------- */
   const dateRange = (watch("dateRange") ?? {
@@ -768,6 +813,17 @@ export default function EditEventPage() {
 
       const location = buildLocationString(data);
 
+      const cleanedMedia = (data.media ?? [])
+        .filter(
+          (m) => m && typeof m.url === "string" && m.url.trim().length > 0,
+        )
+        .map((m, i) => ({
+          url: m.url,
+          type: m.type,
+          caption: m.caption?.trim() || undefined,
+          sortOrder: i,
+        }));
+
       // Send the same shape as create page (but PATCH)
       const payload = {
         title: data.title,
@@ -777,6 +833,7 @@ export default function EditEventPage() {
         minAge: data.minAge,
         location,
         image: data.image,
+        media: cleanedMedia,
         categories: data.categories ?? [],
         promoters: data.promoters ?? [],
         message: data.message ?? "",
@@ -1385,6 +1442,7 @@ export default function EditEventPage() {
                                   onChange={field.onChange}
                                   publicId={`temp/artists/${uuid()}`}
                                   sizing="small"
+                                  accept="image/*"
                                 />
                               )}
                             />
@@ -1459,6 +1517,8 @@ export default function EditEventPage() {
                       onChange={field.onChange}
                       publicId={`temp/events/${uuid()}`}
                       sizing="full"
+                      accept="image/*,video/*"
+                      maxSizeMB={50}
                     />
                   )}
                 />
@@ -1482,6 +1542,140 @@ export default function EditEventPage() {
               <p className="text-xs text-neutral-400">
                 Tip: Keep it scannable — short paragraphs and key info first.
               </p>
+            </div>
+          </Section>
+
+          {/* ✅ NEW: Event Media (directly below Event Description) */}
+          <Section
+            title="Event Media"
+            desc="Upload additional photos/videos for your event page gallery. JPG/PNG/MP4 up to 50MB each."
+            icon={<Film className="h-5 w-5 text-primary-300" />}
+          >
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-sm text-neutral-300">
+                  {mediaFields.length === 0
+                    ? "Optional — add a gallery to make your event page richer."
+                    : `${mediaFields.length} item(s) added`}
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    addMedia({
+                      url: "",
+                      type: "image",
+                      caption: "",
+                      sortOrder: mediaFields.length,
+                    })
+                  }
+                  disabled={mediaFields.length >= 30}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add media
+                </Button>
+              </div>
+
+              {mediaFields.length > 0 ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {mediaFields.map((field, idx) => {
+                    const urlName = `media.${idx}.url` as const;
+                    const typeName = `media.${idx}.type` as const;
+
+                    return (
+                      <div
+                        key={field.id}
+                        className="rounded-xl border border-white/10 bg-neutral-950/60 p-4"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold">
+                            Media #{idx + 1}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Move up"
+                              disabled={idx === 0}
+                              onClick={() => moveMedia(idx, idx - 1)}
+                              title="Move up"
+                            >
+                              ↑
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Move down"
+                              disabled={idx === mediaFields.length - 1}
+                              onClick={() => moveMedia(idx, idx + 1)}
+                              title="Move down"
+                            >
+                              ↓
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Remove media"
+                              onClick={() => removeMedia(idx)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <input type="hidden" {...register(typeName)} />
+
+                        <div className="mt-3">
+                          <Controller
+                            control={control}
+                            name={urlName}
+                            render={({ field }) => (
+                              <ImageUpload
+                                value={field.value}
+                                onChange={field.onChange}
+                                onUploaded={(info) => {
+                                  const nextType: EventMediaType =
+                                    info.resourceType === "video"
+                                      ? "video"
+                                      : "image";
+                                  setValue(typeName, nextType, {
+                                    shouldDirty: true,
+                                  });
+                                }}
+                                publicId={`temp/events/media/${uuid()}`}
+                                sizing="tile"
+                                accept="image/*,video/*"
+                                maxSizeMB={50}
+                                videoControls
+                              />
+                            )}
+                          />
+                        </div>
+
+                        <div className="mt-3 space-y-2">
+                          <FieldLabel>Caption (optional)</FieldLabel>
+                          <LabelledInput
+                            noLabel
+                            placeholder="Short caption (shows under the media)"
+                            {...register(`media.${idx}.caption` as const)}
+                            size="md"
+                            variant="transparent"
+                          />
+                          <p className="text-xs text-neutral-400">
+                            Helps accessibility and context (optional).
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           </Section>
 

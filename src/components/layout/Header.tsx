@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
@@ -18,6 +18,20 @@ import {
 import clsx from "classnames";
 import RegisterLoginModal from "@/components/ui/RegisterLoginModal";
 import SearchModal from "@/components/search/SearchModal";
+import { useCart } from "@/store/useCart";
+
+/**
+ * Minimal typing for Zustand persist API so we avoid `any`.
+ * (Zustand's middleware types are intentionally complex; this is enough for our use.)
+ */
+type PersistApi = {
+  hasHydrated?: () => boolean;
+  onFinishHydration?: (cb: () => void) => (() => void) | void;
+};
+
+type PersistableStore = {
+  persist?: PersistApi;
+};
 
 export default function Header() {
   /* ----- routing helpers ------------------------------------------------ */
@@ -28,6 +42,7 @@ export default function Header() {
     pathname === "/" ||
     pathname.startsWith("/events/") ||
     pathname.startsWith("/organizations/") ||
+    pathname.startsWith("/org/") || // ✅ organization page route
     pathname === "/about" ||
     pathname === "/demo" ||
     pathname === "/help" ||
@@ -36,6 +51,50 @@ export default function Header() {
   /* ----- auth state ----------------------------------------------------- */
   const { data: session, status } = useSession();
   const loggedIn = status === "authenticated";
+
+  /* ----- cart badge ----------------------------------------------------- */
+  const cartCount = useCart((s) =>
+    s.items.reduce(
+      (sum, it) => sum + (Number.isFinite(it.qty) ? it.qty : 0),
+      0,
+    ),
+  );
+
+  const cartBadge = useMemo(() => {
+    if (cartCount <= 0) return "";
+    return cartCount > 99 ? "99+" : String(cartCount);
+  }, [cartCount]);
+
+  /* Optional: avoid any weird first-paint mismatch if persist is slow */
+  const [cartHydrated, setCartHydrated] = useState(false);
+
+  useEffect(() => {
+    const persistApi = (useCart as unknown as PersistableStore).persist;
+
+    if (!persistApi) {
+      setCartHydrated(true);
+      return;
+    }
+
+    // If already hydrated, flip immediately.
+    if (
+      typeof persistApi.hasHydrated === "function" &&
+      persistApi.hasHydrated()
+    ) {
+      setCartHydrated(true);
+      return;
+    }
+
+    // Wait until hydration completes.
+    if (typeof persistApi.onFinishHydration === "function") {
+      const unsub = persistApi.onFinishHydration(() => setCartHydrated(true));
+      return () => {
+        if (typeof unsub === "function") unsub();
+      };
+    }
+
+    setCartHydrated(true);
+  }, []);
 
   /* ----- ui state ------------------------------------------------------- */
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -115,7 +174,7 @@ export default function Header() {
     "fixed inset-x-0 top-0 z-[100] transition-colors duration-300",
     hasHero && !scrolled
       ? "bg-transparent border-transparent"
-      : "border-b border-white/10 bg-neutral-950/70 backdrop-blur-md supports-[backdrop-filter]:bg-neutral-950/60"
+      : "border-b border-white/10 bg-neutral-950/70 backdrop-blur-md supports-[backdrop-filter]:bg-neutral-950/60",
   );
 
   const showDemo = pathname === "/" || pathname.startsWith("/help");
@@ -129,8 +188,6 @@ export default function Header() {
           <div className="flex items-center gap-6 w-full max-w-[420px]">
             <Link href="/" className="flex items-center">
               <div className="relative w-[94px] h-[39px]">
-                {" "}
-                {/* ← adjust these values to whatever size you want */}
                 <Image
                   src="/Logo.svg"
                   alt="Tikd."
@@ -165,12 +222,12 @@ export default function Header() {
             <Link href="/events" className="hover:text-primary-500 transition">
               Events
             </Link>
-            {/* <Link href="#" className="hover:text-primary-500 transition">
+            <Link href="/about" className="hover:text-primary-500 transition">
               About us
-            </Link> */}
+            </Link>
 
             {/* right-hand buttons / avatar / logout (desktop) */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               {!loggedIn ? (
                 <>
                   <Button
@@ -185,10 +242,12 @@ export default function Header() {
                   >
                     Sign up
                   </Button>
+
                   {/* Cart icon – always visible */}
                   <Link
                     href="/checkout"
-                    className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
+                    aria-label="Cart"
+                    className="relative w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -196,6 +255,7 @@ export default function Header() {
                       height="14"
                       viewBox="0 0 14 14"
                       fill="none"
+                      aria-hidden="true"
                     >
                       <path
                         d="M13.2994 1.34215H0.000488281V2.74203H1.61035L4.07484 9.51956C4.17296 9.78961 4.3518 10.0229 4.58709 10.1878C4.82237 10.3527 5.10271 10.4413 5.39003 10.4414H11.1995V9.0415H5.39003L4.88047 7.64162H11.1995C11.4795 7.64162 11.7329 7.47503 11.8428 7.21745L13.9426 2.31787C13.9886 2.21143 14.0074 2.09522 13.9973 1.9797C13.9872 1.86419 13.9484 1.75302 13.8846 1.65621C13.8208 1.5594 13.7339 1.48 13.6317 1.42517C13.5295 1.37034 13.4153 1.34181 13.2994 1.34215Z"
@@ -210,6 +270,24 @@ export default function Header() {
                         fill="white"
                       />
                     </svg>
+
+                    {cartHydrated && cartCount > 0 && (
+                      <span
+                        className={clsx(
+                          "absolute -top-1 -right-1 z-50",
+                          "min-w-[18px] h-[18px] px-1",
+                          "rounded-full bg-primary-500 text-white",
+                          "text-[10px] font-extrabold leading-[18px] text-center",
+                          "ring-2 ring-[#08080F]",
+                        )}
+                        aria-label={`${cartCount} item${
+                          cartCount === 1 ? "" : "s"
+                        } in cart`}
+                        title={`${cartCount} item${cartCount === 1 ? "" : "s"}`}
+                      >
+                        {cartBadge}
+                      </span>
+                    )}
                   </Link>
                 </>
               ) : (
@@ -217,7 +295,8 @@ export default function Header() {
                   {/* Cart icon – always visible */}
                   <Link
                     href="/checkout"
-                    className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
+                    aria-label="Cart"
+                    className="relative w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -225,6 +304,7 @@ export default function Header() {
                       height="14"
                       viewBox="0 0 14 14"
                       fill="none"
+                      aria-hidden="true"
                     >
                       <path
                         d="M13.2994 1.34215H0.000488281V2.74203H1.61035L4.07484 9.51956C4.17296 9.78961 4.3518 10.0229 4.58709 10.1878C4.82237 10.3527 5.10271 10.4413 5.39003 10.4414H11.1995V9.0415H5.39003L4.88047 7.64162H11.1995C11.4795 7.64162 11.7329 7.47503 11.8428 7.21745L13.9426 2.31787C13.9886 2.21143 14.0074 2.09522 13.9973 1.9797C13.9872 1.86419 13.9484 1.75302 13.8846 1.65621C13.8208 1.5594 13.7339 1.48 13.6317 1.42517C13.5295 1.37034 13.4153 1.34181 13.2994 1.34215Z"
@@ -239,7 +319,26 @@ export default function Header() {
                         fill="white"
                       />
                     </svg>
+
+                    {cartHydrated && cartCount > 0 && (
+                      <span
+                        className={clsx(
+                          "absolute -top-1 -right-1 z-50",
+                          "min-w-[18px] h-[18px] px-1",
+                          "rounded-full bg-primary-500 text-white",
+                          "text-[10px] font-extrabold leading-[18px] text-center",
+                          "ring-2 ring-[#08080F]",
+                        )}
+                        aria-label={`${cartCount} item${
+                          cartCount === 1 ? "" : "s"
+                        } in cart`}
+                        title={`${cartCount} item${cartCount === 1 ? "" : "s"}`}
+                      >
+                        {cartBadge}
+                      </span>
+                    )}
                   </Link>
+
                   <div className="relative" ref={avatarRef}>
                     <button
                       type="button"
@@ -344,7 +443,8 @@ export default function Header() {
             {/* Cart always visible on mobile */}
             <Link
               href="/checkout"
-              className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center cursor-pointer"
+              aria-label="Cart"
+              className="relative w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center cursor-pointer"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -352,6 +452,7 @@ export default function Header() {
                 height="14"
                 viewBox="0 0 14 14"
                 fill="none"
+                aria-hidden="true"
               >
                 <path
                   d="M13.2994 1.34215H0.000488281V2.74203H1.61035L4.07484 9.51956C4.17296 9.78961 4.3518 10.0229 4.58709 10.1878C4.82237 10.3527 5.10271 10.4413 5.39003 10.4414H11.1995V9.0415H5.39003L4.88047 7.64162H11.1995C11.4795 7.64162 11.7329 7.47503 11.8428 7.21745L13.9426 2.31787C13.9886 2.21143 14.0074 2.09522 13.9973 1.9797C13.9872 1.86419 13.9484 1.75302 13.8846 1.65621C13.8208 1.5594 13.7339 1.48 13.6317 1.42517C13.5295 1.37034 13.4153 1.34181 13.2994 1.34215Z"
@@ -366,6 +467,24 @@ export default function Header() {
                   fill="white"
                 />
               </svg>
+
+              {cartHydrated && cartCount > 0 && (
+                <span
+                  className={clsx(
+                    "absolute -top-1 -right-1 z-50",
+                    "min-w-[18px] h-[18px] px-1",
+                    "rounded-full bg-primary-500 text-white",
+                    "text-[10px] font-extrabold leading-[18px] text-center",
+                    "ring-2 ring-[#08080F]",
+                  )}
+                  aria-label={`${cartCount} item${
+                    cartCount === 1 ? "" : "s"
+                  } in cart`}
+                  title={`${cartCount} item${cartCount === 1 ? "" : "s"}`}
+                >
+                  {cartBadge}
+                </span>
+              )}
             </Link>
 
             {/* Avatar (mobile) */}
@@ -496,9 +615,9 @@ export default function Header() {
               <Link href="/events" onClick={() => setMobileOpen(false)}>
                 Events
               </Link>
-              {/* <Link href="#" onClick={() => setMobileOpen(false)}>
+              <Link href="/about" onClick={() => setMobileOpen(false)}>
                 About us
-              </Link> */}
+              </Link>
 
               {!loggedIn ? (
                 <>

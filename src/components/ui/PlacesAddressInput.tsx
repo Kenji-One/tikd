@@ -1,6 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  src/components/ui/PlacesAddressInput.tsx                          */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +20,8 @@ declare global {
   }
 }
 
+type Variant = "form" | "filter";
+
 type Props = {
   /** Can be null/undefined from RHF defaultValues/reset/db — we normalize internally */
   value: string | null | undefined;
@@ -42,6 +41,12 @@ type Props = {
 
   /** Optional: extra className on wrapper */
   className?: string;
+
+  /** NEW: compact styling for filter bar dropdown */
+  variant?: Variant;
+
+  /** NEW: hide the script error text line (useful in small dropdowns) */
+  hideErrorText?: boolean;
 };
 
 const SCRIPT_ID = "google-maps-places-script";
@@ -59,7 +64,6 @@ function hasPlacesLoaded(): boolean {
 function ensureGlobalCallback(): void {
   if (typeof window === "undefined") return;
 
-  // ✅ No `any` – typed index signature for the callback slot.
   const w = window as unknown as { [key: string]: unknown };
 
   if (typeof w[CALLBACK_NAME] !== "function") {
@@ -103,7 +107,7 @@ function scriptSrcMatches(src: string, language: string, region: string) {
   return placesOk && cbOk && langOk && regionOk;
 }
 
-// ✅ helper: remove google safely without `any`
+// helper: remove google safely without `any`
 function clearWindowGoogle(): void {
   try {
     const w = window as unknown as { google?: unknown };
@@ -122,10 +126,8 @@ async function loadGoogleMapsPlacesScript(
 
   const signature = `${apiKey}::${language}::${region}`;
 
-  // If already loaded with same signature, we're done.
   if (hasPlacesLoaded() && loadedSignature === signature) return;
 
-  // If there's an inflight load with same signature, await it.
   if (loadPromise && loadedSignature === signature) {
     await loadPromise;
     return;
@@ -137,21 +139,17 @@ async function loadGoogleMapsPlacesScript(
     SCRIPT_ID,
   ) as HTMLScriptElement | null;
 
-  // If a script exists but doesn't match required params, replace it.
   if (existing) {
     const src = existing.src || "";
     if (!scriptSrcMatches(src, language, region)) {
       existing.remove();
-      // best-effort reset (helps during dev/hot reload)
       clearWindowGoogle();
       window.__tikdPlacesReady = false;
     } else {
-      // Script matches — just wait until places is actually ready.
       loadedSignature = signature;
       try {
         await waitForInit(2000);
       } catch {
-        // fall through: script may be "stuck", we will reload below
         existing.remove();
         window.__tikdPlacesReady = false;
         clearWindowGoogle();
@@ -187,7 +185,6 @@ async function loadGoogleMapsPlacesScript(
     s.addEventListener("error", onError);
     document.head.appendChild(s);
 
-    // Resolve when callback fires OR places becomes available.
     waitForInit(INIT_TIMEOUT_MS)
       .then(() => {
         cleanup();
@@ -207,14 +204,47 @@ async function loadGoogleMapsPlacesScript(
   await loadPromise;
 }
 
+function inputClasses(variant: Variant) {
+  if (variant === "filter") {
+    return clsx(
+      "w-full rounded-full border px-9 py-2 text-sm transition",
+      "bg-neutral-900/45 text-neutral-0 placeholder:text-white/45",
+      "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
+    );
+  }
+
+  // default "form"
+  return clsx(
+    "w-full rounded-lg border px-10 py-3 text-sm transition",
+    "bg-white/5 text-neutral-0 placeholder:text-neutral-500",
+    "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
+  );
+}
+
+function optionsClasses(variant: Variant) {
+  if (variant === "filter") {
+    return clsx(
+      "absolute z-50 mt-2 max-h-64 w-full overflow-auto rounded-xl border p-1 shadow-xl",
+      "border-white/10 bg-neutral-950/95 backdrop-blur-xl",
+    );
+  }
+
+  return clsx(
+    "absolute z-50 mt-2 max-h-64 w-full overflow-auto rounded-lg border p-1 shadow-xl",
+    "border-white/10 bg-neutral-948/95 backdrop-blur",
+  );
+}
+
 function LoadingInput({
   placeholder,
   error,
   disabled,
+  variant,
 }: {
   placeholder: string;
   error?: boolean;
   disabled?: boolean;
+  variant: Variant;
 }) {
   return (
     <div className="relative">
@@ -225,9 +255,7 @@ function LoadingInput({
       <input
         disabled
         className={clsx(
-          "w-full rounded-lg border px-10 py-3 text-sm transition",
-          "bg-white/5 text-neutral-0 placeholder:text-neutral-500",
-          "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
+          inputClasses(variant),
           "opacity-60 cursor-not-allowed",
           error && "ring-1 ring-inset ring-error-500 border-transparent",
           disabled && "opacity-60 cursor-not-allowed",
@@ -253,10 +281,9 @@ function LoadedPlacesCombobox({
   country,
   className,
   scriptOk,
-}: Props & { scriptOk: boolean }) {
+  variant,
+}: Props & { scriptOk: boolean; variant: Variant }) {
   const requestOptions = useMemo(() => {
-    // "address" is fine, but some accounts return better with "geocode".
-    // We'll keep address (your original intent), but allow full results.
     const base: Record<string, unknown> = { types: ["address"] };
     if (country) base.componentRestrictions = { country };
     return base;
@@ -274,25 +301,21 @@ function LoadedPlacesCombobox({
     debounce: 250,
     cache: 24 * 60 * 60,
     callbackName: CALLBACK_NAME,
-    initOnMount: false, // ✅ critical: we will init manually when script is ready
+    initOnMount: false,
   });
 
   const safePropValue = typeof value === "string" ? value : "";
   const inputValue = typeof inputValueRaw === "string" ? inputValueRaw : "";
 
-  // When parent value changes (reset/edit), update the input without triggering new fetch.
   useEffect(() => {
     setValue(safePropValue, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePropValue]);
 
-  // ✅ Initialize the hook AFTER the script is confirmed ready.
   useEffect(() => {
     if (!scriptOk) return;
     if (!hasPlacesLoaded()) return;
     if (disabled) return;
-
-    // init() is idempotent; safe to call.
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scriptOk, disabled, country]);
@@ -325,9 +348,7 @@ function LoadedPlacesCombobox({
           <Combobox.Input
             ref={inputRef}
             className={clsx(
-              "w-full rounded-lg border px-10 py-3 text-sm transition",
-              "bg-white/5 text-neutral-0 placeholder:text-neutral-500",
-              "border-white/10 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-transparent",
+              inputClasses(variant),
               (!enabled || disabled) && "opacity-60 cursor-not-allowed",
               error && "ring-1 ring-inset ring-error-500 border-transparent",
             )}
@@ -338,7 +359,6 @@ function LoadedPlacesCombobox({
               setValue(v, true);
               onChange(v);
             }}
-            // Don’t instantly wipe suggestions: it can cancel option clicks
             onBlur={() => {
               window.setTimeout(() => clearSuggestions(), 120);
             }}
@@ -351,23 +371,17 @@ function LoadedPlacesCombobox({
         </div>
 
         {options.length > 0 && (
-          <Combobox.Options
-            static
-            className={clsx(
-              "absolute z-50 mt-2 max-h-64 w-full overflow-auto rounded-lg border p-1 shadow-xl",
-              "border-white/10 bg-neutral-948/95 backdrop-blur",
-            )}
-          >
+          <Combobox.Options static className={optionsClasses(variant)}>
             {options.map((opt) => (
               <Combobox.Option
                 key={opt.place_id}
                 value={opt.description}
                 className={({ active }) =>
                   clsx(
-                    "cursor-pointer select-none rounded-md px-3 py-2 text-sm",
+                    "cursor-pointer select-none rounded-lg px-3 py-2 text-sm",
                     active
                       ? "bg-primary-900/40 text-neutral-0"
-                      : "text-neutral-200",
+                      : "text-neutral-200 hover:text-neutral-0",
                   )
                 }
               >
@@ -394,6 +408,8 @@ export default function PlacesAddressInput({
   className,
   language = "en",
   region = "US",
+  variant = "form",
+  hideErrorText = false,
 }: Props) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "";
 
@@ -435,6 +451,7 @@ export default function PlacesAddressInput({
           placeholder={placeholder}
           error={error}
           disabled={disabled}
+          variant={variant}
         />
       ) : (
         <LoadedPlacesCombobox
@@ -448,10 +465,12 @@ export default function PlacesAddressInput({
           scriptOk={scriptOk}
           language={language}
           region={region}
+          variant={variant}
+          hideErrorText={hideErrorText}
         />
       )}
 
-      {scriptError ? (
+      {!hideErrorText && scriptError ? (
         <p className="mt-2 text-xs text-error-300">{scriptError}</p>
       ) : null}
     </div>

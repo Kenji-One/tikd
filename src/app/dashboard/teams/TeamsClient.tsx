@@ -46,6 +46,11 @@ type CardRow = {
 
   /** ✅ used for sorting */
   createdAt?: string;
+
+  /** ✅ org-style performance metrics (optional; can be 0 if backend not ready) */
+  pageViews?: number;
+  ticketsSold?: number;
+  revenue?: number;
 };
 
 type TeamApi = {
@@ -69,6 +74,11 @@ type TeamApi = {
   /** ✅ optional (preferred) like orgs */
   myRoleId?: string | null;
   myRoleMeta?: RoleBadgeMeta | null;
+
+  /** ✅ org-style performance metrics (optional) */
+  pageViews?: number;
+  ticketsSold?: number;
+  revenue?: number;
 };
 
 type TeamRowStyle = CSSProperties & {
@@ -369,15 +379,16 @@ function TeamListRow({ item }: { item: CardRow }) {
 
 /* ------------------------------ Sort ------------------------------ */
 /**
- * “Same filter button as Organizations page”
- * -> reuse SortControl and place it LEFT of "Create Team"
+ * Match Organizations filter options EXACTLY:
+ * Title / Page Views / Tickets Sold / Revenue
  */
-type TeamSortField = "title" | "totalMembers" | "createdAt";
+type TeamSortField = "title" | "pageViews" | "ticketsSold" | "revenue";
 
 const TEAM_SORT_OPTIONS: SortOption<TeamSortField>[] = [
   { key: "title", label: "Title" },
-  { key: "totalMembers", label: "Total Members" },
-  { key: "createdAt", label: "Created Date" },
+  { key: "pageViews", label: "Page Views" },
+  { key: "ticketsSold", label: "Tickets Sold" },
+  { key: "revenue", label: "Revenue" },
 ];
 
 export default function TeamsClient() {
@@ -424,6 +435,11 @@ export default function TeamsClient() {
       accentColor: resolveTeamAccentColor(t),
 
       createdAt: t.createdAt,
+
+      // ✅ these can be missing from backend: default to 0
+      pageViews: safeNumber(t.pageViews),
+      ticketsSold: safeNumber(t.ticketsSold),
+      revenue: safeNumber(t.revenue),
     }));
   }, [teams]);
 
@@ -451,16 +467,16 @@ export default function TeamsClient() {
         return av.localeCompare(bv) * dirMul;
       }
 
-      if (sortField === "totalMembers") {
-        return (
-          (safeNumber(a.totalMembers) - safeNumber(b.totalMembers)) * dirMul
-        );
+      if (sortField === "pageViews") {
+        return (safeNumber(a.pageViews) - safeNumber(b.pageViews)) * dirMul;
       }
 
-      // createdAt
-      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return (at - bt) * dirMul;
+      if (sortField === "ticketsSold") {
+        return (safeNumber(a.ticketsSold) - safeNumber(b.ticketsSold)) * dirMul;
+      }
+
+      // revenue
+      return (safeNumber(a.revenue) - safeNumber(b.revenue)) * dirMul;
     });
 
     return base;
@@ -546,7 +562,7 @@ export default function TeamsClient() {
                     ariaLabel="Teams view toggle"
                   />
 
-                  {/* ✅ Same filter/sort button as Organizations (LEFT of Create Team) */}
+                  {/* ✅ Dropdown now matches Organizations options */}
                   <SortControl<TeamSortField>
                     options={TEAM_SORT_OPTIONS}
                     sortField={sortField}

@@ -79,29 +79,29 @@ export default function TicketSelector({
         {/* Left block */}
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <p className="truncate text-[13.5px] sm:text-[14px] font-extrabold tracking-[-0.2px] text-white">
+            <p className="truncate text-[16px] sm:text-[18px] font-extrabold tracking-[-0.2px] text-white">
               {label}
             </p>
 
             {isSelected ? (
-              <span className="hidden sm:inline-flex items-center rounded-full border border-primary-951/30 bg-primary-951/15 px-2 py-0.5 text-[10px] font-semibold text-primary-999">
+              <span className="hidden sm:inline-flex items-center rounded-full border border-primary-951/30 bg-primary-951/15 px-2 py-0.5 text-[12px] font-semibold text-primary-999">
                 Added
               </span>
             ) : null}
           </div>
 
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <p
               className={[
-                "text-[11px] tracking-[-0.18px]",
-                feesIncluded ? "text-success-400" : "text-white/55",
+                "tracking-[-0.18px]",
+                feesIncluded ? "text-success-400" : "text-white/75",
               ].join(" ")}
             >
               {feesText}
             </p>
 
             {isSelected ? (
-              <span className="text-[11px] text-white/55">
+              <span className=" text-white/75">
                 Line total:{" "}
                 <span className="font-semibold text-white/80 tabular-nums">
                   {sym}
@@ -118,11 +118,11 @@ export default function TicketSelector({
           <div className="text-right">
             {/* ✅ prevent gradient clip cutting last digit:
                 add tiny horizontal padding and negative margin so layout doesn’t grow */}
-            <p className="inline-block whitespace-nowrap px-[2px] -mx-[2px] text-[13px] sm:text-[14px] italic font-extrabold tracking-[-0.32px] tabular-nums bg-gradient-to-r from-primary-999 via-primary-952 to-primary-951 text-transparent bg-clip-text">
+            <p className="inline-block whitespace-nowrap px-[2px] -mx-[2px] text-[16px] sm:text-[20px] italic font-extrabold tracking-[-0.32px] tabular-nums bg-gradient-to-r from-primary-999 via-primary-952 to-primary-951 text-transparent bg-clip-text">
               {sym}
               {price.toFixed(2)}
             </p>
-            <p className="text-[10px] text-white/45">per ticket</p>
+            <p className="text-[13px] text-white/65">per ticket</p>
           </div>
 
           {/* Stepper */}
@@ -161,7 +161,7 @@ export default function TicketSelector({
               </svg>
             </button>
 
-            <span className="w-8 text-center text-sm font-semibold tabular-nums text-white">
+            <span className="w-8 text-center font-semibold tabular-nums text-white">
               {qty}
             </span>
 

@@ -1,5 +1,14 @@
-// src\models\Event.ts
+// src/models/Event.ts
 import { Schema, model, models, Document, Types } from "mongoose";
+
+export type EventMediaType = "image" | "video";
+
+export type EventMediaItem = {
+  url: string;
+  type: EventMediaType;
+  caption?: string;
+  sortOrder?: number;
+};
 
 export interface IEvent extends Document {
   title: string;
@@ -17,6 +26,9 @@ export interface IEvent extends Document {
   minAge?: number;
   location: string;
   image?: string;
+
+  /** ✅ NEW: additional media for event page gallery */
+  media: EventMediaItem[];
 
   categories: string[];
   coHosts: string[];
@@ -39,6 +51,16 @@ export interface IEvent extends Document {
   updatedAt: Date;
 }
 
+const EventMediaSchema = new Schema<EventMediaItem>(
+  {
+    url: { type: String, required: true },
+    type: { type: String, enum: ["image", "video"], required: true },
+    caption: { type: String, default: "" },
+    sortOrder: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
 const EventSchema = new Schema<IEvent>(
   {
     title: { type: String, required: true },
@@ -51,6 +73,9 @@ const EventSchema = new Schema<IEvent>(
     minAge: { type: Number, default: undefined },
     location: { type: String, required: true },
     image: String,
+
+    // ✅ NEW
+    media: { type: [EventMediaSchema], default: [] },
 
     categories: { type: [String], default: [] },
     coHosts: { type: [String], default: [] },

@@ -243,6 +243,17 @@ function OrganizationListRow({
 
   const styleVars: OrgRowStyle = { ["--org-accent"]: accent };
 
+  const isHexAccent = String(accent || "").startsWith("#");
+
+  // Accent-driven visuals (fallback to your primary-purple vibe)
+  const borderIdle = isHexAccent ? `${accent}2B` : "rgba(154,70,255,0.22)";
+  const borderHover = isHexAccent ? `${accent}55` : "rgba(154,70,255,0.40)";
+  const glow = isHexAccent ? `${accent}55` : "rgba(154,70,255,0.45)";
+
+  const iconBg = isHexAccent ? `${accent}24` : "rgba(154,70,255,0.17)";
+  const iconBorder = isHexAccent ? `${accent}52` : "rgba(154,70,255,0.30)";
+  const iconColor = isHexAccent ? `${accent}` : "rgba(189,153,255,0.95)";
+
   return (
     <Link
       href={`/dashboard/organizations/${org._id}`}
@@ -284,45 +295,91 @@ function OrganizationListRow({
         </div>
       </div>
 
-      {/* ✅ True-centered meta (center of the whole row) */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex items-center gap-6">
-        {/* ✅ Role pill */}
-        <RoleBadge meta={roleMeta} />
+      <div className="flex items-center gap-6">
+        {/* ✅ True-centered meta (center of the whole row) */}
+        <div className="pointer-events-none md:flex items-center gap-6">
+          {/* ✅ Role pill */}
+          <RoleBadge meta={roleMeta} />
 
-        {/* ✅ Total Members */}
-        <div className="inline-flex items-center gap-2 text-[12px] text-neutral-200">
-          <span
+          {/* ✅ Total Members (better-looking pill bubble) */}
+          <div
             className={clsx(
-              "inline-flex h-7 w-7 items-center justify-center rounded-lg",
-              "ring-1 ring-inset",
+              "relative inline-flex items-center gap-2.5 overflow-hidden",
+              "h-9 rounded-full pl-1 pr-3",
+              "border backdrop-blur-xl",
+              "shadow-[0_16px_40px_rgba(0,0,0,0.55)]",
+              "transition-all duration-200",
+              "group-hover:shadow-[0_18px_46px_rgba(0,0,0,0.62)]",
             )}
             style={{
+              borderColor: borderIdle,
               background:
-                accent && String(accent).startsWith("#")
-                  ? `${accent}22`
-                  : "rgba(154,70,255,0.15)",
-              color:
-                accent && String(accent).startsWith("#")
-                  ? `${accent}`
-                  : "rgba(189,153,255,0.95)",
-              borderColor:
-                accent && String(accent).startsWith("#")
-                  ? `${accent}33`
-                  : "rgba(154,70,255,0.22)",
+                "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))",
             }}
+            aria-label={`${formatMembers(org.totalMembers)} Total Members`}
           >
-            <Users className="h-4 w-4" />
-          </span>
-          <span className="font-semibold text-neutral-100">
-            {formatMembers(org.totalMembers)}
-          </span>
-          <span className="text-neutral-400">Total Members</span>
-        </div>
-      </div>
+            {/* subtle accent glow blob */}
+            <span
+              aria-hidden
+              className={clsx(
+                "pointer-events-none absolute -left-10 -top-10 h-24 w-24 rounded-full blur-2xl",
+                "transition-opacity duration-200 opacity-70 group-hover:opacity-100",
+              )}
+              style={{
+                background: `radial-gradient(circle at 30% 30%, ${glow}, transparent 62%)`,
+              }}
+            />
+            {/* top sheen */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 opacity-70"
+              style={{
+                background:
+                  "linear-gradient(90deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 35%, rgba(255,255,255,0.00) 70%)",
+              }}
+            />
 
-      {/* Right (chevron) */}
-      <div className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
-        <ChevronRight className="h-4 w-4" />
+            {/* icon chip */}
+            <span
+              className={clsx(
+                "relative inline-flex h-7 w-7 items-center justify-center",
+                "rounded-full ring-1 ring-inset",
+              )}
+              style={{
+                background: iconBg,
+                borderColor: iconBorder,
+                color: iconColor,
+                boxShadow: `0 0 0 1px ${iconBorder}`,
+              }}
+            >
+              <Users className="h-4 w-4" />
+            </span>
+
+            {/* text */}
+            <span className="relative inline-flex items-center gap-2">
+              <span className="text-[12px] font-extrabold tracking-[-0.01em] text-neutral-50">
+                {formatMembers(org.totalMembers)}
+              </span>
+              <span className="text-[12px] font-medium text-neutral-300">
+                Total Members
+              </span>
+            </span>
+
+            {/* hover border pop */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-full opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+              style={{
+                boxShadow: `inset 0 0 0 1px ${borderHover}`,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Right (chevron) */}
+        <div className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
+          <ChevronRight className="h-4 w-4" />
+        </div>
       </div>
     </Link>
   );

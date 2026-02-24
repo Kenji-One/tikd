@@ -263,7 +263,7 @@ export async function GET(
   const ticketTypes = ticketTypesDocs.map((t) => {
     const remaining =
       t.totalQuantity === null
-        ? 999999 // "unlimited" fallback (keeps UI simple without changing components)
+        ? 999999 // "unlimited" fallback
         : Math.max((t.totalQuantity ?? 0) - (t.soldCount ?? 0), 0);
 
     return {
@@ -296,6 +296,13 @@ const artistInputSchema = z.object({
   image: z.string().url().optional(),
 });
 
+const mediaItemSchema = z.object({
+  url: z.string().url(),
+  type: z.enum(["image", "video"]),
+  caption: z.string().max(120).optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+});
+
 const patchSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
@@ -307,6 +314,9 @@ const patchSchema = z.object({
   minAge: z.coerce.number().int().min(0).max(99).optional(),
   location: z.string().min(1).optional(),
   image: z.string().url().optional(),
+
+  // ✅ NEW
+  media: z.array(mediaItemSchema).max(30).optional(),
 
   categories: z.array(z.string()).optional(),
   promoters: z.array(z.string().email()).optional(),
@@ -374,6 +384,9 @@ export async function PATCH(
   if (data.location !== undefined) event.location = data.location;
   if (data.image !== undefined) event.image = data.image;
 
+  if (data.media !== undefined)
+    event.media = data.media as unknown as IEvent["media"];
+
   if (data.categories !== undefined) event.categories = data.categories;
   if (data.promoters !== undefined) event.promoters = data.promoters;
   if (data.message !== undefined) event.message = data.message;
@@ -411,7 +424,7 @@ export async function PATCH(
 
   await event.save();
 
-  // ✅ If it JUST got published, create a notification (and make the red dot real)
+  // ✅ If it JUST got published, create a notification
   const didPublishNow = prevStatus === "draft" && event.status === "published";
   if (didPublishNow) {
     // Recipients: creator + org owner + active event team members (deduped)

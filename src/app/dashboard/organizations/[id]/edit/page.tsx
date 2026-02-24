@@ -1,21 +1,32 @@
-// src/app/dashboard/organizations/[id]/edit/page.tsx
+/* ------------------------------------------------------------------ */
+/*  src/app/dashboard/organizations/[id]/edit/page.tsx                */
+/* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useMemo, useState, ReactNode } from "react";
-import { useForm, Controller, SubmitHandler } from "react-hook-form";
+import React, { useMemo, useRef, useState, useEffect } from "react";
+import type { CSSProperties } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { z } from "zod";
+import { useForm, Controller, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { v4 as uuid } from "uuid";
-import { useParams, useRouter } from "next/navigation";
 import clsx from "clsx";
-import { Building2, Palette, Globe2, MapPin, Sparkles } from "lucide-react";
+import { Building2, ImagePlus, Link2, Sparkles, Info } from "lucide-react";
 
-import ImageUpload from "@/components/ui/ImageUpload";
-import { Button } from "@/components/ui/Button";
 import LabelledInput from "@/components/ui/LabelledInput";
 import { TextArea } from "@/components/ui/TextArea";
+import ImageUpload from "@/components/ui/ImageUpload";
+import { Button } from "@/components/ui/Button";
+import ConnectionProfileCard from "@/components/connections/ConnectionProfileCard";
+import TikdColorPicker from "@/components/ui/TikdColorPicker";
+import PlacesAddressInput from "@/components/ui/PlacesAddressInput";
+import ImagePositionEditorModal, {
+  type ImageEditorMode,
+} from "@/components/ui/ImagePositionEditorModal";
 
-/* ----------------------------- Schema ----------------------------- */
+/* ------------------------------------------------------------------ */
+/*  Constants & schema                                                */
+/* ------------------------------------------------------------------ */
 
 const businessTypeValues = [
   "brand",
@@ -25,51 +36,188 @@ const businessTypeValues = [
   "fraternity",
   "charity",
 ] as const;
+type BusinessType = (typeof businessTypeValues)[number];
 
-type OrgBusinessType = (typeof businessTypeValues)[number];
+const BUSINESS_TYPES: {
+  value: BusinessType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "brand",
+    label: "Brand",
+    description: "You run or host events/parties under your own brand.",
+  },
+  {
+    value: "venue",
+    label: "Venue",
+    description:
+      "You run your own events or host others’ events at a consistent location.",
+  },
+  {
+    value: "community",
+    label: "Community",
+    description: "You organize events for a club, group, or community.",
+  },
+  {
+    value: "artist",
+    label: "Artist",
+    description: "You perform at events as a DJ, musician, or creator.",
+  },
+  {
+    value: "fraternity",
+    label: "Fraternity/Sorority",
+    description: "You organize social events for a Greek-life organization.",
+  },
+  {
+    value: "charity",
+    label: "Charity",
+    description:
+      "You host events to support non-profits, causes, or fundraisers.",
+  },
+];
 
-const FormSchema = z.object({
-  name: z.string().min(2, "Name is required"),
+/* 🔧 helper: website is truly optional (empty allowed, but invalid URLs rejected) */
+const websiteSchema = z
+  .string()
+  .trim()
+  .optional()
+  .refine(
+    (value) => {
+      if (!value) return true;
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    {
+      message: "Must be a valid URL (e.g., https://example.com)",
+    },
+  );
+
+/**
+ * ✅ Optional URL field that can be "", undefined, or a valid URL.
+ */
+const optionalUrlSchema = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(""))
+  .refine(
+    (value) => {
+      if (!value) return true;
+      try {
+        new URL(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Must be a valid URL" },
+  );
+
+const OrgSchema = z.object({
+  name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
 
-  logo: z.string().url().optional().or(z.literal("")),
-  website: z.string().url().optional().or(z.literal("")),
+  /** branding */
+  banner: optionalUrlSchema,
+  logo: optionalUrlSchema,
+
+  website: websiteSchema,
   businessType: z.enum(businessTypeValues),
-  location: z.string().optional().or(z.literal("")),
-  accentColor: z.string().optional().or(z.literal("")),
+  location: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .refine((v) => !v || v.length >= 2, {
+      message: "Location must be at least 2 characters",
+    }),
+  accentColor: z
+    .string()
+    .regex(
+      /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/,
+      "Use a valid hex color (e.g., #6366F1)",
+    )
+    .optional()
+    .or(z.literal("")),
 });
+type OrgFormData = z.infer<typeof OrgSchema>;
 
-type FormValues = z.infer<typeof FormSchema>;
-
-type OrgResponse = FormValues & {
+type OrgApiResponse = {
   _id: string;
-  ownerId: string;
-  createdAt?: string;
-  updatedAt?: string;
+  name?: string;
+  description?: string;
+  banner?: string;
+  logo?: string;
+  website?: string;
+  businessType?: BusinessType;
+  location?: string;
+  accentColor?: string;
 };
 
-/* ----------------------------- Helpers ---------------------------- */
+/* ----------------------------- helpers ---------------------------- */
+const meshBg: CSSProperties = {
+  background:
+    "radial-gradient(1000px 420px at 15% 10%, rgba(130,46,255,.25), transparent 60%)," +
+    "radial-gradient(800px 420px at 85% 0%, rgba(88,101,242,.20), transparent 60%)",
+};
 
-function Section(props: {
-  title: string;
-  icon?: ReactNode;
-  desc?: string;
-  children: ReactNode;
-}) {
-  const { title, icon, desc, children } = props;
+function RequiredAsterisk() {
   return (
-    <section className="rounded-2xl border border-white/10 bg-neutral-950/70 p-5 md:p-6">
-      <div className="mb-4 flex items-start gap-3">
+    <span aria-hidden className="ml-1 text-error-400">
+      *
+    </span>
+  );
+}
+
+function FieldLabel({
+  children,
+  required,
+  htmlFor,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+  htmlFor?: string;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="block text-sm font-medium text-neutral-0"
+    >
+      <span className="inline-flex items-center">
+        {children}
+        {required ? <RequiredAsterisk /> : null}
+      </span>
+    </label>
+  );
+}
+
+function Section({
+  title,
+  icon,
+  desc,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  desc?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+      <div className="mb-6 flex items-start gap-3">
         {icon ? (
-          <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-primary-900/50 ring-1 ring-primary-700/40">
+          <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-md bg-primary-900/50 ring-1 ring-primary-500">
             {icon}
           </div>
         ) : null}
         <div>
           <h2 className="text-base font-semibold md:text-lg">{title}</h2>
-          {desc ? (
-            <p className="mt-1 text-sm text-neutral-300">{desc}</p>
-          ) : null}
+          {desc ? <p className="mt-1 text-neutral-300">{desc}</p> : null}
         </div>
       </div>
       {children}
@@ -77,67 +225,213 @@ function Section(props: {
   );
 }
 
-/* ------------------------------ Page ------------------------------ */
+function hostFromUrl(u?: string) {
+  try {
+    if (!u) return "";
+    const url = new URL(u);
+    return url.host.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
 
+function getBusinessTypeLabel(value?: BusinessType | null) {
+  if (!value) return "";
+  return BUSINESS_TYPES.find((t) => t.value === value)?.label ?? "";
+}
+
+/** Remove query/hash so we never store cache-busters in DB. */
+function stripQueryAndHash(u?: string) {
+  if (!u) return "";
+  try {
+    const url = new URL(u);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return u.split("?")[0]?.split("#")[0] ?? u;
+  }
+}
+
+/** Force fresh fetch after overwrite/crop (Cloudinary CDN + Next/Image cache). */
+function withCacheBust(u: string, nonce: number) {
+  try {
+    const url = new URL(u);
+    url.searchParams.set("cb", String(nonce));
+    return url.toString();
+  } catch {
+    const sep = u.includes("?") ? "&" : "?";
+    return `${u}${sep}cb=${nonce}`;
+  }
+}
+
+async function commitCloudinaryCrop(args: {
+  publicId: string;
+  cropUrl: string;
+}) {
+  const res = await fetch("/api/cloudinary/commit-crop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      public_id: args.publicId,
+      source_url: args.cropUrl,
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || "Failed to commit crop");
+  }
+
+  const json = (await res.json().catch(() => null)) as {
+    secure_url?: string;
+  } | null;
+
+  if (!json?.secure_url) throw new Error("Invalid crop response");
+  return json.secure_url;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                         */
+/* ------------------------------------------------------------------ */
 export default function EditOrganizationPage() {
   const router = useRouter();
   const params = useParams() as { id?: string };
   const orgId = params?.id ?? "";
 
-  const [loading, setLoading] = useState(true);
+  const errorRing =
+    "rounded-lg ring-1 ring-inset ring-error-500 border-transparent";
+
+  // ✅ Stable publicIds (session-stable, same idea as New page)
+  const bannerPublicId = useMemo(() => uuid(), []);
+  const logoPublicId = useMemo(() => uuid(), []);
+
+  const bannerOriginalRef = useRef<string | null>(null);
+  const logoOriginalRef = useRef<string | null>(null);
+
+  // ✅ Global “cache-bust” nonce used to force fresh Cloudinary/Next fetches
+  const [previewNonce, setPreviewNonce] = useState<number>(() => Date.now());
+
+  const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const {
-    control,
     register,
+    control,
     handleSubmit,
+    watch,
+    setValue,
     reset,
-    formState: { isSubmitting, errors, submitCount },
-  } = useForm<FormValues>({
-    resolver: zodResolver(FormSchema),
+    trigger,
+    formState: { errors, isSubmitting, submitCount },
+  } = useForm<OrgFormData>({
+    resolver: zodResolver(OrgSchema),
     defaultValues: {
       name: "",
       description: "",
-      logo: "",
       website: "",
-      businessType: "brand",
       location: "",
       accentColor: "",
-    },
+      banner: "",
+      logo: "",
+      businessType: "brand",
+    } as Partial<OrgFormData>,
     mode: "onBlur",
   });
 
-  const hasErrors = useMemo(() => Object.keys(errors).length > 0, [errors]);
+  const [editor, setEditor] = useState<{
+    open: boolean;
+    mode: ImageEditorMode;
+    src: string;
+    title: string;
+    publicId: string;
+  } | null>(null);
 
-  /* -------------------------- Load org --------------------------- */
+  function openAdjust(mode: ImageEditorMode) {
+    const banner = watch("banner") || "";
+    const logo = watch("logo") || "";
 
+    if (mode === "banner") {
+      const original = bannerOriginalRef.current || stripQueryAndHash(banner);
+      if (!original) return;
+
+      setEditor({
+        open: true,
+        mode,
+        src: original,
+        title: "Adjust banner",
+        publicId: `temp/orgs/banners/${bannerPublicId}`,
+      });
+      return;
+    }
+
+    const original = logoOriginalRef.current || stripQueryAndHash(logo);
+    if (!original) return;
+
+    setEditor({
+      open: true,
+      mode,
+      src: original,
+      title: "Adjust logo",
+      publicId: `temp/orgs/logos/${logoPublicId}`,
+    });
+  }
+
+  /* -------------------------- Load org ---------------------------- */
   useEffect(() => {
     if (!orgId) return;
+
     let cancelled = false;
 
     const run = async () => {
       try {
         setLoading(true);
         setLoadError(null);
-        const res = await fetch(`/api/organizations/${orgId}`);
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to load organization");
-        }
-        const org = (await res.json()) as OrgResponse;
 
-        if (!cancelled) {
-          reset({
-            name: org.name ?? "",
-            description: org.description ?? "",
-            logo: org.logo ?? "",
-            website: org.website ?? "",
-            businessType: org.businessType as OrgBusinessType,
-            location: org.location ?? "",
-            accentColor: org.accentColor ?? "",
-          });
+        const res = await fetch(`/api/organizations/${orgId}`, {
+          method: "GET",
+        });
+
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
+          throw new Error(payload?.error || "Failed to load organization");
         }
-      } catch (err: unknown) {
+
+        const org = (await res
+          .json()
+          .catch(() => null)) as OrgApiResponse | null;
+        if (!org?._id) throw new Error("Invalid organization response");
+
+        const nonce = Date.now();
+        if (!cancelled) {
+          setPreviewNonce(nonce);
+
+          // Store clean originals (no cache bust) for re-editing in crop modal
+          const cleanBanner = org.banner ? stripQueryAndHash(org.banner) : "";
+          const cleanLogo = org.logo ? stripQueryAndHash(org.logo) : "";
+          bannerOriginalRef.current = cleanBanner || null;
+          logoOriginalRef.current = cleanLogo || null;
+
+          reset(
+            {
+              name: org.name ?? "",
+              description: org.description ?? "",
+              website: org.website ?? "",
+              location: org.location ?? "",
+              accentColor: org.accentColor ?? "",
+              businessType: (org.businessType ?? "brand") as BusinessType,
+
+              // ✅ Put cache-busted URLs into form so preview updates reliably.
+              // We'll strip query/hash before saving.
+              banner: cleanBanner ? withCacheBust(cleanBanner, nonce) : "",
+              logo: cleanLogo ? withCacheBust(cleanLogo, nonce) : "",
+            },
+            { keepDirty: false },
+          );
+        }
+      } catch (err) {
         if (!cancelled) {
           const message =
             err instanceof Error ? err.message : "Failed to load organization";
@@ -148,56 +442,99 @@ export default function EditOrganizationPage() {
       }
     };
 
-    run();
+    void run();
+
     return () => {
       cancelled = true;
     };
   }, [orgId, reset]);
 
-  /* -------------------------- Submit ----------------------------- */
-
-  const onSubmit: SubmitHandler<FormValues> = async (data) => {
+  /* -------------------------- Submit ------------------------------ */
+  const onSubmit: SubmitHandler<OrgFormData> = async (data) => {
     if (!orgId) return;
-    try {
-      const res = await fetch(`/api/organizations/${orgId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
 
-      if (!res.ok) {
-        const payload = await res.json().catch(() => ({}));
-        console.error("Update failed", payload);
-        alert(payload.error || "Failed to update organization");
-        return;
-      }
+    // ✅ strip cache-busters before saving
+    const cleanBanner = data.banner?.trim()
+      ? stripQueryAndHash(data.banner)
+      : "";
+    const cleanLogo = data.logo?.trim() ? stripQueryAndHash(data.logo) : "";
 
+    const payload = {
+      ...data,
+      banner: cleanBanner ? cleanBanner : "",
+      logo: cleanLogo ? cleanLogo : "",
+      website: data.website?.trim() ? data.website.trim() : "",
+      accentColor: data.accentColor?.trim() ? data.accentColor.trim() : "",
+      description: data.description?.trim() ? data.description.trim() : "",
+      location: data.location?.trim() ? data.location.trim() : "",
+      name: data.name?.trim() ? data.name.trim() : data.name,
+    };
+
+    const res = await fetch(`/api/organizations/${orgId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
       router.push(`/dashboard/organizations/${orgId}`);
-    } catch (err) {
-      console.error(err);
-      alert("Something went wrong while updating");
+    } else {
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      alert(body?.error || "Failed to update organization");
     }
   };
+
+  /* ---------------------------- preview --------------------------- */
+  const name = watch("name");
+  const description = watch("description");
+  const banner = watch("banner");
+  const logo = watch("logo");
+  const website = watch("website");
+  const businessType = watch("businessType");
+  const location = watch("location");
+  const accentColor = watch("accentColor");
+
+  const siteHost = useMemo(() => hostFromUrl(website || undefined), [website]);
+  const previewAccent =
+    accentColor && accentColor.trim() !== "" ? accentColor : "#7C3AED";
+
+  const hasErrors = Object.keys(errors).length > 0;
+
+  const cardDescription =
+    description?.trim() ||
+    siteHost ||
+    (businessType ? getBusinessTypeLabel(businessType) : "") ||
+    "Public profile";
+
+  // ✅ Always show cache-busted URLs in UI so overwrites/crops reflect instantly
+  const uiBanner = useMemo(() => {
+    const v = banner?.trim() ? banner.trim() : "";
+    return v ? withCacheBust(v, previewNonce) : "";
+  }, [banner, previewNonce]);
+
+  const uiLogo = useMemo(() => {
+    const v = logo?.trim() ? logo.trim() : "";
+    return v ? withCacheBust(v, previewNonce) : "";
+  }, [logo, previewNonce]);
 
   /* --------------------------- Render ----------------------------- */
 
   if (loading) {
     return (
       <main className="relative bg-neutral-950 text-neutral-0">
-        <div className="relative isolate px-4 pt-8 md:py-10 mt-2">
+        <div className="relative isolate mt-6 px-4 pt-10 md:py-12 lg:mt-8">
           <div
             className="pointer-events-none absolute inset-0 -z-10 opacity-80"
-            style={{
-              background:
-                "radial-gradient(1000px 420px at 15% 10%, rgba(130,46,255,.25), transparent 60%), radial-gradient(800px 420px at 85% 0%, rgba(88,101,242,.20), transparent 60%)",
-            }}
+            style={meshBg}
           />
           <div className="mx-auto max-w-[1232px]">
             <h1 className="text-2xl font-extrabold md:text-3xl">
               Edit Organization
             </h1>
             <p className="mt-2 max-w-prose text-sm text-neutral-300">
-              Loading organization details...
+              Loading organization details…
             </p>
           </div>
         </div>
@@ -208,19 +545,28 @@ export default function EditOrganizationPage() {
   if (loadError) {
     return (
       <main className="relative bg-neutral-950 text-neutral-0">
-        <div className="relative isolate px-4 pt-8 md:py-10 mt-2">
+        <div className="relative isolate mt-6 px-4 pt-10 md:py-12 lg:mt-8">
           <div
             className="pointer-events-none absolute inset-0 -z-10 opacity-80"
-            style={{
-              background:
-                "radial-gradient(1000px 420px at 15% 10%, rgba(130,46,255,.25), transparent 60%), radial-gradient(800px 420px at 85% 0%, rgba(88,101,242,.20), transparent 60%)",
-            }}
+            style={meshBg}
           />
-          <div className="mx-auto max-w-[1232px] space-y-2">
+          <div className="mx-auto max-w-[1232px]">
             <h1 className="text-2xl font-extrabold md:text-3xl">
               Edit Organization
             </h1>
-            <p className="max-w-prose text-sm text-red-400">{loadError}</p>
+            <p className="mt-2 max-w-prose text-sm text-error-300">
+              {loadError}
+            </p>
+
+            <div className="mt-6">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push("/dashboard/organizations")}
+              >
+                Back to organizations
+              </Button>
+            </div>
           </div>
         </div>
       </main>
@@ -229,31 +575,82 @@ export default function EditOrganizationPage() {
 
   return (
     <main className="relative bg-neutral-950 text-neutral-0">
-      <div className="relative isolate px-4 pt-8 md:py-10 mt-2">
+      {editor?.open ? (
+        <ImagePositionEditorModal
+          open={editor.open}
+          mode={editor.mode}
+          src={editor.src}
+          title={editor.title}
+          onClose={() => setEditor(null)}
+          onApply={async ({ cropUrl }) => {
+            // ✅ Commit crop to Cloudinary (overwrite the temp asset)
+            // This makes "Apply" actually apply everywhere, immediately.
+            const secureUrl = await commitCloudinaryCrop({
+              publicId: editor.publicId,
+              cropUrl,
+            });
+
+            const nonce = Date.now();
+            setPreviewNonce(nonce);
+
+            // Keep track of the true original for re-editing (raw, no cachebust)
+            const clean = stripQueryAndHash(secureUrl);
+            if (editor.mode === "banner") bannerOriginalRef.current = clean;
+            else logoOriginalRef.current = clean;
+
+            const fieldName = editor.mode === "banner" ? "banner" : "logo";
+
+            // Store cache-busted URL for instant UI update; strip before submit
+            setValue(fieldName, withCacheBust(secureUrl, nonce), {
+              shouldDirty: true,
+              shouldValidate: true,
+              shouldTouch: true,
+            });
+
+            void trigger(fieldName);
+            setEditor(null);
+          }}
+        />
+      ) : null}
+
+      {/* Header / mesh */}
+      <div className="relative isolate mt-6 px-4 pt-10 md:py-12 lg:mt-8">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
-          style={{
-            background:
-              "radial-gradient(1000px 420px at 15% 10%, rgba(130,46,255,.25), transparent 60%), radial-gradient(800px 420px at 85% 0%, rgba(88,101,242,.20), transparent 60%)",
-          }}
+          style={meshBg}
         />
         <div className="mx-auto max-w-[1232px]">
           <h1 className="text-2xl font-extrabold md:text-3xl">
             Edit Organization
           </h1>
           <p className="mt-2 max-w-prose text-sm text-neutral-300">
-            Update your organization’s details, branding and links. Changes
-            apply immediately.
+            Update your organization profile. Changes affect your organization
+            page, event cards, and previews.
           </p>
         </div>
       </div>
 
       <form
         onSubmit={handleSubmit(onSubmit)}
+        className="mx-auto grid max-w-[1232px] grid-cols-1 gap-6 px-4 py-8 md:grid-cols-12"
         noValidate
-        className="mx-auto grid max-w-[1232px] grid-cols-1 gap-6 py-8 md:grid-cols-12"
       >
+        {/* ------------------------- Main form ----------------------- */}
         <div className="space-y-6 md:col-span-7 lg:col-span-8">
+          {/* Required fields note */}
+          <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-3">
+            <div className="flex items-center gap-3">
+              <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
+                <Info className="h-5 w-5 text-neutral-200" />
+              </div>
+              <p className="text-sm text-neutral-300 leading-relaxed">
+                Required fields are marked with an{" "}
+                <span className="font-semibold text-error-300">*</span>.
+              </p>
+            </div>
+          </div>
+
+          {/* Error summary after first submit */}
           {submitCount > 0 && hasErrors && (
             <div
               role="alert"
@@ -267,131 +664,297 @@ export default function EditOrganizationPage() {
 
           {/* Basic info */}
           <Section
-            title="Basic information"
-            desc="This is how your organization appears across Tikd."
+            title="Basic Information"
+            desc="This appears on your organization page and on event cards."
             icon={<Building2 className="h-5 w-5 text-primary-300" />}
           >
-            <div className="space-y-4">
-              <LabelledInput
-                label="Organization name"
-                placeholder="Enter name"
-                {...register("name")}
-                size="md"
-                variant="full"
-                className={errors.name && "border border-error-500"}
-              />
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Description
-                </label>
-                <TextArea
-                  {...register("description")}
-                  placeholder="Tell attendees what this organization is about"
+            <div className="space-y-7">
+              <div className="space-y-2">
+                <FieldLabel required>Organization Name</FieldLabel>
+                <LabelledInput
+                  noLabel
+                  aria-label="Organization Name"
+                  placeholder="e.g., Nightwave Collective"
+                  {...register("name")}
+                  variant="transparent"
                   size="md"
-                  variant="full"
+                  className={clsx(errors.name && errorRing)}
                 />
-              </div>
-
-              {/* Business type chips */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">
-                  Business type
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {businessTypeValues.map((bt) => (
-                    <label key={bt} className="cursor-pointer">
-                      <input
-                        type="radio"
-                        value={bt}
-                        {...register("businessType")}
-                        className="peer sr-only"
-                      />
-                      <span
-                        className={clsx(
-                          "inline-flex items-center rounded-full border px-4 py-1.5 text-xs md:text-sm transition-colors",
-                          "border-white/10 text-neutral-300 peer-checked:border-white/30 peer-checked:bg-white/10 peer-checked:text-neutral-0"
-                        )}
-                      >
-                        {bt.charAt(0).toUpperCase() + bt.slice(1)}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                {errors.businessType && (
-                  <p className="text-xs text-error-400 mt-1">
-                    {errors.businessType.message}
+                {errors.name?.message ? (
+                  <p className="text-xs text-error-300">
+                    {String(errors.name.message)}
                   </p>
-                )}
+                ) : null}
               </div>
-            </div>
-          </Section>
 
-          {/* Branding and links */}
-          <Section
-            title="Branding & links"
-            desc="Logo, accent color and website help your org feel recognizable."
-            icon={<Palette className="h-5 w-5 text-primary-300" />}
-          >
-            <div className="space-y-4">
-              {/* Logo */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium">Logo</label>
+                <FieldLabel>Address</FieldLabel>
                 <Controller
                   control={control}
-                  name="logo"
+                  name="location"
                   render={({ field }) => (
-                    <ImageUpload
-                      label="Upload logo"
-                      value={field.value}
-                      onChange={field.onChange}
-                      publicId={`org-logos/${orgId || "temp"}/${uuid()}`}
-                      sizing="avatar"
+                    <PlacesAddressInput
+                      value={field.value ?? ""}
+                      onChange={(v) => field.onChange(v)}
+                      placeholder="Type to search address"
+                      error={!!errors.location}
                     />
                   )}
                 />
+                {errors.location?.message ? (
+                  <p className="text-xs text-error-300">
+                    {String(errors.location.message)}
+                  </p>
+                ) : (
+                  <p className="text-xs text-neutral-400">
+                    Where are most of your events based?
+                  </p>
+                )}
               </div>
 
-              {/* Website */}
-              <LabelledInput
-                label="Website"
-                placeholder="https://example.com"
-                {...register("website")}
-                size="md"
-                variant="full"
-                icon={<Globe2 className="h-4 w-4 opacity-60" />}
-                className={errors.website && "border border-error-500"}
-              />
-
-              {/* Location */}
-              <LabelledInput
-                label="Location"
-                placeholder="City, Country"
-                {...register("location")}
-                size="md"
-                variant="full"
-                icon={<MapPin className="h-4 w-4 opacity-60" />}
-              />
-
-              {/* Accent color */}
               <div className="space-y-2">
-                <LabelledInput
-                  label="Accent color"
-                  placeholder="#8257E6"
-                  {...register("accentColor")}
+                <FieldLabel>Description</FieldLabel>
+                <TextArea
+                  {...register("description")}
+                  placeholder="What is this org about?"
+                  variant="transparent"
                   size="md"
-                  variant="full"
-                  className={errors.accentColor && "border border-error-500"}
                 />
-                <p className="text-xs text-neutral-400">
-                  Optional — used for highlights on your org page.
-                </p>
               </div>
             </div>
           </Section>
 
-          {/* Actions */}
-          <div className="flex flex-wrap gap-3">
+          {/* Business type */}
+          <Section
+            title="Type of business"
+            desc="Tell us what best describes how you run or host events."
+            icon={<Sparkles className="h-5 w-5 text-primary-300" />}
+          >
+            <Controller
+              control={control}
+              name="businessType"
+              render={({ field }) => (
+                <div className="space-y-3">
+                  <FieldLabel required>Business Type</FieldLabel>
+
+                  <p className="text-xs text-neutral-400">
+                    Choose one. You can always tweak this later in settings.
+                  </p>
+
+                  <fieldset>
+                    <legend className="sr-only">
+                      What describes best the type of your business?
+                    </legend>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {BUSINESS_TYPES.map((type) => {
+                        const selected = field.value === type.value;
+
+                        return (
+                          <label
+                            key={type.value}
+                            className="cursor-pointer"
+                            aria-label={type.label}
+                          >
+                            <input
+                              type="radio"
+                              value={type.value}
+                              checked={selected}
+                              onChange={() => field.onChange(type.value)}
+                              className="sr-only"
+                            />
+
+                            <div
+                              className={clsx(
+                                "relative rounded-2xl border bg-neutral-900/55 px-4 py-3 text-left transition",
+                                "shadow-[0_16px_36px_rgba(0,0,0,0.45)]",
+                                "min-h-[86px] sm:min-h-[86px] pr-12",
+                                selected
+                                  ? "border-primary-500/90 ring-1 ring-primary-400/55 bg-gradient-to-br from-primary-950/55 via-neutral-950 to-neutral-950"
+                                  : "border-white/10 hover:border-primary-500/55 hover:bg-neutral-900/70",
+                              )}
+                            >
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                <span
+                                  className={clsx(
+                                    "flex h-5 w-5 items-center justify-center rounded-full border bg-black/45",
+                                    selected
+                                      ? "border-primary-400 ring-1 ring-primary-400/30"
+                                      : "border-white/25",
+                                  )}
+                                >
+                                  <span
+                                    className={clsx(
+                                      "h-2.5 w-2.5 rounded-full",
+                                      selected
+                                        ? "bg-primary-300"
+                                        : "bg-white/20",
+                                    )}
+                                  />
+                                </span>
+                              </div>
+
+                              <p className="text-sm font-semibold">
+                                {type.label}
+                              </p>
+                              <p className="mt-1 line-clamp-2 text-xs leading-snug text-neutral-300">
+                                {type.description}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+
+                  {errors.businessType && (
+                    <p className="text-xs leading-snug text-error-300">
+                      Choose the type that best describes your organization.
+                    </p>
+                  )}
+                </div>
+              )}
+            />
+          </Section>
+
+          {/* Branding */}
+          <Section
+            title="Branding"
+            desc="Upload a banner + a crisp square logo and choose your accent color."
+            icon={<ImagePlus className="h-5 w-5 text-primary-300" />}
+          >
+            <div className="space-y-5">
+              <Controller
+                control={control}
+                name="banner"
+                render={({ field }) => (
+                  <div className="space-y-2">
+                    <ImageUpload
+                      label="Banner"
+                      value={uiBanner || ""}
+                      onChange={(next) => {
+                        const nonce = Date.now();
+                        setPreviewNonce(nonce);
+
+                        const cleanOriginal = stripQueryAndHash(next);
+                        if (cleanOriginal)
+                          bannerOriginalRef.current = cleanOriginal;
+
+                        field.onChange(withCacheBust(next, nonce));
+                      }}
+                      publicId={`temp/orgs/banners/${bannerPublicId}`}
+                    />
+                    {field.value?.trim() ? (
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => openAdjust("banner")}
+                        >
+                          Adjust banner
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              />
+
+              <div className="rounded-lg border border-white/10 bg-neutral-950/45 p-4">
+                <div className="flex flex-col items-center justify-between gap-4">
+                  <div className="shrink-0">
+                    <Controller
+                      control={control}
+                      name="logo"
+                      render={({ field }) => (
+                        <div className="space-y-2 flex flex-col items-center">
+                          <ImageUpload
+                            label=""
+                            value={uiLogo || ""}
+                            onChange={(next) => {
+                              const nonce = Date.now();
+                              setPreviewNonce(nonce);
+
+                              const cleanOriginal = stripQueryAndHash(next);
+                              if (cleanOriginal)
+                                logoOriginalRef.current = cleanOriginal;
+
+                              field.onChange(withCacheBust(next, nonce));
+                            }}
+                            publicId={`temp/orgs/logos/${logoPublicId}`}
+                            sizing="square"
+                          />
+                          {field.value?.trim() ? (
+                            <div className="flex justify-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => openAdjust("logo")}
+                              >
+                                Adjust logo
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    />
+                  </div>
+                  <div className="min-w-0 text-center">
+                    <p className="text-sm font-semibold">Logo</p>
+
+                    <p className="mt-2 text-[11px] text-neutral-400">
+                      Recommended: ≥ 512×512, transparent PNG if possible.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Controller
+                control={control}
+                name="accentColor"
+                render={({ field }) => (
+                  <div className="md:pl-1">
+                    <TikdColorPicker
+                      value={field.value || ""}
+                      onChange={field.onChange}
+                      defaultColor="#7C3AED"
+                      label="Select an accent color"
+                      description="Used for highlights on your organization page and event cards."
+                      showAlpha
+                      onResetToDefault={() => field.onChange("")}
+                      error={errors.accentColor?.message || null}
+                    />
+                  </div>
+                )}
+              />
+            </div>
+          </Section>
+
+          {/* Links */}
+          <Section
+            title="Links"
+            desc="Add your main website so fans and partners can learn more."
+            icon={<Link2 className="h-5 w-5 text-primary-300" />}
+          >
+            <div className="space-y-2">
+              <FieldLabel>Website (optional)</FieldLabel>
+              <LabelledInput
+                noLabel
+                aria-label="Website"
+                placeholder="https://example.com"
+                {...register("website")}
+                variant="transparent"
+                size="md"
+                className={clsx(errors.website && errorRing)}
+              />
+              {errors.website?.message ? (
+                <p className="text-xs text-error-300">
+                  {String(errors.website.message)}
+                </p>
+              ) : null}
+            </div>
+          </Section>
+
+          <div className="flex gap-3 justify-end">
             <Button
               type="button"
               variant="ghost"
@@ -399,34 +962,76 @@ export default function EditOrganizationPage() {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" loading={isSubmitting}>
-              Save changes
+            <Button
+              type="submit"
+              variant="primary"
+              loading={isSubmitting}
+              animation
+            >
+              Save Changes
             </Button>
           </div>
         </div>
 
-        {/* Right-side tips / info */}
+        {/* ------------------------- Sidebar -------------------------- */}
         <aside className="md:col-span-5 lg:col-span-4">
-          <div className="md:sticky md:top-20 space-y-6">
-            <Section
-              title="Tips for a strong profile"
-              icon={<Sparkles className="h-5 w-5 text-primary-300" />}
-              desc="Small tweaks can make your organization much more attractive."
-            >
+          <div className="space-y-6 md:sticky md:top-20">
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+              <h3 className="mb-3 text-sm font-semibold">Live Preview</h3>
+
+              <div className="flex justify-center">
+                <ConnectionProfileCard
+                  key={`org-live-${uiBanner}-${uiLogo}-${previewNonce}`}
+                  href="#"
+                  kind="organization"
+                  title={name?.trim() || "Organization name"}
+                  description={cardDescription}
+                  bannerUrl={uiBanner?.trim() ? uiBanner : undefined}
+                  iconUrl={uiLogo?.trim() ? uiLogo : undefined}
+                  totalMembers={undefined}
+                  joinDateLabel={
+                    businessType
+                      ? `${getBusinessTypeLabel(businessType)} · Preview`
+                      : "Preview"
+                  }
+                />
+              </div>
+
+              <div className="mt-3 text-xs text-neutral-400">
+                Preview reflects your banner/logo/accent choices.
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Sparkles className="h-4 w-4 text-primary-300" />
+                Make it stand out
+              </h3>
               <ul className="list-inside list-disc space-y-1 text-sm text-neutral-300">
+                <li>Use a clean banner (≥ 1600×400).</li>
+                <li>Use a simple, square logo (≥ 512×512).</li>
+                <li>Keep the description concise and specific.</li>
                 <li>
-                  Use a clear logo with transparent background if possible.
-                </li>
-                <li>
-                  Keep the description short but specific — who are you, what do
-                  you host?
-                </li>
-                <li>
-                  Add a website or socials so people can learn more before
-                  buying.
+                  Pick a business type and accent color that match how guests
+                  see you.
                 </li>
               </ul>
-            </Section>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
+              <p className="text-xs text-neutral-300">
+                Address:{" "}
+                <span className="font-semibold text-neutral-0">
+                  {location?.trim() || "—"}
+                </span>
+              </p>
+              <p className="mt-2 text-xs text-neutral-300">
+                Accent:{" "}
+                <span className="font-mono font-semibold text-neutral-0">
+                  {previewAccent}
+                </span>
+              </p>
+            </div>
           </div>
         </aside>
       </form>

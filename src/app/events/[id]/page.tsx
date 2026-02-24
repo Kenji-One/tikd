@@ -1,6 +1,4 @@
-/* ------------------------------------------------------------------ */
-/*  src/app/events/[id]/page.tsx                                      */
-/* ------------------------------------------------------------------ */
+// src/app/events/[id]/page.tsx
 "use client";
 
 import Image from "next/image";
@@ -16,6 +14,9 @@ import InfoRow from "@/components/ui/InfoRow";
 import { EventHero } from "@/components/sections/event/EventHero";
 import { useCart } from "@/store/useCart";
 import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
+import EventMediaGallery, {
+  type EventMediaItem,
+} from "@/components/ui/EventMediaGallery";
 
 /* ------------------------------------------------------------------ */
 /*  Remote types                                                      */
@@ -44,6 +45,10 @@ interface ApiEvent {
   date: string; // ISO
   location: string;
   image?: string;
+
+  // ✅ NEW: media gallery items
+  media?: EventMediaItem[];
+
   attendingCount: number;
   attendeesPreview: { _id: string; image?: string }[];
   artists: Artist[];
@@ -238,8 +243,9 @@ export default function EventDetailPage() {
   /* ---------- Date / map ---------- */
   const dateLabel = formatDate(eventData.date);
 
-  const MAP_W = 900;
-  const MAP_H = 520;
+  // Slightly larger request so it stays crisp when embedded
+  const MAP_W = 1000;
+  const MAP_H = 560;
   const mapUrl =
     getStaticMapUrl(eventData.location, MAP_W, MAP_H) || "/dummy/map.png";
 
@@ -269,6 +275,10 @@ export default function EventDetailPage() {
     }
   }
 
+  const hasDesc = Boolean(eventData.description?.trim());
+  const hasMedia = (eventData.media?.length ?? 0) > 0;
+  const showDetailsCard = hasDesc || hasMedia || eventData.attendingCount > 0;
+
   /* ---------- Render ---------- */
   return (
     <EventHero
@@ -297,7 +307,7 @@ export default function EventDetailPage() {
       {/* ---------------- Right column content ---------------- */}
       <div className="space-y-6">
         {/* Details */}
-        {eventData.description && (
+        {showDetailsCard && (
           <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
             <div className="p-5 sm:p-6">
               <h2 className="text-lg font-semibold text-white">Details</h2>
@@ -344,9 +354,18 @@ export default function EventDetailPage() {
                 />
               </div>
 
-              <p className="mt-4 whitespace-pre-wrap text-white/90 font-light leading-[150%]">
-                {eventData.description}
-              </p>
+              {hasDesc ? (
+                <p className="mt-4 whitespace-pre-wrap text-white/90 font-light leading-[150%]">
+                  {eventData.description}
+                </p>
+              ) : null}
+
+              {/* ✅ Media gallery (videos one-by-one, images carousel) */}
+              {hasMedia ? (
+                <div className={hasDesc ? "mt-5" : "mt-4"}>
+                  <EventMediaGallery items={eventData.media ?? []} />
+                </div>
+              ) : null}
 
               {eventData.attendingCount > 0 && (
                 <div className="mt-5">
@@ -389,16 +408,30 @@ export default function EventDetailPage() {
           </section>
         )}
 
-        {/* Venue */}
+        {/* Venue (✅ map moved here) */}
         <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
           <div className="p-5 sm:p-6">
             <h2 className="text-lg font-semibold text-white">Venue</h2>
+
             <p className="mt-3 text-white/85 font-light leading-[150%]">
               {eventData.location}
             </p>
-            <p className="mt-2 text-sm text-white/55">
-              Map is shown at the bottom of this page.
-            </p>
+
+            {/* Embedded map (replaces “Map is shown…” text) */}
+            <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-neutral-900/25">
+              <div className="relative h-[220px] sm:h-[240px] md:h-[260px]">
+                <Image
+                  src={mapUrl}
+                  alt={`Map for ${eventData.location}`}
+                  fill
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 700px, 760px"
+                  className="object-cover"
+                  unoptimized
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+                <div className="pointer-events-none absolute inset-0 ring-1 ring-white/10" />
+              </div>
+            </div>
           </div>
         </section>
 
@@ -409,71 +442,56 @@ export default function EventDetailPage() {
           </p>
         </InfoRow>
 
-        {/* Bottom banner (Org + Map) */}
+        {/* Bottom banner (Org only) — map removed; container reduced */}
         <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md overflow-hidden">
-          <div className="grid gap-0 md:grid-cols-2">
-            {/* Org panel */}
-            <div className="relative p-6 sm:p-7">
-              <div
-                className="pointer-events-none absolute inset-0 opacity-90"
-                style={{
-                  background:
-                    "radial-gradient(680px 240px at 16% 10%, rgba(154,70,255,0.22), transparent 55%)," +
-                    "radial-gradient(520px 220px at 92% 34%, rgba(167,112,255,0.16), transparent 55%)",
-                }}
-              />
-              <div className="relative flex flex-col items-center justify-center text-center h-full">
-                <div className="relative size-[54px] overflow-hidden rounded-full bg-white/10 border border-white/10">
-                  <Image
-                    src={
-                      eventData.organization.logo ||
-                      "/dummy/organization-placeholder.png"
-                    }
-                    alt={`${eventData.organization.name} logo`}
-                    fill
-                    sizes="54px"
-                    className="object-cover"
-                  />
-                </div>
-
-                <p className="mt-3 text-sm text-white/60">Hosted by</p>
-                <p className="mt-1 text-lg font-semibold text-white">
-                  {eventData.organization.name}
-                </p>
-
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                  <Button asChild variant="secondary">
-                    <Link href={`/org/${eventData.organization._id}`}>
-                      More Events
-                    </Link>
-                  </Button>
-
-                  {eventData.organization.website && (
-                    <Button asChild variant="secondary">
-                      <a
-                        href={eventData.organization.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Visit Website
-                      </a>
-                    </Button>
-                  )}
-                </div>
+          {/* Org panel now fills full width */}
+          <div className="relative p-5 sm:p-6">
+            <div
+              className="pointer-events-none absolute inset-0 opacity-90"
+              style={{
+                background:
+                  "radial-gradient(680px 240px at 16% 10%, rgba(154,70,255,0.22), transparent 55%)," +
+                  "radial-gradient(520px 220px at 92% 34%, rgba(167,112,255,0.16), transparent 55%)",
+              }}
+            />
+            <div className="relative flex flex-col items-center justify-center text-center">
+              <div className="relative size-[52px] overflow-hidden rounded-full bg-white/10 border border-white/10">
+                <Image
+                  src={
+                    eventData.organization.logo ||
+                    "/dummy/organization-placeholder.png"
+                  }
+                  alt={`${eventData.organization.name} logo`}
+                  fill
+                  sizes="52px"
+                  className="object-cover"
+                />
               </div>
-            </div>
 
-            {/* Map panel */}
-            <div className="relative min-h-[220px] md:min-h-[260px]">
-              <Image
-                src={mapUrl}
-                alt={`Map for ${eventData.location}`}
-                width={MAP_W}
-                height={MAP_H}
-                className="h-full w-full object-cover"
-                unoptimized
-              />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+              <p className="mt-3 text-sm text-white/60">Hosted by</p>
+              <p className="mt-1 text-lg font-semibold text-white">
+                {eventData.organization.name}
+              </p>
+
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <Button asChild variant="secondary">
+                  <Link href={`/org/${eventData.organization._id}`}>
+                    More Events
+                  </Link>
+                </Button>
+
+                {eventData.organization.website && (
+                  <Button asChild variant="secondary">
+                    <a
+                      href={eventData.organization.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Visit Website
+                    </a>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </section>

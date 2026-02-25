@@ -1,10 +1,12 @@
-// src/components/features/settings/AvatarDialog.tsx
 "use client";
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
+import { Upload } from "lucide-react";
+import clsx from "classnames";
+
 import { Button } from "@/components/ui/Button";
 
 /* ---------- env (public) ---------- */
@@ -25,6 +27,7 @@ export default function AvatarDialog({ open, onClose }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string>(""); // object URL or data URL
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<UploadState>("idle");
+  const [dragOver, setDragOver] = useState(false);
 
   const userId = session?.user?.id || "guest";
   const username = session?.user?.name || "guest";
@@ -39,13 +42,27 @@ export default function AvatarDialog({ open, onClose }: Props) {
         : state === "saving"
           ? "Saving…"
           : "Update Avatar",
-    [state]
+    [state],
   );
 
+  useEffect(() => {
+    // reset local state when modal closes
+    if (!open) {
+      if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl("");
+      setError(null);
+      setState("idle");
+      setDragOver(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   function resetLocal() {
+    if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
     setPreviewUrl("");
     setError(null);
     setState("idle");
+    setDragOver(false);
   }
 
   function closeAll() {
@@ -57,22 +74,29 @@ export default function AvatarDialog({ open, onClose }: Props) {
     fileInputRef.current?.click();
   }
 
-  async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFile(file?: File | null) {
     setError(null);
-    const f = e.target.files?.[0];
-    if (!f) return;
+    if (!file) return;
 
-    if (!/image\/(png|jpeg|svg\+xml)/.test(f.type)) {
+    if (!/image\/(png|jpeg|svg\+xml)/.test(file.type)) {
+      // match HTML behavior: silent reject is ok, but we keep a friendly message
       setError("Only PNG, JPG or SVG files are allowed.");
       return;
     }
-    if (f.size > 5 * 1024 * 1024) {
+    if (file.size > 5 * 1024 * 1024) {
       setError("Max file size is 5MB.");
       return;
     }
 
-    const url = URL.createObjectURL(f);
+    if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+
+    const url = URL.createObjectURL(file);
     setPreviewUrl(url);
+  }
+
+  async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    handleFile(f);
   }
 
   async function generateRandom() {
@@ -82,11 +106,14 @@ export default function AvatarDialog({ open, onClose }: Props) {
       setState("uploading");
       const seed = `${username || "guest"}-${Date.now()}`;
       const svg = await fetch(
-        `/api/avatar?seed=${encodeURIComponent(seed)}`
+        `/api/avatar?seed=${encodeURIComponent(seed)}`,
       ).then((r) => r.text());
       const blob = new Blob([svg], { type: "image/svg+xml" });
       const dataUrl = await blobToDataUrl(blob);
+
+      if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(dataUrl);
+
       setState("idle");
     } catch {
       setState("idle");
@@ -103,8 +130,9 @@ export default function AvatarDialog({ open, onClose }: Props) {
     try {
       setState("saving");
       const publicId = `users/${userId}/avatar`;
+
       const { signature, timestamp, overwrite, invalidate } = await fetch(
-        `/api/cloudinary/sign?public_id=${encodeURIComponent(publicId)}&overwrite=1`
+        `/api/cloudinary/sign?public_id=${encodeURIComponent(publicId)}&overwrite=1`,
       ).then((r) => r.json());
 
       const form = new FormData();
@@ -118,7 +146,7 @@ export default function AvatarDialog({ open, onClose }: Props) {
 
       const cloudinaryResp = await fetch(
         `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`,
-        { method: "POST", body: form }
+        { method: "POST", body: form },
       ).then((r) => r.json());
 
       if (!cloudinaryResp?.secure_url) {
@@ -169,12 +197,21 @@ export default function AvatarDialog({ open, onClose }: Props) {
     }
   }
 
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    handleFile(f);
+  }
+
   return (
     <Transition appear show={open} as={Fragment}>
       <Dialog
         as="div"
-        className="relative z-50"
-        onClose={() => (disabled ? null : closeAll())}
+        className="relative z-[1000]"
+        onClose={() => {
+          if (!disabled) closeAll();
+        }}
       >
         {/* Overlay */}
         <Transition.Child
@@ -186,7 +223,7 @@ export default function AvatarDialog({ open, onClose }: Props) {
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px]" />
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-[8px]" />
         </Transition.Child>
 
         {/* Panel */}
@@ -195,110 +232,159 @@ export default function AvatarDialog({ open, onClose }: Props) {
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-200"
-              enterFrom="opacity-0 translate-y-2 scale-[0.98]"
-              enterTo="opacity-100 translate-y-0 scale-100"
+              enterFrom="opacity-0 scale-[0.96]"
+              enterTo="opacity-100 scale-100"
               leave="ease-in duration-150"
-              leaveFrom="opacity-100 translate-y-0 scale-100"
-              leaveTo="opacity-0 translate-y-2 scale-[0.98]"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-[0.98]"
             >
-              <Dialog.Panel className="w-full max-w-md rounded-2xl border border-white/10 bg-surface p-5 ring-1 ring-white/10">
-                <Dialog.Title className="text-lg font-semibold">
-                  {" "}
-                  {heading}{" "}
-                </Dialog.Title>
-                <p className="mt-1 text-sm text-white/70">
-                  JPG/PNG/SVG, max 5MB. You can upload your own or generate a
-                  random avatar.
-                </p>
-
-                {/* top row: current + preview */}
-                <div className="mt-5 grid grid-cols-2 gap-4">
-                  <Thumb title="Current">
-                    {currentAvatar ? (
-                      <Image
-                        alt="Current avatar"
-                        src={currentAvatar}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <FallbackInitial name={username} />
-                    )}
-                  </Thumb>
-
-                  <Thumb title="Preview">
-                    {previewUrl ? (
-                      <Image
-                        alt="Preview avatar"
-                        src={previewUrl}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center text-xs text-white/40">
-                        No file selected
-                      </div>
-                    )}
-                  </Thumb>
-                </div>
-
-                {/* upload box */}
-                <div
-                  className="mt-4 cursor-pointer rounded-xl border border-dashed border-white/15 bg-white/5 p-4 text-sm text-white/80 hover:bg-white/[0.08]"
-                  onClick={pickFile}
-                >
-                  <p className="font-medium">Upload</p>
-                  <p className="text-xs text-white/60">
-                    Choose file or drag & drop here
-                  </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/svg+xml"
-                    className="hidden"
-                    onChange={onFileChange}
-                  />
-                </div>
-
-                {/* actions */}
-                {error && (
-                  <p className="mt-3 text-xs text-error-500">{error}</p>
+              <Dialog.Panel
+                className={clsx(
+                  "w-full max-w-[520px] overflow-hidden rounded-[24px]",
+                  "border border-white/10",
+                  "bg-[linear-gradient(135deg,rgba(20,20,30,0.95)_0%,rgba(15,15,25,0.95)_100%)]",
+                  "shadow-[0_20px_60px_rgba(0,0,0,0.50)]",
                 )}
+              >
+                <div className="p-8">
+                  <Dialog.Title className="text-[24px] font-semibold tracking-[-0.01em] text-neutral-0">
+                    {heading}
+                  </Dialog.Title>
+                  <p className="mt-2 text-[13px] leading-relaxed text-white/60">
+                    JPG/PNG/SVG, max 5MB. You can upload your own or generate a
+                    random avatar.
+                  </p>
 
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <Button
-                    onClick={saveUpload}
-                    disabled={disabled || !previewUrl}
-                    variant="brand"
-                    size="sm"
+                  {/* Current + Preview */}
+                  <div className="mt-6 grid grid-cols-2 gap-4">
+                    <AvatarBox title="CURRENT">
+                      {currentAvatar ? (
+                        <Image
+                          alt="Current avatar"
+                          src={currentAvatar}
+                          fill
+                          sizes="240px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <FallbackInitial name={username} />
+                      )}
+                    </AvatarBox>
+
+                    <AvatarBox title="PREVIEW" dashed={!previewUrl}>
+                      {previewUrl ? (
+                        // next/image can work with blob/data in many setups; keep consistent with your code
+                        <Image
+                          alt="Preview avatar"
+                          src={previewUrl}
+                          fill
+                          unoptimized
+                          sizes="240px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-[13px] text-white/30">
+                          No file selected
+                        </div>
+                      )}
+                    </AvatarBox>
+                  </div>
+
+                  {/* Upload area (click + drag/drop) */}
+                  <div
+                    className={clsx(
+                      "mt-5 rounded-xl border-2 border-dashed p-8 text-center transition",
+                      dragOver
+                        ? "border-primary-500/60 bg-primary-500/10"
+                        : "border-white/15 bg-white/[0.02] hover:bg-white/[0.04] hover:border-primary-500/40",
+                      disabled
+                        ? "opacity-70 pointer-events-none"
+                        : "cursor-pointer",
+                    )}
+                    role="button"
+                    tabIndex={0}
+                    onClick={pickFile}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        pickFile();
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (!disabled) setDragOver(true);
+                    }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={onDrop}
+                    aria-label="Upload avatar"
                   >
-                    Save Upload
-                  </Button>
+                    <Upload className="mx-auto mb-2 h-8 w-8 text-white/70" />
+                    <div className="text-[15px] font-semibold text-white">
+                      Upload
+                    </div>
+                    <div className="mt-1 text-[13px] text-white/50">
+                      Choose file or drag &amp; drop here
+                    </div>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/svg+xml"
+                      className="hidden"
+                      onChange={onFileChange}
+                    />
+                  </div>
+
+                  {/* Full-width Random button */}
                   <Button
                     onClick={generateRandom}
                     disabled={disabled}
                     variant="secondary"
-                    size="sm"
+                    size="md"
+                    className={clsx(
+                      "mt-4 w-full rounded-xl px-6 py-3 text-[14px] font-semibold",
+                      "bg-white/5 border border-white/10 hover:bg-white/10",
+                      "transition-all hover:-translate-y-[1px]",
+                    )}
                   >
                     Use Random Avatar
                   </Button>
 
-                  <div className="ml-auto flex items-center gap-2">
+                  {/* Error */}
+                  {error ? (
+                    <p className="mt-4 text-[12px] leading-snug text-error-500">
+                      {error}
+                    </p>
+                  ) : null}
+
+                  {/* Footer actions */}
+                  <div className="mt-6 flex gap-3 border-t border-white/10 pt-6">
                     <Button
                       onClick={removeAvatar}
                       disabled={disabled}
                       variant="destructive"
-                      size="sm"
+                      size="md"
+                      className={clsx(
+                        "flex-1 rounded-xl px-6 py-3 text-[14px] font-semibold",
+                        "transition-all hover:-translate-y-[1px]",
+                      )}
                     >
                       Remove
                     </Button>
+
                     <Button
-                      onClick={closeAll}
-                      disabled={disabled}
-                      variant="ghost"
-                      size="sm"
+                      onClick={saveUpload}
+                      disabled={disabled || !previewUrl}
+                      variant="brand"
+                      size="md"
+                      className={clsx(
+                        "flex-1 rounded-xl px-6 py-3 text-[14px] font-semibold",
+                        "bg-[linear-gradient(135deg,#7c3aed,#6366f1)] hover:bg-[linear-gradient(135deg,#7c3aed,#6366f1)]",
+                        "shadow-[0_4px_20px_rgba(124,58,237,0.30)]",
+                        "transition-all hover:-translate-y-[1px] hover:shadow-[0_6px_30px_rgba(124,58,237,0.40)]",
+                      )}
                     >
-                      Close
+                      Save
                     </Button>
                   </div>
                 </div>
@@ -311,19 +397,31 @@ export default function AvatarDialog({ open, onClose }: Props) {
   );
 }
 
-/* ---------- helpers & tiny subcomponents ---------- */
+/* ---------- tiny subcomponents + helpers ---------- */
 
-function Thumb({
+function AvatarBox({
   title,
+  dashed,
   children,
 }: {
   title: string;
+  dashed?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-      <p className="mb-2 text-xs font-medium text-white/70">{title}</p>
-      <div className="relative w-28 h-28 mx-auto overflow-hidden rounded-full ring-1 ring-white/5">
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      <div className="text-[11px] font-semibold tracking-[0.08em] text-white/60">
+        {title}
+      </div>
+
+      <div
+        className={clsx(
+          "mt-3 relative aspect-square w-full overflow-hidden rounded-xl",
+          dashed
+            ? "border-2 border-dashed border-white/10 bg-white/[0.03]"
+            : "",
+        )}
+      >
         {children}
       </div>
     </div>
@@ -332,8 +430,8 @@ function Thumb({
 
 function FallbackInitial({ name }: { name: string }) {
   return (
-    <div className="flex h-full w-full items-center justify-center rounded-xl bg-[conic-gradient(from_220deg_at_50%_50%,#6d28d9,#3b82f6,#111827)]">
-      <span className="text-2xl font-semibold text-white">
+    <div className="absolute inset-0 grid place-items-center bg-[linear-gradient(135deg,#22d3ee,#6366f1)]">
+      <span className="text-3xl font-semibold text-white">
         {name?.[0]?.toUpperCase() || "U"}
       </span>
     </div>

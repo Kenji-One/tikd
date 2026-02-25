@@ -1,6 +1,7 @@
+// src/app/org/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
@@ -48,6 +49,13 @@ const getStaticMapUrl = (
   ].join("");
 };
 
+const chunk = <T,>(arr: T[], size: number): T[][] => {
+  if (size <= 0) return [arr];
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
 interface OrgDTO {
   _id: string;
   name: string;
@@ -58,6 +66,7 @@ interface OrgDTO {
   logo?: string; // Cloudinary URL
   website?: string;
   location?: string;
+  accentColor?: string; // used to tint EventCard date
 
   /** optional future fields (safe if absent) */
   hoursLabel?: string;
@@ -92,7 +101,7 @@ type UiEventCard = {
   dateLabel: string;
   venue: string;
   img: string;
-  category: string; // ✅ required
+  category: string;
 };
 
 const toCard = (e: EventDTO): UiEventCard => ({
@@ -145,96 +154,40 @@ export default function OrganizerPage() {
   const heroSrc = org?.banner || org?.logo || "";
   const website = (org?.website ?? "").trim();
   const locationStr = (org?.location ?? "").trim();
+  const orgAccent = (org?.accentColor ?? "").trim() || undefined;
 
-  const upcomingEvents = (upcomingRes?.items ?? []).map(toCard);
-
-  /**
-   * ✅ FIX (minimal): only make 2-row columns when we actually have >4 events.
-   * - <=4 events: 1 row, each column has 1 card (side-by-side)
-   * - >4 events: 2 rows, each column has 2 cards (as before)
-   */
-  const stackPerCol = upcomingEvents.length <= 4 ? 1 : 2;
-
-  const upcomingColumns = useMemo(() => {
-    const cols: UiEventCard[][] = [];
-    for (let i = 0; i < upcomingEvents.length; i += stackPerCol) {
-      cols.push(upcomingEvents.slice(i, i + stackPerCol));
-    }
-    return cols;
-  }, [upcomingEvents, stackPerCol]);
+  const upcomingEvents = useMemo(
+    () => (upcomingRes?.items ?? []).map(toCard),
+    [upcomingRes?.items],
+  );
 
   /**
-   * keep your existing "4 columns visible" default
-   * but "Load More" should add:
-   * - when stackPerCol=1 => +4 columns (so you reveal 4 more events)
-   * - when stackPerCol=2 => +2 columns (your original behavior, reveals 4 events)
+   * ✅ REQUIRED BEHAVIOR
+   * - Desktop (lg+): ALWAYS 4 columns.
+   * - Up to 8 events visible (2 rows max on desktop).
+   * - If >8 events: carousel activates, 8 events per slide (4x2 on desktop).
    */
-  const COLS_STEP = stackPerCol === 1 ? 4 : 2;
+  const PAGE_SIZE = 8;
 
-  const [visibleCols, setVisibleCols] = useState(4);
-  const totalCols = upcomingColumns.length;
-  const shownColumns = upcomingColumns.slice(0, visibleCols);
+  const pages = useMemo(() => {
+    if (upcomingEvents.length <= PAGE_SIZE) return [upcomingEvents];
+    return chunk(upcomingEvents, PAGE_SIZE);
+  }, [upcomingEvents]);
 
-  /**
-   * ✅ Keep 4 column slots when <=4 events
-   */
-  const paddedColumns = useMemo(() => {
-    if (stackPerCol !== 1) return shownColumns;
+  const isCarousel = pages.length > 1;
 
-    const missing = Math.max(0, 4 - shownColumns.length);
-    if (missing === 0) return shownColumns;
+  const [pageIdx, setPageIdx] = useState(0);
 
-    return [
-      ...shownColumns,
-      ...Array.from({ length: missing }, () => [] as UiEventCard[]),
-    ];
-  }, [shownColumns, stackPerCol]);
-
-  /**
-   * ✅ NEW (minimal): when stackPerCol=1, make columns smaller so 4 fit inside container.
-   * Container inner width (your screenshot) ~ 1169px.
-   * With gap-4 (48px total gaps), 4 cols must be <= ~280px each.
-   */
-  const colClassName =
-    stackPerCol === 1
-      ? "flex w-[260px] shrink-0 flex-col gap-4 sm:w-[270px] lg:w-[280px]"
-      : "flex w-[280px] shrink-0 flex-col gap-4 sm:w-[300px] lg:w-[320px]";
-
-  /* scroller arrows ------------------------------------------------------ */
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
-
+  // keep index valid when data changes
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
+    setPageIdx(0);
+  }, [id, pages.length]);
 
-    const update = () => {
-      const max = el.scrollWidth - el.clientWidth;
-      setCanLeft(el.scrollLeft > 4);
-      setCanRight(el.scrollLeft < max - 4);
-    };
+  const safePageIdx = Math.min(pageIdx, Math.max(0, pages.length - 1));
+  const pageEvents = pages[safePageIdx] ?? [];
 
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
-    return () => {
-      el.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, [shownColumns.length]);
-
-  const scrollByCols = (dir: -1 | 1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    const firstCol = el.querySelector<HTMLElement>("[data-org-col]");
-    const colW = firstCol?.offsetWidth ?? 300;
-    const gap = 16;
-    const delta = dir * (colW * 2 + gap * 2);
-
-    el.scrollBy({ left: delta, behavior: "smooth" });
-  };
+  const goPrev = () => setPageIdx((p) => Math.max(0, p - 1));
+  const goNext = () => setPageIdx((p) => Math.min(pages.length - 1, p + 1));
 
   /* location helpers ----------------------------------------------------- */
   const addressText = useMemo(() => {
@@ -349,15 +302,16 @@ export default function OrganizerPage() {
               </h2>
             ) : null}
 
-            {!isLoading && upcomingEvents.length > 0 ? (
+            {/* ✅ Only show arrows when carousel is active (>8 events) */}
+            {!isLoading && upcomingEvents.length > 0 && isCarousel ? (
               <div className="flex items-center gap-2">
                 <Button
                   variant="secondary"
                   size="icon"
-                  onClick={() => scrollByCols(-1)}
-                  disabled={!canLeft}
-                  aria-label="Scroll left"
-                  title="Scroll left"
+                  onClick={goPrev}
+                  disabled={safePageIdx === 0}
+                  aria-label="Previous events"
+                  title="Previous"
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </Button>
@@ -365,10 +319,10 @@ export default function OrganizerPage() {
                 <Button
                   variant="secondary"
                   size="icon"
-                  onClick={() => scrollByCols(1)}
-                  disabled={!canRight}
-                  aria-label="Scroll right"
-                  title="Scroll right"
+                  onClick={goNext}
+                  disabled={safePageIdx >= pages.length - 1}
+                  aria-label="Next events"
+                  title="Next"
                 >
                   <ChevronRight className="h-5 w-5" />
                 </Button>
@@ -377,53 +331,37 @@ export default function OrganizerPage() {
           </div>
 
           {isLoading ? (
-            <div className="mt-5 flex gap-4 overflow-hidden">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="w-[280px] shrink-0 space-y-4 sm:w-[300px]"
-                >
-                  <Skeleton className="h-[188px] w-full rounded-[18px]" />
-                  <Skeleton className="h-[188px] w-full rounded-[18px]" />
-                </div>
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-[188px] w-full rounded-[18px]" />
               ))}
             </div>
           ) : upcomingEvents.length > 0 ? (
-            <>
-              <div
-                ref={scrollerRef}
-                className="mt-5 overflow-x-auto no-scrollbar"
-              >
-                <div className="flex gap-4 pb-2">
-                  {(stackPerCol === 1 ? paddedColumns : shownColumns).map(
-                    (col, colIdx) => (
-                      <div
-                        key={`col-${colIdx}`}
-                        data-org-col
-                        className={colClassName}
-                      >
-                        {col.map((ev) => (
-                          <EventCard key={ev.id} {...ev} />
-                        ))}
-                      </div>
-                    ),
-                  )}
-                </div>
-              </div>
-
-              {visibleCols < totalCols && (
-                <div className="mt-6 flex justify-center">
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      setVisibleCols((v) => Math.min(v + COLS_STEP, totalCols))
-                    }
+            <div className="mt-5">
+              {/* ✅ If <=8: static grid (still 4 cols on desktop). If >8: carousel slides of 8. */}
+              {isCarousel ? (
+                <div className="overflow-hidden">
+                  <div
+                    className="flex transition-transform duration-300 ease-out"
+                    style={{
+                      transform: `translate3d(-${safePageIdx * 100}%, 0, 0)`,
+                    }}
                   >
-                    Load More
-                  </Button>
+                    {pages.map((slide, idx) => (
+                      <div key={`slide-${idx}`} className="w-full shrink-0">
+                        <UpcomingGrid
+                          events={slide}
+                          orgAccent={orgAccent}
+                          // keep desktop at 4 cols; max 8 items already via chunk()
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              ) : (
+                <UpcomingGrid events={pageEvents} orgAccent={orgAccent} />
               )}
-            </>
+            </div>
           ) : null}
         </section>
 
@@ -486,10 +424,10 @@ export default function OrganizerPage() {
                       </div>
                     </div>
                     <div className="pt-4">
-                      <div className="text-[16px] text-white leading-[130%] tracking-[-2%]">
+                      <div className="text-[16px] leading-[130%] tracking-[-2%] text-white">
                         {orgName}
                       </div>
-                      <div className="text-[16px] text-white leading-[130%] tracking-[-2%]">
+                      <div className="text-[16px] leading-[130%] tracking-[-2%] text-white">
                         {addressText}
                       </div>
 
@@ -511,6 +449,33 @@ export default function OrganizerPage() {
         <div className="h-10" />
       </div>
     </main>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Upcoming grid (desktop: always 4 cols)                                     */
+/* -------------------------------------------------------------------------- */
+function UpcomingGrid({
+  events,
+  orgAccent,
+}: {
+  events: UiEventCard[];
+  orgAccent?: string;
+}) {
+  return (
+    <div
+      className={clsx(
+        "grid gap-4",
+        // ✅ mobile responsive, but ALWAYS 4 columns on desktop
+        "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+      )}
+    >
+      {events.map((ev) => (
+        <div key={ev.id} className="min-w-0">
+          <EventCard {...ev} dateAccentColor={orgAccent} />
+        </div>
+      ))}
+    </div>
   );
 }
 

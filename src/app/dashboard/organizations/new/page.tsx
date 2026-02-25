@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -430,8 +430,244 @@ export default function NewOrganizationPage() {
     return v ? withCacheBust(v, previewNonce) : "";
   }, [logo, previewNonce]);
 
+  /* ------------------------------------------------------------------
+     ✅ Drag & Drop (banner + logo)
+  ------------------------------------------------------------------ */
+
+  const bannerUploadRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ NEW: "logo block" ref (whole block, not only small uploader)
+  const logoBlockRef = useRef<HTMLDivElement | null>(null);
+
+  const [bannerDragActive, setBannerDragActive] = useState(false);
+  const [logoDragActive, setLogoDragActive] = useState(false);
+
+  const getFileInputFromZone = useCallback((root: HTMLDivElement | null) => {
+    if (!root) return null;
+    return root.querySelector('input[type="file"]') as HTMLInputElement | null;
+  }, []);
+
+  const pushFileToZone = useCallback(
+    (root: HTMLDivElement | null, file: File) => {
+      const input = getFileInputFromZone(root);
+      if (!input) return;
+
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    [getFileInputFromZone],
+  );
+
+  const handleDropImageOnly = useCallback(
+    (root: HTMLDivElement | null, files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      const file = files[0];
+      const isImage = file.type.startsWith("image/");
+      if (!isImage) {
+        alert("Please drop an image file (JPG/PNG/WebP).");
+        return;
+      }
+
+      const maxBytes = 50 * 1024 * 1024; // 50MB
+      if (file.size > maxBytes) {
+        alert("File is too large. Max size is 50MB.");
+        return;
+      }
+
+      pushFileToZone(root, file);
+    },
+    [pushFileToZone],
+  );
+
+  const makeDragHandlers = useCallback(
+    (
+      setActive: (v: boolean) => void,
+      zoneRef: React.RefObject<HTMLDivElement | null>,
+    ) => ({
+      onDragEnter: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActive(true);
+      },
+      onDragOver: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+        setActive(true);
+      },
+      onDragLeave: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const next = e.relatedTarget as Node | null;
+        if (next && e.currentTarget.contains(next)) return;
+
+        setActive(false);
+      },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActive(false);
+        handleDropImageOnly(zoneRef.current, e.dataTransfer?.files ?? null);
+      },
+    }),
+    [handleDropImageOnly],
+  );
+
+  const bannerDnD = useMemo(
+    () => makeDragHandlers(setBannerDragActive, bannerUploadRef),
+    [makeDragHandlers],
+  );
+
+  // ✅ Logo DnD now targets the WHOLE logo block, but still finds the hidden input inside ImageUpload
+  const logoDnD = useMemo(
+    () => makeDragHandlers(setLogoDragActive, logoBlockRef),
+    [makeDragHandlers],
+  );
+
+  // ✅ optional: click anywhere on the logo block to open file picker
+  const openLogoPicker = useCallback(() => {
+    const input = getFileInputFromZone(logoBlockRef.current);
+    input?.click();
+  }, [getFileInputFromZone]);
+
   return (
     <main className="relative bg-neutral-950 text-neutral-0">
+      <style jsx global>{`
+        /* ----------------------------------------------------------------
+           ✅ Org DnD base (banner already good) + NEW logo block variant
+        ----------------------------------------------------------------- */
+
+        .tikd-orgDropZone {
+          position: relative;
+          overflow: hidden;
+          border-radius: var(--tikd-org-drop-r, 12px);
+        }
+
+        .tikd-orgDropZone::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 140ms ease;
+          border-radius: inherit;
+          box-shadow:
+            0 0 0 1px rgba(154, 70, 255, 0.28),
+            0 18px 60px rgba(154, 70, 255, 0.1);
+        }
+
+        .tikd-orgDropZone[data-active="true"]::after {
+          opacity: 1;
+        }
+
+        .tikd-orgDropOverlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 140ms ease;
+          border-radius: inherit;
+        }
+
+        .tikd-orgDropOverlay[data-active="true"] {
+          opacity: 1;
+        }
+
+        .tikd-orgDropOverlay__backdrop {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background:
+            radial-gradient(
+              520px 220px at 34% 18%,
+              rgba(154, 70, 255, 0.18),
+              transparent 62%
+            ),
+            rgba(0, 0, 0, 0.22);
+          backdrop-filter: blur(10px);
+        }
+
+        .tikd-orgDropOverlay__frame {
+          position: absolute;
+          inset: var(--tikd-org-frame-inset, 12px);
+          border-radius: calc(var(--tikd-org-drop-r, 12px) - 12px);
+          border: 1px dashed rgba(231, 222, 255, 0.28);
+          box-shadow: inset 0 0 0 1px rgba(154, 70, 255, 0.1);
+          opacity: 0.95;
+        }
+
+        .tikd-orgDropOverlay__content {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          padding: 12px;
+        }
+
+        .tikd-orgDropOverlay__pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: var(--tikd-org-pill-pad, 10px 14px);
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(10, 10, 16, 0.38);
+          box-shadow:
+            0 10px 30px rgba(0, 0, 0, 0.35),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+          color: rgba(255, 255, 255, 0.92);
+          font-size: var(--tikd-org-pill-font, 12px);
+          font-weight: 800;
+          letter-spacing: 0.2px;
+          line-height: 1;
+          white-space: nowrap;
+        }
+
+        .tikd-orgDropOverlay__pill svg {
+          flex: 0 0 auto;
+          filter: drop-shadow(0 10px 18px rgba(154, 70, 255, 0.18));
+        }
+
+        /* -------------------------------------------------------------
+           ✅ NEW: Logo block drop zone styling
+           - Overlay covers the full logo card (not just 80x80)
+           - Keeps it subtle (no huge purple blob)
+        -------------------------------------------------------------- */
+        .tikd-orgLogoDropZone {
+          position: relative;
+          border-radius: 16px;
+          overflow: hidden;
+        }
+
+        .tikd-orgLogoDropZone[data-active="true"] {
+          box-shadow:
+            0 0 0 1px rgba(154, 70, 255, 0.22),
+            0 18px 60px rgba(154, 70, 255, 0.12);
+        }
+
+        /* allow clicking anywhere without blocking inner controls */
+        .tikd-orgLogoDropZone__clickCatcher {
+          position: absolute;
+          inset: 0;
+          cursor: pointer;
+          background: transparent;
+          border: 0;
+          padding: 0;
+          z-index: 5;
+        }
+
+        /* keep inner elements above click catcher when needed */
+        .tikd-orgLogoDropZone__inner {
+          position: relative;
+          z-index: 10;
+        }
+      `}</style>
+
       {editor?.open ? (
         <ImagePositionEditorModal
           open={editor.open}
@@ -440,8 +676,6 @@ export default function NewOrganizationPage() {
           title={editor.title}
           onClose={() => setEditor(null)}
           onApply={async ({ cropUrl }) => {
-            // ✅ Commit crop to Cloudinary (overwrite the temp asset)
-            // This makes "Apply" actually apply everywhere, immediately.
             const secureUrl = await commitCloudinaryCrop({
               publicId: editor.publicId,
               cropUrl,
@@ -450,14 +684,12 @@ export default function NewOrganizationPage() {
             const nonce = Date.now();
             setPreviewNonce(nonce);
 
-            // Keep track of the true original for re-editing (raw, no cachebust)
             const clean = stripQueryAndHash(secureUrl);
             if (editor.mode === "banner") bannerOriginalRef.current = clean;
             else logoOriginalRef.current = clean;
 
             const fieldName = editor.mode === "banner" ? "banner" : "logo";
 
-            // Store cache-busted URL for instant UI update; strip before submit
             setValue(fieldName, withCacheBust(secureUrl, nonce), {
               shouldDirty: true,
               shouldValidate: true,
@@ -681,26 +913,64 @@ export default function NewOrganizationPage() {
             icon={<ImagePlus className="h-5 w-5 text-primary-300" />}
           >
             <div className="space-y-5">
+              {/* ---------------- Banner (keep as-is; you said it's good) ---------------- */}
               <Controller
                 control={control}
                 name="banner"
                 render={({ field }) => (
                   <div className="space-y-2">
-                    <ImageUpload
-                      label="Banner"
-                      value={uiBanner || ""}
-                      onChange={(next) => {
-                        const nonce = Date.now();
-                        setPreviewNonce(nonce);
+                    <FieldLabel>Banner</FieldLabel>
 
-                        const cleanOriginal = stripQueryAndHash(next);
-                        if (cleanOriginal)
-                          bannerOriginalRef.current = cleanOriginal;
+                    <div
+                      ref={bannerUploadRef}
+                      className="tikd-orgDropZone"
+                      data-active={bannerDragActive ? "true" : "false"}
+                      style={
+                        {
+                          ["--tikd-org-drop-r" as unknown as string]: "12px",
+                          ["--tikd-org-frame-inset" as unknown as string]:
+                            "14px",
+                          ["--tikd-org-pill-font" as unknown as string]: "12px",
+                          ["--tikd-org-pill-pad" as unknown as string]:
+                            "10px 14px",
+                        } as React.CSSProperties
+                      }
+                      {...bannerDnD}
+                    >
+                      <div
+                        className="tikd-orgDropOverlay"
+                        data-active={bannerDragActive ? "true" : "false"}
+                        aria-hidden
+                      >
+                        <div className="tikd-orgDropOverlay__backdrop" />
+                        <div className="tikd-orgDropOverlay__frame" />
+                        <div className="tikd-orgDropOverlay__content">
+                          <span className="tikd-orgDropOverlay__pill">
+                            <ImagePlus className="h-4 w-4 text-primary-300" />
+                            Drop to upload banner
+                          </span>
+                        </div>
+                      </div>
 
-                        field.onChange(withCacheBust(next, nonce));
-                      }}
-                      publicId={`temp/orgs/banners/${bannerPublicId}`}
-                    />
+                      <ImageUpload
+                        label=""
+                        value={uiBanner || ""}
+                        onChange={(next) => {
+                          const nonce = Date.now();
+                          setPreviewNonce(nonce);
+
+                          const cleanOriginal = stripQueryAndHash(next);
+                          if (cleanOriginal)
+                            bannerOriginalRef.current = cleanOriginal;
+
+                          field.onChange(withCacheBust(next, nonce));
+                        }}
+                        publicId={`temp/orgs/banners/${bannerPublicId}`}
+                        accept="image/*"
+                        maxSizeMB={50}
+                      />
+                    </div>
+
                     {field.value?.trim() ? (
                       <div className="flex justify-end">
                         <Button
@@ -712,55 +982,125 @@ export default function NewOrganizationPage() {
                         </Button>
                       </div>
                     ) : null}
+
+                    <p className="text-xs text-neutral-400">
+                      Tip: You can{" "}
+                      <span className="text-neutral-200 font-semibold">
+                        drag & drop
+                      </span>{" "}
+                      an image onto this banner area.
+                    </p>
                   </div>
                 )}
               />
 
-              <div className="rounded-lg border border-white/10 bg-neutral-950/45 p-4">
-                <div className="flex flex-col items-center justify-between gap-4">
-                  <div className="shrink-0">
-                    <Controller
-                      control={control}
-                      name="logo"
-                      render={({ field }) => (
-                        <div className="space-y-2 flex flex-col items-center">
-                          <ImageUpload
-                            label=""
-                            value={uiLogo || ""}
-                            onChange={(next) => {
-                              const nonce = Date.now();
-                              setPreviewNonce(nonce);
+              {/* ---------------- Logo block: drop anywhere in the whole card ---------------- */}
+              <div
+                ref={logoBlockRef}
+                className={clsx(
+                  "tikd-orgLogoDropZone rounded-lg border border-white/10 bg-neutral-950/45 p-4",
+                )}
+                data-active={logoDragActive ? "true" : "false"}
+                {...logoDnD}
+              >
+                {/* click anywhere (but doesn't block inner buttons due to z-order below) */}
+                <button
+                  type="button"
+                  onClick={openLogoPicker}
+                  aria-label="Upload logo"
+                  className="tikd-orgLogoDropZone__clickCatcher"
+                />
 
-                              const cleanOriginal = stripQueryAndHash(next);
-                              if (cleanOriginal)
-                                logoOriginalRef.current = cleanOriginal;
-
-                              field.onChange(withCacheBust(next, nonce));
-                            }}
-                            publicId={`temp/orgs/logos/${logoPublicId}`}
-                            sizing="square"
-                          />
-                          {field.value?.trim() ? (
-                            <div className="flex justify-center">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => openAdjust("logo")}
-                              >
-                                Adjust logo
-                              </Button>
+                <div className="tikd-orgLogoDropZone__inner">
+                  <div className="flex flex-col items-center justify-between gap-4">
+                    <div className="shrink-0">
+                      <Controller
+                        control={control}
+                        name="logo"
+                        render={({ field }) => (
+                          <div className="space-y-2 flex flex-col items-center">
+                            {/* overlay spans FULL logo card */}
+                            <div
+                              className="tikd-orgDropOverlay"
+                              data-active={logoDragActive ? "true" : "false"}
+                              aria-hidden
+                              style={
+                                {
+                                  // make overlay match the card
+                                  ["--tikd-org-drop-r" as unknown as string]:
+                                    "16px",
+                                  ["--tikd-org-frame-inset" as unknown as string]:
+                                    "16px",
+                                  ["--tikd-org-pill-font" as unknown as string]:
+                                    "12px",
+                                  ["--tikd-org-pill-pad" as unknown as string]:
+                                    "10px 14px",
+                                } as React.CSSProperties
+                              }
+                            >
+                              <div className="tikd-orgDropOverlay__backdrop" />
+                              <div className="tikd-orgDropOverlay__frame" />
+                              <div className="tikd-orgDropOverlay__content">
+                                <span className="tikd-orgDropOverlay__pill">
+                                  <ImagePlus className="h-4 w-4 text-primary-300" />
+                                  Drop to upload logo
+                                </span>
+                              </div>
                             </div>
-                          ) : null}
-                        </div>
-                      )}
-                    />
-                  </div>
-                  <div className="min-w-0 text-center">
-                    <p className="text-sm font-semibold">Logo</p>
 
-                    <p className="mt-2 text-[11px] text-neutral-400">
-                      Recommended: ≥ 512×512, transparent PNG if possible.
-                    </p>
+                            <ImageUpload
+                              label=""
+                              value={uiLogo || ""}
+                              onChange={(next) => {
+                                const nonce = Date.now();
+                                setPreviewNonce(nonce);
+
+                                const cleanOriginal = stripQueryAndHash(next);
+                                if (cleanOriginal)
+                                  logoOriginalRef.current = cleanOriginal;
+
+                                field.onChange(withCacheBust(next, nonce));
+                              }}
+                              publicId={`temp/orgs/logos/${logoPublicId}`}
+                              sizing="square"
+                              accept="image/*"
+                              maxSizeMB={50}
+                            />
+
+                            {field.value?.trim() ? (
+                              <div className="flex justify-center">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openAdjust("logo");
+                                  }}
+                                >
+                                  Adjust logo
+                                </Button>
+                              </div>
+                            ) : null}
+
+                            <p className="text-xs text-neutral-400 text-center max-w-[240px]">
+                              You can{" "}
+                              <span className="text-neutral-200 font-semibold">
+                                drag & drop
+                              </span>{" "}
+                              an image anywhere in this logo block.
+                            </p>
+                          </div>
+                        )}
+                      />
+                    </div>
+
+                    <div className="min-w-0 text-center">
+                      <p className="text-sm font-semibold">Logo</p>
+
+                      <p className="mt-2 text-[11px] text-neutral-400">
+                        Recommended: ≥ 512×512, transparent PNG if possible.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

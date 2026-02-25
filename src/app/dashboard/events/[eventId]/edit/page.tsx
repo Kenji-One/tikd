@@ -7,7 +7,10 @@ import {
   useForm,
   useFieldArray,
   type SubmitHandler,
+  type SubmitErrorHandler,
   Controller,
+  type FieldErrors,
+  type Resolver,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -86,7 +89,7 @@ type EventEditMeta = EventWithMeta & {
     website?: string;
     slug?: string;
   };
-  organizationId?: unknown; // (can be populated object depending on backend)
+  organizationId?: unknown; // can be populated object depending on backend
 };
 
 /* ----------------------------- Schema ----------------------------- */
@@ -96,8 +99,22 @@ const timeHHMMOrEmpty = z.union([
   z.string().regex(/^([0-1]\d|2[0-3]):([0-5]\d)$/, "Use HH:MM (e.g. 18:10)"),
 ]);
 
+/**
+ * ✅ Typed optional URL:
+ * - accepts "" OR a valid URL string
+ * - transforms "" -> undefined
+ * This avoids Zod preprocess returning `unknown`.
+ */
+const optionalUrl = z
+  .union([z.literal(""), z.string().url()])
+  .transform((v) => (v === "" ? undefined : v));
+
+/**
+ * ✅ Media URL can be "" in the UI (you filter empties before sending).
+ * Keep it as `string` so field array stays simple.
+ */
 const mediaItemSchema = z.object({
-  url: z.string().url(),
+  url: z.union([z.literal(""), z.string().url()]).default(""),
   type: z.enum(["image", "video"]),
   caption: z.string().max(120).optional(),
   sortOrder: z.number().int().min(0).max(999).optional(),
@@ -108,7 +125,6 @@ const FormSchema = z
     title: z.string().min(3, "Event name is required"),
     description: z.string().optional(),
 
-    /** Multi-day Date Range + Start/End time */
     dateRange: z
       .object({
         start: z.date().nullable(),
@@ -122,18 +138,16 @@ const FormSchema = z
     startTime: timeHHMMOrEmpty,
     endTime: timeHHMMOrEmpty,
 
-    /** Derived ISO (sent to API) */
     date: z.string().optional(),
     endDate: z.string().optional(),
 
-    /** Meta */
     minAge: z.coerce.number().int().min(0).max(99).optional(),
-    image: z.string().url().optional(),
 
-    /** ✅ NEW: Event media (gallery) */
+    // ✅ now: string | undefined (no unknown)
+    image: optionalUrl.optional(),
+
     media: z.array(mediaItemSchema).max(30).default([]),
 
-    /** Location (new UI fields) */
     locationMode: z
       .enum(["specific", "city", "tbd", "tba", "secret", "other"])
       .default("specific"),
@@ -142,31 +156,26 @@ const FormSchema = z
     locationName: z.string().trim().optional(),
     locationOther: z.string().trim().optional(),
 
-    /** Org is taken from event */
     organizationId: z.string().min(1, "Organization is required"),
 
-    /** Categories (chips) */
     categories: z.array(z.string()).default([]),
 
-    /** People & comms (kept for API parity even if UI doesn’t expose them) */
     promoters: z.array(z.string().email()).default([]),
     message: z.string().optional(),
 
-    /** Artists */
     artists: z
       .array(
         z.object({
           name: z.string().min(1, "Artist name required"),
-          image: z.string().url().optional(),
+          // ✅ now: string | undefined (no unknown)
+          image: optionalUrl.optional(),
         }),
       )
       .default([]),
 
-    /** Status */
     status: z.enum(["published", "draft"]).default("published"),
   })
   .superRefine((v, ctx) => {
-    // Require times (but still allow empty initial UI state)
     if (!v.startTime) {
       ctx.addIssue({
         code: "custom",
@@ -182,7 +191,6 @@ const FormSchema = z
       });
     }
 
-    // Location validation
     const cityNeeded = v.locationMode === "city";
     const addressNeeded = v.locationMode === "specific";
     const otherNeeded = v.locationMode === "other";
@@ -218,9 +226,7 @@ const FormSchema = z
     }
   });
 
-type Schema = typeof FormSchema;
-type FormInput = z.input<Schema>;
-type FormValues = z.output<Schema>;
+type FormValues = z.infer<typeof FormSchema>;
 
 /* ----------------------------- Helpers ---------------------------- */
 
@@ -256,7 +262,6 @@ function fmtDateRangeShort(a: Date, b: Date) {
   const b0 = clampToDay(b);
   const same = a0.getTime() === b0.getTime();
   if (same) return fmtDateShort(a0);
-
   return `${fmtDateShort(a0)} – ${fmtDateShort(b0)}`;
 }
 
@@ -365,7 +370,6 @@ function buildLocationString(v: FormValues) {
 
       const parts = [name, addr].filter(Boolean);
       let out = parts.join(" · ");
-
       if (!out) out = city;
 
       return out;
@@ -410,25 +414,29 @@ function guessLocationModeAndFields(locationRaw: string | undefined | null): {
     return { mode: "secret", city: "", address: "", name: "", other: "" };
   }
 
-  // If legacy combined "Name · Address", keep it as address (works nicely with Places input)
   if (loc.includes(" · ")) {
-    return {
-      mode: "specific",
-      city: "",
-      address: loc,
-      name: "",
-      other: "",
-    };
+    return { mode: "specific", city: "", address: loc, name: "", other: "" };
   }
 
-  // Default: treat as a specific address-like value to satisfy validation.
-  return {
-    mode: "specific",
-    city: "",
-    address: loc,
-    name: "",
-    other: "",
-  };
+  return { mode: "specific", city: "", address: loc, name: "", other: "" };
+}
+
+function firstErrorMessage(errs: FieldErrors<FormValues>): string | null {
+  const stack: unknown[] = [errs];
+
+  while (stack.length) {
+    const node = stack.shift();
+    if (!node || typeof node !== "object") continue;
+
+    const maybeMsg = (node as { message?: unknown }).message;
+    if (typeof maybeMsg === "string" && maybeMsg.trim()) return maybeMsg;
+
+    for (const v of Object.values(node as Record<string, unknown>)) {
+      if (!v) continue;
+      if (typeof v === "object") stack.push(v);
+    }
+  }
+  return null;
 }
 
 const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
@@ -439,17 +447,14 @@ const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
       <stop offset="0.6" stop-color="#120a24"/>
       <stop offset="1" stop-color="#08080f"/>
     </linearGradient>
-
     <radialGradient id="glow" cx="30%" cy="18%" r="70%">
       <stop offset="0" stop-color="#9a46ff" stop-opacity="0.30"/>
       <stop offset="1" stop-color="#9a46ff" stop-opacity="0"/>
     </radialGradient>
-
     <linearGradient id="wm" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0.02"/>
     </linearGradient>
-
     <linearGradient id="zoneFill" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.06"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0.02"/>
@@ -544,6 +549,14 @@ export default function EditEventPage() {
     enabled: !!eventId,
   });
 
+  /**
+   * ✅ IMPORTANT: strongly type resolver so RHF doesn't fall back to FieldValues.
+   * This fixes SubmitHandler/Control/Controller generic incompatibility warnings.
+   */
+  const formResolver: Resolver<FormValues> = zodResolver(
+    FormSchema,
+  ) as unknown as Resolver<FormValues>;
+
   const {
     register,
     control,
@@ -552,8 +565,8 @@ export default function EditEventPage() {
     setValue,
     reset,
     formState: { isSubmitting, errors, submitCount },
-  } = useForm<FormInput, unknown, FormValues>({
-    resolver: zodResolver(FormSchema),
+  } = useForm<FormValues>({
+    resolver: formResolver,
     defaultValues: {
       title: "",
       description: "",
@@ -571,27 +584,22 @@ export default function EditEventPage() {
       locationName: "",
       locationOther: "",
       organizationId: "",
+      image: undefined,
+      message: "",
+      minAge: undefined,
+      date: undefined,
+      endDate: undefined,
     },
     mode: "onBlur",
   });
-
-  /** Safe watcher with a default for optional array fields coming from z.input */
-  const watchArr = <K extends keyof FormInput>(
-    key: K,
-    fallback: NonNullable<FormInput[K]>,
-  ) => (watch(key) ?? fallback) as NonNullable<FormInput[K]>;
 
   /* ---------- Derive orgId from event ----------------------------- */
   const orgIdFromEvent = useMemo(() => {
     if (!event) return "";
 
-    // Prefer populated `organization` object if available
     if (event.organization?._id) return String(event.organization._id);
-
-    // If backend returns `organizationId` as a string
     if (typeof event.organizationId === "string") return event.organizationId;
 
-    // If backend returns populated `organizationId` object
     if (event.organizationId && typeof event.organizationId === "object") {
       const maybe = event.organizationId as { _id?: unknown };
       if (typeof maybe._id === "string") return maybe._id;
@@ -649,7 +657,7 @@ export default function EditEventPage() {
       date: startISO || undefined,
       endDate: endISO || undefined,
       minAge: event.minAge ?? undefined,
-      image: event.image ?? "",
+      image: event.image ? String(event.image) : undefined,
       media: normalizedMedia,
       categories: event.categories ?? [],
       promoters: event.promoters ?? [],
@@ -657,7 +665,7 @@ export default function EditEventPage() {
       artists:
         event.artists?.map((a) => ({
           name: a.stageName ?? "",
-          image: a.avatar ?? "",
+          image: a.avatar ? String(a.avatar) : undefined,
         })) ?? [],
       status: (event.status as "published" | "draft") ?? "published",
       locationMode: locGuess.mode,
@@ -721,7 +729,7 @@ export default function EditEventPage() {
     fields: artistFields,
     append: addArtist,
     remove: removeArtist,
-  } = useFieldArray<FormInput, "artists">({ control, name: "artists" });
+  } = useFieldArray<FormValues, "artists">({ control, name: "artists" });
 
   /* ---------- Field arrays (media) -------------------------------- */
   const {
@@ -729,7 +737,7 @@ export default function EditEventPage() {
     append: addMedia,
     remove: removeMedia,
     move: moveMedia,
-  } = useFieldArray<FormInput, "media">({ control, name: "media" });
+  } = useFieldArray<FormValues, "media">({ control, name: "media" });
 
   /* ---------- Derived ISO start/end ------------------------------- */
   const dateRange = (watch("dateRange") ?? {
@@ -749,7 +757,6 @@ export default function EditEventPage() {
     const sISO = isoFromDayAndTime(sDay, startTime);
     let eISO = isoFromDayAndTime(eDay, endTime);
 
-    // If end is <= start, roll end to next day (overnight / multi-day edge)
     if (new Date(eISO).getTime() <= new Date(sISO).getTime()) {
       eISO = isoFromDayAndTime(addDays(eDay, 1), endTime);
     }
@@ -824,7 +831,6 @@ export default function EditEventPage() {
           sortOrder: i,
         }));
 
-      // Send the same shape as create page (but PATCH)
       const payload = {
         title: data.title,
         description: data.description,
@@ -869,9 +875,15 @@ export default function EditEventPage() {
       }
     };
 
+  const onInvalid: SubmitErrorHandler<FormValues> = (errs) => {
+    console.warn("EditEvent validation errors:", errs);
+    const msg = firstErrorMessage(errs as FieldErrors<FormValues>);
+    setSubmitError(msg ? msg : "Please fix the highlighted fields.");
+  };
+
   /* ---------- Live preview ---------------------------------------- */
   const title = watch("title") ?? "";
-  const image = watch("image") ?? "";
+  const image = watch("image"); // string | undefined
 
   const preview = useMemo(
     () => ({
@@ -879,7 +891,7 @@ export default function EditEventPage() {
       title: title || "Untitled Event",
       dateLabel: startISO ? fmtDateTimeLabel(startISO, endISO) : "Date TBA",
       venue: derivedLocationLabel || "Location TBA",
-      img: image || event?.image || TIXSY_MOCK_POSTER,
+      img: image || event?.image || TIXSY_MOCK_POSTER, // ✅ always string
       category: "Shows",
     }),
     [title, startISO, endISO, derivedLocationLabel, image, event],
@@ -887,12 +899,11 @@ export default function EditEventPage() {
 
   /* ---------- Categories chips ------------------------------------ */
   const CATS = ["Shows", "Party", "Comedy", "Social", "Listing Party"] as const;
-  const categories = watchArr("categories", [] as unknown as string[]);
+  const categories = (watch("categories") ?? []) as string[];
   const toggleCat = (c: string) => {
-    const set = new Set(categories as string[]);
+    const set = new Set(categories);
     if (set.has(c)) set.delete(c);
     else set.add(c);
-
     setValue("categories", Array.from(set), { shouldDirty: true });
   };
 
@@ -945,15 +956,13 @@ export default function EditEventPage() {
       </div>
 
       <form
-        onSubmit={handleSubmit(submitImpl("published"))}
+        onSubmit={handleSubmit(submitImpl("published"), onInvalid)}
         className="grid grid-cols-1 gap-6 pt-6 pb-14 md:grid-cols-12 max-w-7xl mx-auto"
         noValidate
       >
         <input type="hidden" {...register("organizationId")} />
 
-        {/* ------------------------- Main form ----------------------- */}
         <div className="md:col-span-7 lg:col-span-8 space-y-6">
-          {/* Required fields note */}
           <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-3">
             <div className="flex items-center gap-3">
               <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
@@ -992,7 +1001,7 @@ export default function EditEventPage() {
           {submitError ? (
             <div
               role="alert"
-              className="rounded-2xl border border-error-500/40 bg-error-500/10 p-4 text-sm text-error-200"
+              className="rounded-xl border border-error-500/40 bg-error-500/10 p-4 text-sm text-error-200"
             >
               {submitError}
             </div>
@@ -1004,7 +1013,6 @@ export default function EditEventPage() {
             icon={<Sparkles className="h-5 w-5 text-primary-300" />}
           >
             <div className="space-y-7">
-              {/* Event Name (required) */}
               <div className="space-y-2">
                 <FieldLabel required>Event Name</FieldLabel>
                 <LabelledInput
@@ -1024,7 +1032,6 @@ export default function EditEventPage() {
               </div>
 
               <div className="space-y-2">
-                {/* Date Range + Start/End Time */}
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <FieldLabel required>Date</FieldLabel>
@@ -1087,7 +1094,6 @@ export default function EditEventPage() {
                   </div>
                 </div>
 
-                {/* Microcopy summary */}
                 <p className="text-sm text-neutral-300">
                   This event will run on{" "}
                   <span className="font-medium">
@@ -1109,12 +1115,11 @@ export default function EditEventPage() {
                 </p>
               </div>
 
-              {/* Categories */}
               <div className="space-y-2">
                 <FieldLabel>Choose Categories</FieldLabel>
                 <div className="flex flex-wrap gap-3">
                   {CATS.map((c) => {
-                    const active = (categories as string[]).includes(c);
+                    const active = categories.includes(c);
                     return (
                       <button
                         key={c}
@@ -1148,13 +1153,11 @@ export default function EditEventPage() {
                 />
               </div>
 
-              {/* -------- LOCATION SECTION (selector + inputs) -------- */}
               <div className="space-y-3">
                 <FieldLabel required>
                   Where does the event take place?
                 </FieldLabel>
 
-                {/* pills */}
                 <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
                   {locationTabs.map((t) => {
                     const active = locationMode === t.key;
@@ -1167,7 +1170,6 @@ export default function EditEventPage() {
                             shouldDirty: true,
                           });
 
-                          // reset fields when changing modes (keeps UX clean)
                           if (
                             t.key === "tbd" ||
                             t.key === "tba" ||
@@ -1220,7 +1222,6 @@ export default function EditEventPage() {
                   })}
                 </div>
 
-                {/* Fields area */}
                 <div className="space-y-4 rounded-lg border border-white/10 bg-neutral-950/60 p-4">
                   {showCity ? (
                     <div className="space-y-2">
@@ -1330,7 +1331,6 @@ export default function EditEventPage() {
                   ) : null}
                 </div>
 
-                {/* small helper preview */}
                 <p className="text-sm text-neutral-300">
                   Preview:{" "}
                   <span className="font-medium text-neutral-0">
@@ -1350,7 +1350,6 @@ export default function EditEventPage() {
               <div className="space-y-2">
                 <FieldLabel>Organization</FieldLabel>
 
-                {/* Selected organization card */}
                 <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
@@ -1401,6 +1400,12 @@ export default function EditEventPage() {
                   <p className="mt-2 text-sm text-neutral-300">
                     This event is under the selected organization.
                   </p>
+
+                  {errors.organizationId?.message ? (
+                    <p className="mt-2 text-xs text-error-300">
+                      {String(errors.organizationId.message)}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -1411,7 +1416,7 @@ export default function EditEventPage() {
                     type="button"
                     size="sm"
                     variant="secondary"
-                    onClick={() => addArtist({ name: "" })}
+                    onClick={() => addArtist({ name: "", image: "" })}
                   >
                     <Plus className="h-4 w-4" />
                     Add artist
@@ -1420,11 +1425,7 @@ export default function EditEventPage() {
 
                 <div className="space-y-3 w-full">
                   {artistFields.map((field, idx) => {
-                    const artistNameErr = (
-                      errors.artists as unknown as Array<
-                        { name?: { message?: string } } | undefined
-                      >
-                    )?.[idx]?.name?.message;
+                    const artistNameErr = errors.artists?.[idx]?.name?.message;
 
                     return (
                       <div
@@ -1489,11 +1490,9 @@ export default function EditEventPage() {
                 </div>
               </div>
 
-              {/* (members loaded for future UI parity; not shown to match create page exactly) */}
               {membersLoading ? (
                 <p className="text-xs text-neutral-400">Loading team…</p>
               ) : null}
-              {members.length > 0 ? null : null}
             </div>
           </Section>
 
@@ -1505,7 +1504,10 @@ export default function EditEventPage() {
             <div className="mt-3 flex justify-center pb-6">
               <div
                 ref={posterUploadRef}
-                className="poster-uploader flex relative w-full max-w-[224px] max-h-[309px] rounded-2xl aspect-[4/6]"
+                className={clsx(
+                  "poster-uploader flex relative w-full max-w-[224px] max-h-[309px] rounded-2xl aspect-[4/6]",
+                  errors.image && "ring-1 ring-error-500/70",
+                )}
               >
                 <Controller
                   control={control}
@@ -1524,6 +1526,11 @@ export default function EditEventPage() {
                 />
               </div>
             </div>
+            {errors.image?.message ? (
+              <p className="text-xs text-error-300">
+                {String(errors.image.message)}
+              </p>
+            ) : null}
           </Section>
 
           <Section
@@ -1545,7 +1552,6 @@ export default function EditEventPage() {
             </div>
           </Section>
 
-          {/* ✅ NEW: Event Media (directly below Event Description) */}
           <Section
             title="Event Media"
             desc="Upload additional photos/videos for your event page gallery. JPG/PNG/MP4 up to 50MB each."
@@ -1694,7 +1700,7 @@ export default function EditEventPage() {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={handleSubmit(submitImpl("draft"))}
+                onClick={handleSubmit(submitImpl("draft"), onInvalid)}
                 loading={isSubmitting}
               >
                 Save as Draft
@@ -1711,7 +1717,6 @@ export default function EditEventPage() {
           </div>
         </div>
 
-        {/* ------------------------- Sidebar -------------------------- */}
         <aside className="md:col-span-5 lg:col-span-4">
           <div className="md:sticky md:top-20 space-y-6">
             <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
@@ -1719,7 +1724,6 @@ export default function EditEventPage() {
               <div className="relative group">
                 <EventCard {...preview} clickable={false} />
 
-                {/* Click poster (preview) to change it */}
                 <button
                   type="button"
                   onClick={openPosterPicker}
@@ -1734,7 +1738,6 @@ export default function EditEventPage() {
                   <span className="sr-only">Change event poster</span>
                 </button>
 
-                {/* tiny hint chip (subtle, only on hover) */}
                 <div className="pointer-events-none absolute left-3 top-3 opacity-0 translate-y-[-2px] transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0">
                   <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-200">
                     <ImagePlus className="h-4 w-4 text-primary-300" />

@@ -137,7 +137,7 @@ export default function DownloadCsvModal({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50 cursor-pointer"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />

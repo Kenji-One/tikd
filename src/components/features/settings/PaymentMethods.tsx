@@ -1,8 +1,8 @@
-// src/components/features/settings/PaymentMethods.tsx
 "use client";
 
-import { Button } from "@/components/ui/Button";
+import { useMemo, useState } from "react";
 import clsx from "classnames";
+import { Button } from "@/components/ui/Button";
 
 type Card = {
   id: string;
@@ -12,79 +12,131 @@ type Card = {
   label?: string;
 };
 
-const demo: Card[] = [
+const initialDemo: Card[] = [
   {
-    id: "1",
+    id: "visa",
     brand: "Visa",
     last4: "4724",
     label: "My New Visa",
     isDefault: true,
   },
-  { id: "2", brand: "Card", last4: "4724", label: "Credit Card" },
-  { id: "3", brand: "Card", last4: "4724", label: "Tom’s Card" },
+  { id: "credit", brand: "Card", last4: "4724", label: "Credit Card" },
+  { id: "toms", brand: "Card", last4: "4724", label: "Tom’s Card" },
 ];
 
 function DefaultPill() {
   return (
-    <span className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+    <span className="inline-flex items-center rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1 text-[12px] font-semibold text-emerald-300">
       Default Method
     </span>
   );
 }
 
 export default function PaymentMethods() {
+  const [cards, setCards] = useState<Card[]>(initialDemo);
+
+  const defaultId = useMemo(
+    () => cards.find((c) => c.isDefault)?.id ?? null,
+    [cards],
+  );
+
+  function makeDefault(id: string) {
+    setCards((prev) => {
+      const next = prev.map((c) => ({ ...c, isDefault: c.id === id }));
+      const chosen = next.find((c) => c.id === id);
+      const rest = next.filter((c) => c.id !== id);
+      return chosen ? [chosen, ...rest] : next;
+    });
+  }
+
+  function removeCard(id: string) {
+    setCards((prev) => prev.filter((c) => c.id !== id));
+  }
+
   return (
     <div className="w-full">
-      <h3 className="text-[16px] font-extrabold tracking-[-0.02em] text-neutral-0">
+      <h2 className="mb-8 text-[20px] font-semibold tracking-[-0.01em] text-white">
         Payment Methods
-      </h3>
+      </h2>
 
-      <div className="mt-6 ">
-        <div className="space-y-3">
-          {demo.map((c) => (
-            <div
-              key={c.id}
-              className={clsx(
-                "flex flex-col gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3",
-                "sm:flex-row sm:items-center sm:justify-between",
-              )}
-            >
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-[13px] font-semibold text-neutral-0">
-                    {c.label ?? c.brand}
-                  </p>
-                  {c.isDefault ? <DefaultPill /> : null}
+      <div className="space-y-4">
+        {cards.map((c) => (
+          <div
+            key={c.id}
+            className={clsx(
+              "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between",
+              "rounded-2xl border border-white/10 bg-white/[0.02] p-6",
+              "transition hover:bg-white/[0.04] hover:border-white/15",
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="text-[15px] font-semibold text-white">
+                  {c.label ?? c.brand}
                 </div>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
-                  {c.brand} ending in {c.last4}
-                  {c.isDefault ? " · Default" : ""}
-                </p>
+                {c.isDefault ? <DefaultPill /> : null}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                {!c.isDefault ? (
-                  <Button size="sm" variant="secondary">
-                    Make as Default
-                  </Button>
-                ) : null}
-                <Button size="sm" variant="destructive">
-                  Remove
-                </Button>
+              <div className="mt-1 text-[13px] text-white/50">
+                {c.brand} ending in {c.last4}
+                {c.isDefault ? ", Default" : ""}
               </div>
             </div>
-          ))}
-        </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-          <Button variant="secondary" size="sm">
-            Download Invoices
-          </Button>
-          <Button variant="brand" size="sm" animation>
-            Add Payment Method
-          </Button>
-        </div>
+            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+              {!c.isDefault ? (
+                <button
+                  type="button"
+                  onClick={() => makeDefault(c.id)}
+                  className={clsx(
+                    "rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-[13px] font-semibold text-white cursor-pointer",
+                    "transition hover:bg-white/10 hover:scale-[1.05] active:scale-[0.98]",
+                  )}
+                >
+                  Make as Default
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => removeCard(c.id)}
+                className={clsx(
+                  "rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-[13px] font-semibold text-red-300 cursor-pointer",
+                  "transition hover:bg-red-500/20 hover:scale-[1.05] active:scale-[0.98]",
+                )}
+                aria-label={`Remove ${c.label ?? c.brand}`}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
+
+      <div className="mt-8 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          className={clsx(
+            "rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-[14px] font-semibold text-white cursor-pointer",
+            "transition hover:bg-white/10 hover:scale-[1.03] active:scale-[0.98]",
+          )}
+        >
+          Download Invoices
+        </button>
+
+        <Button
+          type="button"
+          variant="premium"
+          size="md"
+          className="rounded-xl py-4 px-6"
+          animation
+        >
+          Add Payment Method
+        </Button>
+      </div>
+
+      {/* (Optional) keep a stable default marker if list becomes empty */}
+      {cards.length > 0 && defaultId === null ? null : null}
     </div>
   );
 }

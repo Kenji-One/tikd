@@ -1,7 +1,7 @@
-// src/components/features/settings/NotificationSettings.tsx
 "use client";
 
 import { useEffect, useState } from "react";
+import clsx from "classnames";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Checkbox, Toggle } from "@/components/ui";
 import { toast } from "@/components/ui/Toast";
@@ -74,6 +74,7 @@ export default function NotificationSettings() {
     storage: { call: false, email: true, sms: false },
     securityAlerts: { call: false, email: true, sms: false },
   });
+
   const [toggles, setToggles] = useState<Record<MarketingKey, boolean>>({
     sales: false,
     special: false,
@@ -139,111 +140,107 @@ export default function NotificationSettings() {
 
   return (
     <div className="w-full">
-      <h3 className="text-[16px] font-extrabold tracking-[-0.02em] text-neutral-0">
+      <h2 className="mb-8 text-[20px] font-semibold tracking-[-0.01em] text-white">
         Notifications
-      </h3>
+      </h2>
 
       {isLoading ? (
-        <div className="mt-6 animate-pulse space-y-4">
-          <div className="h-10 w-44 rounded-xl bg-white/8" />
-
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="h-4 w-56 rounded bg-white/10" />
-            <div className="mt-4 space-y-2">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 w-44 rounded bg-white/10" />
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+            <div className="h-12 rounded-xl bg-white/6" />
+            <div className="mt-3 space-y-2">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-10 rounded-xl bg-white/6" />
+                <div key={i} className="h-12 rounded-xl bg-white/6" />
               ))}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="h-4 w-40 rounded bg-white/10" />
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
+            <div className="h-6 w-56 rounded bg-white/10" />
             <div className="mt-4 space-y-3">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-14 rounded-xl bg-white/6" />
+                <div key={i} className="h-16 rounded-xl bg-white/6" />
               ))}
             </div>
           </div>
         </div>
       ) : (
         <>
-          {/* Matrix panel */}
-          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-[13px] text-neutral-200">
-                <thead className="text-[12px] text-neutral-400">
-                  <tr>
-                    <th className="px-3 py-2 font-semibold">Notifications</th>
-                    <th className="px-3 py-2 text-center font-semibold">
-                      Call
-                    </th>
-                    <th className="px-3 py-2 text-center font-semibold">
-                      Email
-                    </th>
-                    <th className="px-3 py-2 text-center font-semibold">SMS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rowMeta.map(({ key, label }) => (
-                    <tr
-                      key={key}
-                      className="border-t border-white/10 hover:bg-white/[0.02]"
-                    >
-                      <td className="px-3 py-3">{label}</td>
-                      {(["call", "email", "sms"] as Channel[]).map((ch) => (
-                        <td key={ch} className="px-3 py-3">
-                          <div className="flex justify-center">
-                            <Checkbox
-                              size="md"
-                              aria-label={`${label} via ${ch}`}
-                              checked={matrix[key][ch]}
-                              onCheckedChange={(val) =>
-                                onMatrixChange(key, ch, !!val)
-                              }
-                            />
-                          </div>
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Matrix table (HTML style) */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02]">
+            <div className="grid grid-cols-4 gap-4 rounded-t-2xl border-b border-white/10 bg-white/[0.02] px-6 py-4 text-[13px] font-semibold text-white/70">
+              <div>Notifications</div>
+              <div className="text-center">Call</div>
+              <div className="text-center">Email</div>
+              <div className="text-center">SMS</div>
             </div>
 
-            <p className="mt-3 text-[11px] text-neutral-400">
-              Tip: “Email” channel is recommended for critical alerts.
-            </p>
-          </div>
+            {rowMeta.map(({ key, label }, idx) => (
+              <div
+                key={key}
+                className={clsx(
+                  "grid grid-cols-4 gap-4 px-6 py-4 transition",
+                  "bg-white/[0.02] hover:bg-white/[0.04]",
+                  idx !== rowMeta.length - 1 ? "border-b border-white/10" : "",
+                  idx === rowMeta.length - 1 ? "rounded-b-2xl" : "",
+                )}
+              >
+                <div className="flex items-center text-[14px] text-white">
+                  {label}
+                </div>
 
-          {/* Marketing panel */}
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <div className="divide-y divide-white/10">
-              {(Object.keys(toggleMeta) as MarketingKey[]).map((key) => {
-                const { title, desc } = toggleMeta[key];
-                return (
-                  <div
-                    key={key}
-                    className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <h4 className="truncate text-[13px] font-semibold text-neutral-0">
-                        {title}
-                      </h4>
-                      <p className="mt-0.5 truncate text-[11px] text-neutral-400">
-                        {desc}
-                      </p>
-                    </div>
-
-                    <Toggle
+                {(["call", "email", "sms"] as Channel[]).map((ch) => (
+                  <div key={ch} className="flex items-center justify-center">
+                    <Checkbox
                       size="sm"
-                      checked={toggles[key]}
-                      onCheckedChange={(v) => onToggleChange(key, v)}
-                      aria-label={`${title} toggle`}
+                      variant="settings"
+                      aria-label={`${label} via ${ch}`}
+                      checked={matrix[key][ch]}
+                      onCheckedChange={(val) => onMatrixChange(key, ch, !!val)}
                     />
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-4 text-[13px] text-white/50">
+            Tip: “Email” channel is recommended for critical alerts.
+          </p>
+
+          {/* Marketing toggles */}
+          <div className="mt-8 space-y-4">
+            {(Object.keys(toggleMeta) as MarketingKey[]).map((k) => {
+              const meta = toggleMeta[k];
+              return (
+                <div
+                  key={k}
+                  className={clsx(
+                    "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                    "rounded-2xl border border-white/10 bg-white/[0.02] p-5",
+                    "transition hover:bg-white/[0.04] hover:border-white/15",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="text-[15px] font-semibold text-white">
+                      {meta.title}
+                    </div>
+                    <div className="mt-1 text-[13px] text-white/50">
+                      {meta.desc}
+                    </div>
+                  </div>
+
+                  <Toggle
+                    size="sm"
+                    variant="settings"
+                    checked={toggles[k]}
+                    onCheckedChange={(v) => onToggleChange(k, v)}
+                    aria-label={`${meta.title} toggle`}
+                  />
+                </div>
+              );
+            })}
           </div>
         </>
       )}

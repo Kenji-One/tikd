@@ -730,10 +730,11 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     unpublishMutation.mutate();
   };
 
-  const openPublicEvent = () => {
+  const openPublicEvent = useCallback(() => {
     if (!eventId) return;
+    // Direct user gesture → reliably opens (no Link/asChild composition edge cases)
     window.open(`/events/${eventId}`, "_blank", "noreferrer");
-  };
+  }, [eventId]);
 
   const statusError =
     publishMutation.error?.message || unpublishMutation.error?.message || "";
@@ -904,14 +905,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
                 {/* Actions */}
                 <div className="flex shrink-0 items-center gap-2">
-                  {/* Download button (Uiverse-inspired) */}
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    asChild
                     className="tikd-action-icon tikdDownloadWrap"
-                    title="Download CSV"
+                    title={actionsLocked ? "Loading event…" : "Download CSV"}
                     aria-label="Download CSV"
                     disabled={actionsLocked}
                     onClick={() => {
@@ -972,7 +971,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
                   {eventId && (
                     <Button
-                      asChild
+                      type="button"
                       variant="ghost"
                       size="md"
                       className={clsx(
@@ -982,20 +981,17 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       title={
                         actionsLocked ? "Loading event…" : "View public page"
                       }
+                      aria-label={
+                        actionsLocked ? "Loading event…" : "View public page"
+                      }
+                      disabled={actionsLocked}
+                      onClick={() => {
+                        if (actionsLocked) return;
+                        openPublicEvent();
+                      }}
                       icon={<Eye className="h-4 w-4" />}
                     >
-                      <Link
-                        href={`/events/${eventId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-disabled={actionsLocked ? "true" : "false"}
-                        tabIndex={actionsLocked ? -1 : 0}
-                        onClick={(e) => {
-                          if (actionsLocked) e.preventDefault();
-                        }}
-                      >
-                        View
-                      </Link>
+                      View
                     </Button>
                   )}
 
@@ -1107,10 +1103,11 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       </section>
 
       <style jsx global>{`
-        /* From Uiverse.io by vinodjangid07 (adapted to Tikd tokens) */
         .tikdDownloadBtn {
           width: 100%;
-          height: 100%;
+          height: 23px;
+          transform: scale(0.7557);
+          transform-origin: center;
           border: none;
           border-radius: 999px;
           display: flex;
@@ -1123,7 +1120,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           user-select: none;
           -webkit-tap-highlight-color: transparent;
           padding: 0px;
-          pointer-events: none; /* important: wrapper button receives the click */
+
+          pointer-events: none;
         }
 
         .tikdDownloadBtn__svgIcon {

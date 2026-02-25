@@ -16,15 +16,21 @@ export interface EventCardProps {
   venue: string;
   img: string;
   category: string;
+
   /** extra classes from parent (e.g. w-full h-full) */
   className?: string;
+
   /** makes the whole card a link when true */
   clickable?: boolean;
+
   /** optional custom href (defaults to `/events/:id`) when clickable */
   href?: string;
 
   /** ✅ NEW: optional accent color for date row (hex) */
   dateAccentColor?: string;
+
+  /** ✅ NEW: enable/disable Steam visual treatment */
+  steam?: boolean;
 
   /**
    * Optional: hover-only pin icon in top-right.
@@ -170,6 +176,7 @@ export function EventCard({
   clickable = true,
   href,
   dateAccentColor,
+  steam = true,
   pin,
   topLeftOverlay,
   topLeftOverlayClassName,
@@ -262,17 +269,26 @@ export function EventCard({
   );
 
   const cardClasses = clsx(
-    "group/card relative flex w-full flex-col gap-2 transition-opacity",
-    "group-hover/row:opacity-60 hover:opacity-100",
-    "tikd-steamCard",
+    "group/card relative flex w-full flex-col gap-2",
+    steam
+      ? "transition-opacity group-hover/row:opacity-60 hover:opacity-100"
+      : "",
+    steam ? "tikd-steamCard" : "",
     className,
   );
 
-  const Cover = (
-    <div className="tikd-steamCard__float">
-      <div className="tikd-steamCard__cover">
-        <div className="tikd-steamCard__rim">
-          <div className="tikd-steamCard__poster relative w-full overflow-hidden rounded-lg aspect-[171/214] sm:aspect-[79/95] bg-neutral-900">
+  const CoverInner = (
+    <div className={steam ? "tikd-steamCard__float" : undefined}>
+      <div className={steam ? "tikd-steamCard__cover" : undefined}>
+        <div className={steam ? "tikd-steamCard__rim" : undefined}>
+          <div
+            // ✅ used by the create-page to measure poster-only rect precisely
+            data-tikd-eventcard-poster="true"
+            className={clsx(
+              "tikd-steamCard__poster relative w-full overflow-hidden rounded-lg",
+              "aspect-[171/214] sm:aspect-[79/95] bg-neutral-900",
+            )}
+          >
             <Image
               src={imgSrc}
               alt={title}
@@ -288,7 +304,9 @@ export function EventCard({
               }}
             />
 
-            <div aria-hidden className="tikd-steamCard__restGlow" />
+            {steam ? (
+              <div aria-hidden className="tikd-steamCard__restGlow" />
+            ) : null}
           </div>
         </div>
       </div>
@@ -296,7 +314,12 @@ export function EventCard({
   );
 
   const Meta = (
-    <div className="tikd-steamCard__meta space-y-1 px-1 text-left">
+    <div
+      className={clsx(
+        steam ? "tikd-steamCard__meta" : "",
+        "space-y-1 px-1 text-left",
+      )}
+    >
       <h3 className="text-sm font-bold uppercase text-neutral-0">{title}</h3>
       <div
         className={clsx("flex items-center gap-1 text-xs", dateColourClass)}
@@ -312,7 +335,7 @@ export function EventCard({
     <>
       {overlays}
       {pinButton}
-      {Cover}
+      {CoverInner}
       {Meta}
     </>
   );

@@ -1,14 +1,15 @@
-// src/components/ui/Checkbox.tsx
 "use client";
 
 import * as React from "react";
 import clsx from "clsx";
 
 type Size = "sm" | "md" | "lg";
+type Variant = "default" | "settings";
 
 export interface CheckboxProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size" | "type"> {
   size?: Size;
+  variant?: Variant;
   checked?: boolean;
   defaultChecked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
@@ -40,6 +41,7 @@ export default function Checkbox({
   name,
   value,
   size = "md",
+  variant = "default",
   checked,
   defaultChecked,
   onCheckedChange,
@@ -61,6 +63,41 @@ export default function Checkbox({
     onCheckedChange?.(next);
   }
 
+  const isChecked = controlled ? !!checked : internal;
+
+  const boxDefault = clsx(
+    "relative grid place-items-center overflow-hidden transition-all",
+    SIZE_MAP[size],
+    RADIUS_MAP[size],
+    "border border-neutral-600 bg-neutral-900",
+    "peer-checked:border-[1.5px] peer-checked:border-primary-700 peer-checked:bg-[#181828]",
+    "outline-none ring-0 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500/55",
+    "after:content-[''] after:absolute after:pointer-events-none after:transition-all after:opacity-0 after:z-[1]",
+    "after:left-1/2 after:top-1/2 after:-translate-x-1/2 after:-translate-y-1/2",
+    "after:h-[17px] after:w-[18px] after:bg-primary-500",
+    AFTER_INSET[size],
+    "peer-checked:after:opacity-100",
+    "peer-checked:[&>svg]:opacity-100 peer-checked:[&>svg]:scale-100",
+  );
+
+  // HTML “settings” checkbox look:
+  // - 20px box (sm)
+  // - border 2px rgba white/20
+  // - checked: purple->indigo gradient, border transparent
+  // - white checkmark
+  const boxSettings = clsx(
+    "relative grid place-items-center transition-all",
+    SIZE_MAP[size],
+    "rounded-[8px]",
+    "border-2 bg-white/5",
+    isChecked
+      ? "border-transparent bg-[linear-gradient(135deg,#7c3aed,#6366f1)]"
+      : "border-white/20 bg-white/5",
+    "outline-none ring-0 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500/40",
+    "hover:border-white/30",
+    "peer-checked:hover:border-transparent",
+  );
+
   return (
     <div
       className={clsx("inline-flex flex-col gap-1.5", disabled && "opacity-60")}
@@ -72,7 +109,6 @@ export default function Checkbox({
           disabled ? "cursor-not-allowed" : "cursor-pointer",
         )}
       >
-        {/* Native input (peer) */}
         <input
           id={inputId}
           name={name}
@@ -86,53 +122,52 @@ export default function Checkbox({
           {...rest}
         />
 
-        {/* OUTER box + inner neon via ::after */}
         <span
           aria-hidden
           className={clsx(
-            "relative grid place-items-center overflow-hidden transition-all",
-            SIZE_MAP[size],
-            RADIUS_MAP[size],
-            "border border-neutral-600 bg-neutral-900",
-
-            // ON state (✅ purple brand)
-            "peer-checked:border-[1.5px] peer-checked:border-primary-700 peer-checked:bg-[#181828]",
-
-            // Focus ring (✅ purple)
-            "outline-none ring-0 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500/55",
-
-            // Purple neon fill (under the checkmark)
-            "after:content-[''] after:absolute after:pointer-events-none after:transition-all after:opacity-0 after:z-[1]",
-            "after:left-1/2 after:top-1/2 after:-translate-x-1/2 after:-translate-y-1/2",
-            "after:h-[17px] after:w-[18px] after:bg-primary-500",
-            AFTER_INSET[size],
-            "peer-checked:after:opacity-100",
-
-            // ✅ Drive the SVG visibility from the peer (real input state)
-            "peer-checked:[&>svg]:opacity-100 peer-checked:[&>svg]:scale-100",
-
+            variant === "settings" ? boxSettings : boxDefault,
             className,
           )}
         >
-          {/* Checkmark ABOVE the ::after fill */}
-          <svg
-            className={clsx(
-              "relative z-[2] transition-[opacity,transform] duration-150 opacity-0 scale-75",
-              size === "sm" && "h-3.5 w-3.5",
-              size === "md" && "h-4 w-4",
-              size === "lg" && "h-3.5 w-3.5",
-            )}
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 14 14"
-            fill="none"
-          >
-            <path
-              d="M5.25009 9.43247L2.81759 6.99997L1.98926 7.82247L5.25009 11.0833L12.2501 4.0833L11.4276 3.2608L5.25009 9.43247Z"
-              fill="#08080F"
-            />
-          </svg>
+          {/* Checkmark */}
+          {variant === "settings" ? (
+            <svg
+              viewBox="0 0 24 24"
+              className={clsx(
+                "transition-opacity",
+                isChecked ? "opacity-100" : "opacity-0",
+                size === "sm" && "h-3.5 w-3.5",
+                size === "md" && "h-4 w-4",
+                size === "lg" && "h-5 w-5",
+              )}
+              fill="none"
+              stroke="white"
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : (
+            <svg
+              className={clsx(
+                "relative z-[2] transition-[opacity,transform] duration-150 opacity-0 scale-75",
+                size === "sm" && "h-3.5 w-3.5",
+                size === "md" && "h-4 w-4",
+                size === "lg" && "h-3.5 w-3.5",
+              )}
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+            >
+              <path
+                d="M5.25009 9.43247L2.81759 6.99997L1.98926 7.82247L5.25009 11.0833L12.2501 4.0833L11.4276 3.2608L5.25009 9.43247Z"
+                fill="#08080F"
+              />
+            </svg>
+          )}
         </span>
 
         {label && (

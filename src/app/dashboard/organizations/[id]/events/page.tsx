@@ -1314,8 +1314,7 @@ export default function OrgEventsPage() {
 
   // Org-scoped event “detail” route (keeps you inside org dashboard)
   const eventHref = useCallback(
-    (eventId: string) =>
-      `/dashboard/organizations/${orgId}/events/${eventId}/summary`,
+    (eventId: string) => `/dashboard/events/${eventId}/summary`,
     [orgId],
   );
 

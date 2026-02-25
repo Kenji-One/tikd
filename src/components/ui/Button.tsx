@@ -1,4 +1,3 @@
-// src/components/ui/Button.tsx
 "use client";
 
 import { forwardRef, ReactNode } from "react";
@@ -8,6 +7,7 @@ import ElectricBorder from "../ElectricBorder";
 
 type InnerVariants =
   | "primary"
+  | "premium"
   | "secondary"
   | "ghost"
   | "destructive"
@@ -20,6 +20,7 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?:
     | "primary"
+    | "premium"
     | "secondary"
     | "ghost"
     | "destructive"
@@ -66,18 +67,26 @@ const variants: Record<
   string
 > = {
   primary: "bg-primary-500 text-white hover:bg-primary-600",
-  secondary:
-    "border border-white/10 text-white bg-transparent hover:bg-white/5 hover:border-primary-500",
-  ghost:
-    "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffffc] border border-transparent hover:border-primary-500",
 
   /**
-   * ✅ Warmer destructive (outline style like your screenshot)
-   * - no gradient, no shine, no shadow
-   * - clear “delete/remove” intent via warm red outline + text
-   * - subtle tinted hover/active fill (still matte)
-   * - error-tinted focus ring (overrides base ring)
+   * ✅ NEW: Premium (aka primary-2)
+   * - matches your snippet exactly: left→right premium gradient + stronger shadow
+   * - keep hover as gradient (not “bg-primary”) to preserve the look
    */
+  premium: clsx(
+    "text-white",
+    "bg-[linear-gradient(90deg,rgba(154,70,255,0.95),rgba(66,139,255,0.55))]",
+    "hover:bg-[linear-gradient(90deg,rgba(154,70,255,1),rgba(66,139,255,0.62))]",
+    "shadow-[0_18px_40px_rgba(154,70,255,0.18)]",
+  ),
+
+  secondary:
+    "border border-white/10 text-white bg-transparent hover:bg-white/5 hover:border-primary-500",
+
+  // ✅ FIX: hover color typo (#ffffffc -> #ffffff1c)
+  ghost:
+    "bg-[#ffffff12] backdrop-blur-[15px] text-white hover:bg-[#ffffff1c] border border-transparent hover:border-primary-500",
+
   destructive: clsx(
     "bg-transparent",
     "text-error-400",
@@ -93,10 +102,6 @@ const variants: Record<
     "bg-neutral-800 text-white border border-white/10 hover:border-primary-500 hover:bg-neutral-700/40",
   default: "bg-button-primary text-white ",
 
-  /**
-   * Used for all "View All" / "Detailed View" actions
-   * NEW: Uiverse-style calm purple wrap + rotating line on hover
-   */
   viewAction:
     "tikd-viewAction focus-visible:ring-2 focus-visible:ring-primary-500/45",
 };
@@ -110,13 +115,6 @@ const sizes: Record<NonNullable<ButtonProps["size"]>, string> = {
   icon: "p-2 w-9 h-9",
 };
 
-/**
- * viewAction uses the size classes on the INNER content (not the outer button),
- * because its layout matches the Uiverse structure:
- * button > wrap > outline + content
- *
- * ✅ Tweaked: slightly smaller across the board
- */
 const viewActionContentSizes: Record<
   NonNullable<ButtonProps["size"]>,
   string
@@ -157,14 +155,18 @@ const variantSweep: Record<NonElectricVariant, string> = {
     sweepBase("before:duration-700"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent",
   ),
+
+  premium: clsx(
+    sweepBase("before:duration-850"),
+    // slightly stronger sheen to match premium feel
+    "before:bg-gradient-to-r before:from-transparent before:via-white/24 before:to-transparent",
+  ),
+
   brand: clsx(
     sweepBase("before:duration-800"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/24 before:to-transparent",
   ),
 
-  /**
-   * ❌ No shine for destructive even when animation={true}
-   */
   destructive: "",
 
   secondary: clsx(
@@ -173,20 +175,22 @@ const variantSweep: Record<NonElectricVariant, string> = {
       "before:opacity-0 before:transition-opacity hover:before:opacity-100 " +
       "before:blur-[0.5px]",
   ),
+
   ghost: clsx(
     sweepBase("before:duration-900"),
     "before:bg-gradient-to-r before:from-transparent before:via-primary-300/18 before:to-transparent",
   ),
+
   social: clsx(
     sweepBase("before:duration-850"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/16 before:to-transparent",
   ),
+
   default: clsx(
     sweepBase("before:duration-850"),
     "before:bg-gradient-to-r before:from-transparent before:via-primary-500/16 before:to-transparent",
   ),
 
-  // viewAction has its own dedicated animation; keep this subtle if enabled elsewhere.
   viewAction: clsx(
     sweepBase("before:duration-850"),
     "before:bg-gradient-to-r before:from-transparent before:via-white/14 before:to-transparent",
@@ -221,7 +225,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       asChild = false,
       icon,
       animation = false,
-      /* electric-only props with defaults */
       electricColor = "#9a51ff",
       electricSpeed = 1,
       electricChaos = 0.5,
@@ -271,14 +274,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           : electricDefaultInner
         : variants[variant];
 
-    // viewAction already has its own hover animation; avoid stacking the sweep on top.
     const animateClasses =
       animation && !isViewAction ? getSweepClasses(variant, electricInner) : "";
 
     const combined = clsx(
       base,
       innerClasses,
-      // viewAction handles sizing on its inner content element
       !isViewAction ? sizes[size] : "",
       animateClasses,
       className,

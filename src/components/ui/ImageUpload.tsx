@@ -296,7 +296,11 @@ export default function ImageUpload({
           type="button"
           onClick={handleSelect}
           disabled={loading}
-          className={clsx(variant.button, loading && "opacity-60")}
+          className={clsx(
+            variant.button,
+            loading && "opacity-60",
+            "cursor-pointer",
+          )}
           aria-label="Upload"
         >
           {loading ? "Uploading…" : "Click to upload"}

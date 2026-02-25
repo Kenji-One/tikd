@@ -1851,14 +1851,9 @@ export default function RolesPermissionsModal({
 
                             <Button
                               type="button"
-                              variant="primary"
+                              variant="premium"
                               size="md"
-                              className={clsx(
-                                "rounded-xl",
-                                "bg-[linear-gradient(90deg,rgba(154,70,255,0.95),rgba(66,139,255,0.55))]",
-                                "hover:bg-[linear-gradient(90deg,rgba(154,70,255,1),rgba(66,139,255,0.62))]",
-                                "shadow-[0_18px_40px_rgba(154,70,255,0.18)]",
-                              )}
+                              className="rounded-xl"
                               disabled={saving || !activeRoleId}
                               onClick={onSaveMeta}
                               icon={<Check className="h-4 w-4" />}

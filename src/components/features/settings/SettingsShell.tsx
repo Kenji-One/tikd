@@ -12,9 +12,9 @@ import {
   ShieldCheck,
   Ticket as TicketIcon,
   UserRound,
+  Camera,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
 import ProfileSettings from "./ProfileSettings";
 import SecuritySettings from "./SecuritySettings";
 import ChangePassword from "./ChangePassword";
@@ -31,7 +31,7 @@ type TabItem = {
   content: React.ReactNode;
 };
 
-function FinanceStyleTabButton({
+function TabButton({
   label,
   icon,
   active,
@@ -49,26 +49,23 @@ function FinanceStyleTabButton({
       aria-selected={active}
       onClick={onClick}
       className={clsx(
-        "group relative flex items-center justify-center gap-2",
-        "rounded-lg border px-3 py-2.5 text-[13px] font-semibold tracking-[-0.02em] cursor-pointer",
-        "outline-none transition",
-        "focus-visible:ring-2 focus-visible:ring-primary-500/30",
+        "group relative flex w-full items-center justify-center gap-2",
+        "rounded-xl px-4 py-3 text-[14px] font-semibold",
+        "transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35",
         active
           ? clsx(
-              "border-primary-500/35 bg-neutral-950/30 text-neutral-0",
-              "shadow-[0_14px_34px_rgba(154,70,255,0.12)]",
-              "ring-1 ring-primary-500/18",
-              "shadow-[inset_0_-2px_0_rgba(154,70,255,0.55)]",
+              "text-white",
+              "bg-[linear-gradient(135deg,rgba(124,58,237,0.20),rgba(99,102,241,0.20))]",
+              "border border-white/20",
+              "shadow-[0_4px_20px_rgba(124,58,237,0.20)]",
             )
-          : "border-neutral-800/70 bg-neutral-950/12 text-neutral-300 hover:bg-neutral-900/18 hover:text-neutral-0",
+          : "text-white/50 hover:text-white/80",
       )}
     >
       <span
         className={clsx(
-          "inline-flex items-center justify-center transition",
-          active
-            ? "text-primary-200"
-            : "text-neutral-300 group-hover:text-neutral-0",
+          "inline-flex items-center justify-center",
+          active ? "text-white" : "text-white/50 group-hover:text-white/80",
         )}
       >
         {icon}
@@ -88,56 +85,37 @@ function SettingsTabBar({
   onChange: (id: TabId) => void;
 }) {
   return (
-    <div className="w-full">
-      <div
-        role="tablist"
-        aria-label="Settings tabs"
-        className={clsx(
-          "relative overflow-hidden rounded-xl border border-white/10",
-          "bg-neutral-950/35 backdrop-blur-[12px]",
-        )}
-      >
-        {/* light wash behind buttons (keeps it premium without muddy look) */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-90"
-          style={{
-            background:
-              "radial-gradient(900px 220px at 18% 0%, rgba(154,70,255,0.12), transparent 62%)," +
-              "radial-gradient(720px 220px at 86% 20%, rgba(88,101,242,0.09), transparent 62%)," +
-              "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0))",
-          }}
-        />
-
-        <div className="relative grid grid-cols-2 gap-2 p-3 sm:grid-cols-5">
-          {tabs.map((t) => (
-            <FinanceStyleTabButton
-              key={t.id}
-              label={t.label}
-              icon={t.icon}
-              active={active === t.id}
-              onClick={() => onChange(t.id)}
-            />
-          ))}
-        </div>
+    <div
+      role="tablist"
+      aria-label="Settings tabs"
+      className={clsx(
+        "relative mb-8",
+        "rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur-[20px]",
+      )}
+    >
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {tabs.map((t) => (
+          <TabButton
+            key={t.id}
+            label={t.label}
+            icon={t.icon}
+            active={active === t.id}
+            onClick={() => onChange(t.id)}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-/**
- * SettingsShell
- * - Tabs now match Finance graph section (FinanceTabButton style)
- * - Avatar opens dialog on click (avatar itself is clickable)
- * - Single content container
- */
 export default function SettingsShell() {
   const [active, setActive] = useState<TabId>("profile");
   const [avatarOpen, setAvatarOpen] = useState(false);
   const { data: session } = useSession();
 
   const displayName = useMemo(() => {
-    const n = session?.user?.name || "Your Profile";
-    return n.length ? n[0].toUpperCase() + n.slice(1) : "Your Profile";
+    const n = session?.user?.name || "Test User";
+    return n.length ? n : "Test User";
   }, [session?.user?.name]);
 
   const avatarUrl = session?.user?.image || "";
@@ -181,88 +159,91 @@ export default function SettingsShell() {
   const activeTab = tabs.find((t) => t.id === active);
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-neutral-950/45 backdrop-blur-[12px]">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-95"
-          style={{
-            background:
-              "radial-gradient(900px 260px at 0% 0%, rgba(154,70,255,0.18), transparent 62%)," +
-              "radial-gradient(800px 240px at 100% 12%, rgba(88,101,242,0.12), transparent 62%)," +
-              "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0))",
-          }}
-        />
-        <div className="pointer-events-none absolute inset-0 opacity-70 bg-[radial-gradient(900px_380px_at_50%_-10%,rgba(0,0,0,0.32),transparent_65%),radial-gradient(1100px_520px_at_50%_120%,rgba(0,0,0,0.58),transparent_60%)]" />
+    <div>
+      {/* Profile header card (matches new HTML style) */}
+      <div
+        className={clsx(
+          "relative mb-8 overflow-hidden rounded-[24px]",
+          "border border-white/10 backdrop-blur-[20px]",
+          "bg-[linear-gradient(135deg,rgba(124,58,237,0.15)_0%,rgba(99,102,241,0.10)_50%,rgba(20,20,30,0.40)_100%)]",
+          "shadow-[0_20px_60px_rgba(0,0,0,0.30)]",
+        )}
+      >
+        <div className="relative flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+          <div className="flex items-center gap-6">
+            {/* Avatar */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setAvatarOpen(true)}
+                className={clsx(
+                  "group relative h-24 w-24 overflow-hidden rounded-2xl cursor-pointer",
+                  "transition-transform duration-300 hover:scale-[1.05]",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35",
+                )}
+                aria-label="Open avatar dialog"
+              >
+                {avatarUrl ? (
+                  <Image
+                    src={avatarUrl}
+                    alt={`${displayName} profile picture`}
+                    fill
+                    sizes="96px"
+                    className="object-cover"
+                    priority
+                  />
+                ) : (
+                  <div className="absolute inset-0 grid place-items-center text-white">
+                    <UserRound className="h-10 w-10 opacity-90" />
+                  </div>
+                )}
 
-        <div className="relative flex flex-col gap-4 p-4 sm:p-5 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            {/* avatar is clickable (opens dialog) */}
-            <button
-              type="button"
-              onClick={() => setAvatarOpen(true)}
-              className={clsx(
-                "relative h-14 w-14 overflow-hidden rounded-full",
-                "ring-1 ring-white/14",
-                "shadow-[0_16px_44px_rgba(154,70,255,0.14)]",
-                "cursor-pointer",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35",
-              )}
-              aria-label="Change avatar"
-            >
-              <div
-                className="pointer-events-none absolute -inset-10 opacity-80"
-                style={{
-                  background:
-                    "radial-gradient(closest-side, rgba(154,70,255,0.26), transparent 68%)",
-                }}
-              />
-              {avatarUrl ? (
-                <Image
-                  src={avatarUrl}
-                  alt={`${displayName} profile picture`}
-                  fill
-                  sizes="56px"
-                  className="object-cover"
-                  priority
-                />
-              ) : (
-                <div className="absolute inset-0 grid place-items-center bg-[conic-gradient(from_220deg_at_50%_50%,rgba(154,70,255,0.95),rgba(88,101,242,0.80),rgba(18,18,28,0.95))] text-white">
-                  <span className="text-lg font-semibold">
-                    {displayName?.[0]?.toUpperCase() ?? "U"}
-                  </span>
+                {/* Hover overlay */}
+                <div className="absolute inset-0 grid place-items-center rounded-2xl bg-black/60 opacity-0 backdrop-blur-[4px] transition-opacity duration-300 group-hover:opacity-100">
+                  <Camera className="h-6 w-6 text-white/90" />
                 </div>
-              )}
-            </button>
+              </button>
 
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h2 className="truncate text-[18px] font-extrabold tracking-[-0.03em] text-neutral-0 sm:text-[20px]">
-                  {displayName}
-                </h2>
+              <button
+                type="button"
+                onClick={() => setAvatarOpen(true)}
+                className={clsx(
+                  "mt-2 block w-full rounded-lg",
+                  "border border-white/15 bg-white/8 px-3 py-1.5 cursor-pointer",
+                  "text-center text-[12px] font-semibold text-white/80",
+                  "transition hover:bg-white/15 hover:text-white",
+                )}
+              >
+                Change
+              </button>
+            </div>
 
-                <button
-                  type="button"
-                  onClick={() => setAvatarOpen(true)}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-neutral-200 hover:bg-white/7 cursor-pointer"
-                >
-                  Change avatar
-                </button>
+            {/* Name + desc */}
+            <div className="min-w-0 pb-2">
+              <div className="text-2xl font-semibold tracking-[-0.01em]">
+                {displayName}
               </div>
-
-              <p className="mt-1 max-w-[56ch] text-[12px] leading-[1.25] text-neutral-300">
-                Manage your profile, security, notifications, password, and
-                payment methods.
+              <p className="mt-1 text-[14px] text-white/60">
+                Manage your profile, security, notifications, and payment
+                methods.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-start gap-2 md:justify-end">
-            <Link href="/account/my-tickets">
-              <Button variant="ghost" size="sm">
-                <TicketIcon className="mr-0.5 h-4 w-4" />
+          {/* My Tickets */}
+          <div className="flex items-center justify-start sm:justify-end">
+            <Link href="/account/my-tickets" className="inline-flex">
+              <span
+                className={clsx(
+                  "inline-flex items-center gap-2",
+                  "rounded-full border border-white/10 bg-white/5 px-5 py-2.5",
+                  "text-[14px] text-white",
+                  "transition hover:bg-white/10",
+                )}
+              >
+                <TicketIcon className="h-4 w-4" />
                 My Tickets
-              </Button>
+              </span>
             </Link>
           </div>
         </div>
@@ -271,18 +252,16 @@ export default function SettingsShell() {
       {/* Tabs */}
       <SettingsTabBar tabs={tabs} active={active} onChange={setActive} />
 
-      {/* Content container */}
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-neutral-950/45 p-4 backdrop-blur-[12px] sm:p-5">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-90"
-          style={{
-            background:
-              "radial-gradient(900px 420px at 18% 0%, rgba(154,70,255,0.11), transparent 62%)," +
-              "radial-gradient(800px 420px at 92% 30%, rgba(88,101,242,0.08), transparent 62%)," +
-              "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0))",
-          }}
-        />
-        <div className="relative">{activeTab?.content}</div>
+      {/* Content card */}
+      <div
+        className={clsx(
+          "relative overflow-hidden rounded-[24px]",
+          "border border-white/10 backdrop-blur-[20px]",
+          "bg-[linear-gradient(135deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.03)_100%)]",
+          "shadow-[0_20px_60px_rgba(0,0,0,0.30)]",
+        )}
+      >
+        <div className="p-6 sm:p-10">{activeTab?.content}</div>
       </div>
 
       <AvatarDialog open={avatarOpen} onClose={() => setAvatarOpen(false)} />

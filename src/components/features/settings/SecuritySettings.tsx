@@ -1,6 +1,6 @@
-// src/components/features/settings/SecuritySettings.tsx
 "use client";
 
+import clsx from "classnames";
 import { Button } from "@/components/ui/Button";
 
 type Item = {
@@ -12,17 +12,24 @@ type Item = {
 
 function Row({ item }: { item: Item }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-neutral-0">
-          {item.title}
-        </p>
-        <p className="mt-0.5 truncate text-[11px] text-neutral-400">
-          {item.desc}
-        </p>
+    <div
+      className={clsx(
+        "flex items-center justify-between gap-4",
+        "rounded-xl border border-white/10 bg-white/[0.02] p-6",
+        "transition hover:bg-white/[0.04] hover:border-white/15",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="text-[15px] font-semibold text-white">{item.title}</div>
+        <div className="mt-1 text-[13px] text-white/50">{item.desc}</div>
       </div>
 
-      <Button size="sm" variant="secondary" onClick={item.onClick}>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={item.onClick}
+        className="rounded-lg"
+      >
         {item.cta}
       </Button>
     </div>
@@ -50,11 +57,11 @@ export default function SecuritySettings() {
 
   return (
     <div className="w-full">
-      <h3 className="text-[16px] font-extrabold tracking-[-0.02em] text-neutral-0">
+      <h2 className="mb-8 text-[20px] font-semibold tracking-[-0.01em] text-white">
         Security Settings
-      </h3>
+      </h2>
 
-      <div className="mt-6 space-y-3">
+      <div className="space-y-4">
         {items.map((item) => (
           <Row key={item.title} item={item} />
         ))}

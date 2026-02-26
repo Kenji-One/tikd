@@ -1,7 +1,8 @@
 // src/app/dashboard/events/[eventId]/edit/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import type { DragEvent } from "react";
 import Image from "next/image";
 import {
   useForm,
@@ -526,12 +527,97 @@ export default function EditEventPage() {
   const eventId = params?.eventId ?? "";
 
   const posterUploadRef = useRef<HTMLDivElement | null>(null);
-  const openPosterPicker = () => {
+
+  // ✅ same as creation page: separate drag states (scoped to each zone)
+  const [posterDragActive, setPosterDragActive] = useState(false);
+  const [previewPosterDragActive, setPreviewPosterDragActive] = useState(false);
+
+  const getPosterFileInput = useCallback((): HTMLInputElement | null => {
     const root = posterUploadRef.current;
-    if (!root) return;
-    const input = root.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement | null;
+    if (!root) return null;
+    return root.querySelector('input[type="file"]') as HTMLInputElement | null;
+  }, []);
+
+  const pushFileToPosterInput = useCallback(
+    (file: File) => {
+      const input = getPosterFileInput();
+      if (!input) return;
+
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    [getPosterFileInput],
+  );
+
+  const handlePosterDropFiles = useCallback(
+    (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+
+      const file = files[0];
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      if (!isImage && !isVideo) {
+        alert("Please drop an image or a video file (JPG/PNG/MP4).");
+        return;
+      }
+
+      const maxBytes = 50 * 1024 * 1024; // 50MB
+      if (file.size > maxBytes) {
+        alert("File is too large. Max size is 50MB.");
+        return;
+      }
+
+      pushFileToPosterInput(file);
+    },
+    [pushFileToPosterInput],
+  );
+
+  const makeDragHandlers = useCallback(
+    (setActive: (v: boolean) => void) => ({
+      onDragEnter: (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActive(true);
+      },
+      onDragOver: (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+        setActive(true);
+      },
+      onDragLeave: (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const next = e.relatedTarget as Node | null;
+        if (next && e.currentTarget.contains(next)) return;
+
+        setActive(false);
+      },
+      onDrop: (e: DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActive(false);
+        handlePosterDropFiles(e.dataTransfer?.files ?? null);
+      },
+    }),
+    [handlePosterDropFiles],
+  );
+
+  const posterDnD = useMemo(
+    () => makeDragHandlers(setPosterDragActive),
+    [makeDragHandlers],
+  );
+  const previewDnD = useMemo(
+    () => makeDragHandlers(setPreviewPosterDragActive),
+    [makeDragHandlers],
+  );
+
+  const openPosterPicker = () => {
+    const input = getPosterFileInput();
     input?.click();
   };
 
@@ -885,16 +971,19 @@ export default function EditEventPage() {
   const title = watch("title") ?? "";
   const image = watch("image"); // string | undefined
 
+  const posterValue = (image ?? "").trim();
+  const hasPoster = posterValue.length > 0;
+
   const preview = useMemo(
     () => ({
       id: "preview",
       title: title || "Untitled Event",
       dateLabel: startISO ? fmtDateTimeLabel(startISO, endISO) : "Date TBA",
       venue: derivedLocationLabel || "Location TBA",
-      img: image || event?.image || TIXSY_MOCK_POSTER, // ✅ always string
+      img: posterValue || event?.image || TIXSY_MOCK_POSTER,
       category: "Shows",
     }),
-    [title, startISO, endISO, derivedLocationLabel, image, event],
+    [title, startISO, endISO, derivedLocationLabel, posterValue, event],
   );
 
   /* ---------- Categories chips ------------------------------------ */
@@ -922,20 +1011,175 @@ export default function EditEventPage() {
   const showSpecific = locationMode === "specific";
   const showOther = locationMode === "other";
 
+  // ✅ Live preview: poster-only dropzone (same as creation page)
+  const previewWrapRef = useRef<HTMLDivElement | null>(null);
+  const [previewPosterRect, setPreviewPosterRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    radius: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const wrap = previewWrapRef.current;
+    if (!wrap) return;
+
+    let raf = 0;
+
+    const compute = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const poster = wrap.querySelector(
+          '[data-tikd-eventcard-poster="true"]',
+        ) as HTMLElement | null;
+
+        if (!poster) {
+          setPreviewPosterRect(null);
+          return;
+        }
+
+        const w = wrap.getBoundingClientRect();
+        const p = poster.getBoundingClientRect();
+
+        const cs = window.getComputedStyle(poster);
+        const radius = Number.parseFloat(cs.borderTopLeftRadius || "12") || 12;
+
+        setPreviewPosterRect({
+          top: p.top - w.top,
+          left: p.left - w.left,
+          width: p.width,
+          height: p.height,
+          radius,
+        });
+      });
+    };
+
+    compute();
+
+    const ro = new ResizeObserver(() => compute());
+    ro.observe(wrap);
+
+    window.addEventListener("resize", compute);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      window.removeEventListener("resize", compute);
+    };
+  }, [preview.img, preview.title, preview.dateLabel, preview.venue]);
+
   return (
     <main className="relative bg-neutral-950 text-neutral-0 ">
       <style jsx global>{`
-        .poster-uploader > * {
-          position: absolute;
-          inset: 0;
-          width: 100%;
+        /* ---------------------------------------------
+           ✅ Poster upload: make ImageUpload fill height
+        ---------------------------------------------- */
+        .tikdPosterFill > div {
           height: 100%;
         }
-        .poster-uploader img,
-        .poster-uploader video {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
+
+        /* ---------------------------------------------
+           ✅ Clean rounded dashed empty frame
+        ---------------------------------------------- */
+        .tikdPosterEmptyFrame {
+          position: absolute;
+          inset: 14px;
+          border-radius: 18px;
+          border: 1px dashed rgba(231, 222, 255, 0.32);
+          box-shadow: inset 0 0 0 1px rgba(154, 70, 255, 0.12);
+          opacity: 0.55;
+          pointer-events: none;
+        }
+
+        .tikd-posterBox .tikdPosterFill [class*="border-dashed"] {
+          border-color: transparent !important;
+        }
+
+        /* ---------------------------------------------
+           ✅ Drop overlay: stylish + scoped
+        ---------------------------------------------- */
+        .tikd-dropOverlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0;
+          transition:
+            opacity 140ms ease,
+            transform 140ms ease;
+          transform: scale(0.9);
+          border-radius: inherit;
+        }
+
+        .tikd-dropOverlay[data-active="true"] {
+          opacity: 1;
+          transform: scale(1);
+        }
+
+        .tikd-dropOverlay__backdrop {
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background:
+            radial-gradient(
+              560px 260px at 30% 20%,
+              rgba(154, 70, 255, 0.22),
+              transparent 62%
+            ),
+            rgba(5, 5, 10, 0.34);
+          backdrop-filter: blur(12px);
+          box-shadow:
+            0 18px 60px rgba(154, 70, 255, 0.14),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        }
+
+        .tikd-dropOverlay__frame {
+          position: absolute;
+          inset: 10px;
+          border-radius: calc(var(--tikd-drop-r, 16px) - 10px);
+          border: 1px dashed rgba(231, 222, 255, 0.42);
+          box-shadow: inset 0 0 0 1px rgba(154, 70, 255, 0.18);
+        }
+
+        .tikd-dropOverlay__content {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+        }
+
+        .tikd-dropOverlay__pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 14px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(0, 0, 0, 0.28);
+          box-shadow:
+            0 10px 32px rgba(0, 0, 0, 0.35),
+            0 0 0 1px rgba(154, 70, 255, 0.16);
+          color: rgba(255, 255, 255, 0.92);
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.2px;
+        }
+
+        .tikd-dropOverlay__pill svg {
+          filter: drop-shadow(0 10px 18px rgba(154, 70, 255, 0.28));
+        }
+
+        /* ---------------------------------------------------
+           ✅ Edit page: kill Steam interactions in preview
+        --------------------------------------------------- */
+        .tikd-editPreviewCard .tikd-steamCard,
+        .tikd-editPreviewCard .tikd-steamCard * {
+          transform: none !important;
+          transition: none !important;
+        }
+
+        .tikd-editPreviewCard .tikd-steamCard {
+          opacity: 1 !important;
         }
       `}</style>
 
@@ -1505,32 +1749,73 @@ export default function EditEventPage() {
               <div
                 ref={posterUploadRef}
                 className={clsx(
-                  "poster-uploader flex relative w-full max-w-[224px] max-h-[309px] rounded-2xl aspect-[4/6]",
+                  "tikd-posterBox relative w-full max-w-[224px] rounded-2xl aspect-[4/6] overflow-hidden cursor-pointer",
+                  posterDragActive &&
+                    "ring-2 ring-primary-500/70 shadow-[0_0_0_1px_rgba(154,70,255,0.18),0_22px_70px_rgba(154,70,255,0.14)]",
                   errors.image && "ring-1 ring-error-500/70",
                 )}
+                style={
+                  {
+                    ["--tikd-drop-r" as unknown as string]: "24px",
+                  } as React.CSSProperties
+                }
+                {...posterDnD}
               >
-                <Controller
-                  control={control}
-                  name="image"
-                  render={({ field }) => (
-                    <ImageUpload
-                      label="Add Event Poster"
-                      value={field.value}
-                      onChange={field.onChange}
-                      publicId={`temp/events/${uuid()}`}
-                      sizing="full"
-                      accept="image/*,video/*"
-                      maxSizeMB={50}
-                    />
+                {!hasPoster && !posterDragActive ? (
+                  <div className="tikdPosterEmptyFrame" aria-hidden />
+                ) : null}
+
+                <div
+                  className="tikd-dropOverlay"
+                  data-active={posterDragActive ? "true" : "false"}
+                  aria-hidden
+                >
+                  <div className="tikd-dropOverlay__backdrop" />
+                  <div className="tikd-dropOverlay__frame" />
+                  <div className="tikd-dropOverlay__content">
+                    <span className="tikd-dropOverlay__pill">
+                      <ImagePlus className="h-4 w-4 text-primary-300" />
+                      Drop to upload poster
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className={clsx(
+                    "tikdPosterFill absolute inset-0 transition-opacity duration-150",
+                    posterDragActive && "opacity-30",
                   )}
-                />
+                >
+                  <Controller
+                    control={control}
+                    name="image"
+                    render={({ field }) => (
+                      <ImageUpload
+                        value={field.value}
+                        onChange={field.onChange}
+                        publicId={`temp/events/${uuid()}`}
+                        sizing="full"
+                        accept="image/*,video/*"
+                        maxSizeMB={50}
+                        className="h-full cursor-pointer"
+                      />
+                    )}
+                  />
+                </div>
               </div>
             </div>
+
             {errors.image?.message ? (
-              <p className="text-xs text-error-300">
+              <p className="text-xs text-error-300 text-center">
                 {String(errors.image.message)}
               </p>
             ) : null}
+
+            <p className="text-xs text-neutral-400 text-center">
+              You can{" "}
+              <span className="text-neutral-200 font-medium">drag & drop</span>{" "}
+              a file onto the poster area (or the Live Preview) to upload.
+            </p>
           </Section>
 
           <Section
@@ -1721,30 +2006,63 @@ export default function EditEventPage() {
           <div className="md:sticky md:top-20 space-y-6">
             <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">
               <h3 className="mb-3 text-sm font-semibold">Live Preview</h3>
-              <div className="relative group">
-                <EventCard {...preview} clickable={false} />
 
-                <button
-                  type="button"
-                  onClick={openPosterPicker}
-                  aria-label="Change event poster"
-                  className={[
-                    "absolute inset-0 rounded-[14px]",
-                    "cursor-pointer",
-                    "ring-1 ring-transparent",
-                    "outline-none",
-                  ].join(" ")}
-                >
-                  <span className="sr-only">Change event poster</span>
-                </button>
+              <div
+                ref={previewWrapRef}
+                className="tikd-editPreviewCard relative overflow-hidden"
+              >
+                <EventCard {...preview} clickable={false} steam={false} />
+
+                {previewPosterRect ? (
+                  <div
+                    className="absolute z-30 overflow-hidden"
+                    style={
+                      {
+                        top: previewPosterRect.top,
+                        left: previewPosterRect.left,
+                        width: previewPosterRect.width,
+                        height: previewPosterRect.height,
+                        borderRadius: previewPosterRect.radius,
+                        ["--tikd-drop-r" as unknown as string]: `${previewPosterRect.radius}px`,
+                      } as React.CSSProperties
+                    }
+                    {...previewDnD}
+                  >
+                    <button
+                      type="button"
+                      onClick={openPosterPicker}
+                      aria-label="Change event poster"
+                      className="absolute inset-0 cursor-pointer outline-none"
+                      style={{ borderRadius: previewPosterRect.radius }}
+                    >
+                      <span className="sr-only">Change event poster</span>
+                    </button>
+
+                    <div
+                      className="tikd-dropOverlay"
+                      data-active={previewPosterDragActive ? "true" : "false"}
+                      aria-hidden
+                    >
+                      <div className="tikd-dropOverlay__backdrop" />
+                      <div className="tikd-dropOverlay__frame" />
+                      <div className="tikd-dropOverlay__content">
+                        <span className="tikd-dropOverlay__pill">
+                          <ImagePlus className="h-4 w-4 text-primary-300" />
+                          Drop to update poster
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="pointer-events-none absolute left-3 top-3 opacity-0 translate-y-[-2px] transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0">
                   <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-200">
                     <ImagePlus className="h-4 w-4 text-primary-300" />
-                    Click poster to change
+                    Click or drop to change
                   </div>
                 </div>
               </div>
+
               <div className="mt-3 flex items-center justify-end gap-2 text-xs text-neutral-300">
                 <MapPin className="h-4 w-4" />
                 {preview.venue}

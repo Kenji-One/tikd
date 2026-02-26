@@ -50,7 +50,7 @@ function TabButton({
       onClick={onClick}
       className={clsx(
         "group relative flex w-full items-center justify-center gap-2",
-        "rounded-xl px-4 py-3 text-[14px] font-semibold",
+        "rounded-xl px-4 py-3 text-[14px] font-semibold cursor-pointer",
         "transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35",
         active
           ? clsx(

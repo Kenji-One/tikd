@@ -254,28 +254,104 @@ export function EventHero({
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Fixed “Checkout — PRICE” bar (appears after +, stays bottom-fixed)   */}
+      {/* Fixed “Checkout — PRICE” bar (Tikd signature hover)                 */}
       {/* ------------------------------------------------------------------ */}
       {showCheckoutBar ? (
-        <div className="fixed inset-x-0 bottom-5 z-[70] flex justify-center px-4">
-          <div className="relative w-full max-w-[670px]">
+        <div className="fixed inset-x-0 bottom-6 z-[70] flex justify-center px-4">
+          <div className="group relative w-full max-w-[780px]">
+            {/* Ambient “Tikd halo” behind the pill (brand uniqueness) */}
+            <div
+              aria-hidden="true"
+              className={[
+                "pointer-events-none absolute -inset-8 -z-[1] rounded-[999px] opacity-70 blur-2xl",
+                "transition-opacity duration-300",
+                "group-hover:opacity-95",
+              ].join(" ")}
+              style={{
+                background:
+                  "radial-gradient(520px 180px at 50% 35%, rgba(154,81,255,.25), transparent 65%)," +
+                  "radial-gradient(520px 200px at 30% 80%, rgba(255,90,220,.10), transparent 62%)," +
+                  "radial-gradient(520px 220px at 70% 85%, rgba(43,217,255,.08), transparent 66%)",
+              }}
+            />
+
             <button
               type="button"
               onClick={onCheckout}
               className={[
-                "w-full rounded-full border border-white/12",
-                "bg-neutral-900/65 backdrop-blur-2xl",
-                "shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
-                "px-5 py-3 pr-12 cursor-pointer",
-                "transition-[transform,filter,background-color,border-color] duration-200",
-                "hover:bg-neutral-800/70 hover:border-white/16 hover:filter hover:brightness-[1.04]",
-                "active:scale-[0.995]",
+                // shape / sizing
+                "w-full rounded-full",
+                "min-h-[56px] sm:min-h-[60px]",
+                // surface
+                "border border-white/12",
+                "bg-neutral-900/58 backdrop-blur-2xl",
+                "shadow-[0_22px_70px_rgba(0,0,0,0.62)]",
+                // padding (extra right space for close button)
+                "px-7 py-4 pr-[70px] sm:pr-[76px]",
+                // interaction
+                "cursor-pointer",
+                "relative overflow-hidden",
+                "transition-[transform,filter,background-color,border-color,box-shadow] duration-200",
+                "hover:bg-neutral-800/62 hover:border-white/18",
+                // slightly more “premium” hover: lift + glow (still subtle)
+                "group-hover:shadow-[0_26px_84px_rgba(0,0,0,0.70)]",
+                "active:scale-[0.996]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
               ].join(" ")}
               aria-label={`Checkout — ${sym}${selectedTotal.toFixed(2)}`}
             >
-              <span className="block text-center text-[13px] sm:text-sm font-semibold text-white/90">
-                Checkout —{" "}
+              {/* Tikd neon rim (only appears on hover) */}
+              <span
+                aria-hidden="true"
+                className={[
+                  "pointer-events-none absolute inset-0 rounded-full",
+                  "opacity-0 transition-opacity duration-200",
+                  "group-hover:opacity-100",
+                ].join(" ")}
+                style={{
+                  boxShadow:
+                    "inset 0 0 0 1px rgba(154,81,255,.32), inset 0 0 0 2px rgba(154,81,255,.10), 0 0 22px rgba(154,81,255,.18)",
+                }}
+              />
+
+              {/* top sheen */}
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/22 to-transparent"
+              />
+
+              {/* diagonal “scan” sheen (Tikd signature hover) */}
+              <span
+                aria-hidden="true"
+                className={[
+                  "pointer-events-none absolute -inset-y-8 left-[-60%] w-[55%]",
+                  "rotate-[18deg]",
+                  "bg-gradient-to-r from-transparent via-white/18 to-transparent",
+                  "opacity-0 blur-[0.2px]",
+                  "transition-[transform,opacity] duration-500 ease-out",
+                  "group-hover:opacity-100 group-hover:translate-x-[220%]",
+                ].join(" ")}
+              />
+
+              {/* inner glow */}
+              <span
+                aria-hidden="true"
+                className={[
+                  "pointer-events-none absolute -inset-10 opacity-70 blur-2xl",
+                  "transition-opacity duration-200",
+                  "group-hover:opacity-90",
+                ].join(" ")}
+                style={{
+                  background:
+                    "radial-gradient(520px 160px at 50% 30%, rgba(154,81,255,.22), transparent 60%)," +
+                    "radial-gradient(520px 200px at 18% 92%, rgba(255,90,220,.08), transparent 62%)," +
+                    "radial-gradient(620px 220px at 50% 120%, rgba(255,255,255,.06), transparent 60%)",
+                }}
+              />
+
+              <span className="relative z-[1] block text-center text-[15px] sm:text-[16px] font-extrabold tracking-[-0.15px] text-white/92">
+                Checkout{" "}
+                <span className="text-white/55 font-black mx-1.5">—</span>
                 <span className="tabular-nums">
                   {sym}
                   {selectedTotal.toFixed(2)}
@@ -291,10 +367,10 @@ export function EventHero({
                 setCheckoutDismissed(true);
               }}
               className={[
-                "absolute right-2 top-1/2 -translate-y-1/2",
-                "grid size-9 place-items-center rounded-full cursor-pointer",
-                "text-white/70 hover:text-white",
-                "hover:bg-white/8 active:bg-white/10",
+                "absolute right-3 top-1/2 -translate-y-1/2",
+                "grid size-[42px] sm:size-[44px] place-items-center rounded-full cursor-pointer",
+                "text-white/72 hover:text-white",
+                "bg-white/0 hover:bg-white/8 active:bg-white/10",
                 "transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
               ].join(" ")}
@@ -302,8 +378,8 @@ export function EventHero({
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
+                width="16"
+                height="16"
                 viewBox="0 0 16 16"
                 fill="none"
                 aria-hidden="true"

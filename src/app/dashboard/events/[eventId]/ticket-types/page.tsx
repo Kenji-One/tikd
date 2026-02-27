@@ -1664,7 +1664,7 @@ export default function TicketTypesPage() {
                             return next;
                           });
                         }}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 cursor-pointer text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
                       >
                         <EllipsisVertical className="h-4 w-4" />
                       </button>

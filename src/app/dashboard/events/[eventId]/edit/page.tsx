@@ -1,4 +1,6 @@
-// src/app/dashboard/events/[eventId]/edit/page.tsx
+/* ------------------------------------------------------------------ */
+/*  src/app/dashboard/events/[eventId]/edit/page.tsx                   */
+/* ------------------------------------------------------------------ */
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -41,6 +43,7 @@ import DateRangePicker, {
 } from "@/components/ui/DateRangePicker";
 import TimePicker from "@/components/ui/TimePicker";
 import PlacesAddressInput from "@/components/ui/PlacesAddressInput";
+import ImagePositionEditorModal from "@/components/ui/ImagePositionEditorModal";
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 
 /* ----------------------------- Types ------------------------------ */
@@ -92,6 +95,13 @@ type EventEditMeta = EventWithMeta & {
   };
   organizationId?: unknown; // can be populated object depending on backend
 };
+
+type PosterEditorState = {
+  open: boolean;
+  src: string;
+  title: string;
+  publicId: string;
+} | null;
 
 /* ----------------------------- Schema ----------------------------- */
 
@@ -440,6 +450,65 @@ function firstErrorMessage(errs: FieldErrors<FormValues>): string | null {
   return null;
 }
 
+/** Remove query/hash so we never store cache-busters in DB. */
+function stripQueryAndHash(u?: string) {
+  if (!u) return "";
+  try {
+    const url = new URL(u);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return u.split("?")[0]?.split("#")[0] ?? u;
+  }
+}
+
+/** Force fresh fetch after overwrite/crop (Cloudinary CDN + Next/Image cache). */
+function withCacheBust(u: string, nonce: number) {
+  try {
+    const url = new URL(u);
+    url.searchParams.set("cb", String(nonce));
+    return url.toString();
+  } catch {
+    const sep = u.includes("?") ? "&" : "?";
+    return `${u}${sep}cb=${nonce}`;
+  }
+}
+
+function isCloudinaryImageDeliveryUrl(u: string) {
+  return (
+    typeof u === "string" &&
+    u.startsWith("https://res.cloudinary.com/") &&
+    u.includes("/image/upload/")
+  );
+}
+
+async function commitCloudinaryCrop(args: {
+  publicId: string;
+  cropUrl: string;
+}) {
+  const res = await fetch("/api/cloudinary/commit-crop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      public_id: args.publicId,
+      source_url: args.cropUrl,
+    }),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || "Failed to commit crop");
+  }
+
+  const json = (await res.json().catch(() => null)) as {
+    secure_url?: string;
+  } | null;
+
+  if (!json?.secure_url) throw new Error("Invalid crop response");
+  return json.secure_url;
+}
+
 const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="1280" viewBox="0 0 900 1280">
   <defs>
@@ -482,23 +551,6 @@ const TIXSY_MOCK_POSTER = `data:image/svg+xml;utf8,${encodeURIComponent(`
     stroke="#ffffff" stroke-opacity="0.22" stroke-width="2"
     stroke-dasharray="18 14"/>
 
-  <g transform="translate(450 215) translate(-118 0) scale(4.2)" opacity="0.95">
-    <svg width="56" height="24" viewBox="0 0 56 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <g clip-path="url(#clip0_1413_879)">
-        <path d="M0 1.06954H13.4088V6.00978H9.23434V18.8952H4.17443V6.00978H0V1.06954Z" fill="white"/>
-        <path d="M17.806 4.43094C17.3 4.94025 16.7012 5.1949 16.0097 5.1949C15.3182 5.1949 14.7025 4.94025 14.1628 4.43094C13.6568 3.88769 13.4038 3.27652 13.4038 2.59745C13.4038 1.9014 13.6568 1.29872 14.1628 0.789421C14.6857 0.26314 15.3013 0 16.0097 0C16.7012 0 17.3 0.26314 17.806 0.789421C18.3288 1.29872 18.5902 1.9014 18.5902 2.59745C18.5902 3.2935 18.3288 3.90466 17.806 4.43094ZM18.3372 18.8952H13.6568V6.16258H18.3372V18.8952Z" fill="white"/>
-        <path d="M28.1446 12.3761L32.7491 18.8952H27.5627L25.5387 16.0431L23.5148 18.8952H18.3284L22.9582 12.3761L18.5307 6.16258H23.7172L25.5387 8.73456L27.3603 6.16258H32.5467L28.1446 12.3761Z" fill="white"/>
-        <path d="M36.5197 9.90596C36.5197 10.1436 36.7306 10.3219 37.1522 10.4407C37.5907 10.5596 38.122 10.6784 38.7461 10.7972C39.3701 10.9161 39.9942 11.0943 40.6183 11.332C41.2423 11.5527 41.7652 11.9602 42.1868 12.5543C42.6254 13.1485 42.8446 13.9125 42.8446 14.8462C42.8446 15.6441 42.6675 16.3571 42.3133 16.9853C41.9591 17.5964 41.4784 18.0548 40.8713 18.3604C39.7075 18.9546 38.4678 19.2517 37.1522 19.2517C34.0994 19.2517 32.126 18.2416 31.2321 16.2213L35.3053 14.3878C35.6427 15.2536 36.2414 15.6866 37.1016 15.6866C37.6751 15.6866 37.9618 15.4998 37.9618 15.1263C37.9618 14.9396 37.7931 14.7783 37.4558 14.6425C37.1185 14.5067 36.5703 14.3539 35.8113 14.1841C33.1633 13.5899 31.8477 12.2572 31.8646 10.1861C31.8646 8.79398 32.3875 7.71595 33.4332 6.952C34.4958 6.18804 35.7186 5.80606 37.1016 5.80606C39.8846 5.80606 41.7146 6.88409 42.5916 9.04014L38.7208 10.4407C38.4172 9.7277 37.9449 9.37119 37.304 9.37119C36.7812 9.37119 36.5197 9.54945 36.5197 9.90596Z" fill="#BD99FF"/>
-        <path d="M49.1438 12.9618L50.6871 6.16258H56L51.6991 18.8697C51.075 20.7202 50.1052 22.0529 48.7896 22.8677C47.474 23.6996 45.7368 24.0731 43.5779 23.9882V19.5318C44.455 19.5318 45.1128 19.4639 45.5513 19.3281C46.0067 19.2092 46.3693 18.9801 46.6392 18.6405L41.5792 6.16258H46.8922L49.1438 12.9618Z" fill="#BD99FF"/>
-      </g>
-      <defs>
-        <clipPath id="clip0_1413_879">
-          <rect width="56" height="24" fill="white"/>
-        </clipPath>
-      </defs>
-    </svg>
-  </g>
-
   <g font-family="Arial, Helvetica, sans-serif" text-anchor="middle">
     <rect x="402" y="610" width="96" height="96" rx="24"
       fill="#ffffff" fill-opacity="0.06"
@@ -527,6 +579,20 @@ export default function EditEventPage() {
   const eventId = params?.eventId ?? "";
 
   const posterUploadRef = useRef<HTMLDivElement | null>(null);
+
+  // ✅ stable publicId per event for poster
+  const posterPublicId = useMemo(() => {
+    if (eventId) return `temp/events/posters/${eventId}`;
+    return `temp/events/posters/${uuid()}`;
+  }, [eventId]);
+
+  // ✅ remember original (no query/hash) for repeated re-crops
+  const posterOriginalRef = useRef<string | null>(null);
+
+  // ✅ cache-bust nonce to force image refresh after crop/upload
+  const [previewNonce, setPreviewNonce] = useState<number>(() => Date.now());
+
+  const [posterEditor, setPosterEditor] = useState<PosterEditorState>(null);
 
   // ✅ same as creation page: separate drag states (scoped to each zone)
   const [posterDragActive, setPosterDragActive] = useState(false);
@@ -650,6 +716,7 @@ export default function EditEventPage() {
     watch,
     setValue,
     reset,
+    trigger,
     formState: { isSubmitting, errors, submitCount },
   } = useForm<FormValues>({
     resolver: formResolver,
@@ -734,6 +801,16 @@ export default function EditEventPage() {
       }))
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
+    // ✅ sync original poster ref (used for re-crops)
+    if (event.image) {
+      posterOriginalRef.current = stripQueryAndHash(String(event.image));
+    } else {
+      posterOriginalRef.current = null;
+    }
+
+    // ✅ bump nonce so UI refreshes if we just navigated between events
+    setPreviewNonce(Date.now());
+
     reset({
       title: event.title ?? "",
       description: event.description ?? "",
@@ -743,7 +820,7 @@ export default function EditEventPage() {
       date: startISO || undefined,
       endDate: endISO || undefined,
       minAge: event.minAge ?? undefined,
-      image: event.image ? String(event.image) : undefined,
+      image: event.image ? stripQueryAndHash(String(event.image)) : undefined,
       media: normalizedMedia,
       categories: event.categories ?? [],
       promoters: event.promoters ?? [],
@@ -917,6 +994,11 @@ export default function EditEventPage() {
           sortOrder: i,
         }));
 
+      // ✅ strip cache-busters before saving
+      const cleanPoster = data.image?.trim()
+        ? stripQueryAndHash(data.image)
+        : undefined;
+
       const payload = {
         title: data.title,
         description: data.description,
@@ -924,7 +1006,7 @@ export default function EditEventPage() {
         endDate: eISO,
         minAge: data.minAge,
         location,
-        image: data.image,
+        image: cleanPoster,
         media: cleanedMedia,
         categories: data.categories ?? [],
         promoters: data.promoters ?? [],
@@ -970,9 +1052,13 @@ export default function EditEventPage() {
   /* ---------- Live preview ---------------------------------------- */
   const title = watch("title") ?? "";
   const image = watch("image"); // string | undefined
+  const posterValueRaw = (image ?? "").trim();
+  const hasPoster = posterValueRaw.length > 0;
 
-  const posterValue = (image ?? "").trim();
-  const hasPoster = posterValue.length > 0;
+  const uiPoster = useMemo(() => {
+    const v = posterValueRaw ? posterValueRaw : "";
+    return v ? withCacheBust(v, previewNonce) : "";
+  }, [posterValueRaw, previewNonce]);
 
   const preview = useMemo(
     () => ({
@@ -980,11 +1066,32 @@ export default function EditEventPage() {
       title: title || "Untitled Event",
       dateLabel: startISO ? fmtDateTimeLabel(startISO, endISO) : "Date TBA",
       venue: derivedLocationLabel || "Location TBA",
-      img: posterValue || event?.image || TIXSY_MOCK_POSTER,
+      img: uiPoster || event?.image || TIXSY_MOCK_POSTER,
       category: "Shows",
     }),
-    [title, startISO, endISO, derivedLocationLabel, posterValue, event],
+    [title, startISO, endISO, derivedLocationLabel, uiPoster, event],
   );
+
+  const canAdjustPoster = useMemo(() => {
+    const clean =
+      posterOriginalRef.current || stripQueryAndHash(posterValueRaw);
+    return !!clean && isCloudinaryImageDeliveryUrl(clean);
+  }, [posterValueRaw]);
+
+  function openAdjustPoster() {
+    const current = posterValueRaw;
+    if (!current) return;
+
+    const clean = posterOriginalRef.current || stripQueryAndHash(current);
+    if (!clean || !isCloudinaryImageDeliveryUrl(clean)) return;
+
+    setPosterEditor({
+      open: true,
+      src: clean,
+      title: "Adjust poster",
+      publicId: posterPublicId,
+    });
+  }
 
   /* ---------- Categories chips ------------------------------------ */
   const CATS = ["Shows", "Party", "Comedy", "Social", "Listing Party"] as const;
@@ -1183,6 +1290,39 @@ export default function EditEventPage() {
         }
       `}</style>
 
+      {posterEditor?.open ? (
+        <ImagePositionEditorModal
+          open={posterEditor.open}
+          mode="poster"
+          src={posterEditor.src}
+          title={posterEditor.title}
+          onClose={() => setPosterEditor(null)}
+          onApply={async ({ cropUrl }) => {
+            const secureUrl = await commitCloudinaryCrop({
+              publicId: posterEditor.publicId,
+              cropUrl,
+            });
+
+            const nonce = Date.now();
+            setPreviewNonce(nonce);
+
+            const clean = stripQueryAndHash(secureUrl);
+            posterOriginalRef.current = clean;
+
+            setValue("image", withCacheBust(secureUrl, nonce), {
+              shouldDirty: true,
+              shouldValidate: true,
+              shouldTouch: true,
+            });
+
+            void trigger("image");
+            setPosterEditor(null);
+          }}
+          out={{ w: 900, h: 1350, ratio: 2 / 3 }}
+          maxZoom={3.2}
+        />
+      ) : null}
+
       <div className="relative isolate px-4 pt-8 md:py-10 mt-2">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
@@ -1289,6 +1429,7 @@ export default function EditEventPage() {
                           variant="field"
                           align="left"
                           error={!!errors.dateRange?.start}
+                          buttonClassName="cursor-pointer"
                         />
                       )}
                     />
@@ -1370,10 +1511,10 @@ export default function EditEventPage() {
                         type="button"
                         onClick={() => toggleCat(c)}
                         className={clsx(
-                          "rounded-full border px-4 py-2 text-sm transition-colors",
+                          "rounded-full border px-4 py-2 text-sm transition-colors ",
                           active
                             ? "border-white/20 bg-primary-900/50 text-neutral-0"
-                            : "border-white/10 text-neutral-300 hover:text-neutral-0 hover:border-primary-500",
+                            : "border-white/10 text-neutral-300 hover:text-neutral-0 hover:border-primary-500 cursor-pointer",
                         )}
                       >
                         {c}
@@ -1457,7 +1598,7 @@ export default function EditEventPage() {
                           "rounded-full px-3.5 py-1.5 text-sm transition",
                           active
                             ? "bg-primary-900/50 text-neutral-0 ring-1 ring-primary-500/70"
-                            : "text-neutral-300 hover:text-neutral-0",
+                            : "text-neutral-300 hover:text-neutral-0 cursor-pointer",
                         )}
                       >
                         {t.label}
@@ -1745,7 +1886,7 @@ export default function EditEventPage() {
             desc="Upload a featured image/poster. JPEG/PNG/MP4 up to 50MB."
             icon={<ImagePlus className="h-5 w-5 text-primary-300" />}
           >
-            <div className="mt-3 flex justify-center pb-6">
+            <div className="mt-3 flex justify-center pb-5">
               <div
                 ref={posterUploadRef}
                 className={clsx(
@@ -1791,9 +1932,17 @@ export default function EditEventPage() {
                     name="image"
                     render={({ field }) => (
                       <ImageUpload
-                        value={field.value}
-                        onChange={field.onChange}
-                        publicId={`temp/events/${uuid()}`}
+                        value={uiPoster || ""}
+                        onChange={(next) => {
+                          const nonce = Date.now();
+                          setPreviewNonce(nonce);
+
+                          const clean = stripQueryAndHash(next);
+                          if (clean) posterOriginalRef.current = clean;
+
+                          field.onChange(withCacheBust(next, nonce));
+                        }}
+                        publicId={posterPublicId}
                         sizing="full"
                         accept="image/*,video/*"
                         maxSizeMB={50}
@@ -1805,13 +1954,31 @@ export default function EditEventPage() {
               </div>
             </div>
 
+            {hasPoster ? (
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={openAdjustPoster}
+                  disabled={!canAdjustPoster}
+                  title={
+                    canAdjustPoster
+                      ? "Adjust poster"
+                      : "Poster adjust is available for image uploads only (not videos)."
+                  }
+                >
+                  Adjust poster
+                </Button>
+              </div>
+            ) : null}
+
             {errors.image?.message ? (
-              <p className="text-xs text-error-300 text-center">
+              <p className="text-xs text-error-300 text-center mt-3">
                 {String(errors.image.message)}
               </p>
             ) : null}
 
-            <p className="text-xs text-neutral-400 text-center">
+            <p className="text-xs text-neutral-400 text-center mt-3">
               You can{" "}
               <span className="text-neutral-200 font-medium">drag & drop</span>{" "}
               a file onto the poster area (or the Live Preview) to upload.
@@ -2054,19 +2221,25 @@ export default function EditEventPage() {
                     </div>
                   </div>
                 ) : null}
-
-                <div className="pointer-events-none absolute left-3 top-3 opacity-0 translate-y-[-2px] transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-200">
-                    <ImagePlus className="h-4 w-4 text-primary-300" />
-                    Click or drop to change
-                  </div>
-                </div>
               </div>
 
               <div className="mt-3 flex items-center justify-end gap-2 text-xs text-neutral-300">
                 <MapPin className="h-4 w-4" />
                 {preview.venue}
               </div>
+
+              {/* {hasPoster ? (
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={openAdjustPoster}
+                    disabled={!canAdjustPoster}
+                  >
+                    Adjust poster
+                  </Button>
+                </div>
+              ) : null} */}
             </div>
 
             <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">

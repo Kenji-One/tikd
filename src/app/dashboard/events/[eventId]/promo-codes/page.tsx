@@ -20,6 +20,9 @@ import {
   CalendarClock,
   ListChecks,
   X,
+  EllipsisVertical,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 import { useQuery } from "@tanstack/react-query";
@@ -83,18 +86,9 @@ type TicketTypeOption = {
 /* ----------------------------- Helpers ----------------------------- */
 
 function formatDiscountLabel(promo: PromoCodeApi): string {
-  if (promo.kind === "special_access") {
-    return "Special access";
-  }
-
-  if (!promo.discountMode || promo.discountValue == null) {
-    return "Discount";
-  }
-
-  if (promo.discountMode === "percentage") {
-    return `${promo.discountValue}% off`;
-  }
-
+  if (promo.kind === "special_access") return "Special access";
+  if (!promo.discountMode || promo.discountValue == null) return "Discount";
+  if (promo.discountMode === "percentage") return `${promo.discountValue}% off`;
   return `$${promo.discountValue.toFixed(2)} off`;
 }
 
@@ -109,6 +103,28 @@ function mapApiToRow(api: PromoCodeApi): PromoCodeRow {
     maxUses: api.maxUses ?? null,
     active: api.isActive,
   };
+}
+
+// Convert ISO string -> datetime-local value "YYYY-MM-DDTHH:mm" in local time
+function toDatetimeLocalValue(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+function coerceParamToString(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (Array.isArray(value) && typeof value[0] === "string" && value[0].trim()) {
+    return value[0];
+  }
+  return null;
 }
 
 /* ========================= Form value types ========================= */
@@ -145,16 +161,8 @@ type StepDef = {
 };
 
 const steps: StepDef[] = [
-  {
-    id: "general",
-    label: "General",
-    icon: (props) => <Percent {...props} />,
-  },
-  {
-    id: "type",
-    label: "Promo type",
-    icon: (props) => <KeyRound {...props} />,
-  },
+  { id: "general", label: "General", icon: (props) => <Percent {...props} /> },
+  { id: "type", label: "Promo type", icon: (props) => <KeyRound {...props} /> },
   {
     id: "schedule",
     label: "Schedule",
@@ -167,28 +175,26 @@ const steps: StepDef[] = [
   },
 ];
 
-const stepTitles = [
-  "Create promo code",
-  "Promo code type",
-  "Set availability",
-  "Choose where this code applies",
-] as const;
-
 type PromoCodeWizardProps = {
   eventId: string;
+  mode: "create" | "edit";
+  promoId?: string;
+  initial?: PromoCodeApi;
   onCancel: () => void;
-  onCreated: () => void;
+  onDone: () => void;
 };
 
 function PromoCodeWizard({
   eventId,
+  mode,
+  promoId,
+  initial,
   onCancel,
-  onCreated,
+  onDone,
 }: PromoCodeWizardProps) {
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  // tiny “nova” burst for step clicks (pure UX candy)
   const [stepBurst, setStepBurst] = useState(false);
   const burstTimerRef = useRef<number | null>(null);
 
@@ -204,6 +210,46 @@ function PromoCodeWizard({
     burstTimerRef.current = window.setTimeout(() => setStepBurst(false), 260);
   }, []);
 
+  const defaultValues: PromoCodeFormValues = useMemo(() => {
+    if (!initial) {
+      return {
+        name: "",
+        description: "",
+        code: "",
+        kind: "discount",
+        discountMode: "percentage",
+        discountValue: 20,
+        overallItems: null,
+        maxUses: null,
+        isActive: true,
+        validFrom: null,
+        validUntil: null,
+        applicableTicketTypeIds: [],
+      };
+    }
+
+    return {
+      name: initial.name ?? "",
+      description: initial.description ?? "",
+      code: initial.code ?? "",
+      kind: initial.kind ?? "discount",
+      discountMode: (initial.discountMode ?? "percentage") as PromoDiscountMode,
+      discountValue:
+        typeof initial.discountValue === "number"
+          ? initial.discountValue
+          : null,
+      overallItems:
+        typeof initial.overallItems === "number" ? initial.overallItems : null,
+      maxUses: typeof initial.maxUses === "number" ? initial.maxUses : null,
+      isActive: Boolean(initial.isActive),
+      validFrom: toDatetimeLocalValue(initial.validFrom),
+      validUntil: toDatetimeLocalValue(initial.validUntil),
+      applicableTicketTypeIds: Array.isArray(initial.applicableTicketTypeIds)
+        ? initial.applicableTicketTypeIds
+        : [],
+    };
+  }, [initial]);
+
   const {
     register,
     handleSubmit,
@@ -211,43 +257,54 @@ function PromoCodeWizard({
     setValue,
     formState: { isSubmitting },
   } = useForm<PromoCodeFormValues>({
-    defaultValues: {
-      name: "",
-      description: "",
-      code: "",
-
-      kind: "discount",
-      discountMode: "percentage",
-      discountValue: 20,
-
-      overallItems: null,
-
-      maxUses: null,
-      isActive: true,
-
-      validFrom: null,
-      validUntil: null,
-
-      applicableTicketTypeIds: [],
-    },
+    defaultValues,
   });
+
+  useEffect(() => {
+    const v = defaultValues;
+    setValue("name", v.name, { shouldDirty: false });
+    setValue("description", v.description, { shouldDirty: false });
+    setValue("code", v.code, { shouldDirty: false });
+    setValue("kind", v.kind, { shouldDirty: false });
+    setValue("discountMode", v.discountMode, { shouldDirty: false });
+    setValue("discountValue", v.discountValue, { shouldDirty: false });
+    setValue("overallItems", v.overallItems, { shouldDirty: false });
+    setValue("maxUses", v.maxUses, { shouldDirty: false });
+    setValue("isActive", v.isActive, { shouldDirty: false });
+    setValue("validFrom", v.validFrom, { shouldDirty: false });
+    setValue("validUntil", v.validUntil, { shouldDirty: false });
+    setValue("applicableTicketTypeIds", v.applicableTicketTypeIds, {
+      shouldDirty: false,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultValues]);
 
   const kind = watch("kind");
   const discountMode = watch("discountMode");
   const applicableTicketTypeIds = watch("applicableTicketTypeIds");
 
-  // Fetch ticket types for applicability step
+  const titles =
+    mode === "edit"
+      ? ([
+          "Edit promo code",
+          "Promo code type",
+          "Set availability",
+          "Choose where this code applies",
+        ] as const)
+      : ([
+          "Create promo code",
+          "Promo code type",
+          "Set availability",
+          "Choose where this code applies",
+        ] as const);
+
   const { data: ticketTypes } = useQuery<TicketTypeOption[]>({
     queryKey: ["promo-ticket-types", eventId],
-    enabled: !!eventId,
+    enabled: Boolean(eventId),
     queryFn: async () => {
       const res = await fetch(`/api/events/${eventId}/ticket-types`);
-      if (!res.ok) {
-        throw new Error("Failed to load ticket types");
-      }
-
+      if (!res.ok) throw new Error("Failed to load ticket types");
       const json = (await res.json()) as TicketTypeApi[];
-
       return json.map((t) => ({
         _id: t._id,
         name: t.name,
@@ -302,19 +359,31 @@ function PromoCodeWizard({
       applicableTicketTypeIds: values.applicableTicketTypeIds ?? [],
     };
 
-    const res = await fetch(`/api/events/${eventId}/promo-codes`, {
-      method: "POST",
+    const isEdit = mode === "edit";
+    const url = isEdit
+      ? `/api/events/${eventId}/promo-codes/${promoId ?? ""}`
+      : `/api/events/${eventId}/promo-codes`;
+
+    const method: "POST" | "PATCH" = isEdit ? "PATCH" : "POST";
+
+    if (isEdit && !promoId) {
+      setServerError("Missing promo id for edit.");
+      return;
+    }
+
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
       const text = await res.text();
-      setServerError(text || "Failed to create promo code. Please try again.");
+      setServerError(text || "Failed to save promo code. Please try again.");
       return;
     }
 
-    onCreated();
+    onDone();
   }
 
   const activeLeftExpr =
@@ -328,7 +397,7 @@ function PromoCodeWizard({
       className="flex flex-col gap-5 px-6 pb-5"
       noValidate
     >
-      {/* Galaxy stepper header (same as ticket-types) */}
+      {/* Stepper header */}
       <div className="-mx-6">
         <div
           className={clsx(
@@ -337,7 +406,6 @@ function PromoCodeWizard({
           )}
         >
           <div className="tikd-ttw-stepperInner px-8 py-4">
-            {/* active aura */}
             <div className="pointer-events-none absolute inset-0 z-0">
               <div
                 style={{ left: activeLeftExpr }}
@@ -351,7 +419,6 @@ function PromoCodeWizard({
               </div>
             </div>
 
-            {/* dots + connectors */}
             <div className="relative z-10 flex w-full items-center">
               {steps.map((step, idx) => {
                 const Icon = step.icon;
@@ -407,7 +474,6 @@ function PromoCodeWizard({
               })}
             </div>
 
-            {/* labels row */}
             <div className="relative mt-2 h-6">
               {steps.map((step, idx) => {
                 const isActive = activeStep === idx;
@@ -446,11 +512,11 @@ function PromoCodeWizard({
         </div>
       </div>
 
-      {/* Modal title + close (same style as ticket-types) */}
+      {/* Title + close */}
       <div className="mt-1 flex items-start justify-between gap-3">
         <div>
           <h2 className="mt-1 text-lg font-semibold text-neutral-0">
-            {stepTitles[activeStep]}
+            {titles[activeStep]}
           </h2>
         </div>
         <button
@@ -462,9 +528,8 @@ function PromoCodeWizard({
         </button>
       </div>
 
-      {/* Step bodies */}
+      {/* Bodies */}
       <div className="mt-1 space-y-6">
-        {/* Step 0: General */}
         {activeStep === 0 && (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -525,11 +590,9 @@ function PromoCodeWizard({
           </div>
         )}
 
-        {/* Step 1: Type / discount */}
         {activeStep === 1 && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-3">
-              {/* Discount card */}
               <button
                 type="button"
                 onClick={() =>
@@ -562,7 +625,6 @@ function PromoCodeWizard({
                 </div>
               </button>
 
-              {/* Special access card */}
               <button
                 type="button"
                 onClick={() =>
@@ -697,7 +759,6 @@ function PromoCodeWizard({
           </div>
         )}
 
-        {/* Step 2: Schedule */}
         {activeStep === 2 && (
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -742,7 +803,6 @@ function PromoCodeWizard({
           </div>
         )}
 
-        {/* Step 3: Applicability */}
         {activeStep === 3 && (
           <div className="space-y-5">
             <div className="rounded-lg border border-white/10 bg-neutral-900">
@@ -826,67 +886,118 @@ function PromoCodeWizard({
 
 /* ========================== Page component ========================= */
 
+type ModeState =
+  | { kind: "list" }
+  | { kind: "create" }
+  | { kind: "edit"; promoId: string };
+
+type ConfirmState =
+  | { open: false }
+  | { open: true; promoId: string; title: string };
+
 export default function PromoCodesPage() {
-  const { eventId } = useParams() as { eventId?: string };
+  const params = useParams() as Record<string, unknown>;
+  const eventId = useMemo(() => coerceParamToString(params.eventId), [params]);
 
   const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<"list" | "create">("list");
+  const [mode, setMode] = useState<ModeState>({ kind: "list" });
 
-  // ✅ used for “click outside” detection (works even with full-screen scroll containers)
-  const modalShellRef = useRef<HTMLDivElement | null>(null);
+  // dots menu state
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const [confirm, setConfirm] = useState<ConfirmState>({ open: false });
+
+  // modal shells for click-outside
+  const wizardShellRef = useRef<HTMLDivElement | null>(null);
+  const confirmShellRef = useRef<HTMLDivElement | null>(null);
+
+  // close dots menu on outside click (same pattern as ticket-types page)
+  useEffect(() => {
+    if (!openMenuId) return;
+
+    const onDown = (e: MouseEvent | PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest?.("[data-pc-menu-root]")) return;
+      setOpenMenuId(null);
+    };
+
+    window.addEventListener("pointerdown", onDown, { passive: true });
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [openMenuId]);
 
   const {
-    data: promos,
+    data: promosApi,
     isLoading,
     isError,
     refetch,
-  } = useQuery<PromoCodeApi[], Error, PromoCodeRow[]>({
+  } = useQuery<PromoCodeApi[]>({
     queryKey: ["promo-codes", eventId],
     enabled: Boolean(eventId),
     queryFn: async (): Promise<PromoCodeApi[]> => {
+      if (!eventId) return [];
       const res = await fetch(`/api/events/${eventId}/promo-codes`);
-      if (!res.ok) {
-        throw new Error("Failed to load promo codes");
-      }
+      if (!res.ok) throw new Error("Failed to load promo codes");
       return (await res.json()) as PromoCodeApi[];
     },
-    select: (list) => list.map(mapApiToRow),
     staleTime: 60_000,
   });
 
+  const rows = useMemo(() => (promosApi ?? []).map(mapApiToRow), [promosApi]);
+
+  const apiById = useMemo(() => {
+    const m = new Map<string, PromoCodeApi>();
+    for (const p of promosApi ?? []) m.set(p._id, p);
+    return m;
+  }, [promosApi]);
+
   const filtered = useMemo(() => {
-    const list = promos ?? [];
+    const list = rows;
     if (!query.trim()) return list;
-    return list.filter((p) =>
-      p.code.toLowerCase().includes(query.toLowerCase()),
-    );
-  }, [promos, query]);
+    const q = query.toLowerCase();
+    return list.filter((p) => p.code.toLowerCase().includes(q));
+  }, [rows, query]);
 
-  if (!eventId) {
-    return (
-      <div className=" text-error-400">Missing event id in route params.</div>
-    );
-  }
-
-  const closeCreate = () => setMode("list");
+  const closeModal = () => setMode({ kind: "list" });
 
   const onOverlayPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // If the click is NOT inside the modal shell -> close
-    const shell = modalShellRef.current;
+    const shell = wizardShellRef.current;
     const target = e.target as Node | null;
 
     if (!shell || !target) {
-      closeCreate();
+      closeModal();
       return;
     }
-
-    if (!shell.contains(target)) {
-      closeCreate();
-    }
+    if (!shell.contains(target)) closeModal();
   };
+
+  const doDelete = useCallback(
+    async (promoId: string) => {
+      if (!eventId) return;
+
+      const res = await fetch(`/api/events/${eventId}/promo-codes/${promoId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        console.error("Failed to delete promo code", await res.text());
+        return;
+      }
+
+      await refetch();
+    },
+    [eventId, refetch],
+  );
+
+  const editInitial =
+    mode.kind === "edit" ? apiById.get(mode.promoId) : undefined;
 
   return (
     <div className="space-y-6">
+      {!eventId && (
+        <div className="text-error-400">Missing event id in route params.</div>
+      )}
+
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-neutral-0">Promo codes</h2>
@@ -898,122 +1009,291 @@ export default function PromoCodesPage() {
         <Button
           type="button"
           aria-label="Create promo code"
-          onClick={() => setMode("create")}
+          onClick={() => setMode({ kind: "create" })}
           animation={true}
+          disabled={!eventId}
         >
           <Plus className="h-4 w-4" />
           Create Promo Code
         </Button>
       </header>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full max-w-xs">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
-            <Search className="h-4 w-4" />
-          </span>
-          <input
-            type="search"
-            placeholder="Search promo codes…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-full border border-white/10 bg-neutral-950 px-9 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-          />
-        </div>
+      {!eventId ? null : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-xs">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">
+                <Search className="h-4 w-4" />
+              </span>
+              <input
+                type="search"
+                placeholder="Search promo codes…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded-full border border-white/10 bg-neutral-950 px-9 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              />
+            </div>
 
-        <p className="text-[12px] text-neutral-400">
-          {filtered?.length ?? 0} promo code
-          {filtered && filtered.length === 1 ? "" : "s"}
-        </p>
-      </div>
+            <p className="text-[12px] text-neutral-400">
+              {filtered?.length ?? 0} promo code
+              {filtered && filtered.length === 1 ? "" : "s"}
+            </p>
+          </div>
 
-      {isLoading && (
-        <div className="rounded-card border border-white/8 bg-neutral-948/90 px-6 py-8 text-center  text-neutral-300">
-          Loading promo codes…
-        </div>
-      )}
+          {isLoading && (
+            <div className="rounded-card border border-white/8 bg-neutral-948/90 px-6 py-8 text-center  text-neutral-300">
+              Loading promo codes…
+            </div>
+          )}
 
-      {isError && !isLoading && (
-        <div className="rounded-card border border-error-600/40 bg-error-950/60 px-6 py-8 text-center  text-error-200">
-          Failed to load promo codes. Please refresh the page.
-        </div>
-      )}
+          {isError && !isLoading && (
+            <div className="rounded-card border border-error-600/40 bg-error-950/60 px-6 py-8 text-center  text-error-200">
+              Failed to load promo codes. Please refresh the page.
+            </div>
+          )}
 
-      {!isLoading && !isError && (filtered?.length ?? 0) === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-white/10 bg-neutral-950/80 px-6 py-12 text-center">
-          <Percent className="mb-3 h-7 w-7 text-neutral-500" />
-          <p className="text-sm font-medium text-neutral-0">
-            No promo codes yet
-          </p>
-          <p className="mt-1 max-w-md  text-neutral-400">
-            Create your first code to reward loyal guests or unlock hidden
-            ticket types.
-          </p>
-        </div>
-      )}
+          {!isLoading && !isError && (filtered?.length ?? 0) === 0 && (
+            <div className="flex flex-col items-center justify-center rounded-card border border-dashed border-white/10 bg-neutral-950/80 px-6 py-12 text-center">
+              <Percent className="mb-3 h-7 w-7 text-neutral-500" />
+              <p className="text-sm font-medium text-neutral-0">
+                No promo codes yet
+              </p>
+              <p className="mt-1 max-w-md  text-neutral-400">
+                Create your first code to reward loyal guests or unlock hidden
+                ticket types.
+              </p>
+            </div>
+          )}
 
-      {!isLoading && !isError && filtered && filtered.length > 0 && (
-        <div className="space-y-3">
-          {filtered.map((p) => (
-            <RowCard
-              key={p.id}
-              icon={<Percent className="h-5 w-5" />}
-              title={p.title}
-              description={p.description}
-              meta={
-                <>
-                  <RowCardStat label="Code" value={p.code} />
-                  <RowCardStat label="Discount / type" value={p.discount} />
-                  <RowCardStat
-                    label="Uses"
-                    value={`${p.uses}${p.maxUses != null ? ` / ${p.maxUses}` : ""}`}
-                  />
-                  <div className="min-w-[110px] text-right">
-                    <div className="text-[11px] text-neutral-500">Status</div>
-                    <span
-                      className={clsx(
-                        "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
-                        p.active
-                          ? "border border-primary-700/40 bg-primary-900/30 text-primary-300"
-                          : "border border-white/10 bg-neutral-900 text-neutral-200",
-                      )}
-                    >
-                      {p.active ? "Active" : "Inactive"}
-                    </span>
+          {!isLoading && !isError && filtered && filtered.length > 0 && (
+            <div className="space-y-3">
+              {filtered.map((p) => {
+                const isMenuOpen = openMenuId === p.id;
+
+                return (
+                  <div key={p.id} className="relative overflow-visible">
+                    <RowCard
+                      className="overflow-visible"
+                      icon={<Percent className="h-5 w-5" />}
+                      title={p.title}
+                      description={p.description}
+                      meta={
+                        <>
+                          <RowCardStat label="Code" value={p.code} />
+                          <RowCardStat
+                            label="Discount / type"
+                            value={p.discount}
+                          />
+                          <RowCardStat
+                            label="Uses"
+                            value={`${p.uses}${p.maxUses != null ? ` / ${p.maxUses}` : ""}`}
+                          />
+                          <div className="min-w-[110px] text-right">
+                            <div className="text-[11px] text-neutral-500">
+                              Status
+                            </div>
+                            <span
+                              className={clsx(
+                                "mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+                                p.active
+                                  ? "border border-primary-700/40 bg-primary-900/30 text-primary-300"
+                                  : "border border-white/10 bg-neutral-900 text-neutral-200",
+                              )}
+                            >
+                              {p.active ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </>
+                      }
+                      actions={
+                        <div className="relative" data-pc-menu-root>
+                          {/* ✅ Ticket-types style dots button */}
+                          <button
+                            type="button"
+                            aria-haspopup="menu"
+                            aria-expanded={isMenuOpen}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setOpenMenuId((prev) =>
+                                prev === p.id ? null : p.id,
+                              );
+                            }}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
+                          >
+                            <EllipsisVertical className="h-4 w-4" />
+                          </button>
+
+                          {isMenuOpen && (
+                            <div
+                              role="menu"
+                              aria-label="Promo code actions"
+                              className={clsx(
+                                "absolute right-0 z-50 mt-2 w-[170px] overflow-hidden rounded-2xl",
+                                "border border-white/10 bg-neutral-950/95 backdrop-blur-xl",
+                                "shadow-[0_18px_55px_rgba(0,0,0,0.65)]",
+                              )}
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  setMode({ kind: "edit", promoId: p.id });
+                                }}
+                                className={clsx(
+                                  "flex w-full items-center gap-2 px-4 py-3 text-left",
+                                  "text-[13px] text-neutral-100 hover:bg-white/6 transition-colors cursor-pointer",
+                                )}
+                              >
+                                <Pencil className="h-4 w-4 text-neutral-200" />
+                                Edit
+                              </button>
+
+                              <div className="h-px w-full bg-white/10" />
+
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  setConfirm({
+                                    open: true,
+                                    promoId: p.id,
+                                    title: p.title,
+                                  });
+                                }}
+                                className={clsx(
+                                  "flex w-full items-center gap-2 px-4 py-3 text-left",
+                                  "text-[13px] text-error-200 hover:bg-error-950/40 transition-colors cursor-pointer",
+                                )}
+                              >
+                                <Trash2 className="h-4 w-4 text-error-200" />
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      }
+                    />
                   </div>
-                </>
-              }
-            />
-          ))}
-        </div>
-      )}
+                );
+              })}
+            </div>
+          )}
 
-      {/* Modal overlay for creation (same shell styling as ticket-types) */}
-      {mode === "create" && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          // ✅ one handler that works even when a scroll container covers the overlay
-          onPointerDown={onOverlayPointerDown}
-        >
-          <div className="h-full overflow-y-auto">
-            <div className="flex min-h-full items-start justify-center px-3 py-10">
-              <div
-                ref={modalShellRef}
-                className="tikd-ttw-modalShell w-full max-w-[550px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950"
-              >
-                <PromoCodeWizard
-                  eventId={eventId}
-                  onCancel={closeCreate}
-                  onCreated={async () => {
-                    await refetch();
-                    closeCreate();
-                  }}
-                />
+          {/* Create/Edit modal */}
+          {(mode.kind === "create" || mode.kind === "edit") && (
+            <div
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              role="dialog"
+              aria-modal="true"
+              onPointerDown={onOverlayPointerDown}
+            >
+              <div className="h-full overflow-y-auto">
+                <div className="flex min-h-full items-start justify-center px-3 py-10">
+                  <div
+                    ref={wizardShellRef}
+                    className="tikd-ttw-modalShell w-full max-w-[550px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950"
+                  >
+                    <PromoCodeWizard
+                      eventId={eventId}
+                      mode={mode.kind === "edit" ? "edit" : "create"}
+                      promoId={mode.kind === "edit" ? mode.promoId : undefined}
+                      initial={mode.kind === "edit" ? editInitial : undefined}
+                      onCancel={closeModal}
+                      onDone={async () => {
+                        await refetch();
+                        closeModal();
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          )}
+
+          {/* Delete confirm */}
+          {confirm.open && (
+            <div
+              className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Delete promo code"
+              onPointerDownCapture={(e) => {
+                const t = e.target as HTMLElement | null;
+                if (!t) return;
+                if (!t.closest(".tikd-pc-del-shell"))
+                  setConfirm({ open: false });
+              }}
+            >
+              <div
+                ref={confirmShellRef}
+                className={clsx(
+                  "tikd-pc-del-shell w-full max-w-[520px] rounded-3xl border border-white/10 bg-neutral-950",
+                  "shadow-[0_28px_90px_rgba(0,0,0,0.72)]",
+                )}
+              >
+                <div className="flex items-start justify-between gap-3 px-6 pt-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-neutral-0">
+                      Delete promo code?
+                    </h3>
+                    <p className="mt-1 text-sm text-neutral-400">
+                      This will permanently remove{" "}
+                      <span className="font-semibold text-neutral-100">
+                        {confirm.title}
+                      </span>
+                      . Guests will no longer be able to use it.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setConfirm({ open: false })}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50 cursor-pointer transition-colors outline-none"
+                    aria-label="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="mt-5 px-6 pb-6">
+                  <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setConfirm({ open: false })}
+                      className={clsx(
+                        "h-11 rounded-full px-6 text-sm font-semibold",
+                        "border border-white/10 bg-neutral-900 text-neutral-100 hover:bg-neutral-800/80",
+                        "transition-colors cursor-pointer",
+                      )}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const promoId = confirm.promoId;
+                        setConfirm({ open: false });
+                        await doDelete(promoId);
+                      }}
+                      className={clsx(
+                        "h-11 rounded-full px-6 text-sm font-semibold",
+                        "border border-error-600/35 bg-error-950/55 text-error-200",
+                        "hover:bg-error-950/70 hover:border-error-500/45",
+                        "transition-colors cursor-pointer",
+                      )}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -235,7 +235,7 @@ function FriendActionsMenu({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "inline-flex h-8 w-8 items-center justify-center rounded-full",
+          "inline-flex h-8 w-8 items-center justify-center rounded-full cursor-pointer",
           "bg-white/5 text-neutral-200 hover:bg-white/10",
           "border border-white/10",
           "opacity-90 hover:opacity-100",

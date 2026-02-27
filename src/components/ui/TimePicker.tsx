@@ -156,7 +156,7 @@ export default function TimePicker({
   const display = parsed ? fmtDisplay(parsed.hh, parsed.mm) : null;
 
   const inputShell = clsx(
-    "w-full rounded-lg border bg-neutral-950/60 px-4 py-3 transition",
+    "w-full rounded-lg border bg-neutral-950/60 px-4 py-3 transition cursor-pointer",
     "flex items-center justify-between gap-3",
     "focus:outline-none",
     open ? "border-primary-500" : "border-white/10 hover:border-white/15",

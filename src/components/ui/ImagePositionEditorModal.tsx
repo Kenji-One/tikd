@@ -14,7 +14,7 @@ import {
   makeCloudinaryCroppedUrl,
 } from "@/lib/makeCroppedUrl";
 
-export type ImageEditorMode = "banner" | "logo";
+export type ImageEditorMode = "banner" | "logo" | "poster";
 
 type OutSpec = { w: number; h: number; ratio: number };
 type Size = { w: number; h: number };
@@ -48,14 +48,16 @@ export default function ImagePositionEditorModal({
 }: Props) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
-  // preview element is different for banner vs logo, so use a callback ref
+  // preview element is different for banner vs logo vs poster, so use a callback ref
   const [previewEl, setPreviewEl] = useState<HTMLDivElement | null>(null);
 
   const out = useMemo<OutSpec>(() => {
     const base =
       mode === "banner"
         ? ({ w: 1600, h: 400, ratio: 4 / 1 } as OutSpec)
-        : ({ w: 512, h: 512, ratio: 1 } as OutSpec);
+        : mode === "logo"
+          ? ({ w: 512, h: 512, ratio: 1 } as OutSpec)
+          : ({ w: 900, h: 1350, ratio: 2 / 3 } as OutSpec); // poster (2:3)
 
     return {
       w: outOverride?.w ?? base.w,
@@ -342,8 +344,8 @@ export default function ImagePositionEditorModal({
   function getCropBoxPx(): Box | null {
     if (vpSize.w <= 0 || vpSize.h <= 0) return null;
 
-    // Banner uses full viewport.
-    if (mode === "banner") {
+    // Banner + poster use full viewport.
+    if (mode === "banner" || mode === "poster") {
       return { x: 0, y: 0, w: vpSize.w, h: vpSize.h };
     }
 
@@ -442,6 +444,8 @@ export default function ImagePositionEditorModal({
 
   if (!open) return null;
 
+  const isCircle = mode === "logo";
+
   return (
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center p-4"
@@ -509,8 +513,16 @@ export default function ImagePositionEditorModal({
                   "relative mx-auto overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/30",
                   "touch-none select-none",
                   dragging ? "cursor-grabbing" : "cursor-grab",
-                  mode === "banner" ? "w-full" : "w-[340px] max-w-full",
-                  mode === "banner" ? "min-h-[180px]" : "min-h-[340px]",
+                  mode === "banner"
+                    ? "w-full"
+                    : mode === "poster"
+                      ? "w-[340px] max-w-full"
+                      : "w-[340px] max-w-full",
+                  mode === "banner"
+                    ? "min-h-[180px]"
+                    : mode === "poster"
+                      ? "min-h-[420px]"
+                      : "min-h-[340px]",
                 )}
                 style={{ aspectRatio: `${out.ratio}`, touchAction: "none" }}
                 onPointerDown={onPointerDown}
@@ -552,7 +564,7 @@ export default function ImagePositionEditorModal({
 
                 {/* Overlay */}
                 <div className="pointer-events-none absolute inset-0">
-                  {mode === "logo" ? (
+                  {isCircle ? (
                     <div className="absolute inset-0">
                       <div className="absolute inset-0 bg-black/35" />
                       <div className="absolute left-1/2 top-1/2 h-[72%] w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
@@ -637,10 +649,48 @@ export default function ImagePositionEditorModal({
                       />
                     )}
                   </div>
-                ) : (
+                ) : mode === "logo" ? (
                   <div
                     ref={setPreviewEl}
                     className="relative mx-auto my-5 h-40 w-40 overflow-hidden rounded-full bg-black/25 ring-1 ring-white/10"
+                  >
+                    {previewTransform && imgSize ? (
+                      <div
+                        className="absolute left-0 top-0"
+                        style={{ ...previewTransform, willChange: "transform" }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={assetSrc}
+                          alt=""
+                          draggable={false}
+                          className="block select-none max-w-none max-h-none"
+                          style={{
+                            width: `${imgSize.w}px`,
+                            height: `${imgSize.h}px`,
+                            maxWidth: "none",
+                            maxHeight: "none",
+                            pointerEvents: "none",
+                            userSelect: "none",
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={assetSrc}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                        draggable={false}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  // poster
+                  <div
+                    ref={setPreviewEl}
+                    className="relative mx-auto my-5 w-[180px] max-w-full overflow-hidden rounded-2xl bg-black/25 ring-1 ring-white/10"
+                    style={{ aspectRatio: "2 / 3" }}
                   >
                     {previewTransform && imgSize ? (
                       <div

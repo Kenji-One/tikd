@@ -851,7 +851,7 @@ export default function FinancesClient() {
                     </h2>
                     <button
                       type="button"
-                      className="text-[12px] font-semibold text-primary-300 hover:text-primary-200"
+                      className="text-[12px] font-semibold cursor-pointer text-primary-300 hover:text-primary-200"
                       onClick={() =>
                         router.push("/dashboard/finances/withdrawals")
                       }
@@ -1197,7 +1197,7 @@ function FinanceTabButton({
       type="button"
       onClick={onClick}
       className={clsx(
-        "group relative flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-[13px] font-semibold tracking-[-0.02em] transition",
+        "group relative flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-[13px] font-semibold tracking-[-0.02em] transition cursor-pointer",
         active
           ? clsx(
               "border-primary-500/35 bg-neutral-950/30 text-neutral-0",

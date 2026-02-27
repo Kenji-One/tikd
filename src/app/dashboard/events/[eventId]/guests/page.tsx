@@ -192,7 +192,7 @@ function guessNameFromEmail(email: string) {
 
 /* ----------------------------- UI bits --------------------------- */
 const ICON_BTN_40 = clsx(
-  "inline-flex h-10 w-10 items-center justify-center rounded-full",
+  "inline-flex h-10 w-10 items-center justify-center rounded-full cursor-pointer",
   "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
   "opacity-90 hover:opacity-100",
   "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
@@ -535,7 +535,7 @@ function AddGuestModal({
                           onClick={() => removePick(c.key)}
                           aria-label={`Remove ${label}`}
                           className={clsx(
-                            "inline-flex h-6 w-6 items-center justify-center rounded-full",
+                            "inline-flex h-6 w-6 items-center justify-center rounded-full cursor-pointer",
                             "bg-white/0 text-neutral-300 hover:bg-white/10 hover:text-neutral-0",
                             "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                           )}
@@ -580,7 +580,7 @@ function AddGuestModal({
                     disabled={!query.trim()}
                     className={clsx(
                       "inline-flex h-10 items-center justify-center rounded-lg px-3",
-                      "border border-white/10 text-[12px] font-semibold",
+                      "border border-white/10 text-[12px] font-semibold cursor-pointer",
                       query.trim()
                         ? "bg-white/5 text-neutral-100 hover:bg-white/10"
                         : "bg-white/5 text-neutral-500 opacity-60 cursor-not-allowed",
@@ -606,7 +606,7 @@ function AddGuestModal({
                   disabled={!canSend || addMutation.isPending}
                   className={clsx(
                     "w-full md:w-auto",
-                    "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl px-5",
+                    "inline-flex h-[52px] items-center justify-center gap-2 rounded-xl px-5 cursor-pointer",
                     "border border-white/10",
                     canSend && !addMutation.isPending
                       ? "bg-[linear-gradient(90deg,rgba(134,0,238,0.35),rgba(154,70,255,0.55),rgba(170,115,255,0.35))] text-neutral-0 shadow-[0_18px_54px_rgba(154,81,255,0.22)]"
@@ -660,7 +660,7 @@ function AddGuestModal({
               type="button"
               onClick={onClose}
               className={clsx(
-                "inline-flex h-10 items-center justify-center rounded-xl px-4",
+                "inline-flex h-10 items-center justify-center rounded-xl px-4 cursor-pointer",
                 "border border-white/10 bg-white/5 text-[12px] font-semibold text-neutral-200",
                 "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
               )}
@@ -822,7 +822,7 @@ function GuestActionsMenu({
                       className={clsx(
                         "w-full px-2.5 py-2 rounded-lg text-left",
                         "flex items-center gap-2",
-                        "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10",
+                        "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10 cursor-pointer",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                       )}
                     >
@@ -1168,7 +1168,7 @@ export default function GuestsPage() {
                 <button
                   data-tab="order"
                   className={clsx(
-                    "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold",
+                    "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold cursor-pointer",
                     view === "order"
                       ? "text-neutral-0"
                       : "text-neutral-300 hover:text-neutral-0",

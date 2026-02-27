@@ -8,14 +8,33 @@ export type TicketAvailabilityStatus =
   | "paused"
   | "sale_ended";
 
+/**
+ * IMPORTANT:
+ * UI currently uses a "restricted" state (link-only) + "password".
+ * We store "restricted" explicitly to avoid breaking validation and allow
+ * future logic (e.g. only show in direct link page).
+ */
+export type TicketAccessMode = "public" | "restricted" | "password";
+
 export interface ICheckoutRequirements {
   requireFullName: boolean;
+
+  /** UI supports these (even if you don't use them yet) */
+  requireEmail: boolean;
   requirePhone: boolean;
+  requireFacebook: boolean;
+  requireInstagram: boolean;
   requireGender: boolean;
   requireDob: boolean;
+  requireAge: boolean;
+
   subjectToApproval: boolean;
+
   addBuyerDetailsToOrder: boolean;
   addPurchasedTicketsToAttendeesCount: boolean;
+
+  /** UI supports it (future feature) */
+  enableEmailAttachments: boolean;
 }
 
 export interface ITicketDesign {
@@ -24,6 +43,13 @@ export interface ITicketDesign {
   logoUrl?: string;
   backgroundUrl?: string;
   footerText?: string;
+
+  /** UI supports these */
+  watermarkEnabled: boolean;
+  eventInfoEnabled: boolean;
+  logoEnabled: boolean;
+  qrSize: number;
+  qrBorderRadius: number;
 }
 
 export interface ITicketType extends Document {
@@ -53,7 +79,7 @@ export interface ITicketType extends Document {
   salesStartAt?: Date | null;
   salesEndAt?: Date | null;
 
-  accessMode: "public" | "password";
+  accessMode: TicketAccessMode;
   password?: string;
 
   checkout: ICheckoutRequirements;
@@ -66,12 +92,21 @@ export interface ITicketType extends Document {
 const CheckoutSchema = new Schema<ICheckoutRequirements>(
   {
     requireFullName: { type: Boolean, default: true },
+
+    requireEmail: { type: Boolean, default: true },
     requirePhone: { type: Boolean, default: false },
+    requireFacebook: { type: Boolean, default: false },
+    requireInstagram: { type: Boolean, default: false },
     requireGender: { type: Boolean, default: false },
     requireDob: { type: Boolean, default: false },
+    requireAge: { type: Boolean, default: false },
+
     subjectToApproval: { type: Boolean, default: false },
+
     addBuyerDetailsToOrder: { type: Boolean, default: true },
     addPurchasedTicketsToAttendeesCount: { type: Boolean, default: true },
+
+    enableEmailAttachments: { type: Boolean, default: true },
   },
   { _id: false },
 );
@@ -87,6 +122,12 @@ const DesignSchema = new Schema<ITicketDesign>(
     logoUrl: { type: String, default: "" },
     backgroundUrl: { type: String, default: "" },
     footerText: { type: String, default: "" },
+
+    watermarkEnabled: { type: Boolean, default: true },
+    eventInfoEnabled: { type: Boolean, default: true },
+    logoEnabled: { type: Boolean, default: false },
+    qrSize: { type: Number, default: 0, min: 0 },
+    qrBorderRadius: { type: Number, default: 0, min: 0 },
   },
   { _id: false },
 );
@@ -144,7 +185,7 @@ const TicketTypeSchema = new Schema<ITicketType>(
 
     accessMode: {
       type: String,
-      enum: ["public", "password"],
+      enum: ["public", "restricted", "password"],
       default: "public",
     },
     password: { type: String, default: "" },

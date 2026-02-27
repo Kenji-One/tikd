@@ -928,7 +928,7 @@ export default function EventTeamPage() {
                     "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold",
                     tab === "active"
                       ? "text-neutral-0"
-                      : "text-neutral-300 hover:text-neutral-0",
+                      : "text-neutral-300 hover:text-neutral-0 cursor-pointer",
                   )}
                   onClick={() => setTab("active")}
                 >
@@ -937,14 +937,14 @@ export default function EventTeamPage() {
                 <button
                   data-tab="temporary"
                   className={clsx(
-                    "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold",
+                    "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold ",
                     tab === "temporary"
                       ? "text-neutral-0"
-                      : "text-neutral-300 hover:text-neutral-0",
+                      : "text-neutral-300 hover:text-neutral-0 cursor-pointer",
                   )}
                   onClick={() => setTab("temporary")}
                 >
-                  Temporary access
+                  Temporary Access
                 </button>
                 <span
                   ref={indicatorRef}

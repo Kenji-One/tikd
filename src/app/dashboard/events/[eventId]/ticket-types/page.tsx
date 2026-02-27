@@ -11,6 +11,7 @@ import {
   type SVGProps,
   type ComponentType,
 } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import {
   Search,
@@ -19,11 +20,14 @@ import {
   EllipsisVertical,
   X,
   GripVertical,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import clsx from "clsx";
+import { z } from "zod";
 
 import type {
   TicketAvailabilityStatus,
@@ -102,20 +106,183 @@ function reorderFullByVisibleDrag<T extends { id: string }>(args: {
   return next;
 }
 
+/* ----------------------------- Zod (edit fetch) ----------------------------- */
+
+const zTicketTypeDoc = z
+  .object({
+    _id: z.string(),
+    name: z.string().default(""),
+    description: z.string().optional().default(""),
+    price: z.number().optional().default(0),
+    currency: z.string().optional().default("USD"),
+    feeMode: z.enum(["pass_on", "absorb"]).optional().default("pass_on"),
+    isFree: z.boolean().optional().default(false),
+
+    totalQuantity: z.number().nullable().optional().default(null),
+    minPerOrder: z.number().nullable().optional().default(null),
+    maxPerOrder: z.number().nullable().optional().default(null),
+
+    availabilityStatus: z
+      .enum(["scheduled", "on_sale", "paused", "sale_ended"])
+      .optional()
+      .default("on_sale"),
+    salesStartAt: z
+      .union([z.string(), z.date()])
+      .nullable()
+      .optional()
+      .default(null),
+    salesEndAt: z
+      .union([z.string(), z.date()])
+      .nullable()
+      .optional()
+      .default(null),
+
+    accessMode: z.enum(["public", "password"]).optional().default("public"),
+    password: z.string().optional().default(""),
+
+    checkout: z
+      .object({
+        requireFullName: z.boolean().optional(),
+        requirePhone: z.boolean().optional(),
+        requireGender: z.boolean().optional(),
+        requireDob: z.boolean().optional(),
+        subjectToApproval: z.boolean().optional(),
+        addBuyerDetailsToOrder: z.boolean().optional(),
+        addPurchasedTicketsToAttendeesCount: z.boolean().optional(),
+      })
+      .optional()
+      .default({}),
+
+    design: z
+      .object({
+        layout: z.enum(["horizontal", "vertical", "down", "up"]).optional(),
+        brandColor: z.string().optional(),
+        logoUrl: z.string().optional(),
+        backgroundUrl: z.string().optional(),
+        footerText: z.string().optional(),
+      })
+      .optional()
+      .default({}),
+  })
+  .passthrough();
+
+function toIsoLocalOrNull(v: unknown): string | null {
+  if (!v) return null;
+
+  if (typeof v === "string") {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return null;
+    // convert to local datetime-local compatible string
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+  }
+
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return null;
+    return new Date(v.getTime() - v.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+  }
+
+  return null;
+}
+
+function mapDocToFormValues(docRaw: unknown): TicketTypeFormValues {
+  const parsed = zTicketTypeDoc.safeParse(docRaw);
+  const doc = parsed.success ? parsed.data : null;
+
+  const price = doc?.price ?? 0;
+  const isFree = doc?.isFree ?? price <= 0;
+
+  const totalQuantity = doc?.totalQuantity ?? null;
+  const unlimitedQuantity = totalQuantity == null;
+
+  const salesStartAt = toIsoLocalOrNull(doc?.salesStartAt ?? null);
+  const salesEndAt = toIsoLocalOrNull(doc?.salesEndAt ?? null);
+
+  const checkout = doc?.checkout ?? {};
+  const design = doc?.design ?? {};
+
+  return {
+    name: doc?.name ?? "",
+    description: doc?.description ?? "",
+
+    isFree,
+    price: isFree ? 0 : price,
+    currency: doc?.currency ?? "USD",
+    feeMode: doc?.feeMode ?? "pass_on",
+
+    totalQuantity: unlimitedQuantity ? null : (totalQuantity ?? 0),
+    unlimitedQuantity,
+    minPerOrder: doc?.minPerOrder ?? null,
+    maxPerOrder: doc?.maxPerOrder ?? null,
+
+    availabilityStatus: (doc?.availabilityStatus ??
+      "on_sale") as TicketAvailabilityStatus,
+    salesStartAt,
+    salesEndAt,
+
+    accessMode:
+      doc?.accessMode === "password"
+        ? "password"
+        : ("public" as TicketTypeFormValues["accessMode"]),
+    password: doc?.password ?? "",
+
+    // The UI currently supports a bigger set of fields than backend stores.
+    // Keep safe defaults for the extra ones so the wizard renders correctly.
+    requireFullName: checkout.requireFullName ?? true,
+    requireEmail: true,
+    requirePhone: checkout.requirePhone ?? false,
+    requireFacebook: false,
+    requireInstagram: false,
+    requireGender: checkout.requireGender ?? false,
+    requireDob: checkout.requireDob ?? false,
+    requireAge: false,
+    subjectToApproval: checkout.subjectToApproval ?? false,
+    addBuyerDetailsToOrder: checkout.addBuyerDetailsToOrder ?? true,
+    addPurchasedTicketsToAttendeesCount:
+      checkout.addPurchasedTicketsToAttendeesCount ?? true,
+    enableEmailAttachments: true,
+
+    layout: (design.layout ?? "horizontal") as TicketTypeFormValues["layout"],
+    brandColor: design.brandColor ?? "#9a46ff",
+    logoUrl: design.logoUrl ?? "",
+    backgroundUrl: design.backgroundUrl ?? "",
+    footerText: design.footerText ?? "",
+
+    watermarkEnabled: true,
+    eventInfoEnabled: true,
+    logoEnabled: false,
+    qrSize: 0,
+    qrBorderRadius: 0,
+  };
+}
+
 /* ========================= TicketTypeWizard ======================== */
 
+type TicketWizardMode = "create" | "edit";
+
 type TicketTypeWizardProps = {
+  mode: TicketWizardMode;
   eventId: string;
   event?: EventWithMeta;
+
+  ticketTypeId?: string; // required for edit
+  initialValues?: TicketTypeFormValues; // edit prefill
+
   onCancel: () => void;
-  onCreated: () => void;
+  onDone: () => void; // called after create/edit succeeds
 };
 
 function TicketTypeWizard({
+  mode,
   eventId,
   event,
+  ticketTypeId,
+  initialValues,
   onCancel,
-  onCreated,
+  onDone,
 }: TicketTypeWizardProps) {
   const [activeStep, setActiveStep] = useState<0 | 1 | 2 | 3>(0);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -136,6 +303,54 @@ function TicketTypeWizard({
     burstTimerRef.current = window.setTimeout(() => setStepBurst(false), 260);
   }, []);
 
+  const defaultValues: TicketTypeFormValues = useMemo(() => {
+    return (
+      initialValues ?? {
+        name: "",
+        description: "",
+        isFree: true,
+        price: 0,
+        currency: "USD",
+        feeMode: "pass_on",
+
+        totalQuantity: null,
+        unlimitedQuantity: true,
+        minPerOrder: null,
+        maxPerOrder: null,
+        availabilityStatus: "on_sale",
+        salesStartAt: null,
+        salesEndAt: null,
+        accessMode: "public",
+        password: "",
+
+        requireFullName: true,
+        requireEmail: true,
+        requirePhone: false,
+        requireFacebook: false,
+        requireInstagram: false,
+        requireGender: false,
+        requireDob: false,
+        requireAge: false,
+        subjectToApproval: false,
+        addBuyerDetailsToOrder: false,
+        addPurchasedTicketsToAttendeesCount: false,
+        enableEmailAttachments: true,
+
+        layout: "horizontal",
+        brandColor: "#9a46ff",
+        logoUrl: "",
+        backgroundUrl: "",
+        footerText: "",
+
+        watermarkEnabled: true,
+        eventInfoEnabled: true,
+        logoEnabled: false,
+        qrSize: 0,
+        qrBorderRadius: 0,
+      }
+    );
+  }, [initialValues]);
+
   const {
     register,
     handleSubmit,
@@ -143,49 +358,7 @@ function TicketTypeWizard({
     setValue,
     formState: { isSubmitting },
   } = useForm<TicketTypeFormValues>({
-    defaultValues: {
-      name: "",
-      description: "",
-      isFree: true,
-      price: 0,
-      currency: "USD",
-      feeMode: "pass_on",
-
-      totalQuantity: null,
-      unlimitedQuantity: true,
-      minPerOrder: null,
-      maxPerOrder: null,
-      availabilityStatus: "on_sale",
-      salesStartAt: null,
-      salesEndAt: null,
-      accessMode: "public",
-      password: "",
-
-      requireFullName: true,
-      requireEmail: true,
-      requirePhone: false,
-      requireFacebook: false,
-      requireInstagram: false,
-      requireGender: false,
-      requireDob: false,
-      requireAge: false,
-      subjectToApproval: false,
-      addBuyerDetailsToOrder: false,
-      addPurchasedTicketsToAttendeesCount: false,
-      enableEmailAttachments: true,
-
-      layout: "horizontal",
-      brandColor: "#9a46ff",
-      logoUrl: "",
-      backgroundUrl: "",
-      footerText: "",
-
-      watermarkEnabled: true,
-      eventInfoEnabled: true,
-      logoEnabled: false,
-      qrSize: 0,
-      qrBorderRadius: 0,
-    },
+    defaultValues,
   });
 
   const price = watch("price");
@@ -343,12 +516,22 @@ function TicketTypeWizard({
     },
   ];
 
-  const stepTitles = [
-    "Create Ticket Type",
-    "Quantities",
-    "Checkout Requirments",
-    "Customize the way your ticket looks",
-  ] as const;
+  const stepTitles = useMemo(() => {
+    if (mode === "edit") {
+      return [
+        "Edit Ticket Type",
+        "Quantities",
+        "Checkout Requirments",
+        "Customize the way your ticket looks",
+      ] as const;
+    }
+    return [
+      "Create Ticket Type",
+      "Quantities",
+      "Checkout Requirments",
+      "Customize the way your ticket looks",
+    ] as const;
+  }, [mode]);
 
   const goNext = () =>
     setActiveStep((s) => (s < 3 ? ((s + 1) as 0 | 1 | 2 | 3) : s));
@@ -404,8 +587,16 @@ function TicketTypeWizard({
       },
     };
 
-    const res = await fetch(`/api/events/${eventId}/ticket-types`, {
-      method: "POST",
+    const isEdit = mode === "edit";
+
+    const url = isEdit
+      ? `/api/events/${eventId}/ticket-types/${ticketTypeId ?? ""}`
+      : `/api/events/${eventId}/ticket-types`;
+
+    const method: "POST" | "PATCH" = isEdit ? "PATCH" : "POST";
+
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -416,7 +607,7 @@ function TicketTypeWizard({
       return;
     }
 
-    onCreated();
+    onDone();
   }
 
   const activeLeftExpr =
@@ -572,8 +763,8 @@ function TicketTypeWizard({
             price={Number(price || 0)}
             isFree={!!isFree}
             feeMode={feeMode}
-            onFeeModeChange={(mode) =>
-              setValue("feeMode", mode, { shouldDirty: true })
+            onFeeModeChange={(mode2) =>
+              setValue("feeMode", mode2, { shouldDirty: true })
             }
             onPriceStep={handlePriceStep}
             onNext={goNext}
@@ -647,6 +838,8 @@ function TicketTypeWizard({
 
 /* ========================== Page component ========================= */
 
+type UiMode = "list" | "create" | "edit";
+
 export default function TicketTypesPage() {
   const params = useParams<RouteParams>();
   const eventId = params?.eventId;
@@ -654,7 +847,50 @@ export default function TicketTypesPage() {
   const queryClient = useQueryClient();
 
   const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<"list" | "create">("list");
+  const [mode, setMode] = useState<UiMode>("list");
+
+  // menu state (three dots)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // ✅ Portal menu positioning (prevents overflow-hidden clipping)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
+    null,
+  );
+  const menuBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const computeMenuPos = useCallback((id: string) => {
+    const btn = menuBtnRefs.current[id];
+    if (!btn) return null;
+
+    const r = btn.getBoundingClientRect();
+    const gap = 8; // match mt-2
+
+    // menu width is fixed (w-[170px]) => right-aligned to button
+    const menuWidth = 170;
+
+    const top = Math.round(r.bottom + gap);
+    const right = Math.max(12, Math.round(window.innerWidth - r.right));
+    const clampedRight = Math.min(right, Math.max(12, window.innerWidth - 12));
+
+    // Also ensure menu doesn't go off-screen on the left (by adjusting right if needed)
+    const leftIfRight = window.innerWidth - clampedRight - menuWidth;
+    const safeRight =
+      leftIfRight < 12
+        ? Math.max(12, window.innerWidth - 12 - menuWidth)
+        : clampedRight;
+
+    return { top, right: safeRight };
+  }, []);
+
+  // edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editInitialValues, setEditInitialValues] =
+    useState<TicketTypeFormValues | null>(null);
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false);
+
+  // delete state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // local order state (this is what the user is reordering)
   const [ordered, setOrdered] = useState<TicketTypeRow[]>([]);
@@ -694,28 +930,86 @@ export default function TicketTypesPage() {
     onVis?: () => void;
   }>({ attached: false });
 
-  const closeCreate = useCallback(() => {
+  const closeModal = useCallback(() => {
     setMode("list");
+    setEditingId(null);
+    setEditInitialValues(null);
+    setIsLoadingEdit(false);
   }, []);
 
   // ✅ close on ESC + lock body scroll while modal open
   useEffect(() => {
-    if (mode !== "create") return;
+    // We need ESC even in list mode because the dots menu is used in list mode.
+    if (mode === "list" && !openMenuId && !confirmDeleteId) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeCreate();
+      if (e.key !== "Escape") return;
+
+      // close menu first
+      if (openMenuId) {
+        setOpenMenuId(null);
+        setMenuPos(null);
+        return;
+      }
+      // then delete confirm
+      if (confirmDeleteId) {
+        setConfirmDeleteId(null);
+        return;
+      }
+      // then modals
+      if (mode !== "list") closeModal();
     };
 
     window.addEventListener("keydown", onKeyDown);
 
+    // only lock scroll for actual modals (create/edit/delete confirm)
+    const shouldLockScroll = mode !== "list" || Boolean(confirmDeleteId);
     const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (shouldLockScroll) document.body.style.overflow = "hidden";
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = prevOverflow;
+      if (shouldLockScroll) document.body.style.overflow = prevOverflow;
     };
-  }, [mode, closeCreate]);
+  }, [mode, closeModal, openMenuId, confirmDeleteId]);
+
+  // Also close dots menu on outside click (when not dragging)
+  useEffect(() => {
+    if (!openMenuId) return;
+
+    const onDown = (e: MouseEvent | PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      // if click is inside any menu root (button wrapper OR portal menu)
+      if (target.closest?.("[data-tt-menu-root]")) return;
+
+      setOpenMenuId(null);
+      setMenuPos(null);
+    };
+
+    window.addEventListener("pointerdown", onDown, { passive: true });
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [openMenuId]);
+
+  // Keep portal menu position updated on scroll / resize
+  useEffect(() => {
+    if (!openMenuId) return;
+
+    const update = () => {
+      const p = computeMenuPos(openMenuId);
+      if (p) setMenuPos(p);
+    };
+
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [openMenuId, computeMenuPos]);
 
   // Fetch ticket types
   const {
@@ -1000,6 +1294,10 @@ export default function TicketTypesPage() {
     e.preventDefault();
     e.stopPropagation();
 
+    // close any open menus while dragging
+    setOpenMenuId(null);
+    setMenuPos(null);
+
     // reset any stuck state
     stopPointerDrag();
 
@@ -1032,14 +1330,146 @@ export default function TicketTypesPage() {
     document.body.style.cursor = "grabbing";
   }
 
+  const openCreate = useCallback(() => {
+    setOpenMenuId(null);
+    setMenuPos(null);
+    setConfirmDeleteId(null);
+    setMode("create");
+    setEditingId(null);
+    setEditInitialValues(null);
+  }, []);
+
+  const openEdit = useCallback(
+    async (ticketTypeId: string) => {
+      if (!eventId) return;
+
+      setOpenMenuId(null);
+      setMenuPos(null);
+      setConfirmDeleteId(null);
+
+      setMode("edit");
+      setEditingId(ticketTypeId);
+      setEditInitialValues(null);
+      setIsLoadingEdit(true);
+
+      try {
+        const res = await fetch(
+          `/api/events/${eventId}/ticket-types/${ticketTypeId}`,
+        );
+        if (!res.ok) {
+          // if fetch fails, just close modal
+          closeModal();
+          return;
+        }
+        const json: unknown = await res.json();
+        const values = mapDocToFormValues(json);
+        setEditInitialValues(values);
+      } finally {
+        setIsLoadingEdit(false);
+      }
+    },
+    [eventId, closeModal],
+  );
+
+  const requestDelete = useCallback((ticketTypeId: string) => {
+    setOpenMenuId(null);
+    setMenuPos(null);
+    setConfirmDeleteId(ticketTypeId);
+  }, []);
+
+  const doDelete = useCallback(async () => {
+    if (!eventId || !confirmDeleteId) return;
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/events/${eventId}/ticket-types/${confirmDeleteId}`,
+        { method: "DELETE" },
+      );
+
+      if (res.ok) {
+        // optimistic update list + cache
+        const prev = orderedRef.current;
+        const next = prev.filter((x) => x.id !== confirmDeleteId);
+        setOrdered(next);
+        queryClient.setQueryData(["ticket-types", eventId], next);
+
+        setConfirmDeleteId(null);
+        setOpenMenuId(null);
+        setMenuPos(null);
+
+        // also refetch to ensure consistency
+        void refetch();
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [eventId, confirmDeleteId, queryClient, refetch]);
+
   if (!eventId) {
     return (
       <div className=" text-error-400">Missing event id in route params.</div>
     );
   }
 
+  const deleteTargetName =
+    confirmDeleteId != null
+      ? (ordered.find((x) => x.id === confirmDeleteId)?.name ??
+        visible.find((x) => x.id === confirmDeleteId)?.name ??
+        "this ticket type")
+      : "this ticket type";
+
+  const menuId = openMenuId;
+  const portalMenu =
+    menuId && menuPos && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            role="menu"
+            aria-label="Ticket type actions"
+            data-tt-menu-root
+            className={clsx(
+              "fixed z-[9999] w-[170px] overflow-hidden rounded-2xl",
+              "border border-white/10 bg-neutral-950/95 backdrop-blur-xl",
+              "shadow-[0_18px_55px_rgba(0,0,0,0.65)]",
+            )}
+            style={{ top: menuPos.top, right: menuPos.right }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => void openEdit(menuId)}
+              className={clsx(
+                "flex w-full items-center gap-2 px-4 py-3 text-left",
+                "text-[13px] text-neutral-100 hover:bg-white/6 transition-colors cursor-pointer",
+              )}
+            >
+              <Pencil className="h-4 w-4 text-neutral-200" />
+              Edit
+            </button>
+
+            <div className="h-px w-full bg-white/10" />
+
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => requestDelete(menuId)}
+              className={clsx(
+                "flex w-full items-center gap-2 px-4 py-3 text-left",
+                "text-[13px] text-error-200 hover:bg-error-950/40 transition-colors cursor-pointer",
+              )}
+            >
+              <Trash2 className="h-4 w-4 text-error-200" />
+              Delete
+            </button>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div className="space-y-6">
+      {portalMenu}
+
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-neutral-0">Ticket types</h2>
@@ -1051,7 +1481,7 @@ export default function TicketTypesPage() {
         <Button
           type="button"
           aria-label="Create ticket type"
-          onClick={() => setMode("create")}
+          onClick={openCreate}
           animation={true}
         >
           <Plus className="h-4 w-4" />
@@ -1113,6 +1543,7 @@ export default function TicketTypesPage() {
               !!draggingId && draggingId !== t.id && dragOverId === t.id;
 
             const rowKey = `${t?.id ?? "no-id"}-${idx}`;
+            const isMenuOpen = openMenuId === t.id;
 
             return (
               <div
@@ -1209,12 +1640,35 @@ export default function TicketTypesPage() {
                     </>
                   }
                   actions={
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
-                    >
-                      <EllipsisVertical className="h-4 w-4" />
-                    </button>
+                    <div className="relative" data-tt-menu-root>
+                      <button
+                        type="button"
+                        ref={(el) => {
+                          menuBtnRefs.current[t.id] = el;
+                        }}
+                        aria-haspopup="menu"
+                        aria-expanded={isMenuOpen}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (isPointerDraggingRef.current) return;
+
+                          setOpenMenuId((prev) => {
+                            const next = prev === t.id ? null : t.id;
+                            if (next) {
+                              const p = computeMenuPos(next);
+                              setMenuPos(p);
+                            } else {
+                              setMenuPos(null);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-neutral-950 text-neutral-300 transition-colors hover:border-primary-500 hover:text-primary-200"
+                      >
+                        <EllipsisVertical className="h-4 w-4" />
+                      </button>
+                    </div>
                   }
                 />
               </div>
@@ -1223,32 +1677,118 @@ export default function TicketTypesPage() {
         </div>
       )}
 
-      {mode === "create" && (
+      {/* Create / Edit modal */}
+      {(mode === "create" || mode === "edit") && (
         <div
           className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Create ticket type"
-          // ✅ close if the pointer down happened OUTSIDE the modal shell
+          aria-label={
+            mode === "create" ? "Create ticket type" : "Edit ticket type"
+          }
           onPointerDownCapture={(e) => {
             const target = e.target as HTMLElement | null;
             if (!target) return;
-
-            // if click is not inside the modal shell => close
-            if (!target.closest(".tikd-ttw-modalShell")) closeCreate();
+            if (!target.closest(".tikd-ttw-modalShell")) closeModal();
           }}
         >
           <div className="flex min-h-full items-start justify-center px-3 py-10">
             <div className="tikd-ttw-modalShell w-full max-w-[664px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950">
-              <TicketTypeWizard
-                eventId={eventId}
-                event={event}
-                onCancel={closeCreate}
-                onCreated={async () => {
-                  await refetch();
-                  closeCreate();
-                }}
-              />
+              {mode === "edit" && isLoadingEdit ? (
+                <div className="px-6 py-14 text-center text-neutral-300">
+                  Loading ticket type…
+                </div>
+              ) : (
+                <TicketTypeWizard
+                  mode={mode === "edit" ? "edit" : "create"}
+                  eventId={eventId}
+                  event={event}
+                  ticketTypeId={editingId ?? undefined}
+                  initialValues={editInitialValues ?? undefined}
+                  onCancel={closeModal}
+                  onDone={async () => {
+                    await refetch();
+                    closeModal();
+                  }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm modal */}
+      {confirmDeleteId && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete ticket type"
+          onPointerDownCapture={(e) => {
+            const t = e.target as HTMLElement | null;
+            if (!t) return;
+            if (!t.closest(".tikd-tt-del-shell")) setConfirmDeleteId(null);
+          }}
+        >
+          <div
+            className={clsx(
+              "tikd-tt-del-shell w-full max-w-[520px] rounded-3xl border border-white/10 bg-neutral-950",
+              "shadow-[0_28px_90px_rgba(0,0,0,0.72)]",
+            )}
+          >
+            <div className="flex items-start justify-between gap-3 px-6 pt-6">
+              <div>
+                <h3 className="text-lg font-semibold text-neutral-0">
+                  Delete ticket type?
+                </h3>
+                <p className="mt-1 text-sm text-neutral-400">
+                  This will remove{" "}
+                  <span className="font-semibold text-neutral-100">
+                    {deleteTargetName}
+                  </span>{" "}
+                  from this event. You can’t undo this action.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteId(null)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50 cursor-pointer transition-colors outline-none"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-5 px-6 pb-6">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteId(null)}
+                  disabled={isDeleting}
+                  className={clsx(
+                    "h-11 rounded-full px-6 text-sm font-semibold",
+                    "border border-white/10 bg-neutral-900 text-neutral-100 hover:bg-neutral-800/80",
+                    "transition-colors cursor-pointer disabled:opacity-60",
+                  )}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void doDelete()}
+                  disabled={isDeleting}
+                  className={clsx(
+                    "h-11 rounded-full px-6 text-sm font-semibold",
+                    "border border-error-600/35 bg-error-950/55 text-error-200",
+                    "hover:bg-error-950/70 hover:border-error-500/45",
+                    "transition-colors cursor-pointer disabled:opacity-60",
+                  )}
+                >
+                  {isDeleting ? "Deleting…" : "Delete"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

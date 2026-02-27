@@ -1,13 +1,23 @@
+// src/app/api/events/[id]/ticket-types/schema.ts
 import { z } from "zod";
 
 const checkoutSchema = z.object({
   requireFullName: z.boolean(),
+
+  requireEmail: z.boolean(),
   requirePhone: z.boolean(),
+  requireFacebook: z.boolean(),
+  requireInstagram: z.boolean(),
   requireGender: z.boolean(),
   requireDob: z.boolean(),
+  requireAge: z.boolean(),
+
   subjectToApproval: z.boolean(),
+
   addBuyerDetailsToOrder: z.boolean(),
   addPurchasedTicketsToAttendeesCount: z.boolean(),
+
+  enableEmailAttachments: z.boolean(),
 });
 
 const designSchema = z.object({
@@ -16,6 +26,12 @@ const designSchema = z.object({
   logoUrl: z.string().optional(),
   backgroundUrl: z.string().optional(),
   footerText: z.string().optional(),
+
+  watermarkEnabled: z.boolean(),
+  eventInfoEnabled: z.boolean(),
+  logoEnabled: z.boolean(),
+  qrSize: z.number(),
+  qrBorderRadius: z.number(),
 });
 
 export const ticketTypeBodySchema = z.object({
@@ -37,17 +53,32 @@ export const ticketTypeBodySchema = z.object({
   salesStartAt: z.string().nullable().optional(),
   salesEndAt: z.string().nullable().optional(),
 
-  accessMode: z.enum(["public", "password"]).default("public"),
+  /**
+   * UI uses:
+   * - public
+   * - restricted (link-only)
+   * - password
+   */
+  accessMode: z.enum(["public", "restricted", "password"]).default("public"),
   password: z.string().optional().or(z.literal("")),
 
   checkout: checkoutSchema.default({
     requireFullName: true,
+
+    requireEmail: true,
     requirePhone: false,
+    requireFacebook: false,
+    requireInstagram: false,
     requireGender: false,
     requireDob: false,
+    requireAge: false,
+
     subjectToApproval: false,
+
     addBuyerDetailsToOrder: true,
     addPurchasedTicketsToAttendeesCount: true,
+
+    enableEmailAttachments: true,
   }),
 
   design: designSchema.default({
@@ -56,5 +87,11 @@ export const ticketTypeBodySchema = z.object({
     logoUrl: "",
     backgroundUrl: "",
     footerText: "",
+
+    watermarkEnabled: true,
+    eventInfoEnabled: true,
+    logoEnabled: false,
+    qrSize: 0,
+    qrBorderRadius: 0,
   }),
 });

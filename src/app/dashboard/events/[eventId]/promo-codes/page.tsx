@@ -10,6 +10,7 @@ import {
   useState,
   type ComponentType,
   type SVGProps,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useParams } from "next/navigation";
 import {
@@ -29,6 +30,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
+import Toggle from "@/components/ui/Toggle";
 import { RowCard, RowCardStat } from "@/components/ui/RowCard";
 
 /* ---------------------------- API shapes ---------------------------- */
@@ -286,7 +288,7 @@ function PromoCodeWizard({
   const titles =
     mode === "edit"
       ? ([
-          "Edit promo code",
+          "Edit Promo Code",
           "Promo code type",
           "Set availability",
           "Choose where this code applies",
@@ -523,6 +525,7 @@ function PromoCodeWizard({
           type="button"
           onClick={onCancel}
           className="flex h-8 w-8 items-center justify-center rounded-full bg-[#181828] text-neutral-400 hover:text-neutral-50 cursor-pointer"
+          aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>
@@ -602,7 +605,7 @@ function PromoCodeWizard({
                   "flex flex-col items-center gap-3 rounded-lg border px-4 py-4 text-center transition-all bg-neutral-900",
                   kind === "discount"
                     ? "border-primary-500"
-                    : "border-white/10 hover:border-white/30",
+                    : "border-white/10 hover:border-white/30 cursor-pointer",
                 )}
               >
                 <span
@@ -634,7 +637,7 @@ function PromoCodeWizard({
                   "flex flex-col items-center gap-3 rounded-lg border px-4 py-4 text-center transition-all bg-neutral-900",
                   kind === "special_access"
                     ? "border-primary-500"
-                    : "border-white/10 hover:border-white/30",
+                    : "border-white/10 hover:border-white/30 cursor-pointer",
                 )}
               >
                 <span
@@ -688,7 +691,7 @@ function PromoCodeWizard({
                   <div className="relative">
                     <select
                       {...register("discountMode")}
-                      className="w-full appearance-none rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      className="w-full appearance-none rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary-500"
                     >
                       <option value="percentage">Percentage</option>
                       <option value="amount">Dollar amount</option>
@@ -769,7 +772,7 @@ function PromoCodeWizard({
                 <input
                   type="datetime-local"
                   {...register("validFrom")}
-                  className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 cursor-pointer placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
               <div className="space-y-2">
@@ -779,7 +782,7 @@ function PromoCodeWizard({
                 <input
                   type="datetime-local"
                   {...register("validUntil")}
-                  className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 cursor-pointer placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
             </div>
@@ -806,7 +809,7 @@ function PromoCodeWizard({
         {activeStep === 3 && (
           <div className="space-y-5">
             <div className="rounded-lg border border-white/10 bg-neutral-900">
-              <div className="border-b border-white/10 px-4 py-3 font-medium text-neutral-200">
+              <div className="text-base border-b border-white/10 px-4 py-3 font-medium text-neutral-200">
                 Per sale
               </div>
               <div className="divide-y divide-white/8">
@@ -814,34 +817,38 @@ function PromoCodeWizard({
                   ticketTypes.map((t) => {
                     const checked =
                       applicableTicketTypeIds?.includes(t._id) ?? false;
+
                     return (
                       <button
                         key={t._id}
                         type="button"
                         onClick={() => toggleTicket(t._id)}
-                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left "
+                        className={clsx(
+                          "flex w-full items-center justify-between gap-3 px-4 py-3 text-left",
+                          "hover:bg-white/3 transition-colors cursor-pointer",
+                        )}
                       >
                         <div className="flex min-w-0 flex-col">
-                          <span className="truncate text-neutral-0">
+                          <span className="text-base truncate text-neutral-0">
                             {t.name}
                           </span>
-                          <span className="text-[11px] text-neutral-500">
+                          <span className=" text-neutral-500">
                             ${t.price.toFixed(2)} {t.currency}
                           </span>
                         </div>
+
+                        {/* ✅ Use Tikd custom Toggle (prevent double-toggle via row click) */}
                         <div
-                          className={clsx(
-                            "relative inline-flex h-5 w-9 items-center rounded-full border transition-colors",
-                            checked
-                              ? "border-primary-500 bg-primary-600"
-                              : "border-white/20 bg-[#171826]",
-                          )}
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="shrink-0"
                         >
-                          <span
-                            className={clsx(
-                              "absolute left-[3px] h-3.5 w-3.5 rounded-full bg-white transition-transform",
-                              checked && "translate-x-4",
-                            )}
+                          <Toggle
+                            size="sm"
+                            variant="default"
+                            checked={checked}
+                            onCheckedChange={() => toggleTicket(t._id)}
+                            aria-label={`Toggle ${t.name}`}
                           />
                         </div>
                       </button>
@@ -960,7 +967,7 @@ export default function PromoCodesPage() {
 
   const closeModal = () => setMode({ kind: "list" });
 
-  const onOverlayPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+  const onOverlayPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const shell = wizardShellRef.current;
     const target = e.target as Node | null;
 
@@ -1107,7 +1114,6 @@ export default function PromoCodesPage() {
                       }
                       actions={
                         <div className="relative" data-pc-menu-root>
-                          {/* ✅ Ticket-types style dots button */}
                           <button
                             type="button"
                             aria-haspopup="menu"
@@ -1190,8 +1196,8 @@ export default function PromoCodesPage() {
               aria-modal="true"
               onPointerDown={onOverlayPointerDown}
             >
-              <div className="h-full overflow-y-auto">
-                <div className="flex min-h-full items-start justify-center px-3 py-10">
+              <div className="h-[100dvh] overflow-y-auto">
+                <div className="flex min-h-[100dvh] items-center justify-center px-3 py-10">
                   <div
                     ref={wizardShellRef}
                     className="tikd-ttw-modalShell w-full max-w-[550px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950"

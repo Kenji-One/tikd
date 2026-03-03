@@ -1,4 +1,3 @@
-// src/app/dashboard/events/[eventId]/promo-codes/page.tsx
 "use client";
 
 import {
@@ -32,6 +31,9 @@ import clsx from "clsx";
 import { Button } from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import { RowCard, RowCardStat } from "@/components/ui/RowCard";
+import DateRangePicker, {
+  type DateRangeValue,
+} from "@/components/ui/DateRangePicker";
 
 /* ---------------------------- API shapes ---------------------------- */
 
@@ -127,6 +129,32 @@ function coerceParamToString(value: unknown): string | null {
     return value[0];
   }
   return null;
+}
+
+/**
+ * Promo code availability uses DateRangePicker (date-only UI).
+ * We store in form as datetime-local strings:
+ * - validFrom => selected date @ 00:00
+ * - validUntil => selected date @ 23:59
+ */
+function datetimeLocalToDay(dtl: string | null | undefined): Date | null {
+  if (!dtl) return null;
+  const d = new Date(dtl);
+  if (!Number.isFinite(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+function dayToDatetimeLocal(day: Date, mode: "start" | "end"): string {
+  const d = new Date(day);
+  if (mode === "start") d.setHours(0, 0, 0, 0);
+  else d.setHours(23, 59, 0, 0);
+
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 }
 
 /* ========================= Form value types ========================= */
@@ -284,6 +312,12 @@ function PromoCodeWizard({
   const kind = watch("kind");
   const discountMode = watch("discountMode");
   const applicableTicketTypeIds = watch("applicableTicketTypeIds");
+
+  const validFrom = watch("validFrom");
+  const validUntil = watch("validUntil");
+
+  const fromDay = useMemo(() => datetimeLocalToDay(validFrom), [validFrom]);
+  const untilDay = useMemo(() => datetimeLocalToDay(validUntil), [validUntil]);
 
   const titles =
     mode === "edit"
@@ -762,6 +796,7 @@ function PromoCodeWizard({
           </div>
         )}
 
+        {/* ✅ Schedule step (DateRangePicker popovers) */}
         {activeStep === 2 && (
           <div className="space-y-5">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -769,21 +804,64 @@ function PromoCodeWizard({
                 <label className="block font-medium text-neutral-100">
                   Available from
                 </label>
-                <input
-                  type="datetime-local"
-                  {...register("validFrom")}
-                  className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 cursor-pointer placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+
+                <DateRangePicker
+                  variant="field"
+                  selectionMode="single"
+                  align="left"
+                  value={
+                    {
+                      start: fromDay,
+                      end: fromDay,
+                    } satisfies DateRangeValue
+                  }
+                  onChange={(next) => {
+                    const picked = next.start ?? null;
+                    if (!picked) {
+                      setValue("validFrom", null, { shouldDirty: true });
+                      return;
+                    }
+                    setValue("validFrom", dayToDatetimeLocal(picked, "start"), {
+                      shouldDirty: true,
+                    });
+                  }}
                 />
+
+                <p className="pt-1 text-[11px] text-neutral-500">
+                  Date the code becomes available (starts at 12:00am).
+                </p>
               </div>
+
               <div className="space-y-2">
                 <label className="block font-medium text-neutral-100">
                   Expires at
                 </label>
-                <input
-                  type="datetime-local"
-                  {...register("validUntil")}
-                  className="w-full rounded-lg border border-white/10 bg-neutral-900 px-4 py-2 text-neutral-0 cursor-pointer placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+
+                <DateRangePicker
+                  variant="field"
+                  selectionMode="single"
+                  align="left"
+                  value={
+                    {
+                      start: untilDay,
+                      end: untilDay,
+                    } satisfies DateRangeValue
+                  }
+                  onChange={(next) => {
+                    const picked = next.start ?? null;
+                    if (!picked) {
+                      setValue("validUntil", null, { shouldDirty: true });
+                      return;
+                    }
+                    setValue("validUntil", dayToDatetimeLocal(picked, "end"), {
+                      shouldDirty: true,
+                    });
+                  }}
                 />
+
+                <p className="pt-1 text-[11px] text-neutral-500">
+                  Date the code expires (ends at 11:59pm).
+                </p>
               </div>
             </div>
 
@@ -837,7 +915,6 @@ function PromoCodeWizard({
                           </span>
                         </div>
 
-                        {/* ✅ Use Tikd custom Toggle (prevent double-toggle via row click) */}
                         <div
                           onClick={(e) => e.stopPropagation()}
                           onPointerDown={(e) => e.stopPropagation()}
@@ -909,16 +986,13 @@ export default function PromoCodesPage() {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<ModeState>({ kind: "list" });
 
-  // dots menu state
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false });
 
-  // modal shells for click-outside
   const wizardShellRef = useRef<HTMLDivElement | null>(null);
   const confirmShellRef = useRef<HTMLDivElement | null>(null);
 
-  // close dots menu on outside click (same pattern as ticket-types page)
   useEffect(() => {
     if (!openMenuId) return;
 
@@ -1200,7 +1274,12 @@ export default function PromoCodesPage() {
                 <div className="flex min-h-[100dvh] items-center justify-center px-3 py-10">
                   <div
                     ref={wizardShellRef}
-                    className="tikd-ttw-modalShell w-full max-w-[550px] overflow-hidden rounded-3xl border border-white/10 bg-neutral-950"
+                    className={clsx(
+                      // IMPORTANT: force overflow visible (even if tikd-ttw-modalShell has CSS)
+                      "tikd-ttw-modalShell w-full max-w-[550px] rounded-3xl border border-white/10 bg-neutral-950",
+                      "!overflow-visible overflow-visible",
+                    )}
+                    style={{ overflow: "visible" }}
                   >
                     <PromoCodeWizard
                       eventId={eventId}

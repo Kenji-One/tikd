@@ -5,23 +5,40 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
-  QrCode,
   Wallet,
   ArrowRightLeft,
   RotateCcw,
   Copy,
   Check,
 } from "lucide-react";
-import TicketCard, { TicketCardProps } from "./TicketCard";
+import { QRCodeSVG } from "qrcode.react";
+
+import TicketPassCard, { type TicketPassDesign } from "./TicketPassCard";
 import { Button } from "./Button";
 
 export interface TicketDialogProps {
   open: boolean;
   onClose: () => void;
-  ticket: TicketCardProps & {
-    qrUrl?: string; // PNG/SVG URL
-    qrSvg?: string; // inline SVG markup
-    refCode?: string; // order reference
+  ticket: {
+    title: string;
+    dateLabel: string;
+    venue: string;
+    img: string;
+    qty?: number;
+    badge?: string;
+
+    qrUrl?: string;
+    qrSvg?: string;
+    qrValue?: string;
+
+    refCode?: string;
+
+    design?: Partial<TicketPassDesign> | null;
+    eventTitle?: string;
+    eventDateISO?: string;
+    eventLocation?: string;
+    eventImageUrl?: string;
+    ticketTypeLabel?: string;
   };
 }
 
@@ -48,7 +65,7 @@ export default function TicketDialog({
 
   const ariaId = useMemo(
     () => `ticket-dialog-${Math.random().toString(36).slice(2)}`,
-    []
+    [],
   );
 
   if (typeof window === "undefined" || !open) return null;
@@ -62,6 +79,11 @@ export default function TicketDialog({
     } catch {}
   }
 
+  const qrValue =
+    ticket.qrValue ??
+    ticket.refCode ??
+    `${ticket.ticketTypeLabel ?? ticket.title}:${ticket.eventTitle ?? ""}:${ticket.venue}`;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[1000]"
@@ -70,25 +92,21 @@ export default function TicketDialog({
       aria-labelledby={`${ariaId}-title`}
       onClick={onClose}
     >
-      {/* Brand overlay with subtle radial glow */}
+      {/* overlay */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_0%,rgba(154,70,255,.25),transparent_60%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_55%_at_50%_0%,rgba(154,70,255,.22),transparent_60%)]" />
 
-      {/* Panel */}
-      <div className="relative mx-auto grid h-full max-h-[88dvh] w-full max-w-6xl place-items-center p-4">
+      <div className="relative mx-auto grid h-full w-full max-w-6xl place-items-center p-4">
         <div
           onClick={(e) => e.stopPropagation()}
           className="
-            pointer-events-auto relative w-full overflow-hidden rounded-[28px]
-            border border-white/10 bg-neutral-950/80 text-white 
-            ring-1 ring-white/5
-            transition-transform animate-[tikdModalIn_.22s_ease]
+            pointer-events-auto relative w-full overflow-hidden rounded-[26px]
+            border border-white/10 bg-neutral-950/80 text-white ring-1 ring-white/5
+            shadow-[0_28px_90px_rgba(0,0,0,.70)]
+            animate-[tikdModalIn_.18s_ease]
           "
         >
-          {/* soft gradient edge */}
-          <div className="pointer-events-none absolute -inset-px rounded-[28px] bg-[linear-gradient(180deg,rgba(154,70,255,.12),transparent_25%)]" />
-
-          {/* Close */}
+          {/* header close */}
           <button
             aria-label="Close"
             onClick={onClose}
@@ -97,21 +115,26 @@ export default function TicketDialog({
             <X className="h-5 w-5" />
           </button>
 
-          {/* Content grid */}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-[280px_1fr] md:gap-10">
-            {/* Left: Ticket preview */}
-            <section className="relative p-4 md:p-8 bg-neutral-950 flex flex-col">
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-[420px_1fr]">
+            {/* Left */}
+            <section className="relative border-b border-white/10 bg-neutral-950 md:border-b-0 md:border-r md:border-white/10 p-5 md:p-7">
               <h2
                 id={`${ariaId}-title`}
-                className="mb-4 text-2xl font-semibold leading-[90%] tracking-[-0.42px]"
+                className="text-2xl font-semibold leading-[90%] tracking-[-0.42px]"
               >
                 Your Ticket
               </h2>
-              <div className="m-auto flex justify-center">
-                <TicketCard
-                  {...ticket}
-                  onDetails={undefined}
-                  className="bg-transparent p-0 ring-0"
+
+              <div className="mt-4">
+                <TicketPassCard
+                  chrome="plain"
+                  className="bg-transparent p-0"
+                  design={ticket.design ?? undefined}
+                  eventTitle={ticket.eventTitle ?? ticket.title}
+                  eventDateISO={ticket.eventDateISO}
+                  eventLocation={ticket.eventLocation ?? ticket.venue}
+                  eventImageUrl={ticket.eventImageUrl ?? ticket.img}
+                  ticketTypeLabel={ticket.ticketTypeLabel ?? ticket.title}
                 />
               </div>
 
@@ -125,7 +148,7 @@ export default function TicketDialog({
                   </div>
                   <button
                     onClick={copyRef}
-                    className="flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/15"
+                    className="flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/15 cursor-pointer"
                   >
                     {copied ? (
                       <>
@@ -143,20 +166,19 @@ export default function TicketDialog({
               ) : null}
             </section>
 
-            {/* Right: QR + actions */}
-            <section className="flex min-h-[360px] flex-col p-4 md:p-8">
-              <h3 className="mb-4 mx-auto text-lg font-semibold text-neutral-100">
+            {/* Right */}
+            <section className="p-5 md:p-7">
+              <h3 className="text-lg font-semibold text-neutral-100 text-center">
                 Scan QR Code
               </h3>
 
-              {/* QR stage */}
-              <div className="relative flex flex-1 items-center justify-center">
-                <div className="relative rounded-3xl bg-white p-4 shadow-[0_18px_60px_-12px_rgba(154,70,255,.35)] ring-1 ring-black/5">
-                  {/* glow ring */}
-                  <div className="pointer-events-none absolute -inset-[2px] rounded-[22px] bg-[radial-gradient(60%_50%_at_50%_0%,rgba(154,70,255,.25),transparent_70%)]" />
+              <div className="mt-5 flex items-center justify-center">
+                <div className="relative rounded-[28px] bg-white p-6 shadow-[0_22px_80px_-20px_rgba(154,70,255,.35)] ring-1 ring-black/5">
+                  <div className="pointer-events-none absolute -inset-[2px] rounded-[30px] bg-[radial-gradient(60%_50%_at_50%_0%,rgba(154,70,255,.22),transparent_70%)]" />
+
                   {ticket.qrSvg ? (
                     <div
-                      className="relative z-10 h-[260px] w-[260px]"
+                      className="relative z-10"
                       dangerouslySetInnerHTML={{ __html: ticket.qrSvg }}
                     />
                   ) : ticket.qrUrl ? (
@@ -164,36 +186,42 @@ export default function TicketDialog({
                     <img
                       src={ticket.qrUrl}
                       alt="Ticket QR"
-                      className="relative z-10 h-[260px] w-[260px]"
+                      className="relative z-10 h-[300px] w-[300px]"
                     />
                   ) : (
-                    <div className="grid h-[260px] w-[260px] place-items-center text-neutral-900">
-                      <QrCode className="h-24 w-24" />
+                    <div className="relative z-10">
+                      <QRCodeSVG
+                        value={qrValue}
+                        size={300}
+                        bgColor="#ffffff"
+                        fgColor="#0b0b12"
+                      />
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Button variant="secondary" className="justify-center gap-2">
+                {/* ❌ no animation on these */}
+                <Button
+                  variant="secondary"
+                  className="h-10 justify-center gap-2"
+                >
                   <Wallet className="h-4 w-4" />
                   Add to Wallet
                 </Button>
-                <Button variant="ghost" className="justify-center gap-2">
+                <Button variant="ghost" className="h-10 justify-center gap-2">
                   <ArrowRightLeft className="h-4 w-4" />
-                  Transfer Ticket
+                  Transfer
                 </Button>
-                <Button variant="ghost" className="justify-center gap-2">
+                <Button variant="ghost" className="h-10 justify-center gap-2">
                   <RotateCcw className="h-4 w-4" />
-                  Request Refund
+                  Refund
                 </Button>
               </div>
 
-              {/* Optional tiny helper text */}
-              <p className="mt-3 text-[12px] leading-tight text-neutral-400">
-                Keep this QR visible when entering the venue. You can also add
-                the ticket to your mobile wallet for quick access.
+              <p className="mt-4 text-center text-[12px] leading-tight text-neutral-400">
+                Keep this QR visible when entering the venue.
               </p>
             </section>
           </div>
@@ -201,10 +229,12 @@ export default function TicketDialog({
       </div>
 
       <style>{`
-        @keyframes tikdModalIn { from { transform: translateY(6px) scale(.98); opacity: 0 }
-                                  to   { transform: translateY(0) scale(1);   opacity: 1 } }
+        @keyframes tikdModalIn {
+          from { transform: translateY(6px) scale(.99); opacity: 0 }
+          to   { transform: translateY(0) scale(1);   opacity: 1 }
+        }
       `}</style>
     </div>,
-    document.body
+    document.body,
   );
 }

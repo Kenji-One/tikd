@@ -26,11 +26,6 @@ import DateRangePicker, {
   type DateRangeValue,
 } from "@/components/ui/DateRangePicker";
 
-/* ---------------------- Dynamic (no-SSR) Map ----------------------- */
-/**
- * Leaflet touches `window`, so we must import it with `ssr:false`
- * even inside a client component.
- */
 const LocationsChoroplethMap = dynamic(
   () => import("@/components/dashboard/charts/LocationsChoroplethMap"),
   {
@@ -64,18 +59,18 @@ const monthDates = (s: Date, e: Date) => {
   return out;
 };
 
-function mapSeriesToCount(vals: number[], count: number) {
+function mapSeriesToCount<T>(vals: T[], count: number): T[] {
   if (count <= 0) return [];
   if (count === vals.length) return vals;
+  if (vals.length === 0) return [];
+
   const a = [...vals];
-  while (a.length < count) a.push(a[a.length % vals.length]);
+  while (a.length < count) {
+    a.push(a[a.length % vals.length] as T);
+  }
   return a.slice(0, count);
 }
 
-/**
- * Convert decimal comma → decimal dot (e.g. "240,8K" => "240.8K")
- * Only swaps commas that are BETWEEN digits, so text/labels remain intact.
- */
 function normalizeDecimalSeparator(input?: string | number | null) {
   if (input === null || input === undefined) return "";
   if (typeof input === "number") return String(input);
@@ -106,12 +101,90 @@ function inferBigIcon(opts: {
   return null;
 }
 
-/** "SEPTEMBER 2025" (current month/year, uppercase) */
-function currentMonthYearUpper() {
-  const now = new Date();
-  return now
-    .toLocaleDateString(undefined, { month: "long", year: "numeric" })
-    .toUpperCase();
+function niceTicks(maxValue: number, targetCount = 6) {
+  const max = Math.max(1, maxValue);
+  const pow = Math.pow(10, Math.floor(Math.log10(max)));
+  const norm = max / pow;
+
+  let stepNorm = 1;
+  if (norm <= 1.2) stepNorm = 0.2;
+  else if (norm <= 2.5) stepNorm = 0.5;
+  else if (norm <= 6) stepNorm = 1;
+  else stepNorm = 2;
+
+  const step = stepNorm * pow;
+  const top = Math.max(1, Math.ceil(max / step) * step);
+
+  const ticks: number[] = [];
+  const count = Math.max(2, Math.min(8, targetCount));
+  const actualStep = top / (count - 1);
+
+  for (let i = 0; i < count; i++) ticks.push(Math.round(i * actualStep));
+
+  ticks[0] = 0;
+  ticks[ticks.length - 1] = top;
+
+  const uniq: number[] = [];
+  for (const t of ticks) {
+    if (uniq.length === 0 || uniq[uniq.length - 1] !== t) uniq.push(t);
+  }
+  return uniq;
+}
+
+function formatRangeHeading(start: Date, end: Date) {
+  const sameMonth =
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth();
+
+  if (sameMonth) {
+    return start
+      .toLocaleDateString(undefined, { month: "long", year: "numeric" })
+      .toUpperCase();
+  }
+
+  const sameYear = start.getFullYear() === end.getFullYear();
+
+  if (sameYear) {
+    return `${start
+      .toLocaleDateString(undefined, { month: "short" })
+      .toUpperCase()} – ${end
+      .toLocaleDateString(undefined, {
+        month: "short",
+        year: "numeric",
+      })
+      .toUpperCase()}`;
+  }
+
+  return `${start
+    .toLocaleDateString(undefined, {
+      month: "short",
+      year: "numeric",
+    })
+    .toUpperCase()} – ${end
+    .toLocaleDateString(undefined, {
+      month: "short",
+      year: "numeric",
+    })
+    .toUpperCase()}`;
+}
+
+function hasMeaningfulMapData(
+  items: Array<{
+    revenue?: number;
+    viewers?: number;
+    tickets?: number;
+  }>,
+) {
+  return items.some(
+    (item) =>
+      Number(item.revenue ?? 0) > 0 ||
+      Number(item.viewers ?? 0) > 0 ||
+      Number(item.tickets ?? 0) > 0,
+  );
+}
+
+function hasMeaningfulBars(data: number[]) {
+  return data.some((value) => Number(value) > 0);
 }
 
 /* ------------------------------ Types ------------------------------ */
@@ -122,6 +195,9 @@ type MiniCardCfg = {
   negative?: boolean;
   series: number[];
   icon?: ReactNode;
+  xLabels?: string[];
+  dates?: Date[];
+  pinnedIndex?: number;
 };
 
 type BigCardCfg = {
@@ -129,14 +205,9 @@ type BigCardCfg = {
   value: string;
   delta?: string;
   deltaPositive?: boolean;
-
-  /** default single-series chart */
   series: number[];
-
-  /** OPTIONAL: multi-series (used only where needed, e.g. Gender Breakdown) */
   seriesLines?: MultiSeriesLine[];
   pinSeriesKey?: string;
-
   tooltip: RevenueTooltip;
   valuePrefix?: string;
   valueSuffix?: string;
@@ -149,90 +220,92 @@ type DonutCfg = {
   segments: DonutSegment[];
 };
 
+type MapDatum = {
+  key: string;
+  label?: string;
+  revenue: number;
+  viewers: number;
+  tickets: number;
+};
+
 type Props = {
   heading: string;
   backHref?: string;
 
   miniCards: MiniCardCfg[];
-
   bigCard: BigCardCfg;
-
   donut: DonutCfg;
 
   mapLabel: string;
-
   mode: "revenue" | "views" | "tickets";
 
   barsLabel: string;
   barsHeading: string;
-
-  /** default single-series bars */
   barsData: number[];
-
-  /** OPTIONAL stacked bars (used only where needed, e.g. Gender Breakdown) */
   barsStacks?: BarsStackSeries[];
+
+  mapData?: MapDatum[];
+
+  chartLabels?: string[];
+  chartDates?: Date[];
+
+  dateRange?: DateRangeValue;
+  onDateRangeChange?: (next: DateRangeValue) => void;
+  isLoading?: boolean;
 };
 
-const data = [
+const DEFAULT_MAP_DATA: MapDatum[] = [
   { key: "US", revenue: 240000, viewers: 120000, tickets: 18000 },
   { key: "CA", revenue: 110000, viewers: 52000, tickets: 7600 },
   { key: "GB", revenue: 98000, viewers: 47000, tickets: 6400 },
-
-  { key: "Germany", revenue: 88000, viewers: 39000, tickets: 6100 },
-  { key: "France", revenue: 82000, viewers: 36000, tickets: 5600 },
-  { key: "Italy", revenue: 76000, viewers: 34000, tickets: 5200 },
-  { key: "Spain", revenue: 69000, viewers: 31000, tickets: 4700 },
-  { key: "Netherlands", revenue: 54000, viewers: 22000, tickets: 3200 },
-  { key: "Sweden", revenue: 48000, viewers: 19000, tickets: 2700 },
-  { key: "Norway", revenue: 42000, viewers: 16500, tickets: 2400 },
-
-  { key: "Mexico", revenue: 51000, viewers: 28000, tickets: 4100 },
-  { key: "Brazil", revenue: 62000, viewers: 33000, tickets: 5200 },
-  { key: "Argentina", revenue: 38000, viewers: 17000, tickets: 2100 },
-
-  { key: "Japan", revenue: 105000, viewers: 49000, tickets: 6900 },
-  { key: "South Korea", revenue: 64000, viewers: 27000, tickets: 3800 },
-  { key: "China", revenue: 130000, viewers: 61000, tickets: 9100 },
-  { key: "India", revenue: 90000, viewers: 72000, tickets: 10200 },
-
-  { key: "Australia", revenue: 58000, viewers: 24000, tickets: 3500 },
-  { key: "New Zealand", revenue: 22000, viewers: 9000, tickets: 1200 },
-
-  { key: "Turkey", revenue: 46000, viewers: 21000, tickets: 2900 },
   {
-    key: "United Arab Emirates",
-    revenue: 52000,
-    viewers: 18000,
-    tickets: 2500,
+    key: "DE",
+    label: "Germany",
+    revenue: 88000,
+    viewers: 39000,
+    tickets: 6100,
   },
-  { key: "Saudi Arabia", revenue: 57000, viewers: 20000, tickets: 2600 },
-  { key: "South Africa", revenue: 34000, viewers: 16000, tickets: 1900 },
-  { key: "Nigeria", revenue: 28000, viewers: 22000, tickets: 2400 },
-  { key: "Egypt", revenue: 26000, viewers: 14000, tickets: 1700 },
+  { key: "FR", label: "France", revenue: 82000, viewers: 36000, tickets: 5600 },
+  { key: "IT", label: "Italy", revenue: 76000, viewers: 34000, tickets: 5200 },
 ];
+
+const DEFAULT_BARS_DATA = [38000, 52000, 47000, 61000, 88000, 70000, 56000];
 
 export default function DetailedViewShell({
   heading,
   backHref = "/dashboard",
-
   miniCards,
-
   bigCard,
-
   donut,
-
   mapLabel,
   mode,
-
   barsLabel,
   barsHeading,
   barsData,
   barsStacks,
+  mapData,
+  chartLabels,
+  chartDates,
+  dateRange: controlledDateRange,
+  onDateRangeChange,
+  isLoading = false,
 }: Props) {
-  const [dateRange, setDateRange] = useState<DateRangeValue>(() => ({
-    start: new Date(2024, 0, 1),
-    end: new Date(2024, 11, 31),
-  }));
+  const [internalDateRange, setInternalDateRange] = useState<DateRangeValue>(
+    () => ({
+      start: new Date(2024, 0, 1),
+      end: new Date(2024, 11, 31),
+    }),
+  );
+
+  const dateRange = controlledDateRange ?? internalDateRange;
+
+  const handleDateRangeChange = (next: DateRangeValue) => {
+    if (onDateRangeChange) {
+      onDateRangeChange(next);
+      return;
+    }
+    setInternalDateRange(next);
+  };
 
   const effective = useMemo(() => {
     const fallbackStart = new Date(2024, 0, 1);
@@ -246,14 +319,19 @@ export default function DetailedViewShell({
       : { start: e, end: s };
   }, [dateRange.start, dateRange.end]);
 
-  const labels = useMemo(
+  const fallbackLabels = useMemo(
     () => monthLabels(effective.start, effective.end),
     [effective.start, effective.end],
   );
-  const dates = useMemo(
+  const fallbackDates = useMemo(
     () => monthDates(effective.start, effective.end),
     [effective.start, effective.end],
   );
+
+  const labels =
+    chartLabels && chartLabels.length > 0 ? chartLabels : fallbackLabels;
+  const dates =
+    chartDates && chartDates.length > 0 ? chartDates : fallbackDates;
 
   const bigSeries = useMemo(
     () => mapSeriesToCount(bigCard.series, labels.length),
@@ -282,9 +360,6 @@ export default function DetailedViewShell({
       valuePrefix: bigCard.valuePrefix,
     });
 
-  // ✅ dynamic month/year for Donut + Peak Days
-  const monthYear = useMemo(() => currentMonthYearUpper(), []);
-
   const multiLines = useMemo(() => {
     if (!bigCard.seriesLines?.length) return null;
     return bigCard.seriesLines.map((l) => ({
@@ -293,9 +368,40 @@ export default function DetailedViewShell({
     }));
   }, [bigCard.seriesLines, labels.length]);
 
+  const bigMax = useMemo(() => {
+    if (multiLines?.length) {
+      return Math.max(
+        1,
+        ...multiLines.flatMap((line) => line.series.map((n) => Math.max(0, n))),
+      );
+    }
+
+    return Math.max(1, ...bigSeries.map((n) => Math.max(0, n)));
+  }, [bigSeries, multiLines]);
+
+  const bigDomain = useMemo<[number, number]>(() => {
+    return [0, Math.max(1, bigMax)];
+  }, [bigMax]);
+
+  const bigTicks = useMemo(() => niceTicks(bigDomain[1], 6), [bigDomain]);
+
+  const panelHeading = useMemo(
+    () => formatRangeHeading(effective.start, effective.end),
+    [effective.start, effective.end],
+  );
+
+  const safeMapData =
+    mapData?.length && hasMeaningfulMapData(mapData)
+      ? mapData
+      : DEFAULT_MAP_DATA;
+
+  const safeBarsData =
+    barsData.length === 7 && hasMeaningfulBars(barsData)
+      ? barsData
+      : DEFAULT_BARS_DATA;
+
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-center gap-3 pt-2">
         <Link
           href={backHref}
@@ -308,30 +414,43 @@ export default function DetailedViewShell({
         </h1>
       </div>
 
-      {/* 4 KPIs */}
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {miniCards.map((c) => (
-          <MiniMetricCard
-            key={c.title}
-            title={c.title}
-            value={normalizeDecimalSeparator(c.value)}
-            delta={c.delta ? normalizeDecimalSeparator(c.delta) : undefined}
-            icon={c.icon}
-            series={c.series}
-            chart={
-              <SmallKpiChart
-                data={c.series}
-                domain={[0, 500]}
-                yTicks={[0, 100, 250, 500]}
-                xLabels={["12AM", "8AM", "4PM", "11PM"]}
-                stroke="#9A46FF"
-              />
-            }
-          />
-        ))}
+        {miniCards.map((c) => {
+          const localMax = Math.max(1, ...c.series.map((n) => Math.max(0, n)));
+          const localTicks = niceTicks(localMax, 4);
+          const localLabels =
+            c.xLabels && c.xLabels.length > 0
+              ? mapSeriesToCount(c.xLabels, c.series.length)
+              : mapSeriesToCount(
+                  ["12AM", "8AM", "4PM", "11PM"],
+                  c.series.length,
+                );
+
+          return (
+            <MiniMetricCard
+              key={c.title}
+              title={c.title}
+              value={normalizeDecimalSeparator(c.value)}
+              delta={c.delta ? normalizeDecimalSeparator(c.delta) : undefined}
+              icon={c.icon}
+              series={c.series}
+              chart={
+                <SmallKpiChart
+                  data={c.series}
+                  dates={c.dates}
+                  pinnedIndex={c.pinnedIndex}
+                  tooltipDateMode="full"
+                  domain={[0, localMax]}
+                  yTicks={localTicks}
+                  xLabels={localLabels}
+                  stroke="#9A46FF"
+                />
+              }
+            />
+          );
+        })}
       </section>
 
-      {/* Total + Donut */}
       <section className="grid grid-cols-12 gap-5">
         <div className="col-span-12 xl:col-span-8 rounded-lg border border-neutral-700 bg-neutral-900 pl-4">
           <div className="flex items-start justify-between pr-6 pt-5">
@@ -363,30 +482,38 @@ export default function DetailedViewShell({
             </div>
 
             <div className="max-w-[210px]">
-              <DateRangePicker value={dateRange} onChange={setDateRange} />
+              <DateRangePicker
+                value={dateRange}
+                onChange={handleDateRangeChange}
+              />
             </div>
           </div>
 
-          <div className="pr-6 pb-5 h-[320px] sm:h-[340px] lg:h-[360px]">
+          <div
+            className={[
+              "pr-6 pb-5 h-[320px] sm:h-[340px] lg:h-[360px]",
+              isLoading ? "opacity-70 transition-opacity" : "",
+            ].join(" ")}
+          >
             {multiLines ? (
               <RevenueChartMulti
                 series={multiLines}
                 pinSeriesKey={bigCard.pinSeriesKey}
                 dates={dates}
-                domain={[0, 250_000]}
-                yTicks={[0, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000]}
+                domain={bigDomain}
+                yTicks={bigTicks}
                 xLabels={labels}
                 tooltip={bigTooltip}
                 valuePrefix={bigCard.valuePrefix ?? ""}
-                valueSuffix={bigCard.valueSuffix ?? "K"}
+                valueSuffix={bigCard.valueSuffix ?? ""}
                 tooltipVariant="primary"
               />
             ) : (
               <RevenueChart
                 data={bigSeries}
                 dates={dates}
-                domain={[0, 250_000]}
-                yTicks={[0, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000]}
+                domain={bigDomain}
+                yTicks={bigTicks}
                 xLabels={labels}
                 tooltip={bigTooltip}
                 stroke="#9A46FF"
@@ -404,7 +531,9 @@ export default function DetailedViewShell({
             <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
               {donut.label}
             </div>
-            <div className="mt-1 text-2xl font-extrabold">{monthYear}</div>
+            <div className="mt-1 text-2xl font-extrabold">
+              {panelHeading || donut.heading}
+            </div>
           </div>
 
           <div className="flex flex-col justify-end mt-auto">
@@ -439,7 +568,6 @@ export default function DetailedViewShell({
         </div>
       </section>
 
-      {/* Map + Peak days */}
       <section className="grid grid-cols-12 gap-5">
         <div className="col-span-12 xl:col-span-8 rounded-lg border border-neutral-700 bg-neutral-900 p-5">
           <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
@@ -447,7 +575,13 @@ export default function DetailedViewShell({
           </div>
 
           <div className="mt-3 aspect-[16/9] overflow-hidden rounded-lg border border-neutral-700">
-            <LocationsChoroplethMap scope="world" mode={mode} data={data} />
+            <div className={isLoading ? "opacity-75 transition-opacity" : ""}>
+              <LocationsChoroplethMap
+                scope="world"
+                mode={mode}
+                data={safeMapData}
+              />
+            </div>
           </div>
         </div>
 
@@ -457,7 +591,9 @@ export default function DetailedViewShell({
               {barsLabel}
             </div>
 
-            <div className="mt-1 text-2xl font-extrabold">{monthYear}</div>
+            <div className="mt-1 text-2xl font-extrabold">
+              {panelHeading || barsHeading}
+            </div>
           </div>
 
           <div className="mt-4 flex-1 min-h-[260px]">
@@ -468,7 +604,7 @@ export default function DetailedViewShell({
                 metric={mode}
               />
             ) : (
-              <BarsWeek data={barsData} highlightIndex={4} metric={mode} />
+              <BarsWeek data={safeBarsData} highlightIndex={4} metric={mode} />
             )}
           </div>
         </div>

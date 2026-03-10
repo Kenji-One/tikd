@@ -1,6 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  src/components/dashboard/charts/LocationsChoroplethMap.tsx        */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import {
@@ -16,16 +13,12 @@ import type { FeatureCollection, Feature, Geometry } from "geojson";
 import * as L from "leaflet";
 
 /* ------------------------------ Types ------------------------------ */
-/**
- * NOTE:
- * - "views" is accepted as an alias because other parts of the app use it.
- * - Internally we normalize "views" -> "viewers".
- */
 type MapMode = "viewers" | "revenue" | "tickets" | "views";
 type Scope = "world" | "us";
 
 export type ChoroplethDatum = {
   key: string;
+  label?: string;
   viewers?: number;
   revenue?: number;
   tickets?: number;
@@ -46,18 +39,14 @@ type GeoProps = Record<string, unknown>;
 type GeoFeature = Feature<Geometry, GeoProps>;
 
 /* --------------------------- Visual theme -------------------------- */
-/**
- * Tikd purple ramp (low -> high)
- * Designed for dark tiles: stays readable and "Tikd" branded.
- */
 const DEFAULT_RAMP = [
-  "#1C003A", // primary-950 (deep)
-  "#2B0053", // primary-900
-  "#470083", // primary-800
-  "#6600B7", // primary-700
-  "#8600EE", // primary-600
-  "#9A46FF", // primary-500
-  "#C7A0FF", // primary-999 (bright)
+  "#1C003A",
+  "#2B0053",
+  "#470083",
+  "#6600B7",
+  "#8600EE",
+  "#9A46FF",
+  "#C7A0FF",
 ];
 
 /* --------------------------- Helpers -------------------------- */
@@ -83,7 +72,7 @@ function formatCompact(n: number, prefix = "") {
 
 function rampColor(value01: number, ramp = DEFAULT_RAMP) {
   const idx = Math.floor(clamp(value01, 0, 0.9999) * ramp.length);
-  return ramp[idx];
+  return ramp[idx] ?? ramp[ramp.length - 1] ?? "#9A46FF";
 }
 
 function asRecord(x: unknown): Record<string, unknown> {
@@ -96,11 +85,14 @@ function readString(obj: Record<string, unknown>, key: string): string {
   return s.trim();
 }
 
+function normalizeMapKey(value: unknown): string {
+  const raw =
+    typeof value === "string" || typeof value === "number" ? String(value) : "";
+
+  return raw.trim().toLowerCase().replace(/[._]+/g, " ").replace(/\s+/g, " ");
+}
+
 /* ------------------------- TS compatibility ------------------------ */
-/**
- * react-leaflet types + Next.js can sometimes fight each other in strict builds,
- * so we keep a small compatibility cast — WITHOUT `any`.
- */
 const RLMapContainer = MapContainer as unknown as ComponentType<
   ComponentProps<typeof MapContainer>
 >;
@@ -123,7 +115,6 @@ function ConfigureMap({
     map.setView(center, zoom, { animate: false });
 
     if (!showZoomControls) {
-      // Leaflet internally attaches zoomControl on map, but it's not part of TS type.
       const m = map as L.Map & { zoomControl?: L.Control.Zoom };
       m.zoomControl?.remove?.();
     }
@@ -138,11 +129,6 @@ function BaseTiles() {
 
   useEffect(() => {
     if (!layerRef.current) {
-      /**
-       * ✅ IMPORTANT
-       * Use the "rastertiles" endpoint (not the legacy /dark_nolabels path).
-       * This avoids the two big horizontal lines you saw on some dark styles at low zoom.
-       */
       layerRef.current = L.tileLayer(
         "https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}{r}.png",
         {
@@ -180,11 +166,9 @@ export default function LocationsChoroplethMap({
 }: Props) {
   const [fc, setFc] = useState<FeatureCollection<Geometry> | null>(null);
 
-  // Normalize app-wide alias
   const effectiveMode: Exclude<MapMode, "views"> | "viewers" =
     mode === "views" ? "viewers" : mode;
 
-  // Default views
   const mapCenter: [number, number] =
     center ??
     (scope === "us"
@@ -211,7 +195,6 @@ export default function LocationsChoroplethMap({
         if (!cancelled) setFc(json);
       } catch (e) {
         if (!cancelled) setFc(null);
-        // keep console.error (your lint isn't blocking no-console)
         console.error(e);
       }
     })();
@@ -224,10 +207,15 @@ export default function LocationsChoroplethMap({
   const { byKey, maxValue } = useMemo(() => {
     const m = new Map<string, ChoroplethDatum>();
 
+    const add = (k: unknown, datum: ChoroplethDatum) => {
+      const normalized = normalizeMapKey(k);
+      if (!normalized) return;
+      m.set(normalized, datum);
+    };
+
     for (const d of data) {
-      const k = (d.key ?? "").trim().toLowerCase();
-      if (!k) continue;
-      m.set(k, d);
+      add(d.key, d);
+      add(d.label, d);
     }
 
     let max = 0;
@@ -257,16 +245,13 @@ export default function LocationsChoroplethMap({
 
   function featureKeys(f: GeoFeature): string[] {
     const props = asRecord(f.properties);
-
     const out: string[] = [];
 
     const add = (v: unknown) => {
-      const s =
-        typeof v === "string" || typeof v === "number" ? String(v).trim() : "";
-      if (s) out.push(s.toLowerCase());
+      const normalized = normalizeMapKey(v);
+      if (normalized) out.push(normalized);
     };
 
-    // Feature.id is allowed by GeoJSON spec
     add(f.id);
     add(props["id"]);
 
@@ -274,15 +259,17 @@ export default function LocationsChoroplethMap({
       add(props["ISO3166-1-Alpha-2"]);
       add(props["ISO3166-1-Alpha-3"]);
       add(props["name"]);
-
       add(props["ADMIN"]);
       add(props["NAME"]);
       add(props["ISO_A2"]);
       add(props["ISO_A3"]);
       add(props["iso_a2"]);
       add(props["iso_a3"]);
+      add(props["FORMAL_EN"]);
+      add(props["NAME_LONG"]);
+      add(props["BRK_NAME"]);
 
-      return out.filter(Boolean);
+      return Array.from(new Set(out));
     }
 
     add(props["name"]);
@@ -291,7 +278,7 @@ export default function LocationsChoroplethMap({
     add(props["postal"]);
     add(props["STUSPS"]);
 
-    return out.filter(Boolean);
+    return Array.from(new Set(out));
   }
 
   function getFeatureValue(f: GeoFeature) {
@@ -333,6 +320,8 @@ export default function LocationsChoroplethMap({
         readString(props, "name") ||
         readString(props, "ADMIN") ||
         readString(props, "NAME") ||
+        readString(props, "FORMAL_EN") ||
+        readString(props, "NAME_LONG") ||
         "Unknown"
       );
     }
@@ -347,7 +336,6 @@ export default function LocationsChoroplethMap({
 
   return (
     <div className="relative h-full w-full">
-      {/* subtle vignette + purple tint (Tikd branded, very light) */}
       <div
         className="pointer-events-none absolute inset-0 z-[1]"
         style={{
@@ -371,22 +359,22 @@ export default function LocationsChoroplethMap({
         {fc && (
           <RLGeoJSON
             data={fc}
-            // Leaflet style callback expects a feature-like object; react-leaflet passes GeoJSON Feature.
             style={(feature) => {
               const f = feature as GeoFeature;
               const { value, found } = getFeatureValue(f);
 
               const v01 = found
-                ? valueTo01(value)
-                : pseudo01(`missing:${featureKeys(f).join("|")}`, seed) * 0.06;
+                ? Math.max(0.28, valueTo01(value))
+                : 0.12 +
+                  pseudo01(`missing:${featureKeys(f).join("|")}`, seed) * 0.08;
 
               return {
-                // borders: softer, not harsh black
-                color: "rgba(255,255,255,0.10)",
-                weight: 0.85,
-                // fill: Tikd ramp
-                fillColor: found ? rampColor(v01) : "rgba(18,18,32,0.35)",
-                fillOpacity: found ? 0.82 : 0.16,
+                color: found
+                  ? "rgba(255,255,255,0.18)"
+                  : "rgba(255,255,255,0.12)",
+                weight: found ? 1.05 : 0.9,
+                fillColor: found ? rampColor(v01) : "#33204F",
+                fillOpacity: found ? 0.88 : 0.42,
               };
             }}
             onEachFeature={(feature, layer) => {
@@ -396,7 +384,7 @@ export default function LocationsChoroplethMap({
 
               const valueLine = found
                 ? `<div class="tikd-map-tooltip__value">${formatCompact(value, prefix)}</div>`
-                : `<div class="tikd-map-tooltip__nodata">No data</div>`;
+                : `<div class="tikd-map-tooltip__nodata">No data yet</div>`;
 
               const tooltip = `
                 <div class="tikd-map-tooltip__wrap">
@@ -406,7 +394,6 @@ export default function LocationsChoroplethMap({
                 </div>
               `;
 
-              // We want setStyle + tooltip => Path is the correct Leaflet type.
               const path = layer as L.Path;
 
               path.bindTooltip(tooltip, {
@@ -419,32 +406,34 @@ export default function LocationsChoroplethMap({
 
               path.on("mouseover", () => {
                 path.setStyle({
-                  weight: 1.5,
-                  color: "rgba(154,70,255,0.42)",
-                  fillOpacity: found ? 0.92 : 0.24,
+                  weight: 1.7,
+                  color: "rgba(154,70,255,0.55)",
+                  fillOpacity: found ? 0.96 : 0.56,
                 });
               });
 
               path.on("mouseout", () => {
                 path.setStyle({
-                  weight: 0.85,
-                  color: "rgba(255,255,255,0.10)",
-                  fillOpacity: found ? 0.82 : 0.16,
+                  weight: found ? 1.05 : 0.9,
+                  color: found
+                    ? "rgba(255,255,255,0.18)"
+                    : "rgba(255,255,255,0.12)",
+                  fillOpacity: found ? 0.88 : 0.42,
                 });
               });
             }}
           />
         )}
-      </RLMapContainer>
 
-      {!fc && (
-        <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center">
-          <div className="rounded-full border border-white/10 bg-neutral-900/60 px-4 py-2 text-sm text-neutral-200 backdrop-blur-xl">
-            Missing GeoJSON:{" "}
-            <span className="font-semibold">{resolvedGeoUrl}</span>
+        {!fc && (
+          <div className="pointer-events-none absolute inset-0 z-[2] flex items-center justify-center">
+            <div className="rounded-full border border-white/10 bg-neutral-900/60 px-4 py-2 text-sm text-neutral-200 backdrop-blur-xl">
+              Missing GeoJSON:{" "}
+              <span className="font-semibold">{resolvedGeoUrl}</span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </RLMapContainer>
     </div>
   );
 }

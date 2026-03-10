@@ -1,11 +1,10 @@
-// src/app/events/[id]/page.tsx
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { Button } from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
@@ -42,20 +41,14 @@ interface ApiEvent {
   _id: string;
   title: string;
   description?: string;
-  date: string; // ISO
+  date: string;
   location: string;
   image?: string;
-
-  // ✅ NEW: media gallery items
   media?: EventMediaItem[];
-
   attendingCount: number;
   attendeesPreview: { _id: string; image?: string }[];
   artists: Artist[];
-
-  // ✅ Ticket types may be missing if backend changes again; never crash
   ticketTypes?: TicketType[];
-
   organization: {
     _id: string;
     name: string;
@@ -102,6 +95,20 @@ function posterOrDefault(src: unknown): string {
   if (typeof src !== "string") return EVENT_CARD_DEFAULT_POSTER;
   const s = src.trim();
   return s ? s : EVENT_CARD_DEFAULT_POSTER;
+}
+
+function getOrCreateVisitorId(): string {
+  const storageKey = "tikd:visitor-id";
+  const existing = window.localStorage.getItem(storageKey);
+  if (existing && existing.trim()) return existing;
+
+  const created =
+    typeof window.crypto?.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `tikd-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  window.localStorage.setItem(storageKey, created);
+  return created;
 }
 
 function AvatarStack({
@@ -155,14 +162,12 @@ function EventDetailSkeleton() {
 
       <div className="mx-auto w-full max-w-[1360px] px-4 pt-[112px] pb-16 md:pt-[124px]">
         <div className="grid gap-8 lg:grid-cols-12 lg:gap-x-8 xl:gap-x-10">
-          {/* left poster */}
           <div className="lg:col-span-4 xl:col-span-5">
             <div className="lg:sticky lg:top-[112px] md:lg:top-[124px] lg:flex lg:justify-end">
               <Skeleton className="h-[275px] w-[220px] rounded-xl sm:h-[325px] sm:w-[260px] md:h-[375px] md:w-[300px] lg:h-[428px] lg:w-[342px]" />
             </div>
           </div>
 
-          {/* right content */}
           <div className="lg:col-span-8 xl:col-span-7 space-y-6">
             <Skeleton className="h-12 w-3/4" />
             <Skeleton className="h-5 w-44" />
@@ -189,6 +194,7 @@ export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { items, addItem, setQty, removeItem } = useCart();
+  const hasTrackedViewRef = useRef(false);
 
   const {
     data: event,
@@ -201,10 +207,6 @@ export default function EventDetailPage() {
     enabled: Boolean(id),
   });
 
-  /**
-   * ✅ IMPORTANT: Hooks must run on every render in the same order.
-   * We compute memoized values *before* early returns, using safe fallbacks.
-   */
   const eventId = event?._id?.toString() ?? "";
   const safeTicketTypes = event?.ticketTypes ?? [];
   const heroPoster = posterOrDefault(event?.image);
@@ -226,7 +228,38 @@ export default function EventDetailPage() {
     [qtyByTicket],
   );
 
-  /* ---------- Early returns ---------- */
+  useEffect(() => {
+    if (!id || !event?._id) return;
+    if (hasTrackedViewRef.current) return;
+
+    hasTrackedViewRef.current = true;
+
+    const visitorId = getOrCreateVisitorId();
+    const currentUrl = window.location.href;
+    const currentPath = window.location.pathname;
+    const referrer = document.referrer || "";
+    const url = new URL(currentUrl);
+
+    void fetch(`/api/events/${id}/views`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      keepalive: true,
+      body: JSON.stringify({
+        visitorId,
+        url: currentUrl,
+        path: currentPath,
+        referrer,
+        utmSource: url.searchParams.get("utm_source") ?? undefined,
+        utmMedium: url.searchParams.get("utm_medium") ?? undefined,
+        utmCampaign: url.searchParams.get("utm_campaign") ?? undefined,
+      }),
+    }).catch(() => {
+      // silent fail: analytics should never block event page UX
+    });
+  }, [event?._id, id]);
+
   if (isLoading) return <EventDetailSkeleton />;
 
   if (isError || !event) {
@@ -237,19 +270,15 @@ export default function EventDetailPage() {
     );
   }
 
-  // ✅ From here on, `event` is guaranteed
   const eventData: ApiEvent = event;
 
-  /* ---------- Date / map ---------- */
   const dateLabel = formatDate(eventData.date);
 
-  // Slightly larger request so it stays crisp when embedded
   const MAP_W = 1000;
   const MAP_H = 560;
   const mapUrl =
     getStaticMapUrl(eventData.location, MAP_W, MAP_H) || "/dummy/map.png";
 
-  /* ---------- Handle qty change -> Cart ---------- */
   function handleTicketQtyChange(ticketTypeId: string, nextQty: number) {
     const tt = safeTicketTypes.find((t) => t._id === ticketTypeId);
     if (!tt) return;
@@ -265,7 +294,7 @@ export default function EventDetailPage() {
         ticketLabel: tt.label,
         unitPrice: tt.price,
         currency: tt.currency,
-        image: heroPoster, // ticket photos removed; use event poster only
+        image: heroPoster,
         qty: nextQty,
       });
     } else if (existing && nextQty > 0) {
@@ -279,7 +308,6 @@ export default function EventDetailPage() {
   const hasMedia = (eventData.media?.length ?? 0) > 0;
   const showDetailsCard = hasDesc || hasMedia || eventData.attendingCount > 0;
 
-  /* ---------- Render ---------- */
   return (
     <EventHero
       poster={heroPoster}
@@ -304,9 +332,7 @@ export default function EventDetailPage() {
       selectedCount={selectedCount}
       onCheckout={() => router.push("/checkout")}
     >
-      {/* ---------------- Right column content ---------------- */}
       <div className="space-y-6">
-        {/* Details */}
         {showDetailsCard && (
           <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
             <div className="p-5 sm:p-6">
@@ -360,7 +386,6 @@ export default function EventDetailPage() {
                 </p>
               ) : null}
 
-              {/* ✅ Media gallery (videos one-by-one, images carousel) */}
               {hasMedia ? (
                 <div className={hasDesc ? "mt-5" : "mt-4"}>
                   <EventMediaGallery items={eventData.media ?? []} />
@@ -379,7 +404,6 @@ export default function EventDetailPage() {
           </section>
         )}
 
-        {/* Lineup */}
         {eventData.artists.length > 0 && (
           <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
             <div className="p-5 sm:p-6">
@@ -408,7 +432,6 @@ export default function EventDetailPage() {
           </section>
         )}
 
-        {/* Venue (✅ map moved here) */}
         <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
           <div className="p-5 sm:p-6">
             <h2 className="text-lg font-semibold text-white">Venue</h2>
@@ -417,7 +440,6 @@ export default function EventDetailPage() {
               {eventData.location}
             </p>
 
-            {/* Embedded map (replaces “Map is shown…” text) */}
             <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-neutral-900/25">
               <div className="relative h-[220px] sm:h-[240px] md:h-[260px]">
                 <Image
@@ -435,16 +457,13 @@ export default function EventDetailPage() {
           </div>
         </section>
 
-        {/* Terms */}
         <InfoRow title="Terms">
           <p className="whitespace-pre-line text-neutral-0 font-light leading-[150%]">
             All tickets are final sale and cannot be exchanged or refunded…
           </p>
         </InfoRow>
 
-        {/* Bottom banner (Org only) — map removed; container reduced */}
         <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md overflow-hidden">
-          {/* Org panel now fills full width */}
           <div className="relative p-5 sm:p-6">
             <div
               className="pointer-events-none absolute inset-0 opacity-90"

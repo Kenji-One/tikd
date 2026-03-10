@@ -1,4 +1,3 @@
-// src/app/dashboard/events/[eventId]/summary/page.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -7,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Eye, Ticket } from "lucide-react";
 
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
+import { fetchPageViewsAnalytics } from "@/lib/api/pageViews";
 
 import { Button } from "@/components/ui/Button";
 import KpiCard from "@/components/dashboard/cards/KpiCard";
@@ -37,7 +37,7 @@ function getString(rec: UnknownRecord | null, key: string): string | null {
   return typeof v === "string" ? v : null;
 }
 
-/* ----------------------------- Date helpers (same logic style as main dashboard) ----------------------------- */
+/* ----------------------------- Date helpers ----------------------------- */
 function clampToDay(d: Date) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -90,7 +90,7 @@ function monthDates(start: Date, end: Date) {
 function mapSeriesToCount(vals: number[], count: number) {
   if (count === vals.length) return vals;
   const a = [...vals];
-  while (a.length < count) a.push(a[a.length % vals.length]);
+  while (a.length < count) a.push(a[a.length % vals.length] ?? 0);
   return a.slice(0, count);
 }
 
@@ -184,7 +184,7 @@ function fmtMonthYearLong(d: Date) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-/* ----------------------------- Event-metrics + breakdown demo ----------------------------- */
+/* ----------------------------- Metrics ----------------------------- */
 type EventMetrics = {
   ticketsSold: number;
   pageViews: number;
@@ -193,14 +193,14 @@ type EventMetrics = {
 
 function deriveEventMetrics(event?: EventWithMeta): EventMetrics {
   const ticketsSold = event?.attendingCount ?? 0;
-
-  const pageViews =
-    ticketsSold > 0 ? Math.max(ticketsSold * 3, ticketsSold + 10) : 0;
-
-  const assumedAvgTicket = 25; // USD demo
+  const assumedAvgTicket = 25;
   const revenue = ticketsSold * assumedAvgTicket;
 
-  return { ticketsSold, pageViews, revenue };
+  return {
+    ticketsSold,
+    pageViews: 0,
+    revenue,
+  };
 }
 
 function splitByPercent(total: number, percents: number[]) {
@@ -226,9 +226,8 @@ function splitByPercent(total: number, percents: number[]) {
   return out;
 }
 
-/** ✅ Deterministic dummy total per event (so it doesn't jump on rerenders) */
 function stableDummyTotal(seed: string, min = 8000, max = 48000) {
-  let h = 2166136261; // FNV-ish
+  let h = 2166136261;
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i);
     h = Math.imul(h, 16777619);
@@ -237,7 +236,6 @@ function stableDummyTotal(seed: string, min = 8000, max = 48000) {
   return min + n;
 }
 
-/** Tiny deterministic PRNG */
 function mulberry32(seed: number) {
   return function () {
     let t = (seed += 0x6d2b79f5);
@@ -247,7 +245,6 @@ function mulberry32(seed: number) {
   };
 }
 
-/** Deterministic age distribution: no ranges, each age is its own segment */
 function buildStableAges(seedStr: string, total: number) {
   let h = 2166136261;
   for (let i = 0; i < seedStr.length; i++) {
@@ -293,10 +290,6 @@ function buildStableAges(seedStr: string, total: number) {
   return pairs.filter((p) => p.count > 0);
 }
 
-/**
- * ✅ Integer percents that ALWAYS sum to 100 (largest remainder method).
- * - Uses floors, then distributes the remainder to biggest fractional parts.
- */
 function percentsSumTo100(values: number[]) {
   const v = values.map((x) => Math.max(0, Number.isFinite(x) ? x : 0));
   const total = v.reduce((a, b) => a + b, 0);
@@ -337,7 +330,7 @@ const AGE_COLORS = [
   "#C084FC",
 ];
 
-/* ----------------------------- Compact, modern pills row ----------------------------- */
+/* ----------------------------- Compact pills row ----------------------------- */
 function StatPillsRow(opts: {
   items: {
     key: string;
@@ -352,7 +345,6 @@ function StatPillsRow(opts: {
 }) {
   const { items, withArrows, onPrev, onNext } = opts;
 
-  // hex -> rgba helper (supports "#RGB" or "#RRGGBB")
   const rgba = (hex: string, a: number) => {
     const h = hex.replace("#", "").trim();
     const full =
@@ -452,7 +444,8 @@ function StatPillsRow(opts: {
                         className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
                         style={{
                           backgroundColor: it.color,
-                          boxShadow: `0 0 0 1px rgba(0,0,0,0.15), 0 0 18px rgba(154,70,255,0.10)`,
+                          boxShadow:
+                            "0 0 0 1px rgba(0,0,0,0.15), 0 0 18px rgba(154,70,255,0.10)",
                         }}
                       />
                       <span className="min-w-0 break-words text-[12.5px] font-semibold leading-tight tracking-[-0.01em] text-white/80">
@@ -495,9 +488,6 @@ export default function EventSummaryPage() {
     enabled: !!eventId,
   });
 
-  const metrics = useMemo(() => deriveEventMetrics(event), [event]);
-
-  /* ---------- Use same dashboard layout + date range picker UX ---------- */
   const today = useMemo(() => clampToDay(new Date()), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
 
@@ -526,12 +516,38 @@ export default function EventSummaryPage() {
     [hasChosenRange, dateRange.end, ALL_TIME_END],
   );
 
+  const analyticsQuery = useQuery({
+    queryKey: [
+      "event-page-views-analytics",
+      eventId,
+      effectiveStart.toISOString(),
+      effectiveEnd.toISOString(),
+    ],
+    queryFn: () =>
+      fetchPageViewsAnalytics({
+        eventId: eventId ?? null,
+        start: effectiveStart,
+        end: effectiveEnd,
+      }),
+    enabled: !!eventId,
+  });
+
+  const analytics = analyticsQuery.data;
+
+  const baseMetrics = useMemo(() => deriveEventMetrics(event), [event]);
+  const metrics = useMemo<EventMetrics>(
+    () => ({
+      ...baseMetrics,
+      pageViews: analytics?.totals.pageViews ?? 0,
+    }),
+    [analytics?.totals.pageViews, baseMetrics],
+  );
+
   const rangeDays = useMemo(
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
     [effectiveStart, effectiveEnd],
   );
 
-  // --- ✅ TS-safe pick common event fields (defensive, no `any`) ---
   const currentEventMeta = useMemo(() => {
     if (!eventId) return null;
 
@@ -596,14 +612,6 @@ export default function EventSummaryPage() {
     [scale],
   );
 
-  const sparkPageViewsMonthly = useMemo(
-    () =>
-      [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120].map((v) =>
-        Math.max(1, Math.round(v * scale)),
-      ),
-    [scale],
-  );
-
   const sparkTicketsMonthly = useMemo(
     () =>
       [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480].map((v) =>
@@ -618,12 +626,25 @@ export default function EventSummaryPage() {
   }, [dailyMode, labels.length, dates, sparkRevenueMonthly]);
 
   const pageViewsData = useMemo(() => {
-    if (!dailyMode)
-      return mapSeriesToCount(sparkPageViewsMonthly, labels.length);
-    return dailyizeFromMonthly(sparkPageViewsMonthly, dates).map((v) =>
-      Math.round(v),
-    );
-  }, [dailyMode, labels.length, dates, sparkPageViewsMonthly]);
+    const liveSeries = analytics?.series.map((item) => item.views);
+    if (liveSeries?.length) return liveSeries;
+
+    if (!dailyMode) {
+      return mapSeriesToCount(
+        [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120].map((v) =>
+          Math.max(1, Math.round(v * scale)),
+        ),
+        labels.length,
+      );
+    }
+
+    return dailyizeFromMonthly(
+      [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120].map((v) =>
+        Math.max(1, Math.round(v * scale)),
+      ),
+      dates,
+    ).map((v) => Math.round(v));
+  }, [analytics?.series, dailyMode, dates, labels.length, scale]);
 
   const ticketsSoldData = useMemo(() => {
     if (!dailyMode) return mapSeriesToCount(sparkTicketsMonthly, labels.length);
@@ -681,7 +702,6 @@ export default function EventSummaryPage() {
     });
   }, [dates, pinnedIndex, dailyMode]);
 
-  /* ---------- ✅ Dummy demographics: always non-zero (until real analytics exists) ---------- */
   const breakdownTotal = useMemo(() => {
     return stableDummyTotal(eventId ?? "no-event");
   }, [eventId]);
@@ -720,11 +740,6 @@ export default function EventSummaryPage() {
     return buildStableAges(`${eventId ?? "no-event"}::ages`, total);
   }, [breakdownTotal, eventId]);
 
-  /**
-   * ✅ Donut must ALWAYS show full dataset (all ages), and must NOT change on arrows.
-   * ✅ Pills can still carousel (4 at a time), BUT their % must be based on FULL dataset
-   *    and always sum to 100 across all ages (not just the visible 4).
-   */
   const ageSegments = useMemo<DonutSegment[]>(() => {
     return agePairs.map((p, idx) => ({
       label: String(p.age),
@@ -746,7 +761,6 @@ export default function EventSummaryPage() {
     return m;
   }, [ageSegments, agePercentsByIndex]);
 
-  // ✅ Pills carousel: keep old 4-at-a-time paging
   const [agePage, setAgePage] = useState(0);
 
   const agePages = useMemo(() => {
@@ -764,8 +778,6 @@ export default function EventSummaryPage() {
     return ageSlicePairs.map((p, idx) => {
       const label = String(p.age);
       const pct = agePercentMap.get(label) ?? 0;
-
-      // match pill-dot color to the donut segment color for that item’s position in the slice
       const color = AGE_COLORS[idx % AGE_COLORS.length];
 
       return {
@@ -784,6 +796,10 @@ export default function EventSummaryPage() {
     if (v >= 1000) return `$${(v / 1000).toFixed(1)}K`;
     return `$${v.toFixed(0)}`;
   }, [metrics.revenue]);
+
+  const pageViewsDeltaLabel = analytics
+    ? `${analytics.totals.liveViewers} live`
+    : "0 live";
 
   return (
     <div className="space-y-5 px-4 md:px-6 lg:px-8">
@@ -829,22 +845,22 @@ export default function EventSummaryPage() {
               valueIcon={
                 <Eye className="h-5 w-5 shrink-0 text-white/90" aria-hidden />
               }
-              delta="+24.6%"
+              delta={pageViewsDeltaLabel}
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="border-neutral-700 p-5 lg:border-b"
-              detailsHref={`/dashboard/events/${eventId ?? ""}/summary`}
+              detailsHref={`/dashboard/page-views?eventId=${eventId ?? ""}`}
             >
               <SmallKpiChart
                 data={pageViewsData}
                 dates={dates}
-                pinnedIndex={pinnedIndex}
+                pinnedIndex={Math.max(0, pageViewsData.length - 1)}
                 tooltipIcon="eye"
                 tooltipDateMode={dailyMode ? "full" : "monthYear"}
                 domain={pvDomain}
                 yTicks={pvTicks}
                 xLabels={labels}
                 stroke="#9A46FF"
-                deltaText="+24.6%"
+                deltaText={pageViewsDeltaLabel}
                 deltaPositive
               />
             </KpiCard>
@@ -883,10 +899,8 @@ export default function EventSummaryPage() {
         <RecentSalesTable />
       </section>
 
-      {/* ✅ Gender + Age section */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Gender Breakdown */}
           <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
             <div className="flex items-start justify-between">
               <div>
@@ -922,7 +936,6 @@ export default function EventSummaryPage() {
             </div>
           </div>
 
-          {/* Age Breakdown */}
           <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
             <div className="flex items-start justify-between">
               <div>

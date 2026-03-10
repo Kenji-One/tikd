@@ -168,25 +168,6 @@ function formatRangeHeading(start: Date, end: Date) {
     .toUpperCase()}`;
 }
 
-function hasMeaningfulMapData(
-  items: Array<{
-    revenue?: number;
-    viewers?: number;
-    tickets?: number;
-  }>,
-) {
-  return items.some(
-    (item) =>
-      Number(item.revenue ?? 0) > 0 ||
-      Number(item.viewers ?? 0) > 0 ||
-      Number(item.tickets ?? 0) > 0,
-  );
-}
-
-function hasMeaningfulBars(data: number[]) {
-  return data.some((value) => Number(value) > 0);
-}
-
 /* ------------------------------ Types ------------------------------ */
 type MiniCardCfg = {
   title: string;
@@ -242,6 +223,8 @@ type Props = {
   barsLabel: string;
   barsHeading: string;
   barsData: number[];
+  barsLabels?: string[];
+  barsHighlightIndex?: number;
   barsStacks?: BarsStackSeries[];
 
   mapData?: MapDatum[];
@@ -254,22 +237,12 @@ type Props = {
   isLoading?: boolean;
 };
 
-const DEFAULT_MAP_DATA: MapDatum[] = [
-  { key: "US", revenue: 240000, viewers: 120000, tickets: 18000 },
-  { key: "CA", revenue: 110000, viewers: 52000, tickets: 7600 },
-  { key: "GB", revenue: 98000, viewers: 47000, tickets: 6400 },
-  {
-    key: "DE",
-    label: "Germany",
-    revenue: 88000,
-    viewers: 39000,
-    tickets: 6100,
-  },
-  { key: "FR", label: "France", revenue: 82000, viewers: 36000, tickets: 5600 },
-  { key: "IT", label: "Italy", revenue: 76000, viewers: 34000, tickets: 5200 },
-];
+function buildZeroWorldMapData(): MapDatum[] {
+  return [];
+}
 
-const DEFAULT_BARS_DATA = [38000, 52000, 47000, 61000, 88000, 70000, 56000];
+const ZERO_BARS_DATA = [0, 0, 0, 0, 0, 0, 0];
+const ZERO_BARS_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function DetailedViewShell({
   heading,
@@ -282,6 +255,8 @@ export default function DetailedViewShell({
   barsLabel,
   barsHeading,
   barsData,
+  barsLabels,
+  barsHighlightIndex,
   barsStacks,
   mapData,
   chartLabels,
@@ -390,15 +365,31 @@ export default function DetailedViewShell({
     [effective.start, effective.end],
   );
 
-  const safeMapData =
-    mapData?.length && hasMeaningfulMapData(mapData)
-      ? mapData
-      : DEFAULT_MAP_DATA;
+  const safeMapData = useMemo(() => {
+    if (mapData?.length) return mapData;
+    return buildZeroWorldMapData();
+  }, [mapData]);
 
-  const safeBarsData =
-    barsData.length === 7 && hasMeaningfulBars(barsData)
-      ? barsData
-      : DEFAULT_BARS_DATA;
+  const safeBarsData = useMemo(() => {
+    if (barsData.length === 7) return barsData;
+    return ZERO_BARS_DATA;
+  }, [barsData]);
+
+  const safeBarsLabels = useMemo(() => {
+    if (barsLabels?.length === safeBarsData.length) return barsLabels;
+    return ZERO_BARS_LABELS;
+  }, [barsLabels, safeBarsData.length]);
+
+  const safeBarsHighlightIndex = useMemo(() => {
+    if (
+      typeof barsHighlightIndex === "number" &&
+      barsHighlightIndex >= 0 &&
+      barsHighlightIndex < safeBarsData.length
+    ) {
+      return barsHighlightIndex;
+    }
+    return safeBarsData.length > 0 ? safeBarsData.length - 1 : 0;
+  }, [barsHighlightIndex, safeBarsData.length]);
 
   return (
     <div className="space-y-5">
@@ -574,8 +565,10 @@ export default function DetailedViewShell({
             {mapLabel}
           </div>
 
-          <div className="mt-3 aspect-[16/9] overflow-hidden rounded-lg border border-neutral-700">
-            <div className={isLoading ? "opacity-75 transition-opacity" : ""}>
+          <div className="mt-3 h-[440px] sm:h-[480px] lg:h-[520px] overflow-hidden rounded-lg border border-neutral-700">
+            <div
+              className={`h-full w-full ${isLoading ? "opacity-75 transition-opacity" : ""}`}
+            >
               <LocationsChoroplethMap
                 scope="world"
                 mode={mode}
@@ -600,11 +593,16 @@ export default function DetailedViewShell({
             {barsStacks?.length ? (
               <BarsWeekStacked
                 series={barsStacks}
-                highlightIndex={4}
+                highlightIndex={safeBarsHighlightIndex}
                 metric={mode}
               />
             ) : (
-              <BarsWeek data={safeBarsData} highlightIndex={4} metric={mode} />
+              <BarsWeek
+                data={safeBarsData}
+                labels={safeBarsLabels}
+                highlightIndex={safeBarsHighlightIndex}
+                metric={mode}
+              />
             )}
           </div>
         </div>

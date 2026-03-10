@@ -1,8 +1,8 @@
-// src/app/dashboard/organizations/[id]/summary/OrgSummaryClient.tsx
 "use client";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Eye, Ticket, ChevronLeft, ChevronRight } from "lucide-react";
 
 import KpiCard from "@/components/dashboard/cards/KpiCard";
@@ -21,13 +21,25 @@ import DateRangePicker, {
 import DonutFull, {
   type DonutSegment,
 } from "@/components/dashboard/charts/DonutFull";
+import {
+  fetchPageViewsAnalytics,
+  type PageViewsAnalyticsResponse,
+} from "@/lib/api/pageViews";
 
 /* Demo series (MONTHLY) — scoped to org dashboard */
 const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
   (v) => v * 1000,
 );
-const sparkB = [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120];
 const sparkC = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
+
+type ExtendedAnalytics = PageViewsAnalyticsResponse & {
+  comparisons?: {
+    uniqueViewersPct?: number;
+    recurringViewersPct?: number;
+    conversionRatePct?: number;
+    liveViewersPct?: number;
+  };
+};
 
 function clampToDay(d: Date) {
   const x = new Date(d);
@@ -81,7 +93,7 @@ function monthDates(start: Date, end: Date) {
 function mapSeriesToCount(vals: number[], count: number) {
   if (count === vals.length) return vals;
   const a = [...vals];
-  while (a.length < count) a.push(a[a.length % vals.length]);
+  while (a.length < count) a.push(a[a.length % vals.length] ?? 0);
   return a.slice(0, count);
 }
 
@@ -225,8 +237,8 @@ function makeBuckets(dates: Date[], step: number): Bucket[] {
 
   const out: Bucket[] = [];
   for (let i = 0; i < dates.length; i += step) {
-    const start = dates[i];
-    const end = dates[Math.min(i + step - 1, dates.length - 1)];
+    const start = dates[i]!;
+    const end = dates[Math.min(i + step - 1, dates.length - 1)]!;
     out.push({
       start,
       end,
@@ -241,6 +253,67 @@ function sumBucket(values: number[], from: number, to: number) {
   let s = 0;
   for (let i = from; i <= to; i++) s += values[i] ?? 0;
   return s;
+}
+
+function normalizeRangeDateForAnalytics(
+  input: Date,
+  boundary: "start" | "end",
+): Date {
+  return boundary === "start"
+    ? new Date(
+        Date.UTC(
+          input.getFullYear(),
+          input.getMonth(),
+          input.getDate(),
+          0,
+          0,
+          0,
+          0,
+        ),
+      )
+    : new Date(
+        Date.UTC(
+          input.getFullYear(),
+          input.getMonth(),
+          input.getDate(),
+          23,
+          59,
+          59,
+          999,
+        ),
+      );
+}
+
+function formatPercentValue(value: number) {
+  const safe = Math.abs(Number.isFinite(value) ? value : 0);
+  const fixed = safe >= 100 ? Math.round(safe).toString() : safe.toFixed(1);
+  return `${fixed}%`;
+}
+
+function deltaFromPrevious(current: number, previous: number) {
+  const safeCurrent = Number.isFinite(current) ? current : 0;
+  const safePrevious = Number.isFinite(previous) ? previous : 0;
+
+  if (safePrevious <= 0) {
+    if (safeCurrent <= 0) {
+      return {
+        text: "0%",
+        positive: true,
+      };
+    }
+
+    return {
+      text: "100%",
+      positive: true,
+    };
+  }
+
+  const pct = ((safeCurrent - safePrevious) / safePrevious) * 100;
+
+  return {
+    text: formatPercentValue(pct),
+    positive: pct >= 0,
+  };
 }
 
 /* ----------------------------- breakdown helpers (same as Event page) ----------------------------- */
@@ -275,13 +348,6 @@ function stableDummyTotal(seed: string, min = 8000, max = 48000) {
   }
   const n = Math.abs(h) % (max - min + 1);
   return min + n;
-}
-
-function currentMonthYearUpper() {
-  const now = new Date();
-  return now
-    .toLocaleDateString(undefined, { month: "long", year: "numeric" })
-    .toUpperCase();
 }
 
 function mulberry32(seed: number) {
@@ -339,8 +405,7 @@ function buildStableAges(seedStr: string, total: number) {
 }
 
 /**
- * ✅ Integer percents that ALWAYS sum to 100 (largest remainder method).
- * - Uses floors, then distributes the remainder to biggest fractional parts.
+ * Integer percents that ALWAYS sum to 100.
  */
 function percentsSumTo100(values: number[]) {
   const v = values.map((x) => Math.max(0, Number.isFinite(x) ? x : 0));
@@ -382,7 +447,6 @@ const AGE_COLORS = [
   "#C084FC",
 ];
 
-/* ----------------------------- Compact, modern pills row ----------------------------- */
 function StatPillsRow(opts: {
   items: {
     key: string;
@@ -561,6 +625,34 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     [hasChosenRange, dateRange.end, ALL_TIME_END],
   );
 
+  const analyticsStart = useMemo(
+    () => normalizeRangeDateForAnalytics(effectiveStart, "start"),
+    [effectiveStart],
+  );
+
+  const analyticsEnd = useMemo(
+    () => normalizeRangeDateForAnalytics(effectiveEnd, "end"),
+    [effectiveEnd],
+  );
+
+  const analyticsQuery = useQuery({
+    queryKey: [
+      "org-page-views-analytics",
+      orgId,
+      analyticsStart.toISOString(),
+      analyticsEnd.toISOString(),
+    ],
+    queryFn: () =>
+      fetchPageViewsAnalytics({
+        orgId,
+        start: analyticsStart,
+        end: analyticsEnd,
+      }),
+    enabled: !!orgId,
+  });
+
+  const analytics = analyticsQuery.data as ExtendedAnalytics | undefined;
+
   const rangeDays = useMemo(
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
     [effectiveStart, effectiveEnd],
@@ -574,20 +666,51 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
   }, [hasChosenRange, rangeDays]);
 
   const labels = useMemo(() => {
+    const liveSeries = analytics?.series ?? [];
+    if (liveSeries.length > 0) {
+      return liveSeries.map((item, index, arr) => {
+        const d = new Date(item.date);
+
+        if (!hasChosenRange) {
+          return d.toLocaleDateString(undefined, { month: "short" });
+        }
+
+        if (arr.length <= 7) {
+          return d.toLocaleDateString(undefined, { weekday: "short" });
+        }
+
+        return index % 3 === 0
+          ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+          : `${d.getDate()}`;
+      });
+    }
+
     if (monthlyMode) return monthLabels(effectiveStart, effectiveEnd);
 
     const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
     if (dayStep === 1) return buildDailyLabels(dailyDates);
     return makeBuckets(dailyDates, dayStep).map((b) => b.label);
-  }, [monthlyMode, effectiveStart, effectiveEnd, dayStep]);
+  }, [
+    analytics?.series,
+    monthlyMode,
+    effectiveStart,
+    effectiveEnd,
+    dayStep,
+    hasChosenRange,
+  ]);
 
   const dates = useMemo(() => {
+    const liveSeries = analytics?.series ?? [];
+    if (liveSeries.length > 0) {
+      return liveSeries.map((item) => new Date(item.date));
+    }
+
     if (monthlyMode) return monthDates(effectiveStart, effectiveEnd);
 
     const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
     if (dayStep === 1) return dailyDates;
     return makeBuckets(dailyDates, dayStep).map((b) => b.repDate);
-  }, [monthlyMode, effectiveStart, effectiveEnd, dayStep]);
+  }, [analytics?.series, monthlyMode, effectiveStart, effectiveEnd, dayStep]);
 
   const revenueData = useMemo(() => {
     if (monthlyMode) return mapSeriesToCount(sparkA, labels.length);
@@ -608,24 +731,14 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
   }, [monthlyMode, labels.length, effectiveStart, effectiveEnd, dayStep]);
 
   const pageViewsData = useMemo(() => {
-    if (monthlyMode) return mapSeriesToCount(sparkB, labels.length);
+    const liveSeries = analytics?.series.map((item) => item.views);
+    if (liveSeries?.length) {
+      if (liveSeries.length === labels.length) return liveSeries;
+      return mapSeriesToCount(liveSeries, labels.length);
+    }
 
-    const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
-    const dailyValues = dailyizeFromMonthly(sparkB, dailyDates).map((v) =>
-      Math.round(v),
-    );
-
-    if (dayStep === 1) return dailyValues;
-
-    const buckets = makeBuckets(dailyDates, dayStep);
-    return buckets.map((b) => {
-      const from = dailyDates.findIndex(
-        (d) => d.getTime() === b.start.getTime(),
-      );
-      const to = dailyDates.findIndex((d) => d.getTime() === b.end.getTime());
-      return Math.round(sumBucket(dailyValues, from, to));
-    });
-  }, [monthlyMode, labels.length, effectiveStart, effectiveEnd, dayStep]);
+    return new Array(labels.length).fill(0);
+  }, [analytics?.series, labels.length]);
 
   const ticketsSoldData = useMemo(() => {
     if (monthlyMode) return mapSeriesToCount(sparkC, labels.length);
@@ -682,6 +795,16 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     return len - 1;
   }, [revenueData.length, hasChosenRange, monthlyMode, today]);
 
+  const pageViewsPinnedIndex = useMemo(() => {
+    const len = pageViewsData.length;
+    if (len <= 0) return 0;
+    return len - 1;
+  }, [pageViewsData.length]);
+
+  const pageViewsMaxInteractiveIndex = useMemo(() => {
+    return Math.max(0, pageViewsData.length - 1);
+  }, [pageViewsData.length]);
+
   const pinnedSubLabel = useMemo(() => {
     const d = dates[pinnedIndex];
     if (!d) return "";
@@ -693,11 +816,20 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     });
   }, [dates, pinnedIndex, monthlyMode]);
 
+  const pageViewsDelta = useMemo(() => {
+    const current = pageViewsData[pageViewsPinnedIndex] ?? 0;
+    const previous = pageViewsData[pageViewsPinnedIndex - 1] ?? 0;
+    return deltaFromPrevious(current, previous);
+  }, [pageViewsData, pageViewsPinnedIndex]);
+
+  const pageViewsComparisonLabel = monthlyMode
+    ? "vs previous month."
+    : "vs previous day.";
+
   const breakdownTotal = useMemo(
     () => stableDummyTotal(orgId ?? "no-org"),
     [orgId],
   );
-  const monthYearUpper = useMemo(() => currentMonthYearUpper(), []);
 
   const genderSegments = useMemo<DonutSegment[]>(() => {
     const [male, female, other] = splitByPercent(breakdownTotal, [66, 23, 11]);
@@ -731,11 +863,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     return buildStableAges(`${orgId ?? "no-org"}::ages`, total);
   }, [breakdownTotal, orgId]);
 
-  /**
-   * ✅ Donut must ALWAYS show full dataset (all ages), and must NOT change on arrows.
-   * ✅ Pills can still carousel (4 at a time), BUT their % must be based on FULL dataset
-   *    and always sum to 100 across all ages (not just the visible 4).
-   */
   const ageSegments = useMemo<DonutSegment[]>(() => {
     return agePairs.map((p, idx) => ({
       label: String(p.age),
@@ -757,7 +884,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     return m;
   }, [ageSegments, agePercentsByIndex]);
 
-  // ✅ Pills carousel: keep old 4-at-a-time paging
   const [agePage, setAgePage] = useState(0);
 
   const agePages = useMemo(() => {
@@ -775,8 +901,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     return ageSlicePairs.map((p, idx) => {
       const label = String(p.age);
       const pct = agePercentMap.get(label) ?? 0;
-
-      // Keep the “feel” you already had: dots cycle using AGE_COLORS per visible slice
       const color = AGE_COLORS[idx % AGE_COLORS.length];
 
       return {
@@ -789,8 +913,10 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     });
   }, [ageSlicePairs, agePercentMap]);
 
-  // ✅ Match Event Dashboard sizing/feel: make the 3 cards stretch to equal height.
   const panelClass = "rounded-lg border border-neutral-700 bg-neutral-900 p-5";
+  const pageViewsHeaderDeltaLabel = analytics
+    ? `${analytics.totals.liveViewers} live`
+    : "0 live";
 
   return (
     <div className="space-y-5 ">
@@ -803,7 +929,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
             accent="from-[#7C3AED] to-[#9333EA]"
             className="border-neutral-700 pr-6 py-5 lg:border-r"
             stretchChart
-            detailsHref={`/dashboard/organizations/${orgId}/analytics/revenue`}
+            detailsHref={``}
             toolbar={
               <div className="max-w-[210px]">
                 <DateRangePicker value={dateRange} onChange={setDateRange} />
@@ -832,27 +958,29 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
           <div>
             <KpiCard
               title="Total Page Views"
-              value="400"
+              value={(analytics?.totals.pageViews ?? 0).toLocaleString()}
               valueIcon={
                 <Eye className="h-5 w-5 shrink-0 text-white/90" aria-hidden />
               }
-              delta="+24.6%"
+              delta={pageViewsHeaderDeltaLabel}
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="border-neutral-700 p-5 lg:border-b"
-              detailsHref={`/dashboard/organizations/${orgId}/analytics/page-views`}
+              detailsHref={`/dashboard/page-views?orgId=${orgId}`}
             >
               <SmallKpiChart
                 data={pageViewsData}
                 dates={dates}
-                pinnedIndex={pinnedIndex}
+                pinnedIndex={pageViewsPinnedIndex}
+                maxInteractiveIndex={pageViewsMaxInteractiveIndex}
                 tooltipIcon="eye"
                 tooltipDateMode={monthlyMode ? "monthYear" : "full"}
                 domain={pvDomain}
                 yTicks={pvTicks}
                 xLabels={labels}
                 stroke="#9A46FF"
-                deltaText="+24.6%"
-                deltaPositive
+                deltaText={pageViewsDelta.text}
+                deltaPositive={pageViewsDelta.positive}
+                comparisonLabel={pageViewsComparisonLabel}
               />
             </KpiCard>
 
@@ -868,7 +996,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
               delta="-24.6%"
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="p-5"
-              detailsHref={`/dashboard/organizations/${orgId}/analytics/tickets-sold`}
+              detailsHref={``}
             >
               <SmallKpiChart
                 data={ticketsSoldData}
@@ -890,10 +1018,8 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         <RecentSalesTable />
       </section>
 
-      {/* ✅ This section now matches Event Dashboard sizing */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {/* Gender Breakdown */}
           <div className={panelClass}>
             <div className="flex items-start justify-between">
               <div>
@@ -928,7 +1054,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
             </div>
           </div>
 
-          {/* Age Breakdown */}
           <div className={panelClass}>
             <div className="flex items-start justify-between">
               <div>
@@ -950,7 +1075,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
             </div>
 
             <div className="mt-4 flex flex-1 flex-col justify-center">
-              {/* ✅ Donut always shows full dataset */}
               <DonutFull
                 segments={ageSegments}
                 height={300}
@@ -961,7 +1085,6 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
                 showSliceBadges
               />
 
-              {/* ✅ Pills carousel kept; % is for full dataset */}
               <StatPillsRow
                 items={agePills}
                 withArrows

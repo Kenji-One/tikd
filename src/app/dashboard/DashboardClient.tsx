@@ -1,10 +1,8 @@
-/* ------------------------------------------------------------------ */
-/*  src/app/dashboard/DashboardClient.tsx                              */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Eye, Ticket } from "lucide-react";
 
 import KpiCard from "@/components/dashboard/cards/KpiCard";
@@ -20,13 +18,25 @@ import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
 import DateRangePicker, {
   type DateRangeValue,
 } from "@/components/ui/DateRangePicker";
+import {
+  fetchPageViewsAnalytics,
+  type PageViewsAnalyticsResponse,
+} from "@/lib/api/pageViews";
 
 /* Demo data (MONTHLY totals / points) */
 const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
   (v) => v * 1000,
 );
-const sparkB = [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120];
 const sparkC = [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480];
+
+type ExtendedAnalytics = PageViewsAnalyticsResponse & {
+  comparisons?: {
+    uniqueViewersPct?: number;
+    recurringViewersPct?: number;
+    conversionRatePct?: number;
+    liveViewersPct?: number;
+  };
+};
 
 function clampToDay(d: Date) {
   const x = new Date(d);
@@ -69,7 +79,6 @@ function monthLabels(start: Date, end: Date) {
 function monthDates(start: Date, end: Date) {
   const out: Date[] = [];
   const d = new Date(start);
-  // keep a stable mid-month day for “monthly points”
   d.setDate(21);
   while (d <= end) {
     out.push(new Date(d));
@@ -81,7 +90,7 @@ function monthDates(start: Date, end: Date) {
 function mapSeriesToCount(vals: number[], count: number) {
   if (count === vals.length) return vals;
   const a = [...vals];
-  while (a.length < count) a.push(a[a.length % vals.length]);
+  while (a.length < count) a.push(a[a.length % vals.length] ?? 0);
   return a.slice(0, count);
 }
 
@@ -122,9 +131,6 @@ function buildDailyLabels(dates: Date[]) {
   );
 }
 
-/**
- * Turn MONTHLY demo series into DAILY values for the selected range.
- */
 function dailyizeFromMonthly(monthly: number[], dates: Date[]) {
   return dates.map((d, i) => {
     const m = d.getMonth();
@@ -178,18 +184,10 @@ function fmtMonthYearLong(d: Date) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-/* --------------------------- NEW: Bucketing --------------------------- */
-/**
- * Client requirement:
- * - If selected range > 31 days, do NOT jump to months.
- * - Group every 2–3 days into one point.
- *
- * We keep monthly ONLY for "no filter applied" (current year view).
- */
 function bucketStepForRangeDays(rangeDays: number) {
-  if (rangeDays <= 31) return 1; // 1 point per day
-  if (rangeDays <= 62) return 2; // group 2 days
-  return 3; // group 3 days
+  if (rangeDays <= 31) return 1;
+  if (rangeDays <= 62) return 2;
+  return 3;
 }
 
 function fmtBucketLabel(a: Date, b: Date) {
@@ -206,12 +204,10 @@ function fmtBucketLabel(a: Date, b: Date) {
     a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 
   if (sameMonthYear) {
-    // Jan 1–3
     const m = a.toLocaleDateString(undefined, { month: "short" });
     return `${m} ${a.getDate()}–${b.getDate()}`;
   }
 
-  // Jan 30 – Feb 2
   const left = a.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
@@ -240,13 +236,13 @@ function makeBuckets(dates: Date[], step: number): Bucket[] {
 
   const out: Bucket[] = [];
   for (let i = 0; i < dates.length; i += step) {
-    const start = dates[i];
-    const end = dates[Math.min(i + step - 1, dates.length - 1)];
+    const start = dates[i]!;
+    const end = dates[Math.min(i + step - 1, dates.length - 1)]!;
     out.push({
       start,
       end,
       label: fmtBucketLabel(start, end),
-      repDate: end, // pin/hover uses the bucket end (common analytics behavior)
+      repDate: end,
     });
   }
   return out;
@@ -258,13 +254,73 @@ function sumBucket(values: number[], from: number, to: number) {
   return s;
 }
 
+function normalizeRangeDateForAnalytics(
+  input: Date,
+  boundary: "start" | "end",
+): Date {
+  return boundary === "start"
+    ? new Date(
+        Date.UTC(
+          input.getFullYear(),
+          input.getMonth(),
+          input.getDate(),
+          0,
+          0,
+          0,
+          0,
+        ),
+      )
+    : new Date(
+        Date.UTC(
+          input.getFullYear(),
+          input.getMonth(),
+          input.getDate(),
+          23,
+          59,
+          59,
+          999,
+        ),
+      );
+}
+
+function formatPercentValue(value: number) {
+  const safe = Math.abs(Number.isFinite(value) ? value : 0);
+  const fixed = safe >= 100 ? Math.round(safe).toString() : safe.toFixed(1);
+  return `${fixed}%`;
+}
+
+function deltaFromPrevious(current: number, previous: number) {
+  const safeCurrent = Number.isFinite(current) ? current : 0;
+  const safePrevious = Number.isFinite(previous) ? previous : 0;
+
+  if (safePrevious <= 0) {
+    if (safeCurrent <= 0) {
+      return {
+        text: "0%",
+        positive: true,
+      };
+    }
+
+    return {
+      text: "100%",
+      positive: true,
+    };
+  }
+
+  const pct = ((safeCurrent - safePrevious) / safePrevious) * 100;
+
+  return {
+    text: formatPercentValue(pct),
+    positive: pct >= 0,
+  };
+}
+
 export default function DashboardClient() {
   const router = useRouter();
 
   const today = useMemo(() => clampToDay(new Date()), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
 
-  // ✅ “No filter applied” should represent the CURRENT YEAR (so tooltip shows 2026 now)
   const ALL_TIME_START = useMemo(
     () => new Date(currentYear, 0, 1),
     [currentYear],
@@ -291,42 +347,93 @@ export default function DashboardClient() {
     [hasChosenRange, dateRange.end, ALL_TIME_END],
   );
 
+  const analyticsStart = useMemo(
+    () => normalizeRangeDateForAnalytics(effectiveStart, "start"),
+    [effectiveStart],
+  );
+
+  const analyticsEnd = useMemo(
+    () => normalizeRangeDateForAnalytics(effectiveEnd, "end"),
+    [effectiveEnd],
+  );
+
+  const analyticsQuery = useQuery({
+    queryKey: [
+      "global-page-views-analytics",
+      analyticsStart.toISOString(),
+      analyticsEnd.toISOString(),
+    ],
+    queryFn: () =>
+      fetchPageViewsAnalytics({
+        start: analyticsStart,
+        end: analyticsEnd,
+      }),
+  });
+
+  const analytics = analyticsQuery.data as ExtendedAnalytics | undefined;
+
   const rangeDays = useMemo(
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
     [effectiveStart, effectiveEnd],
   );
 
-  // Monthly is ONLY for "no filter applied".
   const monthlyMode = useMemo(() => !hasChosenRange, [hasChosenRange]);
 
-  // When user selects range: bucket days into 1 / 2 / 3 day points.
   const dayStep = useMemo(() => {
     if (!hasChosenRange) return 0;
     return bucketStepForRangeDays(rangeDays);
   }, [hasChosenRange, rangeDays]);
 
   const labels = useMemo(() => {
+    const liveSeries = analytics?.series ?? [];
+    if (liveSeries.length > 0) {
+      return liveSeries.map((item, index, arr) => {
+        const d = new Date(item.date);
+
+        if (!hasChosenRange) {
+          return d.toLocaleDateString(undefined, { month: "short" });
+        }
+
+        if (arr.length <= 7) {
+          return d.toLocaleDateString(undefined, { weekday: "short" });
+        }
+
+        return index % 3 === 0
+          ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+          : `${d.getDate()}`;
+      });
+    }
+
     if (monthlyMode) return monthLabels(effectiveStart, effectiveEnd);
 
     const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
 
-    // step=1 → keep the existing “daily label” logic (weekday / day / month-day)
     if (dayStep === 1) return buildDailyLabels(dailyDates);
 
-    // step=2/3 → show ranges like “Jan 1–3”
     return makeBuckets(dailyDates, dayStep).map((b) => b.label);
-  }, [monthlyMode, effectiveStart, effectiveEnd, dayStep]);
+  }, [
+    analytics?.series,
+    monthlyMode,
+    effectiveStart,
+    effectiveEnd,
+    dayStep,
+    hasChosenRange,
+  ]);
 
   const dates = useMemo(() => {
+    const liveSeries = analytics?.series ?? [];
+    if (liveSeries.length > 0) {
+      return liveSeries.map((item) => new Date(item.date));
+    }
+
     if (monthlyMode) return monthDates(effectiveStart, effectiveEnd);
 
     const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
 
     if (dayStep === 1) return dailyDates;
 
-    // representative date per bucket (end-of-bucket)
     return makeBuckets(dailyDates, dayStep).map((b) => b.repDate);
-  }, [monthlyMode, effectiveStart, effectiveEnd, dayStep]);
+  }, [analytics?.series, monthlyMode, effectiveStart, effectiveEnd, dayStep]);
 
   const revenueData = useMemo(() => {
     if (monthlyMode) return mapSeriesToCount(sparkA, labels.length);
@@ -347,24 +454,14 @@ export default function DashboardClient() {
   }, [monthlyMode, labels.length, effectiveStart, effectiveEnd, dayStep]);
 
   const pageViewsData = useMemo(() => {
-    if (monthlyMode) return mapSeriesToCount(sparkB, labels.length);
+    const liveSeries = analytics?.series.map((item) => item.views);
+    if (liveSeries?.length) {
+      if (liveSeries.length === labels.length) return liveSeries;
+      return mapSeriesToCount(liveSeries, labels.length);
+    }
 
-    const dailyDates = buildDailyDates(effectiveStart, effectiveEnd);
-    const dailyValues = dailyizeFromMonthly(sparkB, dailyDates).map((v) =>
-      Math.round(v),
-    );
-
-    if (dayStep === 1) return dailyValues;
-
-    const buckets = makeBuckets(dailyDates, dayStep);
-    return buckets.map((b) => {
-      const from = dailyDates.findIndex(
-        (d) => d.getTime() === b.start.getTime(),
-      );
-      const to = dailyDates.findIndex((d) => d.getTime() === b.end.getTime());
-      return Math.round(sumBucket(dailyValues, from, to));
-    });
-  }, [monthlyMode, labels.length, effectiveStart, effectiveEnd, dayStep]);
+    return new Array(labels.length).fill(0);
+  }, [analytics?.series, labels.length]);
 
   const ticketsSoldData = useMemo(() => {
     if (monthlyMode) return mapSeriesToCount(sparkC, labels.length);
@@ -413,9 +510,6 @@ export default function DashboardClient() {
   );
   const tsTicks = useMemo(() => niceTicks(tsDomain[1], 4), [tsDomain]);
 
-  // ✅ Pin the “active” dot to:
-  // - current month if NO date filter (monthly mode)
-  // - otherwise the last point in the selected range (daily or bucketed)
   const pinnedIndex = useMemo(() => {
     const len = revenueData.length;
     if (len <= 0) return 0;
@@ -427,20 +521,42 @@ export default function DashboardClient() {
     return len - 1;
   }, [revenueData.length, hasChosenRange, monthlyMode, today]);
 
+  const pageViewsPinnedIndex = useMemo(() => {
+    const len = pageViewsData.length;
+    if (len <= 0) return 0;
+    return len - 1;
+  }, [pageViewsData.length]);
+
+  const pageViewsMaxInteractiveIndex = useMemo(() => {
+    return Math.max(0, pageViewsData.length - 1);
+  }, [pageViewsData.length]);
+
   const pinnedSubLabel = useMemo(() => {
     const d = dates[pinnedIndex];
     if (!d) return "";
 
-    // monthly => Month Year (no day)
     if (monthlyMode) return fmtMonthYearLong(d);
 
-    // selected range => keep full date on pin (bucketed uses end-of-bucket date)
     return d.toLocaleDateString(undefined, {
       month: "long",
       day: "numeric",
       year: "numeric",
     });
   }, [dates, pinnedIndex, monthlyMode]);
+
+  const pageViewsDelta = useMemo(() => {
+    const current = pageViewsData[pageViewsPinnedIndex] ?? 0;
+    const previous = pageViewsData[pageViewsPinnedIndex - 1] ?? 0;
+    return deltaFromPrevious(current, previous);
+  }, [pageViewsData, pageViewsPinnedIndex]);
+
+  const pageViewsComparisonLabel = monthlyMode
+    ? "vs previous month."
+    : "vs previous day.";
+
+  const pageViewsHeaderDeltaLabel = analytics
+    ? `${analytics.totals.liveViewers} live`
+    : "0 live";
 
   return (
     <div className="space-y-5">
@@ -473,7 +589,6 @@ export default function DashboardClient() {
                 deltaText: "+24.6%",
                 deltaPositive: true,
               }}
-              // ✅ monthly hover should show Month Year (no day)
               tooltipDateMode={monthlyMode ? "monthYear" : "full"}
               stroke="#9A46FF"
               fillTop="#9A46FF"
@@ -483,11 +598,11 @@ export default function DashboardClient() {
           <div>
             <KpiCard
               title="Total Page Views"
-              value="400"
+              value={(analytics?.totals.pageViews ?? 0).toLocaleString()}
               valueIcon={
                 <Eye className="h-5 w-5 shrink-0 text-white/90" aria-hidden />
               }
-              delta="+24.6%"
+              delta={pageViewsHeaderDeltaLabel}
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="p-5 pb-4 border-b border-neutral-700"
               detailsHref="/dashboard/page-views"
@@ -495,15 +610,17 @@ export default function DashboardClient() {
               <SmallKpiChart
                 data={pageViewsData}
                 dates={dates}
-                pinnedIndex={pinnedIndex}
+                pinnedIndex={pageViewsPinnedIndex}
+                maxInteractiveIndex={pageViewsMaxInteractiveIndex}
                 tooltipIcon="eye"
                 tooltipDateMode={monthlyMode ? "monthYear" : "full"}
                 domain={pvDomain}
                 yTicks={pvTicks}
                 xLabels={labels}
                 stroke="#9A46FF"
-                deltaText="+24.6%"
-                deltaPositive
+                deltaText={pageViewsDelta.text}
+                deltaPositive={pageViewsDelta.positive}
+                comparisonLabel={pageViewsComparisonLabel}
               />
             </KpiCard>
 

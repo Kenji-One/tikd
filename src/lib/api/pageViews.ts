@@ -19,6 +19,8 @@ export type PageViewSeriesPoint = {
   views: number;
   uniqueViewers: number;
   recurringViewers: number;
+  ticketsSold: number;
+  conversionRate: number;
 };
 
 export type PageViewPeakDay = {
@@ -29,9 +31,16 @@ export type PageViewPeakDay = {
 
 export type PageViewsAnalyticsResponse = {
   ok: true;
+  scope: {
+    type: "event" | "organization" | "global";
+  };
   event?: {
     id: string;
     title: string;
+  };
+  organization?: {
+    id: string;
+    name: string;
   };
   range: {
     start: string;
@@ -46,6 +55,34 @@ export type PageViewsAnalyticsResponse = {
     ticketsSold: number;
     conversionRate: number;
   };
+  comparisons?: {
+    uniqueViewersPct?: number;
+    recurringViewersPct?: number;
+    conversionRatePct?: number;
+    liveViewersPct?: number;
+    baseline?: {
+      today: string;
+      previousDay: string;
+    };
+  };
+  today?: {
+    uniqueViewers: number;
+    recurringViewers: number;
+    ticketsSold: number;
+    conversionRate: number;
+    liveViewers: number;
+  };
+  intraday?: Array<{
+    bucket: string;
+    date: string;
+    label: string;
+    views: number;
+    uniqueViewers: number;
+    recurringViewers: number;
+    ticketsSold: number;
+    liveViewers: number;
+    conversionRate: number;
+  }>;
   series: PageViewSeriesPoint[];
   trafficSources: PageViewTrafficSegment[];
   mapData: PageViewMapDatum[];
@@ -54,6 +91,7 @@ export type PageViewsAnalyticsResponse = {
 
 export type FetchPageViewsAnalyticsParams = {
   eventId?: string | null;
+  orgId?: string | null;
   start?: Date | null;
   end?: Date | null;
 };
@@ -73,6 +111,7 @@ export async function fetchPageViewsAnalytics(
   const params = new URLSearchParams();
 
   appendIfPresent(params, "eventId", input.eventId ?? undefined);
+  appendIfPresent(params, "orgId", input.orgId ?? undefined);
   appendIfPresent(
     params,
     "from",

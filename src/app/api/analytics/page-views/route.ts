@@ -7,17 +7,25 @@ import { auth } from "@/lib/auth";
 import EventPageView from "@/models/EventPageView";
 import Event from "@/models/Event";
 import Ticket from "@/models/Ticket";
+import Organization from "@/models/Organization";
+import OrgTeam from "@/models/OrgTeam";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const preferredRegion = "auto";
 export const maxDuration = 10;
 
-const QuerySchema = z.object({
-  eventId: z.string().length(24).optional(),
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional(),
-});
+const QuerySchema = z
+  .object({
+    eventId: z.string().length(24).optional(),
+    orgId: z.string().length(24).optional(),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  })
+  .refine((data) => !(data.eventId && data.orgId), {
+    message: "Provide either eventId or orgId, not both.",
+    path: ["orgId"],
+  });
 
 type Granularity = "day" | "month";
 
@@ -71,6 +79,29 @@ type TotalsSnapshot = {
   conversionRate: number;
 };
 
+type ScopeContext =
+  | {
+      scope: "event";
+      eventId: string;
+      eventDoc: { _id: Types.ObjectId; title: string };
+      eventIds: Types.ObjectId[];
+      organizationDoc: null;
+    }
+  | {
+      scope: "organization";
+      eventId: undefined;
+      eventDoc: null;
+      eventIds: Types.ObjectId[];
+      organizationDoc: { _id: Types.ObjectId; name: string };
+    }
+  | {
+      scope: "global";
+      eventId: undefined;
+      eventDoc: null;
+      eventIds: Types.ObjectId[];
+      organizationDoc: null;
+    };
+
 function startOfUtcDay(input: Date): Date {
   const d = new Date(input);
   d.setUTCHours(0, 0, 0, 0);
@@ -85,26 +116,6 @@ function endOfUtcDay(input: Date): Date {
 
 function startOfUtcMonth(input: Date): Date {
   return new Date(Date.UTC(input.getUTCFullYear(), input.getUTCMonth(), 1));
-}
-
-function endOfUtcMonth(input: Date): Date {
-  return new Date(
-    Date.UTC(
-      input.getUTCFullYear(),
-      input.getUTCMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    ),
-  );
-}
-
-function startOfUtcHour(input: Date): Date {
-  const d = new Date(input);
-  d.setUTCMinutes(0, 0, 0);
-  return d;
 }
 
 function dayKey(input: Date): string {
@@ -278,9 +289,45 @@ function sourceLabel(value: string): string {
   }
 }
 
-function makeViewMatch(eventId: string | undefined, start: Date, end: Date) {
+function normalizeCountryCode(input: string): string {
+  return input.trim().toUpperCase().slice(0, 2);
+}
+
+function countryNameFromCode(code: string): string {
+  const normalized = normalizeCountryCode(code);
+  if (!normalized) return "";
+
+  try {
+    const display = new Intl.DisplayNames(["en"], { type: "region" });
+    return display.of(normalized) ?? normalized;
+  } catch {
+    return normalized;
+  }
+}
+
+function objectIdArray(values: Types.ObjectId[]): Types.ObjectId[] {
+  return values.filter((value) => Types.ObjectId.isValid(value));
+}
+
+function buildEventScopeMatch(eventIds: Types.ObjectId[]) {
+  if (eventIds.length === 0) {
+    return {
+      eventId: { $in: [] as Types.ObjectId[] },
+    };
+  }
+
+  if (eventIds.length === 1) {
+    return { eventId: eventIds[0] };
+  }
+
   return {
-    ...(eventId ? { eventId: new Types.ObjectId(eventId) } : {}),
+    eventId: { $in: eventIds },
+  };
+}
+
+function makeViewMatch(eventIds: Types.ObjectId[], start: Date, end: Date) {
+  return {
+    ...buildEventScopeMatch(eventIds),
     viewedAt: {
       $gte: start,
       $lte: end,
@@ -288,9 +335,9 @@ function makeViewMatch(eventId: string | undefined, start: Date, end: Date) {
   };
 }
 
-function makeTicketMatch(eventId: string | undefined, start: Date, end: Date) {
+function makeTicketMatch(eventIds: Types.ObjectId[], start: Date, end: Date) {
   return {
-    ...(eventId ? { eventId: new Types.ObjectId(eventId) } : {}),
+    ...buildEventScopeMatch(eventIds),
     status: "paid",
     createdAt: {
       $gte: start,
@@ -300,12 +347,12 @@ function makeTicketMatch(eventId: string | undefined, start: Date, end: Date) {
 }
 
 async function getDistinctViewerCount(
-  eventId: string | undefined,
+  eventIds: Types.ObjectId[],
   start: Date,
   end: Date,
 ): Promise<number> {
   const rows = await EventPageView.aggregate<CountRow>([
-    { $match: makeViewMatch(eventId, start, end) },
+    { $match: makeViewMatch(eventIds, start, end) },
     { $group: { _id: "$visitorId" } },
     { $count: "total" },
   ]);
@@ -314,12 +361,12 @@ async function getDistinctViewerCount(
 }
 
 async function getRecurringViewerCount(
-  eventId: string | undefined,
+  eventIds: Types.ObjectId[],
   start: Date,
   end: Date,
 ): Promise<number> {
   const rows = await EventPageView.aggregate<CountRow>([
-    { $match: makeViewMatch(eventId, start, end) },
+    { $match: makeViewMatch(eventIds, start, end) },
     {
       $group: {
         _id: "$visitorId",
@@ -340,22 +387,22 @@ async function getRecurringViewerCount(
 }
 
 async function getTicketsSoldCount(
-  eventId: string | undefined,
+  eventIds: Types.ObjectId[],
   start: Date,
   end: Date,
 ): Promise<number> {
-  return Ticket.countDocuments(makeTicketMatch(eventId, start, end));
+  return Ticket.countDocuments(makeTicketMatch(eventIds, start, end));
 }
 
 async function getTotalsSnapshot(
-  eventId: string | undefined,
+  eventIds: Types.ObjectId[],
   start: Date,
   end: Date,
 ): Promise<TotalsSnapshot> {
   const [uniqueViewers, recurringViewers, ticketsSold] = await Promise.all([
-    getDistinctViewerCount(eventId, start, end),
-    getRecurringViewerCount(eventId, start, end),
-    getTicketsSoldCount(eventId, start, end),
+    getDistinctViewerCount(eventIds, start, end),
+    getRecurringViewerCount(eventIds, start, end),
+    getTicketsSoldCount(eventIds, start, end),
   ]);
 
   const conversionRate =
@@ -369,6 +416,153 @@ async function getTotalsSnapshot(
   };
 }
 
+async function getAccessibleOrganizationIds(
+  userId: string,
+): Promise<Types.ObjectId[]> {
+  const [ownedOrgs, teamOrgs] = await Promise.all([
+    Organization.find({ ownerId: new Types.ObjectId(userId) })
+      .select("_id")
+      .lean<{ _id: Types.ObjectId }[]>(),
+
+    OrgTeam.find({
+      userId: new Types.ObjectId(userId),
+      status: "active",
+    })
+      .select("organizationId")
+      .lean<{ organizationId: Types.ObjectId }[]>(),
+  ]);
+
+  const seen = new Set<string>();
+  const ids: Types.ObjectId[] = [];
+
+  for (const org of ownedOrgs) {
+    const key = String(org._id);
+    if (!seen.has(key)) {
+      seen.add(key);
+      ids.push(org._id);
+    }
+  }
+
+  for (const member of teamOrgs) {
+    const key = String(member.organizationId);
+    if (!seen.has(key)) {
+      seen.add(key);
+      ids.push(member.organizationId);
+    }
+  }
+
+  return ids;
+}
+
+async function resolveScopeContext(input: {
+  userId: string;
+  eventId?: string;
+  orgId?: string;
+}): Promise<ScopeContext | { error: string; status: number }> {
+  if (input.eventId) {
+    const eventDoc = await Event.findById(input.eventId)
+      .select("_id title organizationId createdByUserId")
+      .lean<{
+        _id: Types.ObjectId;
+        title: string;
+        organizationId: Types.ObjectId;
+        createdByUserId: Types.ObjectId;
+      } | null>();
+
+    if (!eventDoc) {
+      return { error: "Event not found.", status: 404 };
+    }
+
+    const accessibleOrgIds = await getAccessibleOrganizationIds(input.userId);
+    const canAccess =
+      String(eventDoc.createdByUserId) === String(input.userId) ||
+      accessibleOrgIds.some(
+        (orgId) => String(orgId) === String(eventDoc.organizationId),
+      );
+
+    if (!canAccess) {
+      return { error: "Forbidden.", status: 403 };
+    }
+
+    return {
+      scope: "event",
+      eventId: input.eventId,
+      eventDoc: { _id: eventDoc._id, title: eventDoc.title },
+      eventIds: [eventDoc._id],
+      organizationDoc: null,
+    };
+  }
+
+  if (input.orgId) {
+    const orgDoc = await Organization.findById(input.orgId)
+      .select("_id name ownerId")
+      .lean<{
+        _id: Types.ObjectId;
+        name: string;
+        ownerId: Types.ObjectId;
+      } | null>();
+
+    if (!orgDoc) {
+      return { error: "Organization not found.", status: 404 };
+    }
+
+    const accessibleOrgIds = await getAccessibleOrganizationIds(input.userId);
+    const canAccess =
+      String(orgDoc.ownerId) === String(input.userId) ||
+      accessibleOrgIds.some((orgId) => String(orgId) === String(orgDoc._id));
+
+    if (!canAccess) {
+      return { error: "Forbidden.", status: 403 };
+    }
+
+    const eventIds = await Event.find({ organizationId: orgDoc._id })
+      .select("_id")
+      .lean<{ _id: Types.ObjectId }[]>();
+
+    return {
+      scope: "organization",
+      eventId: undefined,
+      eventDoc: null,
+      eventIds: objectIdArray(eventIds.map((item) => item._id)),
+      organizationDoc: { _id: orgDoc._id, name: orgDoc.name },
+    };
+  }
+
+  const accessibleOrgIds = await getAccessibleOrganizationIds(input.userId);
+
+  const createdEventIds = await Event.find({
+    createdByUserId: new Types.ObjectId(input.userId),
+  })
+    .select("_id")
+    .lean<{ _id: Types.ObjectId }[]>();
+
+  const orgEventIds =
+    accessibleOrgIds.length > 0
+      ? await Event.find({ organizationId: { $in: accessibleOrgIds } })
+          .select("_id")
+          .lean<{ _id: Types.ObjectId }[]>()
+      : [];
+
+  const seen = new Set<string>();
+  const merged: Types.ObjectId[] = [];
+
+  for (const item of [...createdEventIds, ...orgEventIds]) {
+    const key = String(item._id);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item._id);
+    }
+  }
+
+  return {
+    scope: "global",
+    eventId: undefined,
+    eventDoc: null,
+    eventIds: merged,
+    organizationDoc: null,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -378,6 +572,7 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const parsed = QuerySchema.safeParse({
     eventId: url.searchParams.get("eventId") ?? undefined,
+    orgId: url.searchParams.get("orgId") ?? undefined,
     from: url.searchParams.get("from") ?? undefined,
     to: url.searchParams.get("to") ?? undefined,
   });
@@ -386,6 +581,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { error: "Invalid analytics query." },
       { status: 400 },
+    );
+  }
+
+  const scopeContext = await resolveScopeContext({
+    userId: session.user.id,
+    eventId: parsed.data.eventId,
+    orgId: parsed.data.orgId,
+  });
+
+  if ("error" in scopeContext) {
+    return NextResponse.json(
+      { error: scopeContext.error },
+      { status: scopeContext.status },
     );
   }
 
@@ -402,9 +610,8 @@ export async function GET(request: NextRequest) {
     rawStart.getTime() <= rawEnd.getTime() ? rawEnd : rawStart,
   );
 
-  const eventId = parsed.data.eventId;
   const granularity = chooseGranularity(start, end);
-  const viewMatch = makeViewMatch(eventId, start, end);
+  const viewMatch = makeViewMatch(scopeContext.eventIds, start, end);
 
   const todayStart = startOfUtcDay(now);
   const todayEnd = endOfUtcDay(now);
@@ -415,50 +622,51 @@ export async function GET(request: NextRequest) {
   const previousLiveStart = new Date(liveStart.getTime() - 86_400_000);
   const previousLiveEnd = new Date(now.getTime() - 86_400_000);
 
-  const [eventDoc, totalPageViews, liveRows, previousLiveRows] =
-    await Promise.all([
-      eventId
-        ? Event.findById(eventId)
-            .select("_id title")
-            .lean<{ _id: Types.ObjectId; title: string } | null>()
-        : Promise.resolve(null),
+  const [totalPageViews, liveRows, previousLiveRows] = await Promise.all([
+    EventPageView.countDocuments(viewMatch),
 
-      EventPageView.countDocuments(viewMatch),
+    EventPageView.aggregate<CountRow>([
+      {
+        $match: makeViewMatch(scopeContext.eventIds, liveStart, now),
+      },
+      {
+        $group: {
+          _id: "$visitorId",
+        },
+      },
+      {
+        $count: "total",
+      },
+    ]),
 
-      EventPageView.aggregate<CountRow>([
-        {
-          $match: makeViewMatch(eventId, liveStart, now),
+    EventPageView.aggregate<CountRow>([
+      {
+        $match: makeViewMatch(
+          scopeContext.eventIds,
+          previousLiveStart,
+          previousLiveEnd,
+        ),
+      },
+      {
+        $group: {
+          _id: "$visitorId",
         },
-        {
-          $group: {
-            _id: "$visitorId",
-          },
-        },
-        {
-          $count: "total",
-        },
-      ]),
-
-      EventPageView.aggregate<CountRow>([
-        {
-          $match: makeViewMatch(eventId, previousLiveStart, previousLiveEnd),
-        },
-        {
-          $group: {
-            _id: "$visitorId",
-          },
-        },
-        {
-          $count: "total",
-        },
-      ]),
-    ]);
+      },
+      {
+        $count: "total",
+      },
+    ]),
+  ]);
 
   const [totalsSnapshot, todaySnapshot, previousDaySnapshot] =
     await Promise.all([
-      getTotalsSnapshot(eventId, start, end),
-      getTotalsSnapshot(eventId, todayStart, todayEnd),
-      getTotalsSnapshot(eventId, previousDayStart, previousDayEnd),
+      getTotalsSnapshot(scopeContext.eventIds, start, end),
+      getTotalsSnapshot(scopeContext.eventIds, todayStart, todayEnd),
+      getTotalsSnapshot(
+        scopeContext.eventIds,
+        previousDayStart,
+        previousDayEnd,
+      ),
     ]);
 
   const [seriesRows, ticketSeriesRows, trafficRows, mapRows, peakRows] =
@@ -505,7 +713,7 @@ export async function GET(request: NextRequest) {
       ]),
 
       Ticket.aggregate<TicketSeriesRow>([
-        { $match: makeTicketMatch(eventId, start, end) },
+        { $match: makeTicketMatch(scopeContext.eventIds, start, end) },
         {
           $group: {
             _id:
@@ -557,13 +765,13 @@ export async function GET(request: NextRequest) {
           },
         },
         { $sort: { viewers: -1 } },
-        { $limit: 30 },
+        { $limit: 60 },
       ]),
 
       EventPageView.aggregate<PeakRow>([
         {
           $match: makeViewMatch(
-            eventId,
+            scopeContext.eventIds,
             startOfUtcDay(
               new Date(
                 Math.max(start.getTime(), end.getTime() - 6 * 86_400_000),
@@ -590,7 +798,7 @@ export async function GET(request: NextRequest) {
 
   const [hourlyViewRows, hourlyTicketRows] = await Promise.all([
     EventPageView.aggregate<HourlyViewsRow>([
-      { $match: makeViewMatch(eventId, todayStart, todayEnd) },
+      { $match: makeViewMatch(scopeContext.eventIds, todayStart, todayEnd) },
       {
         $group: {
           _id: {
@@ -622,7 +830,7 @@ export async function GET(request: NextRequest) {
     ]),
 
     Ticket.aggregate<HourlyTicketsRow>([
-      { $match: makeTicketMatch(eventId, todayStart, todayEnd) },
+      { $match: makeTicketMatch(scopeContext.eventIds, todayStart, todayEnd) },
       {
         $group: {
           _id: {
@@ -674,13 +882,16 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const mapData = mapRows.map((row) => ({
-    key: row._id,
-    label: row._id,
-    viewers: row.viewers,
-    revenue: 0,
-    tickets: 0,
-  }));
+  const mapData = mapRows.map((row) => {
+    const code = normalizeCountryCode(row._id);
+    return {
+      key: code,
+      label: countryNameFromCode(code),
+      viewers: row.viewers,
+      revenue: 0,
+      tickets: 0,
+    };
+  });
 
   const peakBase = buildPeakBuckets(end);
   const peakMap = new Map(peakRows.map((row) => [row._id, row.views]));
@@ -696,6 +907,9 @@ export async function GET(request: NextRequest) {
   const hourlyTicketsMap = new Map(
     hourlyTicketRows.map((row) => [row._id, row.ticketsSold]),
   );
+
+  const liveViewers = liveRows[0]?.total ?? 0;
+  const previousLiveViewers = previousLiveRows[0]?.total ?? 0;
 
   const intraday = hourlyBase.map((bucket, index) => {
     const row = hourlyViewsMap.get(bucket.bucket);
@@ -719,16 +933,24 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  const liveViewers = liveRows[0]?.total ?? 0;
-  const previousLiveViewers = previousLiveRows[0]?.total ?? 0;
-
   return NextResponse.json({
     ok: true,
-    ...(eventDoc
+    scope: {
+      type: scopeContext.scope,
+    },
+    ...(scopeContext.eventDoc
       ? {
           event: {
-            id: String(eventDoc._id),
-            title: eventDoc.title,
+            id: String(scopeContext.eventDoc._id),
+            title: scopeContext.eventDoc.title,
+          },
+        }
+      : {}),
+    ...(scopeContext.organizationDoc
+      ? {
+          organization: {
+            id: String(scopeContext.organizationDoc._id),
+            name: scopeContext.organizationDoc.name,
           },
         }
       : {}),

@@ -55,6 +55,49 @@ function parseNumber(value: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function countryCodeFromAcceptLanguage(headerValue: string): string {
+  if (!headerValue) return "";
+
+  const candidates = headerValue
+    .split(",")
+    .map((part) => part.split(";")[0]?.trim() ?? "")
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const pieces = candidate.split("-");
+    const region = pieces[1] ?? "";
+    const normalized = normalizeCountryCode(region);
+    if (normalized.length === 2) return normalized;
+  }
+
+  return "";
+}
+
+function resolveCountryCode(request: NextRequest): string {
+  const explicitHeaders = [
+    "x-vercel-ip-country",
+    "cf-ipcountry",
+    "x-country-code",
+    "x-appengine-country",
+  ];
+
+  for (const header of explicitHeaders) {
+    const normalized = normalizeCountryCode(safeHeader(request, header));
+    if (normalized.length === 2 && normalized !== "XX") {
+      return normalized;
+    }
+  }
+
+  const fromLanguage = countryCodeFromAcceptLanguage(
+    safeHeader(request, "accept-language"),
+  );
+  if (fromLanguage.length === 2 && fromLanguage !== "XX") {
+    return fromLanguage;
+  }
+
+  return "";
+}
+
 function classifyTrafficSource(input: {
   referrer: string;
   currentUrl: string;
@@ -202,9 +245,7 @@ export async function POST(
     utmSource: parsedBody.data.utmSource,
   });
 
-  const countryCode = normalizeCountryCode(
-    safeHeader(request, "x-vercel-ip-country"),
-  );
+  const countryCode = resolveCountryCode(request);
 
   await EventPageView.create({
     eventId: new Types.ObjectId(eventId),

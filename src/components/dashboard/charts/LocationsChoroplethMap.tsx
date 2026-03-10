@@ -113,11 +113,20 @@ function ConfigureMap({
 
   useEffect(() => {
     map.setView(center, zoom, { animate: false });
+    map.invalidateSize();
+
+    const resizeTimer = window.setTimeout(() => {
+      map.invalidateSize();
+    }, 60);
 
     if (!showZoomControls) {
       const m = map as L.Map & { zoomControl?: L.Control.Zoom };
       m.zoomControl?.remove?.();
     }
+
+    return () => {
+      window.clearTimeout(resizeTimer);
+    };
   }, [map, center, zoom, showZoomControls]);
 
   return null;
@@ -142,11 +151,39 @@ function BaseTiles() {
       layerRef.current.addTo(map);
     }
 
+    const resizeHandler = () => map.invalidateSize();
+    window.addEventListener("resize", resizeHandler);
+
     return () => {
+      window.removeEventListener("resize", resizeHandler);
       if (layerRef.current) {
         map.removeLayer(layerRef.current);
         layerRef.current = null;
       }
+    };
+  }, [map]);
+
+  return null;
+}
+
+function CloseTooltipOnMapInteractions() {
+  const map = useMap();
+
+  useEffect(() => {
+    const closeAll = () => {
+      map.closeTooltip();
+    };
+
+    map.on("dragstart", closeAll);
+    map.on("zoomstart", closeAll);
+    map.on("movestart", closeAll);
+    map.on("mousedown", closeAll);
+
+    return () => {
+      map.off("dragstart", closeAll);
+      map.off("zoomstart", closeAll);
+      map.off("movestart", closeAll);
+      map.off("mousedown", closeAll);
     };
   }, [map]);
 
@@ -204,7 +241,7 @@ export default function LocationsChoroplethMap({
     };
   }, [resolvedGeoUrl]);
 
-  const { byKey, maxValue } = useMemo(() => {
+  const { byKey, maxValue, hasAnyMatchedData } = useMemo(() => {
     const m = new Map<string, ChoroplethDatum>();
 
     const add = (k: unknown, datum: ChoroplethDatum) => {
@@ -219,6 +256,8 @@ export default function LocationsChoroplethMap({
     }
 
     let max = 0;
+    let any = false;
+
     for (const d of data) {
       const v =
         effectiveMode === "revenue"
@@ -229,10 +268,25 @@ export default function LocationsChoroplethMap({
 
       if (!Number.isFinite(v)) continue;
       max = Math.max(max, v);
+      if (v > 0) any = true;
     }
 
-    return { byKey: m, maxValue: max };
+    return { byKey: m, maxValue: max, hasAnyMatchedData: any };
   }, [data, effectiveMode]);
+
+  const geoLayerKey = useMemo(() => {
+    const fingerprint = data
+      .map((d) => {
+        const viewers = Number(d.viewers ?? 0);
+        const revenue = Number(d.revenue ?? 0);
+        const tickets = Number(d.tickets ?? 0);
+        return `${normalizeMapKey(d.key)}:${viewers}:${revenue}:${tickets}`;
+      })
+      .sort()
+      .join("|");
+
+    return `${scope}::${effectiveMode}::${fingerprint}`;
+  }, [data, effectiveMode, scope]);
 
   const label =
     effectiveMode === "revenue"
@@ -293,7 +347,9 @@ export default function LocationsChoroplethMap({
       }
     }
 
-    if (!datum) return { value: 0, found: false };
+    if (!datum) {
+      return { value: 0, found: false };
+    }
 
     const value =
       effectiveMode === "revenue"
@@ -335,7 +391,7 @@ export default function LocationsChoroplethMap({
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full min-h-[420px]">
       <div
         className="pointer-events-none absolute inset-0 z-[1]"
         style={{
@@ -345,6 +401,8 @@ export default function LocationsChoroplethMap({
       />
 
       <RLMapContainer
+        center={mapCenter}
+        zoom={mapZoom}
         scrollWheelZoom={false}
         zoomControl={false}
         className="tikd-leaflet-map h-full w-full"
@@ -355,26 +413,30 @@ export default function LocationsChoroplethMap({
           showZoomControls={showZoomControls}
         />
         <BaseTiles />
+        <CloseTooltipOnMapInteractions />
 
         {fc && (
           <RLGeoJSON
+            key={geoLayerKey}
             data={fc}
             style={(feature) => {
               const f = feature as GeoFeature;
               const { value, found } = getFeatureValue(f);
 
-              const v01 = found
-                ? Math.max(0.28, valueTo01(value))
-                : 0.12 +
-                  pseudo01(`missing:${featureKeys(f).join("|")}`, seed) * 0.08;
+              const useZeroState = !found;
+              const v01 =
+                found && hasAnyMatchedData
+                  ? Math.max(0.28, valueTo01(value))
+                  : 0.14 +
+                    pseudo01(`zero:${featureKeys(f).join("|")}`, seed) * 0.04;
 
               return {
                 color: found
                   ? "rgba(255,255,255,0.18)"
-                  : "rgba(255,255,255,0.12)",
-                weight: found ? 1.05 : 0.9,
-                fillColor: found ? rampColor(v01) : "#33204F",
-                fillOpacity: found ? 0.88 : 0.42,
+                  : "rgba(255,255,255,0.10)",
+                weight: found ? 1.05 : 0.85,
+                fillColor: useZeroState ? "#2A1942" : rampColor(v01),
+                fillOpacity: found ? 0.88 : 0.34,
               };
             }}
             onEachFeature={(feature, layer) => {
@@ -382,15 +444,11 @@ export default function LocationsChoroplethMap({
               const regionName = featureTitle(f);
               const { value, found } = getFeatureValue(f);
 
-              const valueLine = found
-                ? `<div class="tikd-map-tooltip__value">${formatCompact(value, prefix)}</div>`
-                : `<div class="tikd-map-tooltip__nodata">No data yet</div>`;
-
               const tooltip = `
                 <div class="tikd-map-tooltip__wrap">
                   <div class="tikd-map-tooltip__title">${regionName}</div>
                   <div class="tikd-map-tooltip__meta">${label}</div>
-                  ${valueLine}
+                  <div class="tikd-map-tooltip__value">${formatCompact(found ? value : 0, prefix)}</div>
                 </div>
               `;
 
@@ -408,18 +466,23 @@ export default function LocationsChoroplethMap({
                 path.setStyle({
                   weight: 1.7,
                   color: "rgba(154,70,255,0.55)",
-                  fillOpacity: found ? 0.96 : 0.56,
+                  fillOpacity: found ? 0.96 : 0.5,
                 });
               });
 
               path.on("mouseout", () => {
+                path.closeTooltip();
                 path.setStyle({
-                  weight: found ? 1.05 : 0.9,
+                  weight: found ? 1.05 : 0.85,
                   color: found
                     ? "rgba(255,255,255,0.18)"
-                    : "rgba(255,255,255,0.12)",
-                  fillOpacity: found ? 0.88 : 0.42,
+                    : "rgba(255,255,255,0.10)",
+                  fillOpacity: found ? 0.88 : 0.34,
                 });
+              });
+
+              path.on("mousedown", () => {
+                path.closeTooltip();
               });
             }}
           />

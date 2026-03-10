@@ -608,7 +608,7 @@ export default function OrganizationsClient() {
                       const desc = clampText(
                         o.description?.trim() ||
                           (site ? site : "Public profile"),
-                        52,
+                        42,
                       );
 
                       const roleMeta = roleMetaFromOrg(o);

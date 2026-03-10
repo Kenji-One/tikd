@@ -79,7 +79,7 @@ function monthLabels(start: Date, end: Date) {
 function monthDates(start: Date, end: Date) {
   const out: Date[] = [];
   const d = new Date(start);
-  d.setDate(21);
+  d.setDate(1);
   while (d <= end) {
     out.push(new Date(d));
     d.setMonth(d.getMonth() + 1);
@@ -182,6 +182,71 @@ function niceTicks(maxValue: number, targetCount = 6) {
 
 function fmtMonthYearLong(d: Date) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function formatPercentValue(value: number) {
+  const safe = Math.abs(Number.isFinite(value) ? value : 0);
+  const fixed = safe >= 100 ? Math.round(safe).toString() : safe.toFixed(1);
+  return `${fixed}%`;
+}
+
+function deltaFromPrevious(current: number, previous: number) {
+  const safeCurrent = Number.isFinite(current) ? current : 0;
+  const safePrevious = Number.isFinite(previous) ? previous : 0;
+
+  if (safePrevious <= 0) {
+    if (safeCurrent <= 0) {
+      return {
+        text: "0%",
+        positive: true,
+      };
+    }
+
+    return {
+      text: "100%",
+      positive: true,
+    };
+  }
+
+  const pct = ((safeCurrent - safePrevious) / safePrevious) * 100;
+
+  return {
+    text: formatPercentValue(pct),
+    positive: pct >= 0,
+  };
+}
+
+function makeUtcDate(year: number, monthIndex: number, day: number) {
+  return new Date(Date.UTC(year, monthIndex, day, 12, 0, 0, 0));
+}
+
+function normalizeRangeDateForAnalytics(
+  input: Date,
+  boundary: "start" | "end",
+): Date {
+  return boundary === "start"
+    ? new Date(
+        Date.UTC(
+          input.getFullYear(),
+          input.getMonth(),
+          input.getDate(),
+          0,
+          0,
+          0,
+          0,
+        ),
+      )
+    : new Date(
+        Date.UTC(
+          input.getFullYear(),
+          input.getMonth(),
+          input.getDate(),
+          23,
+          59,
+          59,
+          999,
+        ),
+      );
 }
 
 /* ----------------------------- Metrics ----------------------------- */
@@ -492,11 +557,11 @@ export default function EventSummaryPage() {
   const currentYear = useMemo(() => today.getFullYear(), [today]);
 
   const ALL_TIME_START = useMemo(
-    () => new Date(currentYear, 0, 1),
+    () => makeUtcDate(currentYear, 0, 1),
     [currentYear],
   );
   const ALL_TIME_END = useMemo(
-    () => new Date(currentYear, 11, 31),
+    () => makeUtcDate(currentYear, 11, 31),
     [currentYear],
   );
 
@@ -516,18 +581,28 @@ export default function EventSummaryPage() {
     [hasChosenRange, dateRange.end, ALL_TIME_END],
   );
 
+  const analyticsStart = useMemo(
+    () => normalizeRangeDateForAnalytics(effectiveStart, "start"),
+    [effectiveStart],
+  );
+
+  const analyticsEnd = useMemo(
+    () => normalizeRangeDateForAnalytics(effectiveEnd, "end"),
+    [effectiveEnd],
+  );
+
   const analyticsQuery = useQuery({
     queryKey: [
       "event-page-views-analytics",
       eventId,
-      effectiveStart.toISOString(),
-      effectiveEnd.toISOString(),
+      analyticsStart.toISOString(),
+      analyticsEnd.toISOString(),
     ],
     queryFn: () =>
       fetchPageViewsAnalytics({
         eventId: eventId ?? null,
-        start: effectiveStart,
-        end: effectiveEnd,
+        start: analyticsStart,
+        end: analyticsEnd,
       }),
     enabled: !!eventId,
   });
@@ -627,7 +702,10 @@ export default function EventSummaryPage() {
 
   const pageViewsData = useMemo(() => {
     const liveSeries = analytics?.series.map((item) => item.views);
-    if (liveSeries?.length) return liveSeries;
+    if (liveSeries?.length) {
+      if (liveSeries.length === labels.length) return liveSeries;
+      return mapSeriesToCount(liveSeries, labels.length);
+    }
 
     if (!dailyMode) {
       return mapSeriesToCount(
@@ -701,6 +779,35 @@ export default function EventSummaryPage() {
       year: "numeric",
     });
   }, [dates, pinnedIndex, dailyMode]);
+
+  const pageViewsPinnedIndex = useMemo(() => {
+    const len = pageViewsData.length;
+    if (len <= 0) return 0;
+
+    if (dailyMode) return len - 1;
+
+    const currentMonthIndex =
+      today.getFullYear() === effectiveStart.getFullYear()
+        ? today.getMonth() - effectiveStart.getMonth()
+        : len - 1;
+
+    return Math.min(Math.max(currentMonthIndex, 0), len - 1);
+  }, [pageViewsData.length, dailyMode, today, effectiveStart]);
+
+  const pageViewsMaxInteractiveIndex = useMemo(() => {
+    if (dailyMode) return Math.max(0, pageViewsData.length - 1);
+    return pageViewsPinnedIndex;
+  }, [dailyMode, pageViewsData.length, pageViewsPinnedIndex]);
+
+  const pageViewsDelta = useMemo(() => {
+    const current = pageViewsData[pageViewsPinnedIndex] ?? 0;
+    const previous = pageViewsData[pageViewsPinnedIndex - 1] ?? 0;
+    return deltaFromPrevious(current, previous);
+  }, [pageViewsData, pageViewsPinnedIndex]);
+
+  const pageViewsComparisonLabel = dailyMode
+    ? "vs previous day."
+    : "vs previous month.";
 
   const breakdownTotal = useMemo(() => {
     return stableDummyTotal(eventId ?? "no-event");
@@ -797,7 +904,7 @@ export default function EventSummaryPage() {
     return `$${v.toFixed(0)}`;
   }, [metrics.revenue]);
 
-  const pageViewsDeltaLabel = analytics
+  const pageViewsHeaderDeltaLabel = analytics
     ? `${analytics.totals.liveViewers} live`
     : "0 live";
 
@@ -810,7 +917,7 @@ export default function EventSummaryPage() {
             value={kpiRevenueValue}
             delta="+24.6%"
             accent="from-[#7C3AED] to-[#9333EA]"
-            className="border-neutral-700 pr-6 py-5 lg:border-r"
+            className="border-neutral-700 py-5 pr-6 lg:border-r"
             stretchChart
             detailsHref={`/dashboard/events/${eventId ?? ""}/summary`}
             toolbar={
@@ -845,7 +952,7 @@ export default function EventSummaryPage() {
               valueIcon={
                 <Eye className="h-5 w-5 shrink-0 text-white/90" aria-hidden />
               }
-              delta={pageViewsDeltaLabel}
+              delta={pageViewsHeaderDeltaLabel}
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="border-neutral-700 p-5 lg:border-b"
               detailsHref={`/dashboard/page-views?eventId=${eventId ?? ""}`}
@@ -853,15 +960,17 @@ export default function EventSummaryPage() {
               <SmallKpiChart
                 data={pageViewsData}
                 dates={dates}
-                pinnedIndex={Math.max(0, pageViewsData.length - 1)}
+                pinnedIndex={pageViewsPinnedIndex}
+                maxInteractiveIndex={pageViewsMaxInteractiveIndex}
                 tooltipIcon="eye"
                 tooltipDateMode={dailyMode ? "full" : "monthYear"}
                 domain={pvDomain}
                 yTicks={pvTicks}
                 xLabels={labels}
                 stroke="#9A46FF"
-                deltaText={pageViewsDeltaLabel}
-                deltaPositive
+                deltaText={pageViewsDelta.text}
+                deltaPositive={pageViewsDelta.positive}
+                comparisonLabel={pageViewsComparisonLabel}
               />
             </KpiCard>
 
@@ -904,7 +1013,7 @@ export default function EventSummaryPage() {
           <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
+                <div className="text-[16px] font-extrabold leading-none text-neutral-400 uppercase">
                   Gender Breakdown
                 </div>
               </div>
@@ -939,7 +1048,7 @@ export default function EventSummaryPage() {
           <div className="rounded-lg border border-neutral-700 bg-neutral-900 p-5">
             <div className="flex items-start justify-between">
               <div>
-                <div className="text-[16px] uppercase text-neutral-400 font-extrabold leading-none">
+                <div className="text-[16px] font-extrabold leading-none text-neutral-400 uppercase">
                   Age Breakdown
                 </div>
               </div>

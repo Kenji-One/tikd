@@ -19,9 +19,11 @@ import {
 type Metric = "revenue" | "views" | "tickets";
 
 type Props = {
-  /** Length 7 (Mon..Sun) values in absolute numbers */
+  /** Usually length 7 values */
   data: number[];
-  /** 0-based index to accent (e.g., 4 = Friday). */
+  /** Optional labels matching the data order */
+  labels?: string[];
+  /** 0-based index to accent */
   highlightIndex?: number;
   /** What this chart represents (controls tooltip label + formatting) */
   metric?: Metric;
@@ -35,7 +37,7 @@ const AXIS_TICK_STYLE = {
   letterSpacing: -0.2 as number,
 };
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DEFAULT_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** Chart row shape */
 type Row = {
@@ -45,8 +47,17 @@ type Row = {
 };
 
 /** Axis tick: compact numeric (no $) */
-const fmtAxisK = (v: number) =>
-  v >= 1000 ? `${Math.round(v / 1000)}K` : `${v}`;
+const fmtAxisK = (v: number) => {
+  if (v >= 1_000_000) {
+    const m = Math.round((v / 1_000_000) * 10) / 10;
+    return `${String(m).replace(/\.0$/, "")}M`;
+  }
+  if (v >= 1000) {
+    const k = Math.round((v / 1000) * 10) / 10;
+    return `${String(k).replace(/\.0$/, "")}K`;
+  }
+  return `${Math.round(v)}`;
+};
 
 /** Count compact (Views/Tickets) */
 function fmtCountCompact(v: number) {
@@ -56,7 +67,10 @@ function fmtCountCompact(v: number) {
     const m = Math.round((n / 1_000_000) * 10) / 10;
     return `${String(m).replace(/\.0$/, "")}M`;
   }
-  if (n >= 1000) return `${Math.round(n / 1000)}K`;
+  if (n >= 1000) {
+    const k = Math.round((n / 1000) * 10) / 10;
+    return `${String(k).replace(/\.0$/, "")}K`;
+  }
   return `${n}`;
 }
 
@@ -68,12 +82,46 @@ function fmtMoneyCompact(v: number) {
     const m = Math.round((n / 1_000_000) * 10) / 10;
     return `$${String(m).replace(/\.0$/, "")}M`;
   }
-  if (n >= 1000) return `$${Math.round(n / 1000)}K`;
+  if (n >= 1000) {
+    const k = Math.round((n / 1000) * 10) / 10;
+    return `$${String(k).replace(/\.0$/, "")}K`;
+  }
   return `$${n}`;
 }
 
+function buildNiceMax(value: number) {
+  const safe = Math.max(0, Number.isFinite(value) ? value : 0);
+  if (safe <= 0) return 1;
+
+  const exponent = Math.floor(Math.log10(safe));
+  const magnitude = Math.pow(10, exponent);
+  const normalized = safe / magnitude;
+
+  let niceNormalized = 1;
+  if (normalized <= 1) niceNormalized = 1;
+  else if (normalized <= 2) niceNormalized = 2;
+  else if (normalized <= 5) niceNormalized = 5;
+  else niceNormalized = 10;
+
+  return niceNormalized * magnitude;
+}
+
+function buildTicks(maxValue: number) {
+  const safeMax = Math.max(1, buildNiceMax(maxValue));
+  const tickCount = 5;
+  const step = safeMax / (tickCount - 1);
+
+  const ticks = Array.from({ length: tickCount }, (_, i) =>
+    Math.round(step * i),
+  );
+
+  ticks[0] = 0;
+  ticks[ticks.length - 1] = safeMax;
+
+  return ticks;
+}
+
 /* ----------------------------- Tooltip ----------------------------- */
-/** Local tooltip props (avoids Recharts TS mismatches across versions) */
 type TooltipPayloadItem = { value?: number | string };
 type SimpleTooltipProps = {
   active?: boolean;
@@ -134,19 +182,41 @@ function PeakDaysTooltip({
   );
 }
 
-function BarsWeek({ data, highlightIndex = 4, metric = "revenue" }: Props) {
+function BarsWeek({
+  data,
+  labels = DEFAULT_DAY_LABELS,
+  highlightIndex,
+  metric = "revenue",
+}: Props) {
+  const safeLabels = useMemo(() => {
+    if (!labels.length) return DEFAULT_DAY_LABELS;
+    return data.map((_, i) => labels[i] ?? `D${i + 1}`);
+  }, [data, labels]);
+
+  const resolvedHighlightIndex = useMemo(() => {
+    if (
+      typeof highlightIndex === "number" &&
+      highlightIndex >= 0 &&
+      highlightIndex < data.length
+    ) {
+      return highlightIndex;
+    }
+    return data.length > 0 ? data.length - 1 : -1;
+  }, [data.length, highlightIndex]);
+
   const rows: Row[] = useMemo(
     () =>
       data.map((v, i) => ({
-        name: DAY_LABELS[i] ?? `D${i + 1}`,
-        value: v,
-        accent: i === highlightIndex,
+        name: safeLabels[i] ?? `D${i + 1}`,
+        value: Number.isFinite(v) ? v : 0,
+        accent: i === resolvedHighlightIndex,
       })),
-    [data, highlightIndex],
+    [data, resolvedHighlightIndex, safeLabels],
   );
 
-  // Keep your nice “big range” default, but adapt if data exceeds it
-  const maxY = Math.max(250000, ...(data.length ? data : [0]));
+  const rawMax = Math.max(0, ...(data.length ? data : [0]));
+  const maxY = buildNiceMax(rawMax);
+  const yTicks = buildTicks(maxY);
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -156,7 +226,7 @@ function BarsWeek({ data, highlightIndex = 4, metric = "revenue" }: Props) {
         <YAxis
           dataKey="value"
           domain={[0, maxY]}
-          ticks={[0, 25_000, 50_000, 100_000, 150_000, 200_000, 250_000]}
+          ticks={yTicks}
           tick={{ ...AXIS_TICK_STYLE, textAnchor: "end" }}
           tickFormatter={fmtAxisK}
           width={40}
@@ -176,6 +246,7 @@ function BarsWeek({ data, highlightIndex = 4, metric = "revenue" }: Props) {
           dataKey="value"
           radius={[10, 10, 0, 0]}
           isAnimationActive={false}
+          minPointSize={rows.some((row) => row.value > 0) ? 6 : 0}
           activeBar={<Rectangle radius={[10, 10, 0, 0]} fill="#AA73FF" />}
         >
           {rows.map((r, i) => (

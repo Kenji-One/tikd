@@ -171,9 +171,31 @@ function fallbackTrafficSegments(): DonutSegment[] {
   return [{ value: 0, label: "No Data", color: "#8C8CA8" }];
 }
 
+function buildHeading(analytics?: ExtendedAnalytics) {
+  if (!analytics) return "Page Views Detailed View";
+
+  if (analytics.scope?.type === "event" && analytics.event?.title) {
+    return `${analytics.event.title} Page Views`;
+  }
+
+  if (
+    analytics.scope?.type === "organization" &&
+    analytics.organization?.name
+  ) {
+    return `${analytics.organization.name} Page Views`;
+  }
+
+  if (analytics.scope?.type === "global") {
+    return "All Page Views";
+  }
+
+  return "Page Views Detailed View";
+}
+
 export default function FinancesPageViewsDetailedPage() {
   const searchParams = useSearchParams();
   const eventId = searchParams.get("eventId");
+  const orgId = searchParams.get("orgId");
 
   const [dateRange, setDateRange] = useState<DateRangeValue>(() => {
     const end = new Date();
@@ -185,13 +207,15 @@ export default function FinancesPageViewsDetailedPage() {
   const analyticsQuery = useQuery({
     queryKey: [
       "page-views-analytics",
-      eventId ?? "all",
+      eventId ?? "no-event",
+      orgId ?? "no-org",
       dateRange.start instanceof Date ? dateRange.start.toISOString() : "none",
       dateRange.end instanceof Date ? dateRange.end.toISOString() : "none",
     ],
     queryFn: () =>
       fetchPageViewsAnalytics({
         eventId,
+        orgId,
         start: dateRange.start as Date,
         end: dateRange.end as Date,
       }),
@@ -219,15 +243,21 @@ export default function FinancesPageViewsDetailedPage() {
     ? analytics.trafficSources
     : fallbackTrafficSegments();
 
+  const peakDays = analytics?.peakDays ?? [];
   const barsData =
-    analytics?.peakDays.length === 7
-      ? analytics.peakDays.map((item) => item.views)
+    peakDays.length === 7
+      ? peakDays.map((item) => item.views)
       : [0, 0, 0, 0, 0, 0, 0];
 
-  const heading = analytics?.event?.title
-    ? `${analytics.event.title} Page Views`
-    : "Page Views Detailed View";
+  const barsLabels =
+    peakDays.length === 7
+      ? peakDays.map((item) => item.label)
+      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+  const barsHighlightIndex =
+    peakDays.length === 7 ? peakDays.length - 1 : undefined;
+
+  const heading = buildHeading(analytics);
   const miniCards = useMemo(() => buildMiniCards(analytics), [analytics]);
 
   return (
@@ -270,6 +300,8 @@ export default function FinancesPageViewsDetailedPage() {
       barsLabel="PEAK DAYS"
       barsHeading=""
       barsData={barsData}
+      barsLabels={barsLabels}
+      barsHighlightIndex={barsHighlightIndex}
       mode="views"
       mapData={analytics?.mapData ?? []}
     />

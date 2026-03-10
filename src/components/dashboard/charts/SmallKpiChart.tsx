@@ -1,6 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  src/components/dashboard/charts/SmallKpiChart.tsx                 */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import {
@@ -29,6 +26,9 @@ type Props = {
   /** Always-visible pinned dot index (matches Revenue behavior) */
   pinnedIndex?: number;
 
+  /** Highest point that should be hoverable / interactive */
+  maxInteractiveIndex?: number;
+
   /** Icon shown in tooltip next to main number */
   tooltipIcon?: TooltipIcon;
 
@@ -44,12 +44,18 @@ type Props = {
 
   deltaText?: string;
   deltaPositive?: boolean;
+  comparisonLabel?: string;
 
   /** ✅ NEW: chart height (defaults to 150) */
   height?: number;
 };
 
-type Row = { x: number; value: number; y: number };
+type Row = {
+  x: number;
+  value: number;
+  y: number;
+  isInteractive: boolean;
+};
 
 type HoverTooltipProps = {
   active?: boolean;
@@ -68,7 +74,8 @@ function isRow(x: unknown): x is Row {
   return (
     typeof o.x === "number" &&
     typeof o.value === "number" &&
-    typeof o.y === "number"
+    typeof o.y === "number" &&
+    typeof o.isInteractive === "boolean"
   );
 }
 
@@ -158,8 +165,8 @@ function DeltaPillSmall({
   const isNegative = !positive;
 
   const deltaColor = isNegative
-    ? "bg-error-900 text-error-500 border-error-800"
-    : "bg-success-900 text-success-500 border-success-800";
+    ? "border-error-800 bg-error-900 text-error-500"
+    : "border-success-800 bg-success-900 text-success-500";
 
   const deltaIcon = isNegative ? (
     <svg
@@ -195,7 +202,7 @@ function DeltaPillSmall({
 
   return (
     <span
-      className={`flex items-center gap-0.5 rounded-[7px] px-1 py-[3px] text-[10px] font-semibold leading-none border ${deltaColor}`}
+      className={`flex items-center gap-0.5 rounded-[7px] border px-1 py-[3px] text-[10px] leading-none font-semibold ${deltaColor}`}
       aria-label={`Change ${text}${isNegative ? " decrease" : " increase"}`}
     >
       {deltaIcon}
@@ -210,12 +217,14 @@ function SmallKpiChart({
   xLabels = ["12AM", "8AM", "4PM", "11PM"],
   dates,
   pinnedIndex,
+  maxInteractiveIndex,
   tooltipIcon,
   tooltipDateMode = "monthYear",
   yTicks = [0, 100, 250, 500],
   stroke = "#9A46FF",
   deltaText,
   deltaPositive,
+  comparisonLabel = "vs previous month.",
   height = 150,
 }: Props) {
   const scaler = useMemo(() => {
@@ -225,18 +234,38 @@ function SmallKpiChart({
     return makePiecewiseScaler(base);
   }, [yTicks, domain]);
 
+  const resolvedMaxInteractiveIndex = useMemo(() => {
+    if (typeof maxInteractiveIndex !== "number") {
+      return Math.max(0, data.length - 1);
+    }
+    return Math.min(
+      Math.max(maxInteractiveIndex, 0),
+      Math.max(0, data.length - 1),
+    );
+  }, [maxInteractiveIndex, data.length]);
+
   const rows = useMemo(
-    () => data.map((v, i) => ({ x: i, value: v, y: scaler.toScaled(v) })),
-    [data, scaler],
+    () =>
+      data.map((v, i) => ({
+        x: i,
+        value: v,
+        y: scaler.toScaled(v),
+        isInteractive: i <= resolvedMaxInteractiveIndex,
+      })),
+    [data, scaler, resolvedMaxInteractiveIndex],
+  );
+
+  const interactiveRows = useMemo(
+    () => rows.filter((row) => row.isInteractive),
+    [rows],
   );
 
   const maxX = Math.max(0, rows.length - 1);
 
   const xTickValues = useMemo(() => {
-    if (xLabels.length <= 1) return [0];
-    const step = maxX / Math.max(1, xLabels.length - 1);
-    return xLabels.map((_, i) => i * step);
-  }, [xLabels, maxX]);
+    if (rows.length <= 1) return [0];
+    return rows.map((row) => row.x);
+  }, [rows]);
 
   const rawDelta = (deltaText ?? "").trim();
   const fixedDeltaTxt = stripSign(rawDelta);
@@ -245,16 +274,16 @@ function SmallKpiChart({
   const fixedIsPositive = deltaPositive ?? inferredPositive;
 
   const tipWrapper =
-    "pointer-events-none inline-block min-w-[150px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md shadow-[0_10px_26px_rgba(0,0,0,0.50)] px-2.5 py-2 text-white";
+    "pointer-events-none inline-block min-w-[150px] rounded-lg border border-white/10 bg-[rgba(154,70,255,0.18)] px-2.5 py-2 text-white shadow-[0_10px_26px_rgba(0,0,0,0.50)] backdrop-blur-md";
   const tipValueRow = "flex items-center justify-center gap-1";
   const tipValue =
-    "text-[16px] font-extrabold leading-none tabular-nums text-center";
+    "text-[16px] leading-none font-extrabold tabular-nums text-center";
   const tipLabel =
-    "mt-0.5 text-[14px] font-medium text-white/80 leading-tight text-center";
+    "mt-0.5 text-[14px] leading-tight font-medium text-white/80 text-center";
   const tipDivider = "my-1.5 h-px w-full bg-white/10";
   const tipBottomRow =
     "flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap";
-  const tipVs = "text-white/60 leading-tight whitespace-nowrap";
+  const tipVs = "leading-tight whitespace-nowrap text-white/60";
 
   const IconComp =
     tooltipIcon === "ticket" ? Ticket : tooltipIcon === "eye" ? Eye : null;
@@ -302,7 +331,7 @@ function SmallKpiChart({
     <div className="w-full">
       <ResponsiveContainer width="100%" height={height}>
         <LineChart
-          data={rows}
+          data={interactiveRows}
           margin={{ top: 12, right: 8, left: 0, bottom: 3 }}
         >
           <CartesianGrid
@@ -333,11 +362,12 @@ function SmallKpiChart({
             domain={[0, maxX]}
             ticks={xTickValues}
             tick={{ ...AXIS_TICK_STYLE, textAnchor: "middle" }}
-            tickFormatter={(_v: number, idx: number) => xLabels[idx] ?? ""}
+            tickFormatter={(value: number) => xLabels[Math.round(value)] ?? ""}
             axisLine={{ stroke: "#2C2C44", strokeWidth: 1 }}
             tickLine={false}
             tickMargin={10}
             allowDecimals={false}
+            interval={0}
           />
 
           <Line
@@ -348,6 +378,7 @@ function SmallKpiChart({
             dot={false}
             activeDot={false}
             isAnimationActive={false}
+            connectNulls={false}
           />
 
           <Line
@@ -356,6 +387,7 @@ function SmallKpiChart({
             strokeWidth={2}
             dot={clampedPin == null ? false : pinnedDot}
             isAnimationActive={false}
+            connectNulls={false}
             activeDot={{
               r: 4.5,
               fill: "#FFFFFF",
@@ -367,7 +399,6 @@ function SmallKpiChart({
           <Tooltip
             cursor={{ stroke: "rgba(255,255,255,0.12)", strokeWidth: 1 }}
             isAnimationActive={false}
-            /** ✅ Fix: prevent the tooltip wrapper from catching the mouse */
             wrapperStyle={{ pointerEvents: "none" }}
             content={(props: HoverTooltipProps) => {
               const active = props.active;
@@ -376,6 +407,7 @@ function SmallKpiChart({
               if (!active || !payload || payload.length === 0) return null;
               const candidate = payload[0]?.payload;
               if (!isRow(candidate)) return null;
+              if (!candidate.isInteractive) return null;
 
               const row = candidate;
               const label = labelForPoint(row);
@@ -402,7 +434,7 @@ function SmallKpiChart({
                           text={fixedDeltaTxt}
                           positive={fixedIsPositive}
                         />
-                        <span className={tipVs}>vs previous month.</span>
+                        <span className={tipVs}>{comparisonLabel}</span>
                       </div>
                     </>
                   ) : null}

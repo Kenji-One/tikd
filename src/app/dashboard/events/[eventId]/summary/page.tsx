@@ -7,6 +7,8 @@ import { ChevronLeft, ChevronRight, Eye, Ticket } from "lucide-react";
 
 import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
 import { fetchPageViewsAnalytics } from "@/lib/api/pageViews";
+import { fetchTicketsSoldAnalytics } from "@/lib/api/ticketsSold";
+import { fetchRevenueAnalytics } from "@/lib/api/revenue";
 
 import { Button } from "@/components/ui/Button";
 import KpiCard from "@/components/dashboard/cards/KpiCard";
@@ -131,25 +133,6 @@ function buildDailyLabels(dates: Date[]) {
   );
 }
 
-function dailyizeFromMonthly(monthly: number[], dates: Date[]) {
-  return dates.map((d, i) => {
-    const m = d.getMonth();
-    const y = d.getFullYear();
-    const dim = daysInMonth(y, m) || 30;
-
-    const monthTotal = monthly[m % monthly.length] ?? monthly[0] ?? 0;
-    const base = monthTotal / dim;
-
-    const wiggle =
-      1 +
-      0.22 * Math.sin(i * 0.85) +
-      0.1 * Math.cos(i * 0.33) +
-      0.06 * Math.sin(i * 0.17);
-
-    return Math.max(0, base * wiggle);
-  });
-}
-
 function niceTicks(maxValue: number, targetCount = 6) {
   const max = Math.max(1, maxValue);
   const pow = Math.pow(10, Math.floor(Math.log10(max)));
@@ -249,6 +232,23 @@ function normalizeRangeDateForAnalytics(
       );
 }
 
+function formatCurrencyCompact(value: number, currency = "USD") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function formatCurrencyFull(value: number, currency = "USD") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 /* ----------------------------- Metrics ----------------------------- */
 type EventMetrics = {
   ticketsSold: number;
@@ -257,14 +257,10 @@ type EventMetrics = {
 };
 
 function deriveEventMetrics(event?: EventWithMeta): EventMetrics {
-  const ticketsSold = event?.attendingCount ?? 0;
-  const assumedAvgTicket = 25;
-  const revenue = ticketsSold * assumedAvgTicket;
-
   return {
-    ticketsSold,
+    ticketsSold: event?.attendingCount ?? 0,
     pageViews: 0,
-    revenue,
+    revenue: 0,
   };
 }
 
@@ -591,7 +587,7 @@ export default function EventSummaryPage() {
     [effectiveEnd],
   );
 
-  const analyticsQuery = useQuery({
+  const pageViewsQuery = useQuery({
     queryKey: [
       "event-page-views-analytics",
       eventId,
@@ -607,15 +603,57 @@ export default function EventSummaryPage() {
     enabled: !!eventId,
   });
 
-  const analytics = analyticsQuery.data;
+  const ticketsSoldQuery = useQuery({
+    queryKey: [
+      "event-tickets-sold-analytics",
+      eventId,
+      analyticsStart.toISOString(),
+      analyticsEnd.toISOString(),
+    ],
+    queryFn: () =>
+      fetchTicketsSoldAnalytics({
+        eventId: eventId ?? null,
+        start: analyticsStart,
+        end: analyticsEnd,
+      }),
+    enabled: !!eventId,
+  });
+
+  const revenueQuery = useQuery({
+    queryKey: [
+      "event-revenue-analytics",
+      eventId,
+      analyticsStart.toISOString(),
+      analyticsEnd.toISOString(),
+    ],
+    queryFn: () =>
+      fetchRevenueAnalytics({
+        eventId: eventId ?? null,
+        start: analyticsStart,
+        end: analyticsEnd,
+      }),
+    enabled: !!eventId,
+  });
+
+  const pageViewsAnalytics = pageViewsQuery.data;
+  const ticketsSoldAnalytics = ticketsSoldQuery.data;
+  const revenueAnalytics = revenueQuery.data;
 
   const baseMetrics = useMemo(() => deriveEventMetrics(event), [event]);
   const metrics = useMemo<EventMetrics>(
     () => ({
       ...baseMetrics,
-      pageViews: analytics?.totals.pageViews ?? 0,
+      pageViews: pageViewsAnalytics?.totals.pageViews ?? 0,
+      ticketsSold:
+        ticketsSoldAnalytics?.totals.ticketsSold ?? baseMetrics.ticketsSold,
+      revenue: revenueAnalytics?.totals.revenue ?? 0,
     }),
-    [analytics?.totals.pageViews, baseMetrics],
+    [
+      baseMetrics,
+      pageViewsAnalytics?.totals.pageViews,
+      ticketsSoldAnalytics?.totals.ticketsSold,
+      revenueAnalytics?.totals.revenue,
+    ],
   );
 
   const rangeDays = useMemo(
@@ -671,65 +709,50 @@ export default function EventSummaryPage() {
     return buildDailyDates(effectiveStart, effectiveEnd);
   }, [dailyMode, effectiveStart, effectiveEnd]);
 
-  const scale = useMemo(() => {
-    const t = metrics.ticketsSold;
-    if (t <= 0) return 0.15;
-    if (t <= 25) return 0.35;
-    if (t <= 150) return 0.75;
-    return Math.min(2.2, 0.6 + t / 250);
-  }, [metrics.ticketsSold]);
-
-  const sparkRevenueMonthly = useMemo(
-    () =>
-      [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map((v) =>
-        Math.round(v * 1000 * scale),
-      ),
-    [scale],
-  );
-
-  const sparkTicketsMonthly = useMemo(
-    () =>
-      [420, 280, 300, 260, 310, 210, 120, 180, 220, 200, 240, 480].map((v) =>
-        Math.max(1, Math.round(v * scale)),
-      ),
-    [scale],
-  );
-
   const revenueData = useMemo(() => {
-    if (!dailyMode) return mapSeriesToCount(sparkRevenueMonthly, labels.length);
-    return dailyizeFromMonthly(sparkRevenueMonthly, dates);
-  }, [dailyMode, labels.length, dates, sparkRevenueMonthly]);
-
-  const pageViewsData = useMemo(() => {
-    const liveSeries = analytics?.series.map((item) => item.views);
+    const liveSeries = revenueAnalytics?.series.map((item) => item.revenue);
     if (liveSeries?.length) {
       if (liveSeries.length === labels.length) return liveSeries;
       return mapSeriesToCount(liveSeries, labels.length);
     }
 
     if (!dailyMode) {
-      return mapSeriesToCount(
-        [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120].map((v) =>
-          Math.max(1, Math.round(v * scale)),
-        ),
-        labels.length,
-      );
+      return mapSeriesToCount([0], labels.length);
     }
 
-    return dailyizeFromMonthly(
-      [120, 240, 180, 220, 260, 180, 320, 260, 380, 300, 260, 120].map((v) =>
-        Math.max(1, Math.round(v * scale)),
-      ),
-      dates,
-    ).map((v) => Math.round(v));
-  }, [analytics?.series, dailyMode, dates, labels.length, scale]);
+    return dates.map(() => 0);
+  }, [revenueAnalytics?.series, dailyMode, dates, labels.length]);
+
+  const pageViewsData = useMemo(() => {
+    const liveSeries = pageViewsAnalytics?.series.map((item) => item.views);
+    if (liveSeries?.length) {
+      if (liveSeries.length === labels.length) return liveSeries;
+      return mapSeriesToCount(liveSeries, labels.length);
+    }
+
+    if (!dailyMode) {
+      return mapSeriesToCount([0], labels.length);
+    }
+
+    return dates.map(() => 0);
+  }, [pageViewsAnalytics?.series, dailyMode, dates, labels.length]);
 
   const ticketsSoldData = useMemo(() => {
-    if (!dailyMode) return mapSeriesToCount(sparkTicketsMonthly, labels.length);
-    return dailyizeFromMonthly(sparkTicketsMonthly, dates).map((v) =>
-      Math.round(v),
+    const liveSeries = ticketsSoldAnalytics?.series.map(
+      (item) => item.ticketsSold,
     );
-  }, [dailyMode, labels.length, dates, sparkTicketsMonthly]);
+
+    if (liveSeries?.length) {
+      if (liveSeries.length === labels.length) return liveSeries;
+      return mapSeriesToCount(liveSeries, labels.length);
+    }
+
+    if (!dailyMode) {
+      return mapSeriesToCount([0], labels.length);
+    }
+
+    return dates.map(() => 0);
+  }, [ticketsSoldAnalytics?.series, dailyMode, labels.length, dates]);
 
   const revenueMax = useMemo(() => Math.max(0, ...revenueData), [revenueData]);
   const revenueDomain = useMemo<[number, number]>(
@@ -780,6 +803,22 @@ export default function EventSummaryPage() {
     });
   }, [dates, pinnedIndex, dailyMode]);
 
+  const revenuePinnedValue = revenueData[pinnedIndex] ?? 0;
+
+  const revenueDelta = useMemo(() => {
+    const liveDelta = revenueAnalytics?.comparisons?.revenuePct;
+    if (typeof liveDelta === "number") {
+      return {
+        text: formatPercentValue(liveDelta),
+        positive: liveDelta >= 0,
+      };
+    }
+
+    const current = revenueData[pinnedIndex] ?? 0;
+    const previous = revenueData[pinnedIndex - 1] ?? 0;
+    return deltaFromPrevious(current, previous);
+  }, [revenueAnalytics?.comparisons?.revenuePct, revenueData, pinnedIndex]);
+
   const pageViewsPinnedIndex = useMemo(() => {
     const len = pageViewsData.length;
     if (len <= 0) return 0;
@@ -805,9 +844,50 @@ export default function EventSummaryPage() {
     return deltaFromPrevious(current, previous);
   }, [pageViewsData, pageViewsPinnedIndex]);
 
+  const ticketsPinnedIndex = useMemo(() => {
+    const len = ticketsSoldData.length;
+    if (len <= 0) return 0;
+
+    if (dailyMode) return len - 1;
+
+    const currentMonthIndex =
+      today.getFullYear() === effectiveStart.getFullYear()
+        ? today.getMonth() - effectiveStart.getMonth()
+        : len - 1;
+
+    return Math.min(Math.max(currentMonthIndex, 0), len - 1);
+  }, [ticketsSoldData.length, dailyMode, today, effectiveStart]);
+
+  const ticketsMaxInteractiveIndex = useMemo(() => {
+    if (dailyMode) return Math.max(0, ticketsSoldData.length - 1);
+    return ticketsPinnedIndex;
+  }, [dailyMode, ticketsSoldData.length, ticketsPinnedIndex]);
+
+  const ticketsSoldDelta = useMemo(() => {
+    const liveDelta = ticketsSoldAnalytics?.comparisons?.ticketsSoldPct;
+    if (typeof liveDelta === "number") {
+      return {
+        text: formatPercentValue(liveDelta),
+        positive: liveDelta >= 0,
+      };
+    }
+
+    const current = ticketsSoldData[ticketsPinnedIndex] ?? 0;
+    const previous = ticketsSoldData[ticketsPinnedIndex - 1] ?? 0;
+    return deltaFromPrevious(current, previous);
+  }, [
+    ticketsSoldAnalytics?.comparisons?.ticketsSoldPct,
+    ticketsSoldData,
+    ticketsPinnedIndex,
+  ]);
+
   const pageViewsComparisonLabel = dailyMode
     ? "vs previous day."
     : "vs previous month.";
+
+  const ticketsComparisonLabel = dailyMode
+    ? "vs previous day."
+    : "vs previous period.";
 
   const breakdownTotal = useMemo(() => {
     return stableDummyTotal(eventId ?? "no-event");
@@ -898,14 +978,11 @@ export default function EventSummaryPage() {
   }, [ageSlicePairs, agePercentMap]);
 
   const kpiRevenueValue = useMemo(() => {
-    const v = metrics.revenue;
-    if (!Number.isFinite(v)) return "$0";
-    if (v >= 1000) return `$${(v / 1000).toFixed(1)}K`;
-    return `$${v.toFixed(0)}`;
+    return formatCurrencyCompact(metrics.revenue, "USD");
   }, [metrics.revenue]);
 
-  const pageViewsHeaderDeltaLabel = analytics
-    ? `${analytics.totals.liveViewers} live`
+  const pageViewsHeaderDeltaLabel = pageViewsAnalytics
+    ? `${pageViewsAnalytics.totals.liveViewers} live`
     : "0 live";
 
   return (
@@ -915,11 +992,11 @@ export default function EventSummaryPage() {
           <KpiCard
             title="Total Revenue"
             value={kpiRevenueValue}
-            delta="+24.6%"
+            delta={`${revenueDelta.positive ? "+" : "-"}${revenueDelta.text}`}
             accent="from-[#7C3AED] to-[#9333EA]"
             className="border-neutral-700 py-5 pr-6 lg:border-r"
             stretchChart
-            detailsHref={`/dashboard/events/${eventId ?? ""}/summary`}
+            detailsHref={`/dashboard/revenue?eventId=${eventId ?? ""}`}
             toolbar={
               <div className="max-w-[210px]">
                 <DateRangePicker value={dateRange} onChange={setDateRange} />
@@ -934,10 +1011,10 @@ export default function EventSummaryPage() {
               xLabels={labels}
               tooltip={{
                 index: pinnedIndex,
-                valueLabel: kpiRevenueValue,
+                valueLabel: formatCurrencyFull(revenuePinnedValue, "USD"),
                 subLabel: pinnedSubLabel,
-                deltaText: "+24.6%",
-                deltaPositive: true,
+                deltaText: revenueDelta.text,
+                deltaPositive: revenueDelta.positive,
               }}
               tooltipDateMode={dailyMode ? "full" : "monthYear"}
               stroke="#9A46FF"
@@ -983,23 +1060,25 @@ export default function EventSummaryPage() {
                   aria-hidden
                 />
               }
-              delta="-24.6%"
+              delta={`${ticketsSoldDelta.positive ? "+" : "-"}${ticketsSoldDelta.text}`}
               accent="from-[#7C3AED] to-[#9A46FF]"
               className="p-5"
-              detailsHref={`/dashboard/events/${eventId ?? ""}/summary`}
+              detailsHref={`/dashboard/tickets-sold?eventId=${eventId ?? ""}`}
             >
               <SmallKpiChart
                 data={ticketsSoldData}
                 dates={dates}
-                pinnedIndex={pinnedIndex}
+                pinnedIndex={ticketsPinnedIndex}
+                maxInteractiveIndex={ticketsMaxInteractiveIndex}
                 tooltipIcon="ticket"
                 tooltipDateMode={dailyMode ? "full" : "monthYear"}
                 domain={tsDomain}
                 yTicks={tsTicks}
                 xLabels={labels}
                 stroke="#9A46FF"
-                deltaText="-24.6%"
-                deltaPositive={false}
+                deltaText={ticketsSoldDelta.text}
+                deltaPositive={ticketsSoldDelta.positive}
+                comparisonLabel={ticketsComparisonLabel}
               />
             </KpiCard>
           </div>

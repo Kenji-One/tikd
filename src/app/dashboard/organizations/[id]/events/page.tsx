@@ -8,7 +8,12 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   CalendarPlus,
@@ -28,6 +33,9 @@ import GridListToggle, {
   type GridListValue,
 } from "@/components/ui/GridListToggle";
 import SortControl from "@/components/ui/SortControl";
+import { fetchPageViewsAnalytics } from "@/lib/api/pageViews";
+import { fetchTicketsSoldAnalytics } from "@/lib/api/ticketsSold";
+import { fetchRevenueAnalytics } from "@/lib/api/revenue";
 
 /* ------------------------------ Types ------------------------------ */
 type Org = {
@@ -77,6 +85,12 @@ type SortField =
   | "revenue"
   | "eventDate";
 type SortDir = "asc" | "desc";
+
+type EventLiveStats = {
+  pageViews: number;
+  ticketsSold: number;
+  revenue: number;
+};
 
 /* ---------------------------- Helpers ------------------------------ */
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -257,6 +271,10 @@ function sortEvents(args: {
     default:
       return arr;
   }
+}
+
+function makeUtcDate(year: number, monthIndex: number, day: number) {
+  return new Date(Date.UTC(year, monthIndex, day, 12, 0, 0, 0));
 }
 
 /* ---------------------- Compact dropdown (Tikd style) -------------- */
@@ -1144,6 +1162,86 @@ export default function OrgEventsPage() {
     }));
   }, [orgPayload, org]);
 
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const statsRangeStart = useMemo(
+    () => makeUtcDate(currentYear, 0, 1),
+    [currentYear],
+  );
+  const statsRangeEnd = useMemo(
+    () => makeUtcDate(currentYear, 11, 31),
+    [currentYear],
+  );
+
+  const eventStatsQueries = useQueries({
+    queries: events.map((event) => ({
+      queryKey: [
+        "org-events-page-live-stats",
+        String(event._id),
+        statsRangeStart.toISOString(),
+        statsRangeEnd.toISOString(),
+      ],
+      queryFn: async (): Promise<EventLiveStats> => {
+        const [pageViews, tickets, revenue] = await Promise.all([
+          fetchPageViewsAnalytics({
+            eventId: String(event._id),
+            start: statsRangeStart,
+            end: statsRangeEnd,
+          }),
+          fetchTicketsSoldAnalytics({
+            eventId: String(event._id),
+            start: statsRangeStart,
+            end: statsRangeEnd,
+          }),
+          fetchRevenueAnalytics({
+            eventId: String(event._id),
+            start: statsRangeStart,
+            end: statsRangeEnd,
+          }),
+        ]);
+
+        return {
+          pageViews: pageViews?.totals.pageViews ?? 0,
+          ticketsSold: tickets?.totals.ticketsSold ?? 0,
+          revenue: revenue?.totals.revenue ?? 0,
+        };
+      },
+      enabled: !!session && !!event._id,
+      staleTime: 60_000,
+    })),
+  });
+
+  const liveStatsByEventId = useMemo(() => {
+    const map = new Map<string, EventLiveStats>();
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      const query = eventStatsQueries[i];
+      if (!event || !query?.data) continue;
+
+      map.set(String(event._id), query.data);
+    }
+
+    return map;
+  }, [events, eventStatsQueries]);
+
+  const eventsWithLiveStats = useMemo<MyEvent[]>(() => {
+    return events.map((event) => {
+      const live = liveStatsByEventId.get(String(event._id));
+      if (!live) return event;
+
+      return {
+        ...event,
+        pageViews: live.pageViews,
+        views: live.pageViews,
+        ticketsSold: live.ticketsSold,
+        sold: live.ticketsSold,
+        revenue: live.revenue,
+        revenueTotal: live.revenue,
+        grossRevenue: live.revenue,
+      };
+    });
+  }, [events, liveStatsByEventId]);
+
   // pins (same system, still useful inside org scope)
   const { data: pinnedIdsResp } = useQuery<{ ids: string[] }>({
     queryKey: ["eventPins"],
@@ -1193,21 +1291,21 @@ export default function OrgEventsPage() {
 
   const upcomingBase = useMemo(
     () =>
-      events.filter(
+      eventsWithLiveStats.filter(
         (e) => new Date(e.date).getTime() >= now && e.status !== "draft",
       ),
-    [events, now],
+    [eventsWithLiveStats, now],
   );
   const pastBase = useMemo(
     () =>
-      events.filter(
+      eventsWithLiveStats.filter(
         (e) => new Date(e.date).getTime() < now && e.status !== "draft",
       ),
-    [events, now],
+    [eventsWithLiveStats, now],
   );
   const draftsBase = useMemo(
-    () => events.filter((e) => e.status === "draft"),
-    [events],
+    () => eventsWithLiveStats.filter((e) => e.status === "draft"),
+    [eventsWithLiveStats],
   );
 
   // Match main Events behavior: Upcoming can be grid/list, Past+Drafts forced list.
@@ -1315,7 +1413,7 @@ export default function OrgEventsPage() {
   // Org-scoped event “detail” route (keeps you inside org dashboard)
   const eventHref = useCallback(
     (eventId: string) => `/dashboard/events/${eventId}/summary`,
-    [orgId],
+    [],
   );
 
   return (
@@ -1570,8 +1668,9 @@ export default function OrgEventsPage() {
                 ) : (
                   <div className="space-y-2">
                     {pastSorted.map((ev, idx) => {
-                      const revenue = revenueOf(ev) || 123_382;
-                      const ticketsSold = ticketsOf(ev) || 328;
+                      const revenue = revenueOf(ev);
+                      const ticketsSold = ticketsOf(ev);
+                      const pageViews = viewsOf(ev);
 
                       const activeRow = idx === 0;
 
@@ -1636,7 +1735,7 @@ export default function OrgEventsPage() {
                               </div>
                             </div>
 
-                            <div className="grid flex-1 grid-cols-1 gap-3 text-left sm:grid-cols-3 sm:text-center">
+                            <div className="grid flex-1 grid-cols-1 gap-3 text-left sm:grid-cols-4 sm:text-center">
                               <div>
                                 <p className="text-base font-semibold text-neutral-0">
                                   {money(revenue)}
@@ -1650,6 +1749,15 @@ export default function OrgEventsPage() {
                                 </p>
                                 <p className="mt-1 text-neutral-400">
                                   Tickets Sold
+                                </p>
+                              </div>
+
+                              <div>
+                                <p className="text-base font-semibold text-neutral-0">
+                                  {pageViews.toLocaleString()}
+                                </p>
+                                <p className="mt-1 text-neutral-400">
+                                  Page Views
                                 </p>
                               </div>
 

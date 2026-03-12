@@ -47,6 +47,32 @@ type ApiResponse = {
 type SortField = "title" | "pageViews" | "tickets" | "revenue" | "eventDate";
 type SortDir = "asc" | "desc";
 
+type PageViewsTotalsResponse = {
+  totals?: {
+    pageViews?: number;
+  };
+};
+
+type TicketsSoldTotalsResponse = {
+  totals?: {
+    ticketsSold?: number;
+  };
+};
+
+type RevenueTotalsResponse = {
+  totals?: {
+    revenue?: number;
+  };
+};
+
+type EventLiveStats = {
+  pageViews: number;
+  tickets: number;
+  revenue: string;
+};
+
+type EventStatsMap = Record<string, EventLiveStats>;
+
 /**
  * Dropdown options: only the field (no direction).
  * Direction is controlled INSIDE the new single sort control.
@@ -64,6 +90,91 @@ function revenueToNumber(rev: string) {
   // "$123,382" -> 123382
   const n = Number(String(rev).replace(/[^0-9.]/g, ""));
   return Number.isFinite(n) ? n : 0;
+}
+
+function formatRevenueCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(Math.max(0, value));
+}
+
+const ANALYTICS_RANGE_START_ISO = "2000-01-01T00:00:00.000Z";
+
+async function fetchJsonOrThrow<T>(url: string): Promise<T> {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Request failed: ${res.status}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+async function fetchEventStatsForRow(
+  row: Row,
+): Promise<[string, EventLiveStats]> {
+  const endIso = new Date().toISOString();
+
+  const pageViewsUrl =
+    `/api/analytics/page-views?eventId=${encodeURIComponent(row.id)}` +
+    `&from=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
+    `&to=${encodeURIComponent(endIso)}`;
+
+  const ticketsSoldUrl =
+    `/api/analytics/tickets-sold?eventId=${encodeURIComponent(row.id)}` +
+    `&from=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
+    `&to=${encodeURIComponent(endIso)}`;
+
+  const revenueUrl =
+    `/api/analytics/revenue?eventId=${encodeURIComponent(row.id)}` +
+    `&from=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
+    `&to=${encodeURIComponent(endIso)}`;
+
+  const [pageViewsResult, ticketsResult, revenueResult] =
+    await Promise.allSettled([
+      fetchJsonOrThrow<PageViewsTotalsResponse>(pageViewsUrl),
+      fetchJsonOrThrow<TicketsSoldTotalsResponse>(ticketsSoldUrl),
+      fetchJsonOrThrow<RevenueTotalsResponse>(revenueUrl),
+    ]);
+
+  const pageViews =
+    pageViewsResult.status === "fulfilled"
+      ? Number(pageViewsResult.value?.totals?.pageViews ?? 0)
+      : Number(row.pageViews ?? 0);
+
+  const tickets =
+    ticketsResult.status === "fulfilled"
+      ? Number(ticketsResult.value?.totals?.ticketsSold ?? 0)
+      : Number(row.tickets ?? 0);
+
+  const revenueValue =
+    revenueResult.status === "fulfilled"
+      ? Number(revenueResult.value?.totals?.revenue ?? 0)
+      : revenueToNumber(row.revenue);
+
+  return [
+    row.id,
+    {
+      pageViews: Number.isFinite(pageViews) ? pageViews : 0,
+      tickets: Number.isFinite(tickets) ? tickets : 0,
+      revenue: formatRevenueCurrency(
+        Number.isFinite(revenueValue) ? revenueValue : 0,
+      ),
+    },
+  ];
+}
+
+async function fetchUpcomingEventsStats(rows: Row[]): Promise<EventStatsMap> {
+  if (!rows.length) return {};
+
+  const entries = await Promise.all(rows.map(fetchEventStatsForRow));
+  return Object.fromEntries(entries);
 }
 
 /* -------------------------- Data fetching -------------------------- */
@@ -502,6 +613,33 @@ export default function UpcomingEventsTable() {
 
   const rows = data?.rows ?? [];
 
+  const liveStatsQuery = useQuery({
+    queryKey: [
+      "dashboard-upcoming-events-live-stats",
+      rows.map((row) => row.id).join(","),
+    ],
+    queryFn: () => fetchUpcomingEventsStats(rows),
+    enabled: rows.length > 0,
+    staleTime: 30_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+
+  const liveStatsMap = liveStatsQuery.data ?? {};
+
+  const enrichedRows = useMemo<Row[]>(() => {
+    return rows.map((row) => {
+      const live = liveStatsMap[row.id];
+
+      return {
+        ...row,
+        pageViews: live?.pageViews ?? row.pageViews ?? 0,
+        tickets: live?.tickets ?? row.tickets ?? 0,
+        revenue: live?.revenue ?? row.revenue ?? formatRevenueCurrency(0),
+      };
+    });
+  }, [rows, liveStatsMap]);
+
   // ✅ On page load: not auto-selected on any option
   const [sortField, setSortField] = useState<SortField | null>(null);
 
@@ -517,9 +655,9 @@ export default function UpcomingEventsTable() {
 
   const sortedRows = useMemo(() => {
     // If no field chosen, keep original order
-    if (!sortField) return rows;
+    if (!sortField) return enrichedRows;
 
-    const arr = [...rows];
+    const arr = [...enrichedRows];
 
     arr.sort((a, b) => {
       let cmp = 0;
@@ -548,7 +686,7 @@ export default function UpcomingEventsTable() {
     });
 
     return arr;
-  }, [rows, sortField, sortDir]);
+  }, [enrichedRows, sortField, sortDir]);
 
   return (
     <div className="relative overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-2">

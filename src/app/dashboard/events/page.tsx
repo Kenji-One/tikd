@@ -80,6 +80,32 @@ type SortField =
   | "eventDate";
 type SortDir = "asc" | "desc";
 
+type PageViewsTotalsResponse = {
+  totals?: {
+    pageViews?: number;
+  };
+};
+
+type TicketsSoldTotalsResponse = {
+  totals?: {
+    ticketsSold?: number;
+  };
+};
+
+type RevenueTotalsResponse = {
+  totals?: {
+    revenue?: number;
+  };
+};
+
+type EventLiveStats = {
+  pageViews: number;
+  ticketsSold: number;
+  revenue: number;
+};
+
+type EventLiveStatsMap = Record<string, EventLiveStats>;
+
 /* ---------------------------- Helpers ------------------------------ */
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -267,6 +293,75 @@ function sortEvents(args: {
     default:
       return arr;
   }
+}
+
+const ANALYTICS_RANGE_START_ISO = "2000-01-01T00:00:00.000Z";
+
+async function fetchEventLiveStats(
+  eventId: string,
+): Promise<[string, EventLiveStats]> {
+  const endIso = new Date().toISOString();
+
+  const pageViewsUrl =
+    `/api/analytics/page-views?eventId=${encodeURIComponent(eventId)}` +
+    `&from=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
+    `&to=${encodeURIComponent(endIso)}`;
+
+  const ticketsSoldUrl =
+    `/api/analytics/tickets-sold?eventId=${encodeURIComponent(eventId)}` +
+    `&from=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
+    `&to=${encodeURIComponent(endIso)}`;
+
+  const revenueUrl =
+    `/api/analytics/revenue?eventId=${encodeURIComponent(eventId)}` +
+    `&from=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
+    `&to=${encodeURIComponent(endIso)}`;
+
+  const [pageViewsResult, ticketsResult, revenueResult] =
+    await Promise.allSettled([
+      fetchJSON<PageViewsTotalsResponse>(pageViewsUrl, { cache: "no-store" }),
+      fetchJSON<TicketsSoldTotalsResponse>(ticketsSoldUrl, {
+        cache: "no-store",
+      }),
+      fetchJSON<RevenueTotalsResponse>(revenueUrl, { cache: "no-store" }),
+    ]);
+
+  const pageViews =
+    pageViewsResult.status === "fulfilled"
+      ? Number(pageViewsResult.value?.totals?.pageViews ?? 0)
+      : 0;
+
+  const ticketsSold =
+    ticketsResult.status === "fulfilled"
+      ? Number(ticketsResult.value?.totals?.ticketsSold ?? 0)
+      : 0;
+
+  const revenue =
+    revenueResult.status === "fulfilled"
+      ? Number(revenueResult.value?.totals?.revenue ?? 0)
+      : 0;
+
+  return [
+    eventId,
+    {
+      pageViews: Number.isFinite(pageViews) ? pageViews : 0,
+      ticketsSold: Number.isFinite(ticketsSold) ? ticketsSold : 0,
+      revenue: Number.isFinite(revenue) ? revenue : 0,
+    },
+  ];
+}
+
+async function fetchEventsLiveStats(
+  events: MyEvent[],
+): Promise<EventLiveStatsMap> {
+  const realEvents = events.filter((event) => event.status !== "draft");
+  if (!realEvents.length) return {};
+
+  const entries = await Promise.all(
+    realEvents.map((event) => fetchEventLiveStats(String(event._id))),
+  );
+
+  return Object.fromEntries(entries);
 }
 
 /* ---------------------- Compact dropdown (Tikd style) -------------- */
@@ -1482,25 +1577,57 @@ export default function DashboardEventsPage() {
     });
   }, [allEvents, orgsList]);
 
+  const liveStatsQuery = useQuery({
+    queryKey: [
+      "dashboard-events-live-stats",
+      events.map((e) => e._id).join(","),
+    ],
+    queryFn: () => fetchEventsLiveStats(events),
+    enabled: !!session && events.length > 0,
+    staleTime: 30_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+
+  const liveStatsMap = liveStatsQuery.data ?? {};
+
+  const eventsWithLiveStats = useMemo<MyEvent[]>(() => {
+    return events.map((event) => {
+      const live = liveStatsMap[String(event._id)];
+      if (!live) return event;
+
+      return {
+        ...event,
+        pageViews: live.pageViews,
+        views: live.pageViews,
+        ticketsSold: live.ticketsSold,
+        sold: live.ticketsSold,
+        revenue: live.revenue,
+        revenueTotal: live.revenue,
+        grossRevenue: live.revenue,
+      };
+    });
+  }, [events, liveStatsMap]);
+
   const now = useMemo(() => Date.now(), []);
 
   const upcomingBase = useMemo(
     () =>
-      events.filter(
+      eventsWithLiveStats.filter(
         (e) => new Date(e.date).getTime() >= now && e.status !== "draft",
       ),
-    [events, now],
+    [eventsWithLiveStats, now],
   );
   const pastBase = useMemo(
     () =>
-      events.filter(
+      eventsWithLiveStats.filter(
         (e) => new Date(e.date).getTime() < now && e.status !== "draft",
       ),
-    [events, now],
+    [eventsWithLiveStats, now],
   );
   const draftsBase = useMemo(
-    () => events.filter((e) => e.status === "draft"),
-    [events],
+    () => eventsWithLiveStats.filter((e) => e.status === "draft"),
+    [eventsWithLiveStats],
   );
 
   useEffect(() => {
@@ -1830,8 +1957,8 @@ export default function DashboardEventsPage() {
                 ) : (
                   <div className="space-y-2">
                     {pastSorted.map((ev, idx) => {
-                      const revenue = revenueOf(ev) || 123_382;
-                      const ticketsSold = ticketsOf(ev) || 328;
+                      const revenue = revenueOf(ev);
+                      const ticketsSold = ticketsOf(ev);
 
                       const activeRow = idx === 0;
 

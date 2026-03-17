@@ -133,6 +133,30 @@ type UpdateBody = Partial<{
   action: "resend";
 }>;
 
+type TrackingMemberMetricRow = {
+  userId: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role?: string;
+  status?: string;
+  links: number;
+  views: number;
+  ticketsSold: number;
+  revenue: number;
+  lastLinkCreatedAt?: string | null;
+};
+
+type TrackingMembersResponse = {
+  rows: TrackingMemberMetricRow[];
+};
+
+type MemberMetrics = {
+  views: number;
+  tickets: number;
+  revenue: number;
+};
+
 /* ---------------------------- Helpers ---------------------------- */
 async function json<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const res = await fetch(input, {
@@ -172,15 +196,6 @@ function initialsFromName(name: string) {
   const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
   const two = `${a}${b}`.toUpperCase();
   return two || "MB";
-}
-
-function hashToInt(input: string) {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h >>> 0);
 }
 
 function fmtNum(n: number) {
@@ -936,6 +951,22 @@ export default function OrgMembersPage() {
     enabled: canViewMembers,
   });
 
+  const {
+    data: trackingMetricsData,
+    isLoading: trackingMetricsLoading,
+    isError: trackingMetricsError,
+  } = useQuery<TrackingMembersResponse>({
+    queryKey: ["org-member-tracking-metrics", id],
+    queryFn: () =>
+      json<TrackingMembersResponse>(
+        `/api/tracking-links/members?scope=organization&organizationId=${encodeURIComponent(
+          id,
+        )}`,
+      ),
+    staleTime: 30_000,
+    enabled: canViewMembers,
+  });
+
   const rolesById = useMemo(() => {
     const map = new Map<string, OrgRoleRow>();
     for (const r of roles ?? []) map.set(r._id, r);
@@ -947,6 +978,20 @@ export default function OrgMembersPage() {
     for (const r of roles ?? []) map.set(r.key, r);
     return map;
   }, [roles]);
+
+  const trackingMetricsByUserId = useMemo(() => {
+    const map = new Map<string, MemberMetrics>();
+
+    for (const row of trackingMetricsData?.rows ?? []) {
+      map.set(String(row.userId), {
+        views: Number.isFinite(row.views) ? row.views : 0,
+        tickets: Number.isFinite(row.ticketsSold) ? row.ticketsSold : 0,
+        revenue: Number.isFinite(row.revenue) ? row.revenue : 0,
+      });
+    }
+
+    return map;
+  }, [trackingMetricsData]);
 
   function resolveMemberRoleMeta(m: TeamMember): ResolvedRoleMeta {
     if (m.role === "owner") {
@@ -1065,6 +1110,7 @@ export default function OrgMembersPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["org-team", id] });
+      qc.invalidateQueries({ queryKey: ["org-member-tracking-metrics", id] });
       setInviteOpen(false);
     },
   });
@@ -1075,7 +1121,10 @@ export default function OrgMembersPage() {
         method: "PATCH",
         body: JSON.stringify(args.body),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-team", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["org-team", id] });
+      qc.invalidateQueries({ queryKey: ["org-member-tracking-metrics", id] });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -1083,7 +1132,10 @@ export default function OrgMembersPage() {
       json<{ ok: boolean }>(`/api/organizations/${id}/team/${memberId}`, {
         method: "DELETE",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-team", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["org-team", id] });
+      qc.invalidateQueries({ queryKey: ["org-member-tracking-metrics", id] });
+    },
   });
 
   const [active, temporary] = useMemo(() => {
@@ -1156,25 +1208,10 @@ export default function OrgMembersPage() {
     return `Showing ${start}-${end} from ${total} data`;
   }, [total, pageSafe]);
 
-  const metrics = useMemo(() => {
-    const map = new Map<
-      string,
-      { views: number; tickets: number; revenue: number }
-    >();
-
-    for (const m of filtered) {
-      const seed = hashToInt(`${m._id}:${m.email}`);
-      const views = 800 + (seed % 25000);
-      const tickets = 10 + (seed % 920);
-      const revenue = 250 + (seed % 125000) / 10;
-      map.set(m._id, { views, tickets, revenue });
-    }
-
-    return map;
-  }, [filtered]);
-
   const loading =
-    accessLoading || (canViewMembers && (membersLoading || rolesLoading));
+    accessLoading ||
+    (canViewMembers &&
+      (membersLoading || rolesLoading || trackingMetricsLoading));
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
@@ -1281,6 +1318,13 @@ export default function OrgMembersPage() {
               </div>
             ) : (
               <>
+                {trackingMetricsError ? (
+                  <div className="mb-4 rounded-xl border border-warning-500/20 bg-warning-500/10 px-4 py-3 text-[12px] text-warning-200">
+                    Member performance metrics could not be loaded right now.
+                    Membership data is still available.
+                  </div>
+                ) : null}
+
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div
                     ref={tabBarRef}
@@ -1355,11 +1399,13 @@ export default function OrgMembersPage() {
                       {slice.map((m) => {
                         const title = m.name || m.email;
                         const badge = initialsFromName(title);
-                        const met = metrics.get(m._id) ?? {
-                          views: 0,
-                          tickets: 0,
-                          revenue: 0,
-                        };
+
+                        const met =
+                          m.userId && trackingMetricsByUserId.has(m.userId)
+                            ? (trackingMetricsByUserId.get(
+                                m.userId,
+                              ) as MemberMetrics)
+                            : { views: 0, tickets: 0, revenue: 0 };
 
                         const roleMeta = resolveMemberRoleMeta(m);
 

@@ -1,4 +1,3 @@
-// src/app/dashboard/events/[eventId]/team/page.tsx
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -37,14 +36,14 @@ type Status = "invited" | "active" | "revoked" | "expired";
 
 type TeamMember = {
   _id: string;
-  organizationId: string;
+  eventId: string;
   email: string;
   name?: string;
   userId?: string | null;
   role: Role;
   status: Status;
   temporaryAccess: boolean;
-  expiresAt?: string;
+  expiresAt?: string | null;
   scope?: "full" | "checkin" | "promo" | "custom";
   createdAt: string;
   updatedAt: string;
@@ -57,6 +56,30 @@ type UpdateBody = Partial<{
   expiresAt?: string;
   action: "resend";
 }>;
+
+type TrackingMemberMetricRow = {
+  userId: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role?: string;
+  status?: string;
+  links: number;
+  views: number;
+  ticketsSold: number;
+  revenue: number;
+  lastLinkCreatedAt?: string | null;
+};
+
+type TrackingMembersResponse = {
+  rows: TrackingMemberMetricRow[];
+};
+
+type MemberMetrics = {
+  views: number;
+  tickets: number;
+  revenue: number;
+};
 
 /* ---------------------------- Helpers ---------------------------- */
 async function json<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -72,7 +95,7 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function prettyDateShort(d?: string) {
+function prettyDateShort(d?: string | null) {
   if (!d) return "";
   return new Date(d).toLocaleDateString(undefined, {
     month: "short",
@@ -93,16 +116,6 @@ function initialsFromName(name: string) {
   const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
   const two = `${a}${b}`.toUpperCase();
   return two || "MB";
-}
-
-function hashToInt(input: string) {
-  // Stable, tiny hash for deterministic demo metrics.
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h >>> 0);
 }
 
 function fmtNum(n: number) {
@@ -530,8 +543,7 @@ function RolesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
                 Roles & Permissions
               </div>
               <div className="mt-1 text-[12px] text-neutral-400">
-                Create roles and edit permissions (Discord-style). UI only for
-                now.
+                Create roles and edit permissions. UI only for now.
               </div>
             </div>
           </div>
@@ -695,10 +707,9 @@ export default function EventTeamPage() {
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   useFluidTabIndicator(tabBarRef, indicatorRef, tab);
 
-  // TODO: Replace with real permission check (session/ACL).
+  // TODO: replace with explicit event-team permission UI state if you expose it in a dedicated access route.
   const canManageMembers = true;
 
-  // 1) Resolve event -> organizationId
   const { data: event, isLoading: isEventLoading } = useQuery<EventWithMeta>({
     queryKey: ["event", eventId],
     queryFn: () => fetchEventById(eventId!),
@@ -707,15 +718,13 @@ export default function EventTeamPage() {
     gcTime: 30 * 60_000,
   });
 
-  const organizationId = event?.organization?._id;
+  const organizationId = event?.organization?._id ?? "";
 
   /* ---------------------- Shared Grid Template ---------------------- */
-  // ✅ Exact same template as org members page
   const GRID =
     "md:grid md:items-center md:gap-6 md:grid-cols-[minmax(300px,2.2fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(200px,1fr)]";
 
   /* ---------------------- Row purple GRID-style background ---------- */
-  // ✅ Applies ONLY to row containers (not header/table/page).
   const rowBgStyle: React.CSSProperties = {
     background:
       "repeating-linear-gradient(0deg, rgba(154,70,255,0.09) 0px, rgba(154,70,255,0.09) 1px, transparent 1px, transparent 34px)," +
@@ -727,52 +736,88 @@ export default function EventTeamPage() {
   };
 
   /* --------------------------- Data --------------------------- */
-  const { data: members, isLoading: isMembersLoading } = useQuery<TeamMember[]>(
-    {
-      queryKey: ["org-team", organizationId],
-      enabled: !!organizationId,
-      queryFn: () =>
-        json<TeamMember[]>(`/api/organizations/${organizationId}/team`),
-      staleTime: 30_000,
-    },
-  );
+  const {
+    data: members,
+    isLoading: isMembersLoading,
+    isError: isMembersError,
+    error: membersError,
+  } = useQuery<TeamMember[]>({
+    queryKey: ["event-team", eventId],
+    enabled: !!eventId,
+    queryFn: () => json<TeamMember[]>(`/api/events/${eventId}/team`),
+    staleTime: 30_000,
+  });
+
+  const {
+    data: trackingMetricsData,
+    isLoading: trackingMetricsLoading,
+    isError: trackingMetricsError,
+  } = useQuery<TrackingMembersResponse>({
+    queryKey: ["event-team-tracking-metrics", eventId],
+    enabled: !!eventId,
+    queryFn: () =>
+      json<TrackingMembersResponse>(
+        `/api/tracking-links/members?scope=event&eventId=${encodeURIComponent(
+          String(eventId ?? ""),
+        )}`,
+      ),
+    staleTime: 30_000,
+  });
+
+  const trackingMetricsByUserId = useMemo(() => {
+    const map = new Map<string, MemberMetrics>();
+
+    for (const row of trackingMetricsData?.rows ?? []) {
+      map.set(String(row.userId), {
+        views: Number.isFinite(row.views) ? row.views : 0,
+        tickets: Number.isFinite(row.ticketsSold) ? row.ticketsSold : 0,
+        revenue: Number.isFinite(row.revenue) ? row.revenue : 0,
+      });
+    }
+
+    return map;
+  }, [trackingMetricsData]);
 
   const inviteMutation = useMutation({
     mutationFn: (payload: InvitePayload) =>
-      json<{ member: TeamMember }>(
-        `/api/organizations/${organizationId}/team`,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-      ),
+      json<{ member: TeamMember }>(`/api/events/${eventId}/team`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["org-team", organizationId] });
+      qc.invalidateQueries({ queryKey: ["event-team", eventId] });
+      qc.invalidateQueries({
+        queryKey: ["event-team-tracking-metrics", eventId],
+      });
       setInviteOpen(false);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: (args: { memberId: string; body: UpdateBody }) =>
-      json<TeamMember>(
-        `/api/organizations/${organizationId}/team/${args.memberId}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify(args.body),
-        },
-      ),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["org-team", organizationId] }),
+      json<TeamMember>(`/api/events/${eventId}/team/${args.memberId}`, {
+        method: "PATCH",
+        body: JSON.stringify(args.body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["event-team", eventId] });
+      qc.invalidateQueries({
+        queryKey: ["event-team-tracking-metrics", eventId],
+      });
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (memberId: string) =>
-      json<{ ok: boolean }>(
-        `/api/organizations/${organizationId}/team/${memberId}`,
-        { method: "DELETE" },
-      ),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["org-team", organizationId] }),
+      json<{ ok: boolean }>(`/api/events/${eventId}/team/${memberId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["event-team", eventId] });
+      qc.invalidateQueries({
+        queryKey: ["event-team-tracking-metrics", eventId],
+      });
+    },
   });
 
   const [active, temporary] = useMemo(() => {
@@ -824,25 +869,8 @@ export default function EventTeamPage() {
     return `Showing ${start}-${end} from ${total} data`;
   }, [total, pageSafe]);
 
-  /* --------------------------- Demo metrics -------------------------- */
-  const metrics = useMemo(() => {
-    const map = new Map<
-      string,
-      { views: number; tickets: number; revenue: number }
-    >();
-
-    for (const m of filtered) {
-      const seed = hashToInt(`${m._id}:${m.email}`);
-      const views = 800 + (seed % 25000);
-      const tickets = 10 + (seed % 920);
-      const revenue = 250 + (seed % 125000) / 10;
-      map.set(m._id, { views, tickets, revenue });
-    }
-    return map;
-  }, [filtered]);
-
   const isLoading =
-    isEventLoading || (organizationId ? isMembersLoading : true);
+    isEventLoading || isMembersLoading || trackingMetricsLoading;
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0 px-4 md:px-6 lg:px-8">
@@ -859,15 +887,14 @@ export default function EventTeamPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* Header (exact layout) */}
+            {/* Header */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300 uppercase">
                   Team
                 </div>
                 <div className="mt-1 text-neutral-400">
-                  Manage members, roles, and access for this event&apos;s
-                  organization
+                  Manage members, roles, and access for this event
                 </div>
               </div>
 
@@ -908,7 +935,7 @@ export default function EventTeamPage() {
                     variant="primary"
                     icon={<UsersIcon className="h-4 w-4" />}
                     animation
-                    disabled={!organizationId}
+                    disabled={!eventId}
                   >
                     Invite Member
                   </Button>
@@ -916,7 +943,25 @@ export default function EventTeamPage() {
               </div>
             </div>
 
-            {/* Tabs (exact layout) */}
+            {isMembersError ? (
+              <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-10 text-center">
+                <div className="text-[13px] font-semibold text-neutral-100">
+                  Couldn’t load event team
+                </div>
+                <div className="mt-1 text-[12px] text-neutral-500">
+                  {(membersError as Error)?.message || "Something went wrong."}
+                </div>
+              </div>
+            ) : null}
+
+            {trackingMetricsError ? (
+              <div className="mb-4 rounded-xl border border-warning-500/20 bg-warning-500/10 px-4 py-3 text-[12px] text-warning-200">
+                Team performance metrics could not be loaded right now. Team
+                data is still available.
+              </div>
+            ) : null}
+
+            {/* Tabs */}
             <div className="mb-4 flex items-center justify-between gap-3">
               <div
                 ref={tabBarRef}
@@ -959,7 +1004,7 @@ export default function EventTeamPage() {
               </div>
             </div>
 
-            {/* Column header (exact columns) */}
+            {/* Column header */}
             <div
               className={clsx(
                 "hidden md:block",
@@ -991,11 +1036,13 @@ export default function EventTeamPage() {
                   {slice.map((m) => {
                     const title = m.name || m.email;
                     const badge = initialsFromName(title);
-                    const met = metrics.get(m._id) ?? {
-                      views: 0,
-                      tickets: 0,
-                      revenue: 0,
-                    };
+
+                    const met =
+                      m.userId && trackingMetricsByUserId.has(m.userId)
+                        ? (trackingMetricsByUserId.get(
+                            m.userId,
+                          ) as MemberMetrics)
+                        : { views: 0, tickets: 0, revenue: 0 };
 
                     return (
                       <div
@@ -1006,7 +1053,7 @@ export default function EventTeamPage() {
                           "transition-colors",
                           "hover:border-white/14 hover:brightness-[1.02]",
                         )}
-                        style={rowBgStyle} // ✅ purple grid-style background (row only)
+                        style={rowBgStyle}
                       >
                         {/* Desktop row */}
                         <div className={clsx("hidden md:block")}>
@@ -1190,7 +1237,7 @@ export default function EventTeamPage() {
               )}
             </div>
 
-            {/* Mobile FAB (exact behavior/layout) */}
+            {/* Mobile FAB */}
             <button
               onClick={() => setInviteOpen(true)}
               className={clsx(
@@ -1201,7 +1248,7 @@ export default function EventTeamPage() {
                 "focus:outline-none focus:ring-2 focus:ring-primary-500",
                 "before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:transition-transform before:duration-700 hover:before:translate-x-full",
               )}
-              disabled={!organizationId}
+              disabled={!eventId}
             >
               <Plus className="mr-2 h-4 w-4" />
               Invite
@@ -1210,15 +1257,14 @@ export default function EventTeamPage() {
         </section>
       </section>
 
-      {/* Invite Modal */}
-      {/* <InviteTeamModal
+      <InviteTeamModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         onInvite={(payload) => inviteMutation.mutate(payload)}
         isSubmitting={inviteMutation.isPending}
-      /> */}
+        orgId={organizationId}
+      />
 
-      {/* Roles Modal */}
       <RolesModal open={rolesOpen} onClose={() => setRolesOpen(false)} />
     </div>
   );

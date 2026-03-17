@@ -16,47 +16,83 @@ type Actions = {
 
 export type CartStore = CartState & Actions;
 
+function normalizeQty(value: number | undefined): number {
+  return Math.max(1, Math.floor(value ?? 1));
+}
+
 export const useCart = create<CartStore>()(
   persist(
     (set) => ({
       items: [],
       coupon: undefined,
 
-      addItem: (p) =>
-        set((s) => {
-          const key = `${p.eventId}:${p.ticketTypeId}`;
-          const existing = s.items.find((i) => i.key === key);
+      addItem: (payload) =>
+        set((state) => {
+          const key = `${payload.eventId}:${payload.ticketTypeId}`;
+          const nextQty = normalizeQty(payload.qty);
 
+          const existing = state.items.find((item) => item.key === key);
           if (existing) {
-            const increment = Math.max(1, Math.floor(p.qty ?? 1));
             return {
-              items: s.items.map((i) =>
-                i.key === key ? { ...i, qty: i.qty + increment } : i
+              items: state.items.map((item) =>
+                item.key === key ? { ...item, qty: item.qty + nextQty } : item,
               ),
             };
           }
 
-          // Avoid duplicate "qty" property warnings by stripping it from the spread
-          const { qty: rawQty = 1, ...rest } = p;
-          const item: CartItem = {
+          const existingEventId = state.items[0]?.eventId ?? null;
+
+          const { qty: _ignoredQty = 1, ...rest } = payload;
+
+          const nextItem: CartItem = {
             key,
             ...rest,
-            qty: Math.max(1, Math.floor(rawQty)),
+            qty: nextQty,
           };
-          return { items: [...s.items, item] };
+
+          /**
+           * IMPORTANT:
+           * One checkout = one event.
+           * If the user adds a ticket from a different event,
+           * replace the previous cart contents.
+           */
+          if (existingEventId && existingEventId !== payload.eventId) {
+            return {
+              items: [nextItem],
+              coupon: undefined,
+            };
+          }
+
+          return {
+            items: [...state.items, nextItem],
+          };
         }),
 
       removeItem: (key) =>
-        set((s) => ({ items: s.items.filter((i) => i.key !== key) })),
+        set((state) => {
+          const nextItems = state.items.filter((item) => item.key !== key);
+
+          return {
+            items: nextItems,
+            coupon: nextItems.length > 0 ? state.coupon : undefined,
+          };
+        }),
 
       setQty: (key, qty) =>
-        set((s) => ({
-          items: s.items
-            .map((i) =>
-              i.key === key ? { ...i, qty: Math.max(0, Math.floor(qty)) } : i
+        set((state) => {
+          const nextItems = state.items
+            .map((item) =>
+              item.key === key
+                ? { ...item, qty: Math.max(0, Math.floor(qty)) }
+                : item,
             )
-            .filter((i) => i.qty > 0),
-        })),
+            .filter((item) => item.qty > 0);
+
+          return {
+            items: nextItems,
+            coupon: nextItems.length > 0 ? state.coupon : undefined,
+          };
+        }),
 
       clear: () => set({ items: [], coupon: undefined }),
 
@@ -72,8 +108,44 @@ export const useCart = create<CartStore>()(
     {
       name: "tikd-cart",
       storage: createJSONStorage(() => localStorage),
-      version: 1,
-      partialize: (s) => ({ items: s.items, coupon: s.coupon }),
-    }
-  )
+      version: 2,
+      partialize: (state) => ({
+        items: state.items,
+        coupon: state.coupon,
+      }),
+      migrate: (persistedState: unknown) => {
+        const state =
+          typeof persistedState === "object" && persistedState !== null
+            ? (persistedState as Partial<CartState>)
+            : {};
+
+        const items = Array.isArray(state.items) ? state.items : [];
+        const coupon = state.coupon;
+
+        if (items.length <= 1) {
+          return {
+            items,
+            coupon,
+          };
+        }
+
+        const firstEventId =
+          typeof items[0]?.eventId === "string" ? items[0].eventId : null;
+
+        if (!firstEventId) {
+          return {
+            items: [],
+            coupon: undefined,
+          };
+        }
+
+        const filtered = items.filter((item) => item.eventId === firstEventId);
+
+        return {
+          items: filtered,
+          coupon,
+        };
+      },
+    },
+  ),
 );

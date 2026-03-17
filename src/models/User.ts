@@ -1,13 +1,14 @@
-// src/models/User.ts
 import { Schema, models, model, Document, Model } from "mongoose";
 
 /* ───────── Types ───────── */
 export type Channel = "call" | "email" | "sms";
+
 export interface ChannelPrefs {
   call: boolean;
   email: boolean;
   sms: boolean;
 }
+
 export interface UserNotifications {
   channels: {
     apiLimits: ChannelPrefs;
@@ -40,13 +41,13 @@ export interface IUser extends Document {
   zip?: string;
   defaultAddress?: boolean;
 
-  /** ✅ NEW (for Friends UI) */
-  jobTitle?: string; // e.g. "Marketing Manager"
-  company?: string; // e.g. "Highspeed Studios"
-  companyHref?: string; // e.g. "https://highspeed.com"
+  /** Friends UI */
+  jobTitle?: string;
+  company?: string;
+  companyHref?: string;
 
-  /** ✅ NEW (Instagram on Friend card) */
-  instagram?: string; // e.g. "@tikd" or "https://instagram.com/tikd"
+  /** Instagram on Friend card */
+  instagram?: string;
 
   // Security audit
   passwordUpdatedAt?: Date;
@@ -110,8 +111,14 @@ const UserSchema = new Schema<IUser>(
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, "Invalid email."],
     },
-    password: { type: String, required: true },
-    image: { type: String },
+
+    /**
+     * Hidden by default so normal reads never expose hashes unless a route
+     * explicitly opts in with .select("+password").
+     */
+    password: { type: String, required: true, select: false },
+
+    image: { type: String, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
 
     // Optional profile fields
@@ -124,18 +131,14 @@ const UserSchema = new Schema<IUser>(
     zip: { type: String, trim: true, default: "" },
     defaultAddress: { type: Boolean, default: false },
 
-    /** ✅ NEW (for Friends UI) */
     jobTitle: { type: String, trim: true, default: "" },
     company: { type: String, trim: true, default: "" },
     companyHref: { type: String, trim: true, default: "" },
 
-    /** ✅ NEW (Instagram on Friend card) */
     instagram: { type: String, trim: true, default: "" },
 
-    // Security audit
     passwordUpdatedAt: { type: Date },
 
-    // Notifications (with safe defaults)
     notifications: { type: NotificationsSchema, default: () => ({}) },
   },
   { timestamps: true, strict: true },

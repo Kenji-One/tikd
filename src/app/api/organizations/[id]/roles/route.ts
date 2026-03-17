@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
-import { HydratedDocument, Types } from "mongoose";
+import { Types } from "mongoose";
 
 import { auth } from "@/lib/auth";
-import Organization from "@/models/Organization";
-import OrgTeam from "@/models/OrgTeam";
 import OrgRole, { type IOrgRole } from "@/models/OrgRole";
 import {
   ORG_PERMISSION_KEYS,
   emptyPermissions,
-  systemRoleDefaults,
+  normalizePermissions,
 } from "@/lib/orgPermissions";
 import { ROLE_ICON_KEYS } from "@/lib/roleIcons";
+import { requireOrgPermission } from "@/lib/orgAccess";
+import {
+  ensureSystemRoles,
+  shapeRoleResponse,
+  createRoleWithUniqueKey,
+} from "@/lib/orgRoles";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,23 +28,20 @@ type PermissionsMap = Record<string, boolean>;
 
 type RoleLean = Pick<
   IOrgRole,
-  "_id" | "key" | "name" | "color" | "isSystem"
+  "_id" | "key" | "name" | "color" | "isSystem" | "order" | "permissions"
 > & {
-  order?: number;
-  permissions?: PermissionsMap;
   iconKey?: string | null;
   iconUrl?: string | null;
 };
 
-/* ------------------------------ Zod ------------------------------ */
 const permissionsSchema = z
   .record(z.string(), z.boolean())
   .superRefine((obj, ctx) => {
-    for (const k of Object.keys(obj)) {
-      if (!(ORG_PERMISSION_KEYS as readonly string[]).includes(k)) {
+    for (const key of Object.keys(obj)) {
+      if (!(ORG_PERMISSION_KEYS as readonly string[]).includes(key)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Unknown permission key: ${k}`,
+          message: `Unknown permission key: ${key}`,
         });
       }
     }
@@ -81,151 +82,31 @@ function slugify(input: string) {
     .slice(0, 48);
 }
 
-/* ------------------------ Permission guards ----------------------- */
-async function assertCanViewRoles(orgId: string, userId: string) {
-  const org = await Organization.findById(orgId).select("_id ownerId").lean<{
-    _id: Types.ObjectId;
-    ownerId: Types.ObjectId;
-  } | null>();
-
-  if (!org) return { ok: false as const, status: 404 };
-
-  if (String(org.ownerId) === String(userId)) return { ok: true as const, org };
-
-  const member = await OrgTeam.findOne({
-    organizationId: orgId,
-    userId,
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-
-  if (member) return { ok: true as const, org };
-
-  return { ok: false as const, status: 403 };
-}
-
-async function assertCanManageRoles(orgId: string, userId: string) {
-  const org = await Organization.findById(orgId).select("_id ownerId").lean<{
-    _id: Types.ObjectId;
-    ownerId: Types.ObjectId;
-  } | null>();
-
-  if (!org) return { ok: false as const, status: 404 };
-
-  if (String(org.ownerId) === String(userId)) return { ok: true as const, org };
-
-  const admin = await OrgTeam.findOne({
-    organizationId: orgId,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-
-  if (admin) return { ok: true as const, org };
-
-  return { ok: false as const, status: 403 };
-}
-
-/* ------------------------ Seed system roles ----------------------- */
-async function ensureSystemRoles(orgId: string, actorId: string) {
-  const existing = await OrgRole.find({ organizationId: orgId, isSystem: true })
-    .select("_id key")
-    .lean<Array<{ _id: Types.ObjectId; key: string }>>();
-
-  const have = new Set(existing.map((r) => r.key));
-  const defaults = systemRoleDefaults();
-
-  const systemDefs: Array<{
-    key: string;
-    name: string;
-    color: string;
-    order: number;
-    iconKey: string | null;
-    permissions: PermissionsMap;
-  }> = [
-    {
-      key: "admin",
-      name: "Admin",
-      color: "#EF4444",
-      order: 1,
-      iconKey: "shield",
-      permissions: defaults.admin,
-    },
-    {
-      key: "promoter",
-      name: "Promoter",
-      color: "#06B6D4",
-      order: 2,
-      iconKey: "megaphone",
-      permissions: defaults.promoter,
-    },
-    {
-      key: "scanner",
-      name: "Scanner",
-      color: "#22C55E",
-      order: 3,
-      iconKey: "scanner",
-      permissions: defaults.scanner,
-    },
-    {
-      key: "collaborator",
-      name: "Collaborator",
-      color: "#F97316",
-      order: 4,
-      iconKey: "users",
-      permissions: defaults.collaborator,
-    },
-    {
-      key: "member",
-      name: "Member",
-      color: "#94A3B8",
-      order: 5,
-      iconKey: "user",
-      permissions: defaults.member,
-    },
-  ];
-
-  const toInsert = systemDefs.filter((d) => !have.has(d.key));
-  if (!toInsert.length) return;
-
-  await OrgRole.insertMany(
-    toInsert.map((d) => ({
-      organizationId: new Types.ObjectId(orgId),
-      key: d.key,
-      name: d.name,
-      color: d.color,
-      iconKey: d.iconKey,
-      iconUrl: null,
-      isSystem: true,
-      order: d.order,
-      permissions: d.permissions,
-      createdBy: new Types.ObjectId(actorId),
-    })),
-    { ordered: false },
-  );
-}
-
-/* ------------------------------- GET ------------------------------ */
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user?.id)
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id } = await ctx.params;
-  if (!isObjectId(id))
+  if (!isObjectId(id)) {
     return NextResponse.json(
       { error: "Invalid organization id" },
       { status: 400 },
     );
+  }
 
-  const can = await assertCanViewRoles(id, session.user.id);
-  if (!can.ok) {
+  const canView = await requireOrgPermission({
+    organizationId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "members.view",
+  });
+
+  if (!canView.ok) {
     return NextResponse.json(
-      { error: can.status === 404 ? "Organization not found" : "Forbidden" },
-      { status: can.status },
+      { error: canView.error },
+      { status: canView.status },
     );
   }
 
@@ -235,8 +116,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     .sort({ order: 1, createdAt: 1 })
     .lean<RoleLean[]>();
 
-  // counts: system roles by OrgTeam.role, custom roles by OrgTeam.roleId
-  const teamAgg = await OrgTeam.aggregate<{
+  const teamAgg = await (
+    await import("@/models/OrgTeam")
+  ).default.aggregate<{
     _id: { kind: "system" | "custom"; key: string };
     total: number;
   }>([
@@ -267,48 +149,45 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
   const counts = new Map<string, number>();
   for (const row of teamAgg) {
-    const mapKey = `${row._id.kind}:${row._id.key}`;
-    counts.set(mapKey, row.total);
+    counts.set(`${row._id.kind}:${row._id.key}`, row.total);
   }
 
-  const shaped = roles.map((r) => {
-    const isCustom = !r.isSystem;
-    const countKey = isCustom ? `custom:${String(r._id)}` : `system:${r.key}`;
-    return {
-      _id: r._id,
-      key: r.key,
-      name: r.name,
-      color: r.color || "",
-      iconKey: r.iconKey ?? null,
-      iconUrl: r.iconUrl ?? null,
-      isSystem: r.isSystem,
-      order: r.order,
-      permissions: r.permissions,
-      membersCount: counts.get(countKey) ?? 0,
-    };
+  const shaped = roles.map((role) => {
+    const countKey = role.isSystem
+      ? `system:${role.key}`
+      : `custom:${String(role._id)}`;
+
+    return shapeRoleResponse(role, counts.get(countKey) ?? 0);
   });
 
   return NextResponse.json(shaped);
 }
 
-/* ------------------------------- POST ----------------------------- */
 export async function POST(req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user?.id)
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id } = await ctx.params;
-  if (!isObjectId(id))
+  if (!isObjectId(id)) {
     return NextResponse.json(
       { error: "Invalid organization id" },
       { status: 400 },
     );
+  }
 
-  const can = await assertCanManageRoles(id, session.user.id);
-  if (!can.ok) {
+  const canManage = await requireOrgPermission({
+    organizationId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "members.assignRoles",
+  });
+
+  if (!canManage.ok) {
     return NextResponse.json(
-      { error: can.status === 404 ? "Organization not found" : "Forbidden" },
-      { status: can.status },
+      { error: canManage.error },
+      { status: canManage.status },
     );
   }
 
@@ -331,69 +210,28 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     .select("order")
     .lean<{ order: number } | null>();
 
-  const basePerms = emptyPermissions();
   const perms = roleData.permissions
-    ? { ...basePerms, ...roleData.permissions }
-    : basePerms;
+    ? normalizePermissions(roleData.permissions)
+    : emptyPermissions();
 
-  const baseKey = derivedKey;
+  const doc = await createRoleWithUniqueKey({
+    organizationId: id,
+    actorUserId: session.user.id,
+    baseKey: derivedKey,
+    name: roleData.name,
+    color: roleData.color || "",
+    iconKey: roleData.iconKey ?? null,
+    iconUrl: roleData.iconUrl ?? null,
+    order: (max?.order ?? 5) + 1,
+    permissions: perms as PermissionsMap,
+  });
 
-  async function createWithKey(candidateKey: string) {
-    return OrgRole.create({
-      organizationId: new Types.ObjectId(id),
-      key: candidateKey,
-      name: roleData.name,
-      color: roleData.color || "",
-      iconKey: roleData.iconKey ?? null,
-      iconUrl: roleData.iconUrl ?? null,
-      isSystem: false,
-      order: (max?.order ?? 5) + 1,
-      permissions: perms,
-      createdBy: new Types.ObjectId(session?.user.id),
-    });
-  }
-
-  try {
-    let doc: HydratedDocument<IOrgRole> | null = null;
-
-    for (let i = 0; i < 50; i++) {
-      const candidate = i === 0 ? baseKey : `${baseKey}-${i + 1}`;
-      try {
-        doc = await createWithKey(candidate);
-        break;
-      } catch (err: unknown) {
-        const maybe = err as { code?: number };
-        if (maybe?.code === 11000) continue;
-        throw err;
-      }
-    }
-
-    if (!doc) {
-      return NextResponse.json(
-        { error: "Could not generate a unique role key" },
-        { status: 409 },
-      );
-    }
-
+  if (!doc) {
     return NextResponse.json(
-      {
-        _id: doc._id,
-        key: doc.key,
-        name: doc.name,
-        color: doc.color || "",
-        iconKey: (doc as unknown as RoleLean).iconKey ?? null,
-        iconUrl: (doc as unknown as RoleLean).iconUrl ?? null,
-        isSystem: doc.isSystem,
-        order: doc.order,
-        permissions: doc.permissions,
-        membersCount: 0,
-      },
-      { status: 201 },
-    );
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to create role" },
-      { status: 500 },
+      { error: "Could not generate a unique role key" },
+      { status: 409 },
     );
   }
+
+  return NextResponse.json(shapeRoleResponse(doc, 0), { status: 201 });
 }

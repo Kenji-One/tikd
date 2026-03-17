@@ -34,6 +34,39 @@ import {
   type RevenueAnalyticsResponse,
 } from "@/lib/api/revenue";
 
+type OrgPermissionKey =
+  | "members.view"
+  | "members.invite"
+  | "members.remove"
+  | "members.assignRoles"
+  | "events.create"
+  | "events.edit"
+  | "events.publish"
+  | "events.delete"
+  | "links.createTrackingLinks";
+
+type OrgPermissions = Partial<Record<OrgPermissionKey, boolean>>;
+
+type OrgAccessPayload = {
+  isOwner: boolean;
+  role: {
+    key: string;
+    name: string;
+    color?: string;
+    iconKey?: string | null;
+    iconUrl?: string | null;
+    isSystem: boolean;
+    roleId?: string | null;
+  } | null;
+  permissions: OrgPermissions;
+  canManageProfile: boolean;
+};
+
+type OrgSummaryAccessResponse = {
+  _id: string;
+  access?: OrgAccessPayload;
+};
+
 type ExtendedAnalytics = PageViewsAnalyticsResponse & {
   comparisons?: {
     uniqueViewersPct?: number;
@@ -176,7 +209,6 @@ function fmtMonthYearLong(d: Date) {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-/* Bucketing (same behavior as your dashboard) */
 function bucketStepForRangeDays(rangeDays: number) {
   if (rangeDays <= 31) return 1;
   if (rangeDays <= 62) return 2;
@@ -239,12 +271,6 @@ function makeBuckets(dates: Date[], step: number): Bucket[] {
     });
   }
   return out;
-}
-
-function sumBucket(values: number[], from: number, to: number) {
-  let s = 0;
-  for (let i = from; i <= to; i++) s += values[i] ?? 0;
-  return s;
 }
 
 function normalizeRangeDateForAnalytics(
@@ -325,7 +351,6 @@ function formatCurrencyFull(value: number, currency = "USD") {
   }).format(value);
 }
 
-/* ----------------------------- breakdown helpers (same as Event page) ----------------------------- */
 function splitByPercent(total: number, percents: number[]) {
   const safeTotal = Math.max(0, total);
   if (safeTotal === 0) return percents.map(() => 0);
@@ -413,9 +438,6 @@ function buildStableAges(seedStr: string, total: number) {
   return pairs.filter((p) => p.count > 0);
 }
 
-/**
- * Integer percents that ALWAYS sum to 100.
- */
 function percentsSumTo100(values: number[]) {
   const v = values.map((x) => Math.max(0, Number.isFinite(x) ? x : 0));
   const total = v.reduce((a, b) => a + b, 0);
@@ -439,6 +461,20 @@ function percentsSumTo100(values: number[]) {
     k += 1;
   }
   return out;
+}
+
+function canAccessOrgSummary(access?: OrgAccessPayload | null) {
+  if (!access) return false;
+  if (access.isOwner) return true;
+  if (access.role?.key === "admin") return true;
+
+  const perms = access.permissions ?? {};
+  return !!(
+    perms["events.create"] ||
+    perms["events.edit"] ||
+    perms["events.publish"] ||
+    perms["events.delete"]
+  );
 }
 
 const AGE_COLORS = [
@@ -606,6 +642,15 @@ function StatPillsRow(opts: {
 export default function OrgSummaryClient({ orgId }: { orgId: string }) {
   const router = useRouter();
 
+  const accessQuery = useQuery<OrgSummaryAccessResponse>({
+    queryKey: ["org-summary-access", orgId],
+    queryFn: () => fetch(`/api/organizations/${orgId}`).then((r) => r.json()),
+    enabled: !!orgId,
+  });
+
+  const orgAccess = accessQuery.data?.access ?? null;
+  const summaryAllowed = canAccessOrgSummary(orgAccess);
+
   const today = useMemo(() => clampToDay(new Date()), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
 
@@ -657,7 +702,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         start: analyticsStart,
         end: analyticsEnd,
       }),
-    enabled: !!orgId,
+    enabled: !!orgId && summaryAllowed,
   });
 
   const ticketsAnalyticsQuery = useQuery<TicketsSoldAnalyticsResponse>({
@@ -673,7 +718,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         start: analyticsStart,
         end: analyticsEnd,
       }),
-    enabled: !!orgId,
+    enabled: !!orgId && summaryAllowed,
   });
 
   const revenueAnalyticsQuery = useQuery<ExtendedRevenueAnalytics>({
@@ -689,7 +734,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         start: analyticsStart,
         end: analyticsEnd,
       }),
-    enabled: !!orgId,
+    enabled: !!orgId && summaryAllowed,
   });
 
   const analytics = analyticsQuery.data;
@@ -987,6 +1032,33 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     : "0 live";
 
   const ticketsHeaderDeltaLabel = `${ticketsSoldDelta.positive ? "+" : "-"}${ticketsSoldDelta.text}`;
+
+  if (accessQuery.isLoading) {
+    return (
+      <div className="space-y-5">
+        <section className="rounded-lg border border-neutral-700 bg-neutral-900 p-8 text-center">
+          <div className="text-sm text-neutral-300">
+            Loading organization summary…
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (!summaryAllowed) {
+    return (
+      <div className="space-y-5">
+        <section className="rounded-lg border border-neutral-700 bg-neutral-900 p-8 text-center">
+          <div className="text-[14px] font-semibold text-neutral-100">
+            You do not have permission to view this organization summary
+          </div>
+          <div className="mt-2 text-[12px] text-neutral-400">
+            Ask the organization owner or admin to grant event access.
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 ">

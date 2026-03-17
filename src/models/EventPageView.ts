@@ -32,6 +32,12 @@ export interface IEventPageView extends Document {
   timezone?: string;
 
   userAgent?: string;
+
+  trackingLinkId?: Types.ObjectId | null;
+  trackingCode?: string;
+  trackingCreatorUserId?: Types.ObjectId | null;
+  trackingOrganizationId?: Types.ObjectId | null;
+
   viewedAt: Date;
 
   createdAt: Date;
@@ -80,19 +86,41 @@ const EventPageViewSchema = new Schema<IEventPageView>(
 
     userAgent: { type: String, default: "" },
 
+    trackingLinkId: {
+      type: Schema.Types.ObjectId,
+      ref: "TrackingLink",
+      default: null,
+      index: true,
+    },
+    trackingCode: { type: String, default: "", index: true },
+    trackingCreatorUserId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    trackingOrganizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      default: null,
+      index: true,
+    },
+
     viewedAt: {
       type: Date,
       default: Date.now,
       index: true,
     },
   },
-  { timestamps: true },
+  { timestamps: true, strict: true },
 );
 
 EventPageViewSchema.index({ eventId: 1, viewedAt: -1 });
 EventPageViewSchema.index({ eventId: 1, visitorId: 1, viewedAt: -1 });
 EventPageViewSchema.index({ eventId: 1, countryCode: 1, viewedAt: -1 });
 EventPageViewSchema.index({ sourceType: 1, viewedAt: -1 });
+EventPageViewSchema.index({ trackingLinkId: 1, viewedAt: -1 });
+EventPageViewSchema.index({ trackingCreatorUserId: 1, viewedAt: -1 });
 
 export default models.EventPageView ||
   model<IEventPageView>("EventPageView", EventPageViewSchema);

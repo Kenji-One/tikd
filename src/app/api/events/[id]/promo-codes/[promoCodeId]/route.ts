@@ -2,43 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
 import { auth } from "@/lib/auth";
-import Event, { type IEvent } from "@/models/Event";
+import { requireEventPermission } from "@/lib/eventAccess";
+
 import PromoCode from "@/models/PromoCode";
 import { Types } from "mongoose";
 import { promoBodySchema } from "../schema";
 
 const partialSchema = promoBodySchema.partial();
 
-/* --------------------------- helper --------------------------- */
-
-async function ensureEventOwnership(
-  userId: string,
-  eventId: string
-): Promise<{ ok: true; event: IEvent } | { ok: false; res: NextResponse }> {
-  const event = await Event.findById(eventId).lean<IEvent>().exec();
-
-  if (!event) {
-    return {
-      ok: false,
-      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
-    };
-  }
-
-  if (event.createdByUserId.toString() !== userId) {
-    return {
-      ok: false,
-      res: NextResponse.json({ error: "Event not yours" }, { status: 403 }),
-    };
-  }
-
-  return { ok: true, event };
-}
-
 /* ------------------------------ GET ------------------------------ */
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; promoCodeId: string }> }
+  { params }: { params: Promise<{ id: string; promoCodeId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -47,8 +23,19 @@ export async function GET(
 
   const { id: eventId, promoCodeId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   const promo = await PromoCode.findOne({
     _id: promoCodeId,
@@ -60,7 +47,7 @@ export async function GET(
   if (!promo) {
     return NextResponse.json(
       { error: "Promo code not found" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -71,7 +58,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; promoCodeId: string }> }
+  { params }: { params: Promise<{ id: string; promoCodeId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -80,10 +67,21 @@ export async function PATCH(
 
   const { id: eventId, promoCodeId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
 
-  const json = await req.json();
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
+  const json = await req.json().catch(() => null);
   const parsed = partialSchema.safeParse(json);
 
   if (!parsed.success) {
@@ -103,7 +101,7 @@ export async function PATCH(
   }
   if (applicableTicketTypeIds !== undefined) {
     update.applicableTicketTypeIds = (applicableTicketTypeIds || []).map(
-      (id) => new Types.ObjectId(id)
+      (id) => new Types.ObjectId(id),
     );
   }
 
@@ -114,7 +112,7 @@ export async function PATCH(
   const promo = await PromoCode.findOneAndUpdate(
     { _id: promoCodeId, eventId },
     update,
-    { new: true }
+    { new: true },
   )
     .lean()
     .exec();
@@ -122,7 +120,7 @@ export async function PATCH(
   if (!promo) {
     return NextResponse.json(
       { error: "Promo code not found" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 
@@ -133,7 +131,7 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; promoCodeId: string }> }
+  { params }: { params: Promise<{ id: string; promoCodeId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -142,8 +140,19 @@ export async function DELETE(
 
   const { id: eventId, promoCodeId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   await PromoCode.deleteOne({
     _id: promoCodeId,

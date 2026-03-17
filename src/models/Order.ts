@@ -1,29 +1,129 @@
-/**
- *  Order model
- *  -----------
- *  One document = one checkout / transaction.
- *  · Holds an array of Ticket _ids for easy aggregation.
- *  · Stores Stripe identifiers + total amounts (so we can rebuild revenue stats
- *    without hitting Stripe every time).
- */
-
 import { Schema, model, models, Types, Document, Model } from "mongoose";
+
+export type OrderStatus = "pending" | "paid" | "refunded" | "cancelled";
+export type OrderTrackingDestinationKind = "Event" | "Organization";
+
+export interface IOrderItemSnapshot {
+  ticketTypeId: Types.ObjectId;
+  ticketTypeLabel: string;
+  unitPrice: number;
+  qty: number;
+  currency: string;
+}
+
+export interface IOrderTrackingSnapshot {
+  trackingLinkId?: Types.ObjectId | null;
+  trackingCode?: string;
+  trackingCreatorUserId?: Types.ObjectId | null;
+  trackingOrganizationId?: Types.ObjectId | null;
+  trackingDestinationKind?: OrderTrackingDestinationKind | null;
+  trackingDestinationId?: Types.ObjectId | null;
+}
 
 export interface IOrder extends Document {
   _id: Types.ObjectId;
+
   userId: Types.ObjectId;
-  eventId: Types.ObjectId; // primary event (for grouped analytics)
-  ticketIds: Types.ObjectId[]; // all tickets purchased in this order
-  status: "pending" | "paid" | "refunded" | "cancelled";
-  paymentIntentId?: string; // Stripe PI id
-  checkoutSessionId?: string; // Stripe CS id (if you use it)
-  subtotal: number; // tickets only
-  fees: number; // service + processing fees
-  currency: string; // ISO-4217
-  total: number; // subtotal + fees
+  organizationId: Types.ObjectId;
+  eventId: Types.ObjectId;
+
+  ticketIds: Types.ObjectId[];
+
+  items: IOrderItemSnapshot[];
+
+  status: OrderStatus;
+
+  paymentIntentId?: string;
+  checkoutSessionId?: string;
+
+  subtotal: number;
+  fees: number;
+  discount: number;
+  currency: string;
+  total: number;
+
+  couponCode?: string;
+
+  tracking?: IOrderTrackingSnapshot | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
+
+const OrderItemSnapshotSchema = new Schema<IOrderItemSnapshot>(
+  {
+    ticketTypeId: {
+      type: Schema.Types.ObjectId,
+      ref: "TicketType",
+      required: true,
+    },
+    ticketTypeLabel: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 160,
+    },
+    unitPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    qty: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    currency: {
+      type: String,
+      required: true,
+      uppercase: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 3,
+    },
+  },
+  { _id: false },
+);
+
+const OrderTrackingSnapshotSchema = new Schema<IOrderTrackingSnapshot>(
+  {
+    trackingLinkId: {
+      type: Schema.Types.ObjectId,
+      ref: "TrackingLink",
+      default: null,
+      index: true,
+    },
+    trackingCode: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 64,
+    },
+    trackingCreatorUserId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+    trackingOrganizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      default: null,
+      index: true,
+    },
+    trackingDestinationKind: {
+      type: String,
+      enum: ["Event", "Organization", null],
+      default: null,
+    },
+    trackingDestinationId: {
+      type: Schema.Types.ObjectId,
+      default: null,
+      index: true,
+    },
+  },
+  { _id: false },
+);
 
 const OrderSchema = new Schema<IOrder>(
   {
@@ -33,19 +133,39 @@ const OrderSchema = new Schema<IOrder>(
       required: true,
       index: true,
     },
+
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true,
+    },
+
     eventId: {
       type: Schema.Types.ObjectId,
       ref: "Event",
       required: true,
       index: true,
     },
+
     ticketIds: [
       {
         type: Schema.Types.ObjectId,
         ref: "Ticket",
-        required: true,
+        default: [],
       },
     ],
+
+    items: {
+      type: [OrderItemSnapshotSchema],
+      default: [],
+      validate: {
+        validator(value: IOrderItemSnapshot[]) {
+          return Array.isArray(value) && value.length > 0;
+        },
+        message: "Order must contain at least one item snapshot.",
+      },
+    },
 
     status: {
       type: String,
@@ -54,27 +174,83 @@ const OrderSchema = new Schema<IOrder>(
       index: true,
     },
 
-    /* Stripe linkage ---------------------------------------------------- */
-    paymentIntentId: { type: String, default: "" },
-    checkoutSessionId: { type: String, default: "" },
+    paymentIntentId: {
+      type: String,
+      default: "",
+      trim: true,
+      index: true,
+    },
 
-    /* Money ------------------------------------------------------------- */
-    subtotal: { type: Number, required: true, min: 0 },
-    fees: { type: Number, required: true, min: 0 },
-    currency: { type: String, required: true, length: 3, uppercase: true },
-    total: { type: Number, required: true, min: 0 },
+    checkoutSessionId: {
+      type: String,
+      default: "",
+      trim: true,
+      index: true,
+    },
+
+    subtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    fees: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    discount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+
+    currency: {
+      type: String,
+      required: true,
+      uppercase: true,
+      trim: true,
+      minlength: 3,
+      maxlength: 3,
+    },
+
+    total: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    couponCode: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 80,
+    },
+
+    tracking: {
+      type: OrderTrackingSnapshotSchema,
+      default: null,
+    },
   },
-  { timestamps: true }
+  { timestamps: true, strict: true },
 );
 
-/* ---------------------------------------------------------------------- */
-/*  Compound index to query a user’s orders by most-recent                */
-/* ---------------------------------------------------------------------- */
 OrderSchema.index({ userId: 1, createdAt: -1 });
+OrderSchema.index({ eventId: 1, status: 1, createdAt: -1 });
+OrderSchema.index({ organizationId: 1, status: 1, createdAt: -1 });
+OrderSchema.index(
+  { paymentIntentId: 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: {
+      paymentIntentId: { $type: "string", $ne: "" },
+    },
+  },
+);
 
-/* ---------------------------------------------------------------------- */
-/*  Hot-reload-safe export                                                */
-/* ---------------------------------------------------------------------- */
 const Order =
   (models.Order as Model<IOrder>) || model<IOrder>("Order", OrderSchema);
 

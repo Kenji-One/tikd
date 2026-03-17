@@ -1,4 +1,3 @@
-// src/components/checkout/PaymentModal.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -9,11 +8,12 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
+
 import { useCart } from "@/store/useCart";
 import { calcPrices } from "@/lib/pricing";
 
 const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY as string,
 );
 
 type PaymentModalProps = {
@@ -24,6 +24,68 @@ type PaymentModalProps = {
   customerEmail?: string;
   currencyCode?: string;
 };
+
+type PaymentStatusResponse = {
+  ok: true;
+  paymentIntentId: string;
+  paymentIntentStatus: string;
+  finalized: boolean;
+  order: {
+    id: string;
+    status: string;
+    ticketIds: string[];
+    total: number;
+    currency: string;
+    eventId: string;
+  };
+};
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollPaymentFinalization(
+  paymentIntentId: string,
+): Promise<
+  { ok: true; response: PaymentStatusResponse } | { ok: false; message: string }
+> {
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const res = await fetch(
+      `/api/stripe/payment-status?paymentIntentId=${encodeURIComponent(paymentIntentId)}`,
+      {
+        method: "GET",
+        cache: "no-store",
+      },
+    );
+
+    if (res.ok) {
+      const data = (await res.json()) as PaymentStatusResponse;
+
+      if (data.finalized) {
+        return { ok: true, response: data };
+      }
+
+      if (
+        ["requires_payment_method", "canceled"].includes(
+          data.paymentIntentStatus,
+        )
+      ) {
+        return {
+          ok: false,
+          message: "Payment was not completed.",
+        };
+      }
+    }
+
+    await sleep(1500);
+  }
+
+  return {
+    ok: false,
+    message:
+      "Payment was submitted, but order finalization is still processing. Please check again in a moment.",
+  };
+}
 
 export default function PaymentModal({
   clientSecret,
@@ -47,7 +109,7 @@ export default function PaymentModal({
         },
       },
     }),
-    [clientSecret]
+    [clientSecret],
   );
 
   if (!open) return null;
@@ -92,12 +154,12 @@ function CheckoutForm({
   const stripe = useStripe();
   const elements = useElements();
 
-  // cart + pricing for the LEFT summary panel
   const { items, coupon } = useCart();
   const price = useMemo(() => calcPrices(items, coupon), [items, coupon]);
 
-  const normalizeCurrencyCode = (c?: string) =>
-    (c || "USD").trim().toUpperCase();
+  const normalizeCurrencyCode = (value?: string) =>
+    (value || "USD").trim().toUpperCase();
+
   const code = normalizeCurrencyCode(currencyCode ?? price.currency);
 
   const moneyFmt = useMemo(
@@ -109,21 +171,25 @@ function CheckoutForm({
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       }),
-    [code]
+    [code],
   );
-  const fmt = (n: number) => moneyFmt.format(n);
+
+  const fmt = (amount: number) => moneyFmt.format(amount);
 
   const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => setError(null), []);
 
   const handleSubmit = async () => {
     if (!stripe || !elements) return;
+
     setSubmitting(true);
+    setVerifying(false);
     setError(null);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
+    const result = await stripe.confirmPayment({
       elements,
       redirect: "if_required",
       confirmParams: {
@@ -132,20 +198,47 @@ function CheckoutForm({
       },
     });
 
-    if (error) {
-      setError(error.message || "Payment failed. Try another method.");
+    if (result.error) {
+      setError(result.error.message || "Payment failed. Try another method.");
       setSubmitting(false);
       return;
     }
 
-    if (paymentIntent?.status === "succeeded") {
-      onSuccess();
-    } else {
-      onClose();
+    const paymentIntent = result.paymentIntent;
+
+    if (
+      paymentIntent?.id &&
+      ["succeeded", "processing"].includes(paymentIntent.status)
+    ) {
+      setVerifying(true);
+
+      const finalized = await pollPaymentFinalization(paymentIntent.id);
+
+      if (finalized.ok) {
+        onSuccess();
+        return;
+      }
+
+      setVerifying(false);
+      setSubmitting(false);
+      setError(finalized.message);
+      return;
     }
+
+    if (paymentIntent?.status === "requires_payment_method") {
+      setError("Payment was not completed. Please try another method.");
+      setSubmitting(false);
+      return;
+    }
+
+    /**
+     * For redirect-based methods Stripe may navigate away.
+     * If we stay here without a resolvable terminal state, close and let the
+     * return page handle post-redirect verification.
+     */
+    onClose();
   };
 
-  // helper
   const first = items[0];
 
   return (
@@ -156,6 +249,7 @@ function CheckoutForm({
           onClick={onClose}
           className="cursor-pointer text-neutral-300 transition duration-200 hover:text-neutral-0"
           aria-label="Close"
+          disabled={verifying}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -175,11 +269,8 @@ function CheckoutForm({
         </button>
       </div>
 
-      {/* Two-column layout: LEFT summary, RIGHT payment form */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-[420px_1fr] p-4 sm:p-6 sm:px-8">
-        {/* LEFT: Order summary (Figma-styled) */}
         <div className="rounded-2xl bg-neutral-900 p-4 sm:p-6">
-          {/* Brand chip */}
           <div className="mb-6 flex items-center gap-1">
             <span className="inline-block size-4 rounded-full border border-white bg-gradient-to-tr from-primary-800 to-primary-900" />
             <span className="text-neutral-0 text-base">Tikd</span>
@@ -190,7 +281,6 @@ function CheckoutForm({
             {fmt(Math.max(price.subtotal, 0))}
           </div>
 
-          {/* First line item (like mock) */}
           {first && (
             <div className="mt-6 sm:mt-8">
               <div className="flex items-center justify-between text-neutral-0">
@@ -229,21 +319,27 @@ function CheckoutForm({
           />
         </div>
 
-        {/* RIGHT: Stripe Payment Element */}
         <div className="rounded-2xl bg-neutral-900 p-4 mb-4 sm:mb-0">
           <PaymentElement />
+
           {error && <p className="mt-3 text-sm text-error-400">{error}</p>}
-          {/* sticky action on mobile, normal on ≥sm */}
+
+          {verifying ? (
+            <p className="mt-3 text-sm text-neutral-300">
+              Payment received. Finalizing your order…
+            </p>
+          ) : null}
 
           <button
             onClick={handleSubmit}
-            disabled={submitting || !stripe || !elements}
+            disabled={submitting || verifying || !stripe || !elements}
             className="hidden sm:block h-12 w-full mt-4 rounded-xl bg-primary-952 font-semibold text-neutral-0 disabled:opacity-60"
           >
-            {submitting ? "Processing…" : "Pay now"}
+            {verifying ? "Verifying…" : submitting ? "Processing…" : "Pay now"}
           </button>
         </div>
       </div>
+
       <div
         className="w-full block sm:hidden -mx-4 bg-neutral-900/95 backdrop-blur p-4
             sticky bottom-0 left-0 right-0
@@ -251,17 +347,16 @@ function CheckoutForm({
       >
         <button
           onClick={handleSubmit}
-          disabled={submitting || !stripe || !elements}
+          disabled={submitting || verifying || !stripe || !elements}
           className="h-12 w-full rounded-xl bg-primary-952 font-semibold text-neutral-0 disabled:opacity-60"
         >
-          {submitting ? "Processing…" : "Pay now"}
+          {verifying ? "Verifying…" : submitting ? "Processing…" : "Pay now"}
         </button>
       </div>
     </div>
   );
 }
 
-/* tiny row component for summary */
 function Row({
   label,
   value,

@@ -3,9 +3,11 @@ import { z } from "zod";
 import { Types } from "mongoose";
 
 import { connectDB } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import Event from "@/models/Event";
 import Ticket from "@/models/Ticket";
 import Order from "@/models/Order";
+import { listAuthorizedOrganizationIdsForUser } from "@/lib/orgAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,12 +45,8 @@ type PaidOrderLean = {
 type EventPreview = {
   _id: Types.ObjectId;
   title: string;
-};
-
-type OrgScopedEventPreview = {
-  _id: Types.ObjectId;
-  title: string;
   organizationId: Types.ObjectId;
+  createdByUserId: Types.ObjectId;
 };
 
 type MetricSet = {
@@ -286,6 +284,11 @@ function weekdayIndexMondayFirst(date: Date): number {
 }
 
 export async function GET(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const parsed = QuerySchema.safeParse(
       Object.fromEntries(req.nextUrl.searchParams.entries()),
@@ -331,28 +334,73 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
+    const accessibleOrgIds = await listAuthorizedOrganizationIdsForUser({
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+    });
+
+    const accessibleOrgIdSet = new Set(
+      accessibleOrgIds.map((id) => String(id)),
+    );
+
     const scopeType = getScopeType(eventId, orgId);
 
     let scopedEventIds: Types.ObjectId[] | null = null;
-    let scopedEvent: EventPreview | null = null;
+    let scopedEvent: { _id: Types.ObjectId; title: string } | null = null;
 
     if (eventId) {
       const foundEvent = await Event.findById(eventId)
-        .select("_id title")
+        .select("_id title organizationId createdByUserId")
         .lean<EventPreview | null>();
 
       if (!foundEvent) {
         return NextResponse.json({ error: "Event not found" }, { status: 404 });
       }
 
-      scopedEvent = foundEvent;
+      const canAccess =
+        String(foundEvent.createdByUserId) === String(session.user.id) ||
+        accessibleOrgIdSet.has(String(foundEvent.organizationId));
+
+      if (!canAccess) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      scopedEvent = { _id: foundEvent._id, title: foundEvent.title };
       scopedEventIds = [foundEvent._id];
     } else if (orgId) {
+      const orgIdStr = String(orgId);
+      if (!accessibleOrgIdSet.has(orgIdStr)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
       const events = await Event.find({ organizationId: toObjectId(orgId) })
-        .select("_id title organizationId")
-        .lean<OrgScopedEventPreview[]>();
+        .select("_id")
+        .lean<Array<{ _id: Types.ObjectId }>>();
 
       scopedEventIds = events.map((event) => event._id);
+    } else {
+      const [createdEvents, orgEvents] = await Promise.all([
+        Event.find({ createdByUserId: session.user.id })
+          .select("_id")
+          .lean<Array<{ _id: Types.ObjectId }>>(),
+        accessibleOrgIds.length
+          ? Event.find({ organizationId: { $in: accessibleOrgIds } })
+              .select("_id")
+              .lean<Array<{ _id: Types.ObjectId }>>()
+          : Promise.resolve([] as Array<{ _id: Types.ObjectId }>),
+      ]);
+
+      const seen = new Set<string>();
+      const merged: Types.ObjectId[] = [];
+
+      for (const row of [...createdEvents, ...orgEvents]) {
+        const key = String(row._id);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(row._id);
+      }
+
+      scopedEventIds = merged;
     }
 
     const soldMatch: Record<string, unknown> = {

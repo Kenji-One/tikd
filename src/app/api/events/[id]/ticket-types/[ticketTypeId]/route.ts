@@ -2,42 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
 import { auth } from "@/lib/auth";
-import Event, { type IEvent } from "@/models/Event";
+import { requireEventPermission } from "@/lib/eventAccess";
+
 import TicketType from "@/models/TicketType";
 import { ticketTypeBodySchema } from "../schema";
 
 const partialSchema = ticketTypeBodySchema.partial();
 
-/* --------------------------- helpers --------------------------- */
-
-async function ensureEventOwnership(
-  userId: string,
-  eventId: string
-): Promise<{ ok: true; event: IEvent } | { ok: false; res: NextResponse }> {
-  const event = await Event.findById(eventId).lean<IEvent>().exec();
-
-  if (!event) {
-    return {
-      ok: false,
-      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
-    };
-  }
-
-  if (event.createdByUserId.toString() !== userId) {
-    return {
-      ok: false,
-      res: NextResponse.json({ error: "Event not yours" }, { status: 403 }),
-    };
-  }
-
-  return { ok: true, event };
-}
-
 /* ------------------------------ GET ------------------------------ */
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; ticketTypeId: string }> }
+  { params }: { params: Promise<{ id: string; ticketTypeId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -46,8 +22,19 @@ export async function GET(
 
   const { id: eventId, ticketTypeId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   const doc = await TicketType.findOne({
     _id: ticketTypeId,
@@ -67,7 +54,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string; ticketTypeId: string }> }
+  { params }: { params: Promise<{ id: string; ticketTypeId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -76,10 +63,21 @@ export async function PATCH(
 
   const { id: eventId, ticketTypeId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
 
-  const json = await req.json();
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
+  const json = await req.json().catch(() => null);
   const parsed = partialSchema.safeParse(json);
 
   if (!parsed.success) {
@@ -116,7 +114,7 @@ export async function PATCH(
   const doc = await TicketType.findOneAndUpdate(
     { _id: ticketTypeId, eventId },
     update,
-    { new: true }
+    { new: true },
   )
     .lean()
     .exec();
@@ -132,7 +130,7 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string; ticketTypeId: string }> }
+  { params }: { params: Promise<{ id: string; ticketTypeId: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -141,8 +139,19 @@ export async function DELETE(
 
   const { id: eventId, ticketTypeId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   await TicketType.deleteOne({
     _id: ticketTypeId,

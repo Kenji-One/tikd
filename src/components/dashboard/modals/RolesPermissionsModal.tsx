@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  src/components/dashboard/modals/RolesPermissionsModal.tsx          */
+/*  src/components/dashboard/modals/RolesPermissionsModal.tsx         */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -125,6 +125,30 @@ type OrgRoleRow = {
   order: number;
   permissions: Partial<OrgPermissions>;
   membersCount: number;
+};
+
+type OrgAccessResponse = {
+  organization: {
+    id: string;
+    name: string;
+    ownerId: string;
+  };
+  access: {
+    hasAccess: boolean;
+    isOwner: boolean;
+    membershipStatus: string | null;
+    role: {
+      key: string;
+      name: string;
+      color?: string;
+      iconKey?: RoleIconKey | null;
+      iconUrl?: string | null;
+      isSystem: boolean;
+      roleId?: string | null;
+    } | null;
+    permissions: Partial<OrgPermissions>;
+    canManageProfile: boolean;
+  };
 };
 
 type CreateRoleBody = {
@@ -489,7 +513,6 @@ export default function RolesPermissionsModal({
     y: 0,
   });
 
-  // ✅ Delete confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{
     roleId: string;
     roleName: string;
@@ -518,10 +541,34 @@ export default function RolesPermissionsModal({
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
 
+  /* --------------------------- Access --------------------------- */
+  const accessQuery = useQuery<OrgAccessResponse>({
+    queryKey: ["org-access", orgId],
+    enabled: open && !!orgId,
+    queryFn: () =>
+      json<OrgAccessResponse>(`/api/organizations/${orgId}/access`),
+    staleTime: 30_000,
+  });
+
+  const accessPermissions = accessQuery.data?.access.permissions ?? {};
+
+  const canViewRoles =
+    !!accessQuery.data &&
+    accessQuery.data.access.hasAccess &&
+    (accessQuery.data.access.isOwner ||
+      !!accessPermissions["members.view"] ||
+      !!accessPermissions["members.assignRoles"]);
+
+  const canEditRoles =
+    !!accessQuery.data &&
+    accessQuery.data.access.hasAccess &&
+    (accessQuery.data.access.isOwner ||
+      !!accessPermissions["members.assignRoles"]);
+
   /* --------------------------- Query --------------------------- */
   const rolesQuery = useQuery<OrgRoleRow[]>({
     queryKey: ["org-roles", orgId],
-    enabled: open,
+    enabled: open && !!orgId && canViewRoles,
     queryFn: () => json<OrgRoleRow[]>(`/api/organizations/${orgId}/roles`),
     staleTime: 15_000,
   });
@@ -536,7 +583,7 @@ export default function RolesPermissionsModal({
       _id: OWNER_PSEUDO_ID,
       key: "owner",
       name: ROLE_META.owner.label,
-      color: "#8B5CF6",
+      color: "#F7C948",
       iconKey: null,
       iconUrl: null,
       isSystem: true,
@@ -591,7 +638,6 @@ export default function RolesPermissionsModal({
   useEffect(() => {
     if (!open) return;
 
-    // Always open to the main roles list view (fresh start).
     setView("list");
     setEditorTab("manager");
     setQ("");
@@ -607,12 +653,12 @@ export default function RolesPermissionsModal({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !canViewRoles) return;
     if (roles.length && !activeRoleId) {
       const admin = roles.find((r) => r.key === "admin");
       setActiveRoleId((admin ?? roles[0])!._id);
     }
-  }, [open, roles, activeRoleId]);
+  }, [open, canViewRoles, roles, activeRoleId]);
 
   useEffect(() => {
     if (!activeRole) return;
@@ -643,7 +689,6 @@ export default function RolesPermissionsModal({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        // ✅ If confirm is open, close it first (don’t close the whole Roles modal)
         if (confirmOpen) {
           setDeleteConfirm(null);
           return;
@@ -683,7 +728,7 @@ export default function RolesPermissionsModal({
       });
       setActiveRoleId(created._id);
       setView("editor");
-      setEditorTab("manager"); // ✅ Create Role opens on Display/Manager first
+      setEditorTab("manager");
       setQ("");
     },
     onError: (err: unknown) => {
@@ -751,7 +796,6 @@ export default function RolesPermissionsModal({
         setEditorTab("manager");
       }
 
-      // ✅ close confirm if it was open for this role
       setDeleteConfirm((cur) => (cur?.roleId === roleId ? null : cur));
     },
   });
@@ -764,6 +808,8 @@ export default function RolesPermissionsModal({
   const canDelete = (r: OrgRoleRow) => !r.isSystem;
 
   const onCreateRole = () => {
+    if (!canEditRoles) return;
+
     setCreateErr(null);
 
     const base = "New role";
@@ -789,10 +835,12 @@ export default function RolesPermissionsModal({
   const onOpenEditor = (roleId: string) => {
     setActiveRoleId(roleId);
     setView("editor");
-    setEditorTab("manager"); // ✅ Edit opens on Display/Manager first
+    setEditorTab("manager");
   };
 
   const onTogglePerm = (k: OrgPermissionKey, v: boolean) => {
+    if (!canEditRoles) return;
+
     const roleId = activeRoleId;
     if (!roleId) return;
 
@@ -808,6 +856,8 @@ export default function RolesPermissionsModal({
   };
 
   const onSaveMeta = () => {
+    if (!canEditRoles) return;
+
     const roleId = activeRoleId;
     if (!roleId) return;
 
@@ -823,6 +873,7 @@ export default function RolesPermissionsModal({
   };
 
   function openDeleteConfirmationForRole(r: OrgRoleRow) {
+    if (!canEditRoles) return;
     if (!canDelete(r)) return;
     setDeleteConfirm({ roleId: r._id, roleName: r.name });
   }
@@ -834,6 +885,8 @@ export default function RolesPermissionsModal({
   }
 
   async function uploadRoleIcon(file: File) {
+    if (!canEditRoles) return;
+
     setUploadErr(null);
     setUploadingIcon(true);
 
@@ -1104,7 +1157,27 @@ export default function RolesPermissionsModal({
               "p-4 md:p-5",
             )}
           >
-            {view === "list" ? (
+            {accessQuery.isLoading ? (
+              <div className="space-y-3">
+                <div className="h-10 w-52 rounded-xl border border-white/10 bg-neutral-950/35" />
+                <div className="h-[52px] rounded-xl border border-white/10 bg-neutral-950/35" />
+                <div className="h-[52px] rounded-xl border border-white/10 bg-neutral-950/35" />
+                <div className="h-[52px] rounded-xl border border-white/10 bg-neutral-950/35" />
+              </div>
+            ) : accessQuery.isError ? (
+              <div className="rounded-xl border border-error-500/25 bg-error-500/10 px-4 py-3 text-[12px] text-error-200">
+                Couldn’t load organization access. Please refresh and try again.
+              </div>
+            ) : !canViewRoles ? (
+              <div className="rounded-xl border border-white/10 bg-neutral-950/35 px-4 py-10 text-center">
+                <div className="text-[13px] font-semibold text-neutral-100">
+                  You do not have permission to view roles
+                </div>
+                <div className="mt-1 text-[12px] text-neutral-500">
+                  Ask an organization admin or owner to grant access.
+                </div>
+              </div>
+            ) : view === "list" ? (
               <>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="w-full sm:max-w-[520px]">
@@ -1124,7 +1197,7 @@ export default function RolesPermissionsModal({
                     icon={<Plus className="h-4 w-4" />}
                     onClick={onCreateRole}
                     animation
-                    disabled={saving}
+                    disabled={!canEditRoles || saving}
                   >
                     Create Role
                   </Button>
@@ -1133,6 +1206,13 @@ export default function RolesPermissionsModal({
                 {createErr ? (
                   <div className="mt-3 rounded-xl border border-error-500/25 bg-error-500/10 px-4 py-3 text-[12px] text-error-200">
                     {createErr}
+                  </div>
+                ) : null}
+
+                {!canEditRoles ? (
+                  <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[12px] text-neutral-300">
+                    Read only. You can view roles, but you do not have
+                    permission to create, edit, or delete them.
                   </div>
                 ) : null}
 
@@ -1239,8 +1319,10 @@ export default function RolesPermissionsModal({
                                   if (isOwnerRow) return;
                                   onOpenEditor(r._id);
                                 }}
-                                title="Edit role"
-                                aria-label="Edit role"
+                                title={canEditRoles ? "Edit role" : "View role"}
+                                aria-label={
+                                  canEditRoles ? "Edit role" : "View role"
+                                }
                                 className={clsx(
                                   "inline-flex items-center justify-center",
                                   "h-9 w-9 rounded-md border border-white/10 bg-neutral-950/40",
@@ -1265,12 +1347,16 @@ export default function RolesPermissionsModal({
                                 type="button"
                                 onClick={() => openDeleteConfirmationForRole(r)}
                                 title={
-                                  r.isSystem
-                                    ? "System roles cannot be deleted"
-                                    : "Delete role"
+                                  !canEditRoles
+                                    ? "You do not have permission to delete roles"
+                                    : r.isSystem
+                                      ? "System roles cannot be deleted"
+                                      : "Delete role"
                                 }
                                 aria-label="Delete role"
-                                disabled={!canDelete(r) || saving}
+                                disabled={
+                                  !canEditRoles || !canDelete(r) || saving
+                                }
                                 className={clsx(
                                   "inline-flex items-center justify-center",
                                   "h-9 w-9 rounded-md border border-white/10 bg-neutral-950/40",
@@ -1278,7 +1364,7 @@ export default function RolesPermissionsModal({
                                   "focus:outline-none focus:ring-1 focus:ring-primary-600/35",
                                   "transition cursor-pointer",
                                   "tikdIconBtn tikdIconBtn--trash cursor-pointer",
-                                  (!canDelete(r) || saving) &&
+                                  (!canEditRoles || !canDelete(r) || saving) &&
                                     "opacity-50 pointer-events-none",
                                 )}
                               >
@@ -1321,12 +1407,20 @@ export default function RolesPermissionsModal({
                     <span className="text-[12px] font-semibold">Back</span>
                   </button>
 
-                  <div className="text-[12px] text-neutral-500">
-                    {activeRole?.isSystem ? (
-                      <span>System role</span>
-                    ) : (
-                      <span>Custom role</span>
-                    )}
+                  <div className="flex items-center gap-2">
+                    {!canEditRoles ? (
+                      <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-neutral-300">
+                        Read only
+                      </span>
+                    ) : null}
+
+                    <div className="text-[12px] text-neutral-500">
+                      {activeRole?.isSystem ? (
+                        <span>System role</span>
+                      ) : (
+                        <span>Custom role</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1353,10 +1447,12 @@ export default function RolesPermissionsModal({
                           "inline-flex h-8 w-8 items-center justify-center rounded-lg",
                           "border border-white/10 bg-neutral-950/40 text-neutral-200 hover:bg-neutral-950/55",
                           "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
-                          saving && "opacity-60 pointer-events-none",
+                          (!canEditRoles || saving) &&
+                            "opacity-60 pointer-events-none",
                         )}
                         aria-label="Create role"
                         title="Create role"
+                        disabled={!canEditRoles || saving}
                       >
                         <Plus className="h-4 w-4" />
                       </button>
@@ -1487,6 +1583,13 @@ export default function RolesPermissionsModal({
                             Display settings. (Permissions are in the next tab.)
                           </div>
 
+                          {!canEditRoles ? (
+                            <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[12px] text-neutral-300">
+                              Read only. You can inspect this role, but you do
+                              not have permission to modify it.
+                            </div>
+                          ) : null}
+
                           {/* Preview */}
                           <div className="mt-4">
                             <div className="flex items-center gap-2">
@@ -1520,7 +1623,7 @@ export default function RolesPermissionsModal({
                                   placeholder="Role name"
                                   variant="full"
                                   size="md"
-                                  disabled={saving}
+                                  disabled={!canEditRoles || saving}
                                 />
                               </div>
                             </div>
@@ -1565,7 +1668,7 @@ export default function RolesPermissionsModal({
                                         setDraftColor(clampHex(e.target.value))
                                       }
                                       placeholder="#7C3AED"
-                                      disabled={saving}
+                                      disabled={!canEditRoles || saving}
                                       variant="full"
                                       size="md"
                                       endAdornment={
@@ -1575,10 +1678,15 @@ export default function RolesPermissionsModal({
                                             e.preventDefault();
                                             e.stopPropagation();
                                           }}
-                                          onPointerDown={(e) =>
-                                            openColorPickerAt(e)
-                                          }
-                                          onClick={(e) => openColorPickerAt(e)}
+                                          onPointerDown={(e) => {
+                                            if (!canEditRoles || saving) return;
+                                            openColorPickerAt(e);
+                                          }}
+                                          onClick={(e) => {
+                                            if (!canEditRoles || saving) return;
+                                            openColorPickerAt(e);
+                                          }}
+                                          disabled={!canEditRoles || saving}
                                           aria-label="Pick role color"
                                           title="Pick role color"
                                           className={clsx(
@@ -1587,6 +1695,8 @@ export default function RolesPermissionsModal({
                                             "rounded-md",
                                             "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                                             "cursor-pointer",
+                                            (!canEditRoles || saving) &&
+                                              "opacity-60 pointer-events-none",
                                           )}
                                         >
                                           <span
@@ -1612,7 +1722,7 @@ export default function RolesPermissionsModal({
                                     setDraftColor("");
                                     setColorPickerOpen(false);
                                   }}
-                                  disabled={saving}
+                                  disabled={!canEditRoles || saving}
                                   className={clsx(
                                     "inline-flex items-center justify-center",
                                     "h-[44px] w-[44px] shrink-0 rounded-lg",
@@ -1634,7 +1744,10 @@ export default function RolesPermissionsModal({
                                 onChange={(next) => setDraftColor(next)}
                                 defaultColor="#7C3AED"
                                 open={colorPickerOpen}
-                                onOpenChange={setColorPickerOpen}
+                                onOpenChange={(next) => {
+                                  if (!canEditRoles) return;
+                                  setColorPickerOpen(next);
+                                }}
                                 anchorPoint={colorPickerPt}
                                 showAlpha={false}
                               />
@@ -1655,13 +1768,14 @@ export default function RolesPermissionsModal({
                                       key={c}
                                       type="button"
                                       onClick={() => setDraftColor(c)}
-                                      disabled={saving}
+                                      disabled={!canEditRoles || saving}
                                       className={clsx(
                                         "h-[26px] w-[26px] rounded-md",
                                         "border border-white/10",
                                         "transition",
                                         "cursor-pointer hover:border-white",
-                                        saving && "opacity-70",
+                                        (!canEditRoles || saving) &&
+                                          "opacity-70",
                                       )}
                                       style={{
                                         background: c,
@@ -1728,7 +1842,7 @@ export default function RolesPermissionsModal({
                                         "text-[12px] font-semibold text-neutral-0",
                                         "hover:bg-neutral-950/60 cursor-pointer",
                                         "focus-within:ring-2 focus-within:ring-primary-500/60",
-                                        uploadingIcon &&
+                                        (uploadingIcon || !canEditRoles) &&
                                           "opacity-60 pointer-events-none",
                                       )}
                                     >
@@ -1740,6 +1854,9 @@ export default function RolesPermissionsModal({
                                         type="file"
                                         accept="image/*"
                                         className="hidden"
+                                        disabled={
+                                          !canEditRoles || uploadingIcon
+                                        }
                                         onChange={(e) => {
                                           const f = e.target.files?.[0];
                                           if (!f) return;
@@ -1754,7 +1871,7 @@ export default function RolesPermissionsModal({
                                       variant="secondary"
                                       size="sm"
                                       className="rounded-xl"
-                                      disabled={saving}
+                                      disabled={!canEditRoles || saving}
                                       onClick={() => {
                                         setDraftIconUrl(null);
                                         setDraftIconKey(null);
@@ -1783,12 +1900,15 @@ export default function RolesPermissionsModal({
                                           setDraftIconKey(it.key);
                                           setDraftIconUrl(null);
                                         }}
+                                        disabled={!canEditRoles || saving}
                                         className={clsx(
                                           "h-9 w-9 rounded-lg grid place-items-center",
                                           "border border-white/10 bg-neutral-950/55",
                                           "hover:bg-neutral-950/65 hover:border-white/20 transition cursor-pointer",
                                           active &&
                                             "ring-2 ring-primary-500/55 bg-[radial-gradient(140px_90px_at_30%_20%,rgba(154,70,255,0.22),transparent_60%),radial-gradient(140px_90px_at_90%_80%,rgba(66,139,255,0.14),transparent_60%)]",
+                                          (!canEditRoles || saving) &&
+                                            "opacity-60 pointer-events-none",
                                         )}
                                         aria-label={`Icon ${it.label}`}
                                         title={it.label}
@@ -1823,7 +1943,9 @@ export default function RolesPermissionsModal({
                           )}
                         >
                           <div className="flex items-center justify-between gap-2 px-4 py-3">
-                            {activeRole && !activeRole.isSystem ? (
+                            {canEditRoles &&
+                            activeRole &&
+                            !activeRole.isSystem ? (
                               <button
                                 type="button"
                                 disabled={saving}
@@ -1854,7 +1976,9 @@ export default function RolesPermissionsModal({
                               variant="premium"
                               size="md"
                               className="rounded-xl"
-                              disabled={saving || !activeRoleId}
+                              disabled={
+                                saving || !activeRoleId || !canEditRoles
+                              }
                               onClick={onSaveMeta}
                               icon={<Check className="h-4 w-4" />}
                               animation
@@ -1869,6 +1993,13 @@ export default function RolesPermissionsModal({
                         <div className="text-[12px] text-neutral-400">
                           Toggle what this role can do.
                         </div>
+
+                        {!canEditRoles ? (
+                          <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[12px] text-neutral-300">
+                            Read only. You can inspect permissions, but you do
+                            not have permission to change them.
+                          </div>
+                        ) : null}
 
                         <div className="mt-4 space-y-3">
                           {PERMISSION_SECTIONS.map((sec) => (
@@ -1917,7 +2048,9 @@ export default function RolesPermissionsModal({
                                     <PermissionToggle
                                       checked={!!draftPerms[p.key]}
                                       onChange={(v) => onTogglePerm(p.key, v)}
-                                      disabled={!activeRoleId || saving}
+                                      disabled={
+                                        !activeRoleId || saving || !canEditRoles
+                                      }
                                     />
                                   </div>
                                 ))}
@@ -1927,7 +2060,9 @@ export default function RolesPermissionsModal({
                         </div>
 
                         <div className="mt-4 text-[11px] text-neutral-500">
-                          Changes save automatically.
+                          {canEditRoles
+                            ? "Changes save automatically."
+                            : "Read only."}
                         </div>
                       </div>
                     )}
@@ -1935,122 +2070,122 @@ export default function RolesPermissionsModal({
                 </div>
               </>
             )}
+
+            {canViewRoles && rolesQuery.isError ? (
+              <div className="mt-3 rounded-xl border border-error-500/25 bg-error-500/10 px-4 py-3 text-[12px] text-error-200">
+                Failed to load roles. Please refresh.
+              </div>
+            ) : null}
           </div>
 
-          {rolesQuery.isError ? (
-            <div className="mt-3 rounded-xl border border-error-500/25 bg-error-500/10 px-4 py-3 text-[12px] text-error-200">
-              Failed to load roles. Please refresh.
+          {/* Delete confirmation popup */}
+          {confirmOpen ? (
+            <div
+              className="absolute inset-0 z-[95] flex items-center justify-center px-4 sm:px-6"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Delete role confirmation"
+            >
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setDeleteConfirm(null)}
+                className="absolute inset-0 bg-black/55 backdrop-blur-[10px]"
+              />
+
+              <div
+                className={clsx(
+                  "relative w-full max-w-[620px] overflow-hidden rounded-3xl",
+                  "border border-white/10 bg-neutral-950/92",
+                  "shadow-[0_35px_140px_rgba(0,0,0,0.78)]",
+                )}
+              >
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-100"
+                  style={{
+                    background:
+                      "radial-gradient(900px 320px at 18% -10%, rgba(154,70,255,0.18), transparent 60%), radial-gradient(900px 320px at 100% 30%, rgba(66,139,255,0.12), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
+                  }}
+                />
+
+                <div className="relative flex items-start justify-between gap-4 px-7 py-6">
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={clsx(
+                        "mt-0.5 inline-flex h-12 w-12 items-center justify-center rounded-2xl",
+                        "border border-white/10 bg-white/5 text-warning-200 flex-shrink-0",
+                        "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                      )}
+                    >
+                      <AlertTriangle className="h-6 w-6" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="text-[18px] font-semibold text-neutral-0">
+                        Delete Role
+                      </div>
+                      <div className="mt-2 text-[13px] leading-[1.45] text-neutral-400">
+                        Are you sure you want to delete the{" "}
+                        <span className="font-semibold text-neutral-200">
+                          {deleteConfirm?.roleName ?? "this"}
+                        </span>{" "}
+                        role? This action cannot be undone.
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm(null)}
+                    aria-label="Close confirmation"
+                    className={clsx(
+                      "inline-flex flex-shrink-0 h-10 w-10 items-center justify-center rounded-full",
+                      "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10 cursor-pointer",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                    )}
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="relative px-7 pb-7">
+                  <div className="mt-5 grid grid-cols-2 gap-4">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="md"
+                      className={clsx(
+                        "rounded-2xl h-11 text-[14px]",
+                        "border border-white/10 bg-white/5",
+                        "hover:bg-white/10",
+                      )}
+                      disabled={saving}
+                      onClick={() => setDeleteConfirm(null)}
+                    >
+                      Cancel
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="md"
+                      className={clsx(
+                        "rounded-2xl h-11 text-[14px]",
+                        "bg-[linear-gradient(90deg,rgba(154,70,255,0.95),rgba(66,139,255,0.55))]",
+                        "hover:bg-[linear-gradient(90deg,rgba(154,70,255,1),rgba(66,139,255,0.62))]",
+                        "shadow-[0_22px_55px_rgba(154,70,255,0.20)]",
+                      )}
+                      disabled={saving}
+                      onClick={confirmDeleteNow}
+                    >
+                      Okay
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
         </div>
-
-        {/* ✅ Delete confirmation popup */}
-        {confirmOpen ? (
-          <div
-            className="absolute inset-0 z-[95] flex items-center justify-center px-4 sm:px-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Delete role confirmation"
-          >
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={() => setDeleteConfirm(null)}
-              className="absolute inset-0 bg-black/55 backdrop-blur-[10px]"
-            />
-
-            <div
-              className={clsx(
-                "relative w-full max-w-[620px] overflow-hidden rounded-3xl",
-                "border border-white/10 bg-neutral-950/92",
-                "shadow-[0_35px_140px_rgba(0,0,0,0.78)]",
-              )}
-            >
-              <div
-                className="pointer-events-none absolute inset-0 opacity-100"
-                style={{
-                  background:
-                    "radial-gradient(900px 320px at 18% -10%, rgba(154,70,255,0.18), transparent 60%), radial-gradient(900px 320px at 100% 30%, rgba(66,139,255,0.12), transparent 62%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))",
-                }}
-              />
-
-              <div className="relative flex items-start justify-between gap-4 px-7 py-6">
-                <div className="flex items-start gap-4">
-                  <div
-                    className={clsx(
-                      "mt-0.5 inline-flex h-12 w-12 items-center justify-center rounded-2xl",
-                      "border border-white/10 bg-white/5 text-warning-200 flex-shrink-0",
-                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-                    )}
-                  >
-                    <AlertTriangle className="h-6 w-6" />
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="text-[18px] font-semibold text-neutral-0">
-                      Delete Role
-                    </div>
-                    <div className="mt-2 text-[13px] leading-[1.45] text-neutral-400">
-                      Are you sure you want to delete the{" "}
-                      <span className="font-semibold text-neutral-200">
-                        {deleteConfirm?.roleName ?? "this"}
-                      </span>{" "}
-                      role? This action cannot be undone.
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirm(null)}
-                  aria-label="Close confirmation"
-                  className={clsx(
-                    "inline-flex flex-shrink-0 h-10 w-10 items-center justify-center rounded-full",
-                    "border border-white/10 bg-white/5 text-neutral-200 hover:bg-white/10 cursor-pointer",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                  )}
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="relative px-7 pb-7">
-                <div className="mt-5 grid grid-cols-2 gap-4">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="md"
-                    className={clsx(
-                      "rounded-2xl h-11 text-[14px]",
-                      "border border-white/10 bg-white/5",
-                      "hover:bg-white/10",
-                    )}
-                    disabled={saving}
-                    onClick={() => setDeleteConfirm(null)}
-                  >
-                    Cancel
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="md"
-                    className={clsx(
-                      "rounded-2xl h-11 text-[14px]",
-                      "bg-[linear-gradient(90deg,rgba(154,70,255,0.95),rgba(66,139,255,0.55))]",
-                      "hover:bg-[linear-gradient(90deg,rgba(154,70,255,1),rgba(66,139,255,0.62))]",
-                      "shadow-[0_22px_55px_rgba(154,70,255,0.20)]",
-                    )}
-                    disabled={saving}
-                    onClick={confirmDeleteNow}
-                  >
-                    Okay
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );

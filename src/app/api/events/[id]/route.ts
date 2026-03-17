@@ -1,17 +1,17 @@
-/* ------------------------------------------------------------------ */
-/*  src/app/api/events/[id]/route.ts                                  */
-/* ------------------------------------------------------------------ */
-
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
+import {
+  requireEventPermission,
+  requireViewEventDraft,
+} from "@/lib/eventAccess";
+
 import Event, { IEvent } from "@/models/Event";
 import Artist, { IArtist } from "@/models/Artist";
 import Organization, { IOrganization } from "@/models/Organization";
 import Ticket from "@/models/Ticket";
-import OrgTeam from "@/models/OrgTeam";
 import EventTeam from "@/models/EventTeam";
 import TicketType from "@/models/TicketType";
 import type { HydratedDocument, Types } from "mongoose";
@@ -22,7 +22,6 @@ import { createNotification } from "@/lib/notifications";
 /* ------------------------------------------------------------------ */
 const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
 
-/** Lean shape after populating artists + organization */
 type EventLean = Omit<IEvent, "organizationId" | "artists"> & {
   organizationId: Pick<
     IOrganization,
@@ -36,126 +35,8 @@ type EventDoc = HydratedDocument<IEvent> & {
   internalNotes?: string;
 };
 
-async function assertCanManageEvent(eventId: string, userId: string) {
-  // Creator can manage
-  const created = await Event.findOne({ _id: eventId, createdByUserId: userId })
-    .select("_id organizationId createdByUserId")
-    .lean<{
-      _id: Types.ObjectId;
-      organizationId: Types.ObjectId;
-      createdByUserId: Types.ObjectId;
-    } | null>();
-
-  if (created) return { ok: true as const };
-
-  const event = await Event.findById(eventId)
-    .select("_id organizationId createdByUserId")
-    .lean<{
-      _id: Types.ObjectId;
-      organizationId: Types.ObjectId;
-      createdByUserId: Types.ObjectId;
-    } | null>();
-
-  if (!event) {
-    return {
-      ok: false as const,
-      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
-    };
-  }
-
-  // Org owner can manage
-  const org = await Organization.findById(event.organizationId)
-    .select("_id ownerId")
-    .lean<{ _id: Types.ObjectId; ownerId: Types.ObjectId } | null>();
-
-  if (org && String(org.ownerId) === String(userId))
-    return { ok: true as const };
-
-  // Org admin can manage
-  const orgAdmin = await OrgTeam.findOne({
-    organizationId: event.organizationId,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-
-  if (orgAdmin) return { ok: true as const };
-
-  // Event admin can manage
-  const eventAdmin = await EventTeam.findOne({
-    eventId: event._id,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-
-  if (eventAdmin) return { ok: true as const };
-
-  return {
-    ok: false as const,
-    res: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-  };
-}
-
-async function assertCanViewDraft(eventId: string, userId: string) {
-  // Allow: org owner/admin OR event creator OR event team (any active)
-  const event = await Event.findById(eventId)
-    .select("_id organizationId createdByUserId")
-    .lean<{
-      _id: Types.ObjectId;
-      organizationId: Types.ObjectId;
-      createdByUserId: Types.ObjectId;
-    } | null>();
-
-  if (!event) {
-    return {
-      ok: false as const,
-      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
-    };
-  }
-
-  if (String(event.createdByUserId) === String(userId))
-    return { ok: true as const };
-
-  const org = await Organization.findById(event.organizationId)
-    .select("_id ownerId")
-    .lean<{ _id: Types.ObjectId; ownerId: Types.ObjectId } | null>();
-
-  if (org && String(org.ownerId) === String(userId))
-    return { ok: true as const };
-
-  const orgAdmin = await OrgTeam.findOne({
-    organizationId: event.organizationId,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-  if (orgAdmin) return { ok: true as const };
-
-  const anyEventTeam = await EventTeam.findOne({
-    eventId: event._id,
-    userId,
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-  if (anyEventTeam) return { ok: true as const };
-
-  return {
-    ok: false as const,
-    res: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-  };
-}
-
 /* ------------------------------------------------------------------ */
 /*  GET /api/events/:id                                               */
-/*  Note: In Next.js 15, context.params is a Promise.                 */
 /* ------------------------------------------------------------------ */
 export async function GET(
   _req: NextRequest,
@@ -167,10 +48,8 @@ export async function GET(
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
   }
 
-  // We might need auth only for drafts
   const session = await auth();
 
-  /* -------- fetch & populate related docs ------------------------- */
   const event = await Event.findById(id)
     .populate({
       path: "artists",
@@ -180,7 +59,6 @@ export async function GET(
     .populate({
       path: "organizationId",
       model: Organization,
-      // include ownerId to allow draft permission checks without extra query
       select: "name logo website ownerId",
     })
     .lean<EventLean>();
@@ -189,29 +67,34 @@ export async function GET(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  // ✅ Draft protection: only visible to org owner/admin, creator, or event team
   if (event.status === "draft") {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const canView = await assertCanViewDraft(
-      String(event._id),
-      session.user.id,
-    );
-    if (!canView.ok) return canView.res;
+
+    const canView = await requireViewEventDraft({
+      eventId: String(event._id),
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+    });
+
+    if (!canView.ok) {
+      return NextResponse.json(
+        { error: canView.error },
+        { status: canView.status },
+      );
+    }
   }
 
-  /* -------- derive attending count (paid tickets) ----------------- */
   const attendingCount = await Ticket.countDocuments({
     eventId: event._id,
     status: "paid",
   });
 
-  /* 4 random distinct users who already paid */
   const attendeesPreview = await Ticket.aggregate([
     { $match: { eventId: event._id, status: "paid" } },
-    { $group: { _id: "$ownerId" } }, // uniques
-    { $sample: { size: 4 } }, // random 0-4
+    { $group: { _id: "$ownerId" } },
+    { $sample: { size: 4 } },
     {
       $lookup: {
         from: "users",
@@ -224,16 +107,12 @@ export async function GET(
     { $project: { _id: "$user._id", image: "$user.image" } },
   ]);
 
-  /* -------- NEW: public ticket types (so public event page works) -- */
   const now = new Date();
 
   const ticketTypesDocs = await TicketType.find({
     eventId: event._id,
-    // Public page should not expose locked/password ticket types
     accessMode: "public",
-    // Only show types that are currently on sale
     availabilityStatus: "on_sale",
-    // If salesStartAt / salesEndAt are set, respect them
     $and: [
       {
         $or: [{ salesStartAt: null }, { salesStartAt: { $lte: now } }],
@@ -259,36 +138,37 @@ export async function GET(
     >()
     .exec();
 
-  // Shape to match what the public page expects (legacy shape)
-  const ticketTypes = ticketTypesDocs.map((t) => {
+  const ticketTypes = ticketTypesDocs.map((ticketType) => {
     const remaining =
-      t.totalQuantity === null
-        ? 999999 // "unlimited" fallback
-        : Math.max((t.totalQuantity ?? 0) - (t.soldCount ?? 0), 0);
+      ticketType.totalQuantity === null
+        ? 999999
+        : Math.max(
+            (ticketType.totalQuantity ?? 0) - (ticketType.soldCount ?? 0),
+            0,
+          );
 
     return {
-      _id: String(t._id),
-      label: t.name,
-      price: t.price,
+      _id: String(ticketType._id),
+      label: ticketType.name,
+      price: ticketType.price,
       quantity: remaining,
-      currency: t.currency,
-      feesIncluded: t.feeMode === "absorb",
-      image: t.design?.backgroundUrl || "",
+      currency: ticketType.currency,
+      feesIncluded: ticketType.feeMode === "absorb",
+      image: ticketType.design?.backgroundUrl || "",
     };
   });
 
-  /* -------- shape response ---------------------------------------- */
   return NextResponse.json({
     ...event,
-    organization: event.organizationId, // front-end friendly key
+    organization: event.organizationId,
     attendingCount,
     attendeesPreview,
-    ticketTypes, // ✅ restore for public page
+    ticketTypes,
   });
 }
 
 /* ------------------------------------------------------------------ */
-/*  PATCH /api/events/:id – update basic event fields                 */
+/*  PATCH /api/events/:id                                             */
 /* ------------------------------------------------------------------ */
 
 const artistInputSchema = z.object({
@@ -306,24 +186,16 @@ const mediaItemSchema = z.object({
 const patchSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
-
-  // Start/end datetime (ISO -> Date)
   date: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
-
   minAge: z.coerce.number().int().min(0).max(99).optional(),
   location: z.string().min(1).optional(),
   image: z.string().url().optional(),
-
-  // ✅ NEW
   media: z.array(mediaItemSchema).max(30).optional(),
-
   categories: z.array(z.string()).optional(),
   promoters: z.array(z.string().email()).optional(),
   message: z.string().optional(),
-
   artists: z.array(artistInputSchema).optional(),
-
   status: z.enum(["published", "draft"]).optional(),
   internalNotes: z.string().optional(),
 });
@@ -343,14 +215,71 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
   }
 
-  // ✅ Role-based permission: org owner/admin OR event creator OR event admin
-  const can = await assertCanManageEvent(id, session.user.id);
-  if (!can.ok) return can.res;
+  const body: unknown = await req.json().catch(() => null);
+  const parsed = patchSchema.safeParse(body);
 
-  const json = await req.json();
-  const parsed = patchSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
+  }
+
+  const data = parsed.data;
+
+  const editFieldKeys = [
+    "title",
+    "description",
+    "date",
+    "endDate",
+    "minAge",
+    "location",
+    "image",
+    "media",
+    "categories",
+    "promoters",
+    "message",
+    "artists",
+    "internalNotes",
+  ] as const;
+
+  const hasEditChanges = editFieldKeys.some((key) => data[key] !== undefined);
+  const hasStatusChange = data.status !== undefined;
+
+  if (!hasEditChanges && !hasStatusChange) {
+    return NextResponse.json(
+      { error: "No valid fields to update" },
+      { status: 400 },
+    );
+  }
+
+  if (hasEditChanges) {
+    const canEdit = await requireEventPermission({
+      eventId: id,
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "events.edit",
+    });
+
+    if (!canEdit.ok) {
+      return NextResponse.json(
+        { error: canEdit.error },
+        { status: canEdit.status },
+      );
+    }
+  }
+
+  if (hasStatusChange) {
+    const canPublish = await requireEventPermission({
+      eventId: id,
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "events.publish",
+    });
+
+    if (!canPublish.ok) {
+      return NextResponse.json(
+        { error: canPublish.error },
+        { status: canPublish.status },
+      );
+    }
   }
 
   const event = (await Event.findById(id).exec()) as EventDoc | null;
@@ -358,19 +287,13 @@ export async function PATCH(
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  // ✅ Detect publish transition (draft -> published)
   const prevStatus = event.status;
-
-  const data = parsed.data;
 
   if (data.title !== undefined) event.title = data.title;
   if (data.description !== undefined) event.description = data.description;
-
-  // date/endDate + derived durationMinutes
   if (data.date !== undefined) event.date = data.date;
   if (data.endDate !== undefined) event.endDate = data.endDate;
 
-  // Recompute durationMinutes if we have a valid endDate and date
   if (event.endDate && event.date) {
     const ms = event.endDate.getTime() - event.date.getTime();
     if (Number.isFinite(ms) && ms > 0) {
@@ -384,14 +307,14 @@ export async function PATCH(
   if (data.location !== undefined) event.location = data.location;
   if (data.image !== undefined) event.image = data.image;
 
-  if (data.media !== undefined)
+  if (data.media !== undefined) {
     event.media = data.media as unknown as IEvent["media"];
+  }
 
   if (data.categories !== undefined) event.categories = data.categories;
   if (data.promoters !== undefined) event.promoters = data.promoters;
   if (data.message !== undefined) event.message = data.message;
 
-  // Artists: replace list (recreate docs to match POST behavior)
   if (data.artists !== undefined) {
     const prevIds = Array.isArray(event.artists) ? event.artists : [];
 
@@ -399,15 +322,15 @@ export async function PATCH(
       try {
         await Artist.deleteMany({ _id: { $in: prevIds } });
       } catch {
-        // ignore cleanup errors; event refs will be overwritten anyway
+        // ignore cleanup errors
       }
     }
 
     const newIds = await Promise.all(
-      data.artists.map(async (a) => {
+      data.artists.map(async (artist) => {
         const doc = await Artist.create({
-          stageName: a.name,
-          avatar: a.image ?? "",
+          stageName: artist.name,
+          avatar: artist.image ?? "",
         });
         return doc._id;
       }),
@@ -424,10 +347,8 @@ export async function PATCH(
 
   await event.save();
 
-  // ✅ If it JUST got published, create a notification
   const didPublishNow = prevStatus === "draft" && event.status === "published";
   if (didPublishNow) {
-    // Recipients: creator + org owner + active event team members (deduped)
     const recipients = new Set<string>();
 
     if (event.createdByUserId) recipients.add(String(event.createdByUserId));

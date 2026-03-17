@@ -1,19 +1,16 @@
-// src/app/api/tracking-links/members/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import mongoose from "mongoose";
 
 import { auth } from "@/lib/auth";
-import Organization from "@/models/Organization";
 import TrackingLink from "@/models/TrackingLink";
 import User from "@/models/User";
+import { listAuthorizedOrganizationIdsForUser } from "@/lib/orgAccess";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type ObjectId = mongoose.Types.ObjectId;
-
-type OwnedOrgLean = { _id: ObjectId };
 
 type UserLean = {
   _id: ObjectId;
@@ -26,19 +23,14 @@ type UserLean = {
 
 const isObjectId = (val: string) => mongoose.Types.ObjectId.isValid(val);
 
-function displayNameFromUser(u?: UserLean | null) {
-  if (!u) return "";
-  const fn = (u.firstName ?? "").trim();
-  const ln = (u.lastName ?? "").trim();
+function displayNameFromUser(user?: UserLean | null) {
+  if (!user) return "";
+  const fn = (user.firstName ?? "").trim();
+  const ln = (user.lastName ?? "").trim();
   const full = `${fn} ${ln}`.trim();
-  return full || (u.username ?? "") || (u.email ?? "") || "";
+  return full || (user.username ?? "") || (user.email ?? "") || "";
 }
 
-/**
- * GET /api/tracking-links/members/:id
- * Returns minimal member profile for the member detail page (name + email + image).
- * Permission: only if that member has tracking links inside orgs owned by current user.
- */
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -53,22 +45,20 @@ export async function GET(
     return NextResponse.json({ error: "Invalid member id" }, { status: 400 });
   }
 
-  // Owned orgs only
-  const ownedOrgs = (await Organization.find({ ownerId: session.user.id })
-    .select("_id")
-    .lean()) as OwnedOrgLean[];
+  const authorizedOrgIds = await listAuthorizedOrganizationIdsForUser({
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "members.view",
+  });
 
-  const ownedOrgIds: ObjectId[] = ownedOrgs.map((o) => o._id);
-
-  if (!ownedOrgIds.length) {
+  if (!authorizedOrgIds.length) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Ensure this member has at least one link in the user's owned orgs (privacy boundary)
   const memberObjId = new mongoose.Types.ObjectId(id);
 
   const hasAny = await TrackingLink.exists({
-    organizationId: { $in: ownedOrgIds },
+    organizationId: { $in: authorizedOrgIds },
     archived: false,
     createdByUserId: memberObjId,
   });
@@ -77,20 +67,20 @@ export async function GET(
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
   }
 
-  const u = (await User.findById(memberObjId)
+  const user = (await User.findById(memberObjId)
     .select("_id email username firstName lastName image")
     .lean()) as UserLean | null;
 
-  if (!u) {
+  if (!user) {
     return NextResponse.json({ error: "Member not found" }, { status: 404 });
   }
 
-  const member = {
-    id: String(u._id),
-    name: displayNameFromUser(u) || "Member",
-    email: (u.email ?? "").toLowerCase(),
-    image: u.image ?? null,
-  };
-
-  return NextResponse.json({ member });
+  return NextResponse.json({
+    member: {
+      id: String(user._id),
+      name: displayNameFromUser(user) || "Member",
+      email: (user.email ?? "").toLowerCase(),
+      image: user.image ?? null,
+    },
+  });
 }

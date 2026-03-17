@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
+import { acceptOrganizationInviteByToken } from "@/lib/orgInvites";
 
 /* ------------------- server-side validation helpers ------------------- */
 function validateUsername(username: unknown): string | null {
@@ -27,7 +28,7 @@ function validateEmail(email: unknown): string | null {
 function passwordPolicy(
   password: unknown,
   username: string,
-  email: string
+  email: string,
 ): string | null {
   const pw = String(password ?? "");
   if (!pw) return "Password is required.";
@@ -36,10 +37,7 @@ function passwordPolicy(
   const hasLower = /[a-z]/.test(pw);
   const hasUpper = /[A-Z]/.test(pw);
   const hasDigit = /\d/.test(pw);
-  // const hasSymbol = /[^A-Za-z0-9]/.test(pw);
-  // if (!(hasLower && hasUpper && hasDigit && hasSymbol)) {
-  //   return "Use upper & lower case, a number, and a symbol.";
-  // }
+
   if (!(hasLower && hasUpper && hasDigit)) {
     return "Use upper & lower case, and a number.";
   }
@@ -56,25 +54,18 @@ function passwordPolicy(
   return null;
 }
 
-/**
- * POST /api/auth/register
- * Body: { username, email, password, agreeTerms, referralCode? }
- * Returns:
- *  - 201 { ok: true }
- *  - 400 { errors: { field: message } } (validation)
- *  - 409 { errors: { username?: string, email?: string } } (duplicates)
- */
 export async function POST(req: Request) {
   try {
-    const { username, email, password, agreeTerms } = (await req.json()) as {
-      username: string;
-      email: string;
-      password: string;
-      agreeTerms: boolean;
-      referralCode?: string;
-    };
+    const { username, email, password, agreeTerms, inviteToken } =
+      (await req.json()) as {
+        username: string;
+        email: string;
+        password: string;
+        agreeTerms: boolean;
+        referralCode?: string;
+        inviteToken?: string;
+      };
 
-    // Field-level validation
     const fieldErrors: Record<string, string> = {};
     const uErr = validateUsername(username);
     const eErr = validateEmail(email);
@@ -83,8 +74,9 @@ export async function POST(req: Request) {
     if (uErr) fieldErrors.username = uErr;
     if (eErr) fieldErrors.email = eErr;
     if (pErr) fieldErrors.password = pErr;
-    if (!agreeTerms)
+    if (!agreeTerms) {
       fieldErrors.agreeTerms = "You must agree to the Terms & Conditions.";
+    }
 
     if (Object.keys(fieldErrors).length) {
       return NextResponse.json({ errors: fieldErrors }, { status: 400 });
@@ -95,7 +87,6 @@ export async function POST(req: Request) {
     const uname = username.trim().toLowerCase();
     const mail = email.trim().toLowerCase();
 
-    // Uniqueness checks
     const [uDup, eDup] = await Promise.all([
       User.findOne({ username: uname }).lean(),
       User.findOne({ email: mail }).lean(),
@@ -108,23 +99,46 @@ export async function POST(req: Request) {
       return NextResponse.json({ errors: dupErrors }, { status: 409 });
     }
 
-    // Create user
     const hashed = await bcrypt.hash(password, 10);
     const avatarUrl = `/api/avatar?seed=${encodeURIComponent(uname)}`;
 
-    await User.create({
+    const user = await User.create({
       username: uname,
       email: mail,
       password: hashed,
       image: avatarUrl,
     });
 
-    return NextResponse.json({ ok: true }, { status: 201 });
+    let inviteAccepted = false;
+    let inviteAcceptError: string | null = null;
+
+    if (typeof inviteToken === "string" && inviteToken.trim()) {
+      const accepted = await acceptOrganizationInviteByToken({
+        rawToken: inviteToken.trim(),
+        userId: String(user._id),
+        email: mail,
+      });
+
+      if (accepted.ok) {
+        inviteAccepted = true;
+      } else {
+        inviteAcceptError = accepted.error;
+      }
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+        inviteAccepted,
+        inviteAcceptError,
+      },
+      { status: 201 },
+    );
   } catch (err) {
     console.error("Register route error:", err);
     return NextResponse.json(
       { error: "Server error. Please try again later." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

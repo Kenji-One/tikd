@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
 import { auth } from "@/lib/auth";
-import Event, { type IEvent } from "@/models/Event";
+import { requireEventPermission } from "@/lib/eventAccess";
+
 import PromoCode from "@/models/PromoCode";
 import { Types } from "mongoose";
 
@@ -10,31 +11,8 @@ import { promoBodySchema } from "./schema";
 
 /* --------------------------- helper --------------------------- */
 
-async function ensureEventOwnership(
-  userId: string,
-  eventId: string
-): Promise<{ ok: true; event: IEvent } | { ok: false; res: NextResponse }> {
-  const event = await Event.findById(eventId).lean<IEvent>().exec();
-
-  if (!event) {
-    return {
-      ok: false,
-      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
-    };
-  }
-
-  if (event.createdByUserId.toString() !== userId) {
-    return {
-      ok: false,
-      res: NextResponse.json({ error: "Event not yours" }, { status: 403 }),
-    };
-  }
-
-  return { ok: true, event };
-}
-
 function isMongoDuplicateKeyError(
-  err: unknown
+  err: unknown,
 ): err is { code: number; keyValue?: unknown } {
   return (
     typeof err === "object" &&
@@ -48,7 +26,7 @@ function isMongoDuplicateKeyError(
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -57,8 +35,19 @@ export async function GET(
 
   const { id: eventId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   const promos = await PromoCode.find({ eventId })
     .sort({ createdAt: 1 })
@@ -72,7 +61,7 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -81,10 +70,21 @@ export async function POST(
 
   const { id: eventId } = await params;
 
-  const ownership = await ensureEventOwnership(session.user.id, eventId);
-  if (!ownership.ok) return ownership.res;
+  const access = await requireEventPermission({
+    eventId,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "events.edit",
+  });
 
-  const json = await req.json();
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
+  const json = await req.json().catch(() => null);
   const parsed = promoBodySchema.safeParse(json);
 
   if (!parsed.success) {
@@ -98,13 +98,13 @@ export async function POST(
     const doc = await PromoCode.create({
       ...rest,
       code: rest.code.trim().toUpperCase(),
-      organizationId: ownership.event.organizationId,
-      eventId: ownership.event._id,
+      organizationId: access.actor.event.organizationId,
+      eventId: access.actor.event._id,
       createdByUserId: new Types.ObjectId(session.user.id),
       validFrom: validFrom ? new Date(validFrom) : null,
       validUntil: validUntil ? new Date(validUntil) : null,
       applicableTicketTypeIds: applicableTicketTypeIds.map(
-        (id) => new Types.ObjectId(id)
+        (id) => new Types.ObjectId(id),
       ),
     });
 
@@ -113,14 +113,14 @@ export async function POST(
     if (isMongoDuplicateKeyError(err)) {
       return NextResponse.json(
         { error: "Code already exists for this event." },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
     console.error("Failed to create promo code", err);
     return NextResponse.json(
       { error: "Failed to create promo code" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

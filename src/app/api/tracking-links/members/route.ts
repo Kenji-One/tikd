@@ -1,4 +1,3 @@
-// src/app/api/tracking-links/members/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import mongoose from "mongoose";
@@ -10,6 +9,10 @@ import TrackingLink from "@/models/TrackingLink";
 import User from "@/models/User";
 import OrgTeam from "@/models/OrgTeam";
 import EventTeam from "@/models/EventTeam";
+import {
+  listAuthorizedOrganizationIdsForUser,
+  requireOrgPermission,
+} from "@/lib/orgAccess";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,27 +23,20 @@ type Scope = "all" | "organization" | "event";
 
 type MemberRow = {
   userId: string;
-
   name: string;
   email: string;
   image?: string | null;
-
-  // only returned for organization/event scopes
   role?: string;
   status?: string;
-
   links: number;
   views: number;
   ticketsSold: number;
   revenue: number;
-
   lastLinkCreatedAt?: string | null;
 };
 
-type OwnedOrgLean = { _id: ObjectId };
-
 type Aggregated = {
-  _id: ObjectId; // createdByUserId
+  _id: ObjectId;
   links: number;
   views: number;
   ticketsSold: number;
@@ -64,21 +60,14 @@ function safeNumber(n: unknown) {
   return Number.isFinite(x) ? x : 0;
 }
 
-function displayNameFromUser(u?: UserLean | null) {
-  if (!u) return "";
-  const fn = (u.firstName ?? "").trim();
-  const ln = (u.lastName ?? "").trim();
+function displayNameFromUser(user?: UserLean | null) {
+  if (!user) return "";
+  const fn = (user.firstName ?? "").trim();
+  const ln = (user.lastName ?? "").trim();
   const full = `${fn} ${ln}`.trim();
-  return full || (u.username ?? "") || (u.email ?? "") || "";
+  return full || (user.username ?? "") || (user.email ?? "") || "";
 }
 
-/* ------------------------------------------------------------------ */
-/* GET /api/tracking-links/members                                    */
-/* - scope=all (default): all links across owned orgs (non-archived)   */
-/* - scope=organization&organizationId=...                             */
-/* - scope=event&eventId=...                                           */
-/* Returns aggregated metrics grouped by createdByUserId               */
-/* ------------------------------------------------------------------ */
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -95,20 +84,7 @@ export async function GET(req: NextRequest) {
 
   const eventIdParam = (req.nextUrl.searchParams.get("eventId") || "").trim();
 
-  // Owned orgs only (matches your current tracking-links permission model)
-  const ownedOrgs = (await Organization.find({ ownerId: session.user.id })
-    .select("_id")
-    .lean()) as OwnedOrgLean[];
-
-  const ownedOrgIds: ObjectId[] = ownedOrgs.map((o) => o._id);
-
-  if (!ownedOrgIds.length) {
-    return NextResponse.json({ rows: [] as MemberRow[] });
-  }
-
-  // Base filter: within owned orgs + not archived
   const baseFilter: Record<string, unknown> = {
-    organizationId: { $in: ownedOrgIds },
     archived: false,
   };
 
@@ -123,12 +99,21 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const orgObjId = new mongoose.Types.ObjectId(organizationIdParam);
-    const isOwned = ownedOrgIds.some((id) => String(id) === String(orgObjId));
-    if (!isOwned) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canView = await requireOrgPermission({
+      organizationId: organizationIdParam,
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "members.view",
+    });
+
+    if (!canView.ok) {
+      return NextResponse.json(
+        { error: canView.error },
+        { status: canView.status },
+      );
     }
 
+    const orgObjId = new mongoose.Types.ObjectId(organizationIdParam);
     baseFilter.organizationId = orgObjId;
     scopedOrgId = orgObjId;
   }
@@ -140,30 +125,49 @@ export async function GET(req: NextRequest) {
 
     const eventObjId = new mongoose.Types.ObjectId(eventIdParam);
 
-    const ev = (await Event.findById(eventObjId)
+    const event = (await Event.findById(eventObjId)
       .select("_id organizationId")
       .lean()) as { _id: ObjectId; organizationId: ObjectId } | null;
 
-    if (!ev) {
+    if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    const isOwned = ownedOrgIds.some(
-      (id) => String(id) === String(ev.organizationId),
-    );
-    if (!isOwned) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canView = await requireOrgPermission({
+      organizationId: String(event.organizationId),
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "members.view",
+    });
+
+    if (!canView.ok) {
+      return NextResponse.json(
+        { error: canView.error },
+        { status: canView.status },
+      );
     }
 
-    baseFilter.organizationId = ev.organizationId;
+    baseFilter.organizationId = event.organizationId;
     baseFilter.destinationKind = "Event";
-    baseFilter.destinationId = ev._id;
-
-    scopedOrgId = ev.organizationId;
-    scopedEventId = ev._id;
+    baseFilter.destinationId = event._id;
+    scopedOrgId = event.organizationId;
+    scopedEventId = event._id;
   }
 
-  // Aggregate by creator
+  if (scope === "all") {
+    const authorizedOrgIds = await listAuthorizedOrganizationIdsForUser({
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "members.view",
+    });
+
+    if (!authorizedOrgIds.length) {
+      return NextResponse.json({ rows: [] as MemberRow[] });
+    }
+
+    baseFilter.organizationId = { $in: authorizedOrgIds };
+  }
+
   const agg = (await TrackingLink.aggregate<Aggregated>([
     { $match: baseFilter },
     {
@@ -176,29 +180,24 @@ export async function GET(req: NextRequest) {
         lastLinkCreatedAt: { $max: "$createdAt" },
       },
     },
-    // sort by revenue desc, then views desc, then links desc
     { $sort: { revenue: -1, views: -1, links: -1 } },
-    { $limit: 200 }, // safety cap (adjust if you want)
+    { $limit: 200 },
   ])) as Aggregated[];
 
   if (!agg.length) {
     return NextResponse.json({ rows: [] as MemberRow[] });
   }
 
-  const creatorIds = agg
-    .map((a) => a._id)
-    .filter(Boolean) as unknown as ObjectId[];
+  const creatorIds = agg.map((a) => a._id).filter(Boolean) as ObjectId[];
 
-  // Load users in one go
   const users = await User.find({ _id: { $in: creatorIds } })
     .select("_id email username firstName lastName image")
     .lean<UserLean[]>();
 
   const userById = new Map<string, UserLean>(
-    users.map((u) => [String(u._id), u]),
+    users.map((user) => [String(user._id), user]),
   );
 
-  // Optional role/status (only for scoped org/event)
   const roleByUserId = new Map<string, { role?: string; status?: string }>();
 
   if (scope === "organization" && scopedOrgId) {
@@ -211,11 +210,11 @@ export async function GET(req: NextRequest) {
         Array<{ userId?: ObjectId | null; role?: string; status?: string }>
       >();
 
-    for (const m of members) {
-      if (!m.userId) continue;
-      roleByUserId.set(String(m.userId), {
-        role: m.role,
-        status: m.status,
+    for (const member of members) {
+      if (!member.userId) continue;
+      roleByUserId.set(String(member.userId), {
+        role: member.role,
+        status: member.status,
       });
     }
   }
@@ -230,42 +229,40 @@ export async function GET(req: NextRequest) {
         Array<{ userId?: ObjectId | null; role?: string; status?: string }>
       >();
 
-    for (const m of members) {
-      if (!m.userId) continue;
-      roleByUserId.set(String(m.userId), {
-        role: m.role,
-        status: m.status,
+    for (const member of members) {
+      if (!member.userId) continue;
+      roleByUserId.set(String(member.userId), {
+        role: member.role,
+        status: member.status,
       });
     }
   }
 
-  const rows: MemberRow[] = agg.map((a) => {
-    const uid = String(a._id);
-    const u = userById.get(uid);
+  const rows: MemberRow[] = agg.map((entry) => {
+    const uid = String(entry._id);
+    const user = userById.get(uid);
 
-    const base: MemberRow = {
+    const row: MemberRow = {
       userId: uid,
-      name: displayNameFromUser(u) || uid,
-      email: (u?.email ?? "").toLowerCase(),
-      image: u?.image ?? null,
-
-      links: safeNumber(a.links),
-      views: safeNumber(a.views),
-      ticketsSold: safeNumber(a.ticketsSold),
-      revenue: safeNumber(a.revenue),
-
-      lastLinkCreatedAt: a.lastLinkCreatedAt
-        ? new Date(a.lastLinkCreatedAt).toISOString()
+      name: displayNameFromUser(user) || uid,
+      email: (user?.email ?? "").toLowerCase(),
+      image: user?.image ?? null,
+      links: safeNumber(entry.links),
+      views: safeNumber(entry.views),
+      ticketsSold: safeNumber(entry.ticketsSold),
+      revenue: safeNumber(entry.revenue),
+      lastLinkCreatedAt: entry.lastLinkCreatedAt
+        ? new Date(entry.lastLinkCreatedAt).toISOString()
         : null,
     };
 
     if (scope !== "all") {
-      const r = roleByUserId.get(uid);
-      base.role = r?.role ?? "—";
-      base.status = r?.status ?? "—";
+      const meta = roleByUserId.get(uid);
+      row.role = meta?.role ?? "—";
+      row.status = meta?.status ?? "—";
     }
 
-    return base;
+    return row;
   });
 
   return NextResponse.json({ rows });

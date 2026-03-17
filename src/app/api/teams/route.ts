@@ -48,6 +48,17 @@ function isObjectId(val: string) {
   return /^[a-f\d]{24}$/i.test(val);
 }
 
+function buildActiveMembershipTimeClause(now: Date) {
+  return {
+    $or: [
+      { temporaryAccess: false },
+      { expiresAt: { $exists: false } },
+      { expiresAt: null },
+      { expiresAt: { $gte: now } },
+    ],
+  };
+}
+
 /* ------------------------------ Types ------------------------------ */
 type SessionLike = {
   user?: {
@@ -158,7 +169,6 @@ export async function GET() {
     TeamLean[]
   >();
 
-  // self-heal: ensure owner membership exists
   if (ownedTeams.length && ident.email) {
     await Promise.all(
       ownedTeams.map((t) =>
@@ -167,23 +177,35 @@ export async function GET() {
     );
   }
 
-  const membership = await TeamMember.find({
-    status: "active",
-    $or: [
-      ...(isObjectId(ident.userId)
-        ? [{ userId: new Types.ObjectId(ident.userId) }]
-        : []),
-      ...(ident.email ? [{ email: ident.email.toLowerCase() }] : []),
-    ],
-  })
-    .select("teamId role")
-    .lean<Array<{ teamId: Types.ObjectId; role: string }>>();
+  const now = new Date();
+  const membershipIdentity: Array<Record<string, unknown>> = [
+    ...(isObjectId(ident.userId)
+      ? [{ userId: new Types.ObjectId(ident.userId) }]
+      : []),
+    ...(ident.email ? [{ email: ident.email.toLowerCase() }] : []),
+  ];
+
+  const membership = membershipIdentity.length
+    ? await TeamMember.find({
+        status: "active",
+        $and: [
+          { $or: membershipIdentity },
+          buildActiveMembershipTimeClause(now),
+        ],
+      })
+        .select("teamId role")
+        .lean<Array<{ teamId: Types.ObjectId; role: string }>>()
+    : [];
 
   const memberTeamIds = membership.map((m) => String(m.teamId));
   const ownedTeamIds = ownedTeams.map((t) => String(t._id));
   const allTeamIds = Array.from(
     new Set([...ownedTeamIds, ...memberTeamIds]),
   ).filter(Boolean);
+
+  if (!allTeamIds.length) {
+    return NextResponse.json([]);
+  }
 
   const teams =
     allTeamIds.length > ownedTeams.length
@@ -239,7 +261,6 @@ export async function POST(req: NextRequest) {
     ownerId: session.user.id,
   });
 
-  // ✅ Ensure creator becomes an active admin in team members
   const ident = await getSessionUserIdentity(session);
   if (ident.userId && ident.email) {
     await ensureTeamOwnerIsAdmin(

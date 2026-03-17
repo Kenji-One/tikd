@@ -1,6 +1,6 @@
-// src/models/OrgRole.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 import { ROLE_ICON_KEYS, type RoleIconKey } from "@/lib/roleIcons";
+import { normalizePermissions } from "@/lib/orgPermissions";
 
 /* ----------------------------- Types ----------------------------- */
 export type OrgPermissionKey =
@@ -96,7 +96,7 @@ const OrgRoleSchema = new Schema<IOrgRole>(
     permissions: {
       type: Schema.Types.Mixed,
       required: true,
-      default: () => ({}),
+      default: () => normalizePermissions(null),
     },
 
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -106,6 +106,17 @@ const OrgRoleSchema = new Schema<IOrgRole>(
 
 /** Uniqueness per org */
 OrgRoleSchema.index({ organizationId: 1, key: 1 }, { unique: true });
+
+/** Normalize permissions even if something writes to this model outside our API routes */
+OrgRoleSchema.pre("validate", function (next) {
+  const raw =
+    this.permissions && typeof this.permissions === "object"
+      ? (this.permissions as Partial<Record<OrgPermissionKey, boolean>>)
+      : null;
+
+  this.permissions = normalizePermissions(raw);
+  next();
+});
 
 const OrgRole = models.OrgRole || model<IOrgRole>("OrgRole", OrgRoleSchema);
 export default OrgRole;

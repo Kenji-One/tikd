@@ -1,4 +1,3 @@
-// src\models\TeamMember.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 /* ----------------------------- Types ----------------------------- */
@@ -25,7 +24,17 @@ export interface ITeamMember extends Document {
   expiresAt?: Date;
 
   invitedBy: Types.ObjectId;
+
+  /**
+   * Legacy raw token kept for backwards compatibility only.
+   * New invite flows should prefer inviteTokenHash.
+   */
   inviteToken?: string;
+
+  /** Secure invite token storage */
+  inviteTokenHash?: string;
+  inviteExpiresAt?: Date;
+  acceptedAt?: Date;
 
   createdAt: Date;
   updatedAt: Date;
@@ -67,7 +76,11 @@ const TeamMemberSchema = new Schema<ITeamMember>(
     expiresAt: { type: Date, default: undefined },
 
     invitedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+
     inviteToken: { type: String, default: undefined },
+    inviteTokenHash: { type: String, default: undefined },
+    inviteExpiresAt: { type: Date, default: undefined },
+    acceptedAt: { type: Date, default: undefined },
   },
   { timestamps: true, strict: true },
 );
@@ -75,8 +88,10 @@ const TeamMemberSchema = new Schema<ITeamMember>(
 /** Ensure uniqueness per team+email */
 TeamMemberSchema.index({ teamId: 1, email: 1 }, { unique: true });
 
-/** Invite token lookups (accept-invite flows, etc.) */
+/** Invite token lookups */
 TeamMemberSchema.index({ inviteToken: 1 }, { unique: true, sparse: true });
+TeamMemberSchema.index({ inviteTokenHash: 1 }, { unique: true, sparse: true });
+TeamMemberSchema.index({ inviteExpiresAt: 1 });
 
 /** Keep status in sync when expired (but never override revoked) */
 TeamMemberSchema.pre("save", function (next) {

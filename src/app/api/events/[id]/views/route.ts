@@ -5,6 +5,10 @@ import "@/lib/mongoose";
 
 import Event from "@/models/Event";
 import EventPageView from "@/models/EventPageView";
+import {
+  getTrackingAttributionFromRequest,
+  isTrackingAttributionApplicableToEvent,
+} from "@/lib/trackingAttribution";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -199,8 +203,12 @@ export async function POST(
   }
 
   const event = await Event.findById(eventId)
-    .select("_id status")
-    .lean<{ _id: Types.ObjectId; status: "published" | "draft" } | null>();
+    .select("_id status organizationId")
+    .lean<{
+      _id: Types.ObjectId;
+      status: "published" | "draft";
+      organizationId: Types.ObjectId;
+    } | null>();
 
   if (!event) {
     return NextResponse.json({ error: "Event not found." }, { status: 404 });
@@ -247,6 +255,15 @@ export async function POST(
 
   const countryCode = resolveCountryCode(request);
 
+  const attribution = await getTrackingAttributionFromRequest(request);
+  const applicableAttribution = isTrackingAttributionApplicableToEvent({
+    attribution,
+    eventId: String(event._id),
+    organizationId: String(event.organizationId),
+  })
+    ? attribution
+    : null;
+
   await EventPageView.create({
     eventId: new Types.ObjectId(eventId),
     visitorId: parsedBody.data.visitorId,
@@ -271,6 +288,18 @@ export async function POST(
     timezone: safeHeader(request, "x-vercel-ip-timezone"),
 
     userAgent,
+
+    trackingLinkId: applicableAttribution?.trackingLinkId
+      ? new Types.ObjectId(applicableAttribution.trackingLinkId)
+      : null,
+    trackingCode: applicableAttribution?.trackingCode ?? "",
+    trackingCreatorUserId: applicableAttribution?.trackingCreatorUserId
+      ? new Types.ObjectId(applicableAttribution.trackingCreatorUserId)
+      : null,
+    trackingOrganizationId: applicableAttribution?.organizationId
+      ? new Types.ObjectId(applicableAttribution.organizationId)
+      : null,
+
     viewedAt: now,
   });
 

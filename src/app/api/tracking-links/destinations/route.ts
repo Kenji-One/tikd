@@ -1,4 +1,3 @@
-// src/app/api/tracking-links/destinations/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { Types, type FilterQuery } from "mongoose";
@@ -6,12 +5,18 @@ import { Types, type FilterQuery } from "mongoose";
 import { auth } from "@/lib/auth";
 import Organization from "@/models/Organization";
 import Event from "@/models/Event";
+import {
+  listAuthorizedOrganizationIdsForUser,
+  requireOrgPermission,
+} from "@/lib/orgAccess";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type Destination = {
-  kind: "Event" | "Organization";
+type DestinationKind = "Event" | "Organization";
+
+type DestinationResult = {
+  kind: DestinationKind;
   id: string;
   title: string;
 };
@@ -37,53 +42,118 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const q = (req.nextUrl.searchParams.get("q") || "").trim();
+  const scope = String(req.nextUrl.searchParams.get("scope") || "").trim();
+  const organizationId = String(
+    req.nextUrl.searchParams.get("organizationId") || "",
+  ).trim();
+  const eventId = String(req.nextUrl.searchParams.get("eventId") || "").trim();
+  const q = String(req.nextUrl.searchParams.get("q") || "").trim();
+
   const qRx = q ? new RegExp(escapeRegex(q), "i") : null;
 
-  // Owned orgs only
-  const ownedOrgs = (await Organization.find({ ownerId: session.user.id })
+  let authorizedOrgIds: Types.ObjectId[] = [];
+
+  if (scope === "organization") {
+    if (!Types.ObjectId.isValid(organizationId)) {
+      return NextResponse.json(
+        { error: "Invalid organizationId" },
+        { status: 400 },
+      );
+    }
+
+    const canAccess = await requireOrgPermission({
+      organizationId,
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "links.createTrackingLinks",
+    });
+
+    if (!canAccess.ok) {
+      return NextResponse.json(
+        { error: canAccess.error },
+        { status: canAccess.status },
+      );
+    }
+
+    authorizedOrgIds = [new Types.ObjectId(organizationId)];
+  } else if (scope === "event") {
+    if (!Types.ObjectId.isValid(eventId)) {
+      return NextResponse.json({ error: "Invalid eventId" }, { status: 400 });
+    }
+
+    const event = await Event.findById(eventId)
+      .select("_id organizationId")
+      .lean<{ _id: Types.ObjectId; organizationId: Types.ObjectId } | null>();
+
+    if (!event) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+
+    const canAccess = await requireOrgPermission({
+      organizationId: String(event.organizationId),
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "links.createTrackingLinks",
+    });
+
+    if (!canAccess.ok) {
+      return NextResponse.json(
+        { error: canAccess.error },
+        { status: canAccess.status },
+      );
+    }
+
+    authorizedOrgIds = [event.organizationId];
+  } else {
+    authorizedOrgIds = await listAuthorizedOrganizationIdsForUser({
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "links.createTrackingLinks",
+    });
+  }
+
+  if (!authorizedOrgIds.length) {
+    return NextResponse.json({ results: [] as DestinationResult[] });
+  }
+
+  const orgs = (await Organization.find({
+    _id: { $in: authorizedOrgIds },
+    ...(qRx ? { name: qRx } : {}),
+  })
     .select("_id name")
-    .limit(30)
+    .sort({ name: 1 })
+    .limit(20)
     .lean()) as OrgLean[];
 
-  const orgIds: Types.ObjectId[] = ownedOrgs.map((o) => o._id);
-
-  // Filter orgs by query
-  const orgMatches = qRx
-    ? ownedOrgs.filter((o) => qRx.test(String(o.name ?? "")))
-    : ownedOrgs;
-
-  // Events under owned orgs
   const eventFilter: FilterQuery<{
     organizationId: Types.ObjectId;
     title?: RegExp;
   }> = {
-    organizationId: { $in: orgIds },
+    organizationId: { $in: authorizedOrgIds },
   };
 
   if (qRx) {
     eventFilter.title = qRx;
   }
 
-  // IMPORTANT: include organizationId in select to satisfy EventLean
   const events = await Event.find(eventFilter)
     .select("_id title organizationId")
     .sort({ date: -1 })
     .limit(30)
     .lean<EventLean[]>();
 
-  const out: Destination[] = [
-    ...events.map((e) => ({
-      kind: "Event" as const,
-      id: String(e._id),
-      title: String(e.title ?? ""),
-    })),
-    ...orgMatches.map((o) => ({
+  const results: DestinationResult[] = [
+    ...orgs.map((org) => ({
       kind: "Organization" as const,
-      id: String(o._id),
-      title: String(o.name ?? ""),
+      id: String(org._id),
+      title: String(org.name ?? ""),
+    })),
+    ...events.map((event) => ({
+      kind: "Event" as const,
+      id: String(event._id),
+      title: String(event.title ?? ""),
     })),
   ].slice(0, 40);
 
-  return NextResponse.json({ destinations: out });
+  return NextResponse.json({ results });
 }

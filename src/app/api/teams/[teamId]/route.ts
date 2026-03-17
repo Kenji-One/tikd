@@ -1,4 +1,3 @@
-// src/app/api/teams/[teamId]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Types } from "mongoose";
@@ -13,7 +12,6 @@ export const revalidate = 0;
 
 const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
 
-/* website: truly optional – empty/undefined OK, but if present must be valid */
 const websiteSchema = z
   .string()
   .trim()
@@ -54,7 +52,43 @@ const updateTeamSchema = z
 
 type RouteParams = { teamId: string };
 
-async function assertCanViewTeam(teamId: string, userId: string) {
+function normalizeEmail(email?: string | null): string {
+  return String(email ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function buildActiveMembershipTimeClause(now: Date) {
+  return {
+    $or: [
+      { temporaryAccess: false },
+      { expiresAt: { $exists: false } },
+      { expiresAt: null },
+      { expiresAt: { $gte: now } },
+    ],
+  };
+}
+
+function buildIdentityMatch(userId: string, email?: string | null) {
+  const or: Array<Record<string, unknown>> = [];
+
+  if (isObjectId(userId)) {
+    or.push({ userId: new Types.ObjectId(userId) });
+  }
+
+  const emailLower = normalizeEmail(email);
+  if (emailLower) {
+    or.push({ email: emailLower });
+  }
+
+  return or;
+}
+
+async function assertCanViewTeam(
+  teamId: string,
+  userId: string,
+  email?: string | null,
+) {
   const team = await Team.findById(teamId).select("_id ownerId").lean<{
     _id: Types.ObjectId;
     ownerId: Types.ObjectId;
@@ -64,10 +98,13 @@ async function assertCanViewTeam(teamId: string, userId: string) {
 
   if (String(team.ownerId) === String(userId)) return { ok: true as const };
 
+  const identity = buildIdentityMatch(userId, email);
+  if (!identity.length) return { ok: false as const, status: 403 };
+
   const member = await TeamMember.findOne({
-    teamId,
-    userId,
+    teamId: new Types.ObjectId(teamId),
     status: "active",
+    $and: [{ $or: identity }, buildActiveMembershipTimeClause(new Date())],
   })
     .select("_id")
     .lean();
@@ -77,7 +114,11 @@ async function assertCanViewTeam(teamId: string, userId: string) {
   return { ok: false as const, status: 403 };
 }
 
-async function assertCanManageTeam(teamId: string, userId: string) {
+async function assertCanManageTeam(
+  teamId: string,
+  userId: string,
+  email?: string | null,
+) {
   const team = await Team.findById(teamId).select("_id ownerId").lean<{
     _id: Types.ObjectId;
     ownerId: Types.ObjectId;
@@ -87,11 +128,14 @@ async function assertCanManageTeam(teamId: string, userId: string) {
 
   if (String(team.ownerId) === String(userId)) return { ok: true as const };
 
+  const identity = buildIdentityMatch(userId, email);
+  if (!identity.length) return { ok: false as const, status: 403 };
+
   const admin = await TeamMember.findOne({
-    teamId,
-    userId,
+    teamId: new Types.ObjectId(teamId),
     role: "admin",
     status: "active",
+    $and: [{ $or: identity }, buildActiveMembershipTimeClause(new Date())],
   })
     .select("_id")
     .lean();
@@ -107,16 +151,23 @@ export async function GET(
   { params }: { params: Promise<RouteParams> },
 ) {
   const session = await auth();
+
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { teamId } = await params;
+
   if (!teamId || !isObjectId(teamId)) {
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }
 
-  const can = await assertCanViewTeam(teamId, session.user.id);
+  const can = await assertCanViewTeam(
+    teamId,
+    session.user.id,
+    session.user.email ?? undefined,
+  );
+
   if (!can.ok) {
     return NextResponse.json(
       { error: can.status === 404 ? "Team not found" : "Forbidden" },
@@ -125,6 +176,7 @@ export async function GET(
   }
 
   const team = await Team.findById(new Types.ObjectId(teamId)).lean();
+
   if (!team) {
     return NextResponse.json({ error: "Team not found" }, { status: 404 });
   }
@@ -138,16 +190,23 @@ export async function PATCH(
   { params }: { params: Promise<RouteParams> },
 ) {
   const session = await auth();
+
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { teamId } = await params;
+
   if (!teamId || !isObjectId(teamId)) {
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }
 
-  const can = await assertCanManageTeam(teamId, session.user.id);
+  const can = await assertCanManageTeam(
+    teamId,
+    session.user.id,
+    session.user.email ?? undefined,
+  );
+
   if (!can.ok) {
     return NextResponse.json(
       { error: can.status === 404 ? "Team not found" : "Forbidden" },
@@ -155,8 +214,9 @@ export async function PATCH(
     );
   }
 
-  const json = await req.json();
+  const json: unknown = await req.json().catch(() => null);
   const parsed = updateTeamSchema.safeParse(json);
+
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
@@ -180,11 +240,13 @@ export async function DELETE(
   { params }: { params: Promise<RouteParams> },
 ) {
   const session = await auth();
+
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { teamId } = await params;
+
   if (!teamId || !isObjectId(teamId)) {
     return NextResponse.json({ error: "Invalid teamId" }, { status: 400 });
   }

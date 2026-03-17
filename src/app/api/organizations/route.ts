@@ -7,6 +7,7 @@ import Organization from "@/models/Organization";
 import OrgTeam from "@/models/OrgTeam";
 import User from "@/models/User";
 import OrgRole from "@/models/OrgRole";
+import { ensureSystemRoles, getSystemRoleFallback } from "@/lib/orgRoles";
 
 const businessTypeValues = [
   "brand",
@@ -57,6 +58,17 @@ const orgSchema = z.object({
 
 function isObjectId(val: unknown) {
   return typeof val === "string" && /^[a-f\d]{24}$/i.test(val);
+}
+
+function buildActiveMembershipTimeClause(now: Date) {
+  return {
+    $or: [
+      { temporaryAccess: false },
+      { expiresAt: { $exists: false } },
+      { expiresAt: null },
+      { expiresAt: { $gte: now } },
+    ],
+  };
 }
 
 type SessionLike = {
@@ -130,7 +142,6 @@ async function ensureOrgOwnerIsAdmin(
       $set: {
         organizationId: orgId,
         email: ownerEmailLower,
-
         userId: new Types.ObjectId(ownerId),
         name: ownerName ?? "",
         role: "admin",
@@ -139,8 +150,12 @@ async function ensureOrgOwnerIsAdmin(
         invitedBy: new Types.ObjectId(ownerId),
       },
       $unset: {
+        roleId: "",
         expiresAt: "",
         inviteToken: "",
+        inviteTokenHash: "",
+        inviteExpiresAt: "",
+        acceptedAt: "",
       },
     },
     { upsert: true },
@@ -164,6 +179,8 @@ export async function POST(req: Request) {
     ...parsed.data,
     ownerId: session.user.id,
   });
+
+  await ensureSystemRoles(String(org._id), session.user.id);
 
   const ident = await getSessionUserIdentity(session);
   if (ident.userId && ident.email) {
@@ -218,16 +235,22 @@ export async function GET() {
     );
   }
 
-  // 2) orgs where you are an active member
+  // 2) orgs where you are an active, non-expired member
+  const now = new Date();
   const membership = await OrgTeam.find({
     status: "active",
-    $or: [
+    $and: [
       {
-        userId: isObjectId(ident.userId)
-          ? new Types.ObjectId(ident.userId)
-          : ident.userId,
+        $or: [
+          {
+            userId: isObjectId(ident.userId)
+              ? new Types.ObjectId(ident.userId)
+              : ident.userId,
+          },
+          ...(ident.email ? [{ email: ident.email.toLowerCase() }] : []),
+        ],
       },
-      ...(ident.email ? [{ email: ident.email.toLowerCase() }] : []),
+      buildActiveMembershipTimeClause(now),
     ],
   })
     .select("organizationId role roleId")
@@ -246,6 +269,10 @@ export async function GET() {
     new Set([...ownedOrgIds, ...memberOrgIds]),
   ).filter(Boolean);
 
+  if (!allOrgIds.length) {
+    return NextResponse.json([]);
+  }
+
   const orgs =
     allOrgIds.length > ownedOrgs.length
       ? await Organization.find({ _id: { $in: allOrgIds } })
@@ -255,7 +282,6 @@ export async function GET() {
           .lean<OrgLean[]>()
       : ownedOrgs;
 
-  // totalMembers = count of ACTIVE org members (OrgTeam)
   const totals = await OrgTeam.aggregate<{
     _id: Types.ObjectId;
     total: number;
@@ -284,11 +310,12 @@ export async function GET() {
     });
   }
 
-  // ✅ fetch role meta for all orgs in one go
   const orgIdsObj = orgs.map((o) => new Types.ObjectId(String(o._id)));
-  const rolesAll = await OrgRole.find({ organizationId: { $in: orgIdsObj } })
-    .select("_id organizationId key name color iconKey iconUrl isSystem")
-    .lean<OrgRoleLean[]>();
+  const rolesAll = orgIdsObj.length
+    ? await OrgRole.find({ organizationId: { $in: orgIdsObj } })
+        .select("_id organizationId key name color iconKey iconUrl isSystem")
+        .lean<OrgRoleLean[]>()
+    : [];
 
   const roleByOrgAndKey = new Map<string, OrgRoleLean>();
   const roleById = new Map<string, OrgRoleLean>();
@@ -337,13 +364,22 @@ export async function GET() {
           iconUrl: r.iconUrl ?? null,
         };
       } else {
-        myRoleMeta = {
-          key: myRole,
-          name: myRole.charAt(0).toUpperCase() + myRole.slice(1),
-          color: "",
-          iconKey: "users",
-          iconUrl: null,
-        };
+        const fallback = getSystemRoleFallback(myRole);
+        myRoleMeta = fallback
+          ? {
+              key: fallback.key,
+              name: fallback.name,
+              color: fallback.color,
+              iconKey: fallback.iconKey,
+              iconUrl: null,
+            }
+          : {
+              key: myRole,
+              name: myRole.charAt(0).toUpperCase() + myRole.slice(1),
+              color: "",
+              iconKey: "users",
+              iconUrl: null,
+            };
       }
     }
 

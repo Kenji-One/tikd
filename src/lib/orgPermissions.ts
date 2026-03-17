@@ -15,33 +15,67 @@ export const ORG_PERMISSION_KEYS: OrgPermissionKey[] = [
 ];
 
 export function emptyPermissions(): OrgPermissions {
-  return ORG_PERMISSION_KEYS.reduce((acc, k) => {
-    acc[k] = false;
+  return ORG_PERMISSION_KEYS.reduce((acc, key) => {
+    acc[key] = false;
     return acc;
   }, {} as OrgPermissions);
 }
 
-/** Reasonable defaults for system roles (you can tweak any time) */
-export function systemRoleDefaults() {
-  const admin: OrgPermissions = ORG_PERMISSION_KEYS.reduce((acc, k) => {
-    acc[k] = true;
+export function allPermissions(): OrgPermissions {
+  return ORG_PERMISSION_KEYS.reduce((acc, key) => {
+    acc[key] = true;
     return acc;
   }, {} as OrgPermissions);
+}
+
+export function normalizePermissions(
+  input?: Partial<Record<string, boolean>> | null,
+): OrgPermissions {
+  const base = emptyPermissions();
+
+  if (!input) return base;
+
+  for (const key of ORG_PERMISSION_KEYS) {
+    const value = input[key];
+    if (typeof value === "boolean") {
+      base[key] = value;
+    }
+  }
+
+  return base;
+}
+
+/**
+ * Defaults aligned with the org dashboard model:
+ * - Admin: full access
+ * - Promoter: can view members, edit events, create tracking links
+ * - Scanner: no org-dashboard management permissions by default
+ * - Collaborator: can edit events
+ * - Member: no org-dashboard management permissions by default
+ */
+export function systemRoleDefaults(): Record<
+  "admin" | "promoter" | "scanner" | "collaborator" | "member",
+  OrgPermissions
+> {
+  const admin = allPermissions();
 
   const promoter = emptyPermissions();
   promoter["members.view"] = true;
   promoter["events.edit"] = true;
-  promoter["events.publish"] = true;
+  promoter["links.createTrackingLinks"] = true;
 
   const scanner = emptyPermissions();
-  scanner["members.view"] = true;
 
   const collaborator = emptyPermissions();
-  collaborator["members.view"] = true;
   collaborator["events.edit"] = true;
 
   const member = emptyPermissions();
-  member["members.view"] = true;
 
-  return { admin, promoter, scanner, collaborator, member };
+  return {
+    admin,
+    promoter,
+    scanner,
+    collaborator,
+    member,
+  };
 }

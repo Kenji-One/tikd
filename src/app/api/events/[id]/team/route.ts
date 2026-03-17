@@ -1,7 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  /api/events/[id]/team – List & Invite team members                */
-/* ------------------------------------------------------------------ */
-
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
@@ -10,111 +6,232 @@ import { Types } from "mongoose";
 
 import { auth } from "@/lib/auth";
 import Event from "@/models/Event";
-import Organization from "@/models/Organization";
-import OrgTeam from "@/models/OrgTeam";
 import User from "@/models/User";
-import EventTeam, { IEventTeam } from "@/models/EventTeam";
+import EventTeam from "@/models/EventTeam";
+import { resolveEventActor } from "@/lib/eventAccess";
 
-/* Next.js 15: params is a Promise */
 type Ctx = { params: Promise<{ id: string }> };
+
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
 
+type EventTeamRole = "admin" | "promoter" | "scanner" | "collaborator";
+
+type EventTeamLean = {
+  _id: Types.ObjectId;
+  eventId: Types.ObjectId;
+  email: string;
+  userId?: Types.ObjectId | null;
+  name?: string;
+  role: EventTeamRole;
+  status: "invited" | "active" | "revoked" | "expired";
+  temporaryAccess: boolean;
+  expiresAt?: Date | null;
+  invitedBy: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const SAFE_MEMBER_SELECT =
+  "_id eventId email userId name role status temporaryAccess expiresAt invitedBy createdAt updatedAt";
+
 /* ------------------------------ Zod ------------------------------- */
-const inviteSchema = z.object({
-  email: z.string().email(),
-  role: z.enum(["admin", "promoter", "scanner", "collaborator"]),
-  temporaryAccess: z.boolean().optional().default(false),
-  expiresAt: z.coerce.date().optional(), // required if temporaryAccess=true (validated below)
-  applyTo: z
-    .object({
-      existing: z.boolean().optional().default(false),
-      future: z.boolean().optional().default(false),
-    })
-    .optional()
-    .default({ existing: false, future: false }),
-});
+const inviteSchema = z
+  .object({
+    email: z.string().email(),
+    role: z.enum(["admin", "promoter", "scanner", "collaborator"]),
+    temporaryAccess: z.boolean().optional().default(false),
+    expiresAt: z.coerce.date().optional(),
+    applyTo: z
+      .object({
+        existing: z.boolean().optional().default(false),
+        future: z.boolean().optional().default(false),
+      })
+      .optional()
+      .default({ existing: false, future: false }),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.temporaryAccess && !value.expiresAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "expiresAt is required for temporary access",
+        path: ["expiresAt"],
+      });
+    }
 
-/* ----------------------- Permission helpers ----------------------- */
-/**
- * Manage Event Team requires:
- * - event creator OR
- * - org owner OR org admin (active) OR
- * - event admin (active)
- */
-async function assertCanManageEventTeam(eventId: string, userId: string) {
-  const event = await Event.findById(eventId)
-    .select("_id organizationId createdByUserId")
-    .lean<{
-      _id: Types.ObjectId;
-      organizationId: Types.ObjectId;
-      createdByUserId: Types.ObjectId;
-    } | null>();
+    if (
+      value.temporaryAccess &&
+      value.expiresAt &&
+      value.expiresAt.getTime() <= Date.now()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "expiresAt must be in the future",
+        path: ["expiresAt"],
+      });
+    }
+  });
 
-  if (!event) return { ok: false as const, status: 404 };
+type ExistingMemberLean = {
+  _id: Types.ObjectId;
+  status: "invited" | "active" | "revoked" | "expired";
+  temporaryAccess: boolean;
+  expiresAt?: Date | null;
+};
 
-  // event creator
-  if (String(event.createdByUserId) === String(userId)) {
-    return { ok: true as const, event };
+type ExistingUserLean = {
+  _id: Types.ObjectId;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+};
+
+function toSafeMemberResponse(member: EventTeamLean) {
+  return {
+    _id: String(member._id),
+    eventId: String(member.eventId),
+    email: member.email,
+    userId: member.userId ? String(member.userId) : null,
+    name: member.name || "",
+    role: member.role,
+    status: member.status,
+    temporaryAccess: member.temporaryAccess,
+    expiresAt: member.expiresAt ? member.expiresAt.toISOString() : null,
+    invitedBy: String(member.invitedBy),
+    createdAt: member.createdAt.toISOString(),
+    updatedAt: member.updatedAt.toISOString(),
+  };
+}
+
+async function assertCanManageEventTeam(input: {
+  eventId: string;
+  userId: string;
+  email?: string | null;
+}): Promise<
+  | {
+      ok: true;
+      actor: Awaited<ReturnType<typeof resolveEventActor>>;
+    }
+  | { ok: false; status: number; error: string }
+> {
+  const actor = await resolveEventActor(input);
+
+  if (!actor) {
+    return { ok: false, status: 404, error: "Event not found" };
   }
 
-  // org owner
-  const org = await Organization.findById(event.organizationId)
-    .select("_id ownerId")
-    .lean<{ _id: Types.ObjectId; ownerId: Types.ObjectId } | null>();
-
-  if (org && String(org.ownerId) === String(userId)) {
-    return { ok: true as const, event };
+  if (actor.isCreator || actor.orgAccess.isOwner) {
+    return { ok: true, actor };
   }
 
-  // org admin
-  const orgAdmin = await OrgTeam.findOne({
-    organizationId: event.organizationId,
-    userId,
-    role: "admin",
-    status: "active",
+  if (actor.orgAccess.effectiveRole?.key === "admin") {
+    return { ok: true, actor };
+  }
+
+  if (actor.eventTeam?.role === "admin") {
+    return { ok: true, actor };
+  }
+
+  return { ok: false, status: 403, error: "Forbidden" };
+}
+
+async function upsertEventInvite(input: {
+  eventId: Types.ObjectId;
+  invitedBy: string;
+  email: string;
+  role: EventTeamRole;
+  temporaryAccess: boolean;
+  expiresAt?: Date;
+  existingUser: ExistingUserLean | null;
+  displayName: string;
+}): Promise<EventTeamLean | null> {
+  const existingMember = await EventTeam.findOne({
+    eventId: input.eventId,
+    email: input.email,
   })
-    .select("_id")
-    .lean();
+    .select("_id status temporaryAccess expiresAt")
+    .lean<ExistingMemberLean | null>();
 
-  if (orgAdmin) return { ok: true as const, event };
+  const isExpiredActive =
+    existingMember?.status === "active" &&
+    existingMember.temporaryAccess === true &&
+    !!existingMember.expiresAt &&
+    existingMember.expiresAt.getTime() < Date.now();
 
-  // event admin
-  const eventAdmin = await EventTeam.findOne({
-    eventId: event._id,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
+  const isAlreadyActive =
+    existingMember?.status === "active" && !isExpiredActive;
 
-  if (eventAdmin) return { ok: true as const, event };
+  const setUpdate: Record<string, unknown> = {
+    role: input.role,
+    temporaryAccess: input.temporaryAccess,
+    invitedBy: new Types.ObjectId(input.invitedBy),
+    userId: input.existingUser?._id ?? null,
+    name: input.displayName,
+    status: isAlreadyActive ? "active" : "invited",
+  };
 
-  return { ok: false as const, status: 403 };
+  const unsetUpdate: Record<string, ""> = {};
+
+  if (input.temporaryAccess) {
+    setUpdate.expiresAt = input.expiresAt;
+  } else {
+    unsetUpdate.expiresAt = "";
+  }
+
+  if (isAlreadyActive) {
+    unsetUpdate.inviteToken = "";
+  } else {
+    setUpdate.inviteToken = crypto.randomBytes(20).toString("hex");
+  }
+
+  const updateDoc: {
+    $set: Record<string, unknown>;
+    $unset?: Record<string, "">;
+  } = { $set: setUpdate };
+
+  if (Object.keys(unsetUpdate).length) {
+    updateDoc.$unset = unsetUpdate;
+  }
+
+  return EventTeam.findOneAndUpdate(
+    { eventId: input.eventId, email: input.email },
+    updateDoc,
+    { new: true, upsert: true, setDefaultsOnInsert: true },
+  )
+    .select(SAFE_MEMBER_SELECT)
+    .lean<EventTeamLean | null>();
 }
 
 /* ------------------------------- GET ------------------------------ */
 export async function GET(_req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user?.id)
+
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id } = await ctx.params;
-  if (!isObjectId(id))
-    return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
 
-  const can = await assertCanManageEventTeam(id, session.user.id);
-  if (!can.ok) {
+  if (!isObjectId(id)) {
+    return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
+  }
+
+  const canManage = await assertCanManageEventTeam({
+    eventId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+  });
+
+  if (!canManage.ok) {
     return NextResponse.json(
-      { error: can.status === 404 ? "Event not found" : "Forbidden" },
-      { status: can.status },
+      { error: canManage.error },
+      { status: canManage.status },
     );
   }
 
-  // Mark expired on the fly
   await EventTeam.updateMany(
     {
-      eventId: id,
+      eventId: new Types.ObjectId(id),
       temporaryAccess: true,
       expiresAt: { $lt: new Date() },
       status: { $ne: "revoked" },
@@ -122,116 +239,114 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     { $set: { status: "expired" } },
   );
 
-  const members = await EventTeam.find({ eventId: id }).lean<IEventTeam[]>();
-  return NextResponse.json(members);
+  const members = await EventTeam.find({ eventId: new Types.ObjectId(id) })
+    .select(SAFE_MEMBER_SELECT)
+    .sort({ createdAt: 1 })
+    .lean<EventTeamLean[]>();
+
+  return NextResponse.json(members.map(toSafeMemberResponse));
 }
 
 /* ------------------------------- POST ----------------------------- */
 export async function POST(req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user?.id)
+
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id } = await ctx.params;
-  if (!isObjectId(id))
-    return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
 
-  const allowed = await assertCanManageEventTeam(id, session.user.id);
-  if (!allowed.ok) {
+  if (!isObjectId(id)) {
+    return NextResponse.json({ error: "Invalid event id" }, { status: 400 });
+  }
+
+  const canManage = await assertCanManageEventTeam({
+    eventId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+  });
+
+  if (!canManage.ok) {
     return NextResponse.json(
-      { error: allowed.status === 404 ? "Event not found" : "Forbidden" },
-      { status: allowed.status },
+      { error: canManage.error },
+      { status: canManage.status },
     );
   }
 
-  const json = await req.json();
+  const json: unknown = await req.json().catch(() => null);
   const parsed = inviteSchema.safeParse(json);
+
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });
   }
 
   const { email, role, temporaryAccess, expiresAt, applyTo } = parsed.data;
-  if (temporaryAccess && !expiresAt) {
-    return NextResponse.json(
-      { error: "expiresAt is required for temporary access" },
-      { status: 400 },
-    );
-  }
-
   const emailLower = email.trim().toLowerCase();
 
-  // Link user if exists (lowercased to match stored emails)
   const existingUser = await User.findOne({ email: emailLower })
     .select("_id firstName lastName username")
-    .lean();
+    .lean<ExistingUserLean | null>();
 
-  const name =
+  const displayName =
     existingUser?.firstName || existingUser?.lastName
       ? `${existingUser?.firstName ?? ""} ${existingUser?.lastName ?? ""}`.trim()
       : (existingUser?.username ?? "");
 
-  const inviteToken = crypto.randomBytes(20).toString("hex");
+  const member = await upsertEventInvite({
+    eventId: canManage.actor!.event._id,
+    invitedBy: session.user.id,
+    email: emailLower,
+    role,
+    temporaryAccess,
+    expiresAt,
+    existingUser,
+    displayName,
+  });
 
-  // Upsert membership for this event
-  const member = await EventTeam.findOneAndUpdate(
-    { eventId: id, email: emailLower },
-    {
-      $set: {
-        role,
-        temporaryAccess: !!temporaryAccess,
-        expiresAt: temporaryAccess ? expiresAt : undefined,
-        invitedBy: session.user.id,
-        inviteToken,
-        userId: existingUser?._id ?? null,
-        name,
-        status: "invited",
-      },
-    },
-    { new: true, upsert: true, setDefaultsOnInsert: true },
-  );
+  if (!member) {
+    return NextResponse.json(
+      { error: "Could not save event team member" },
+      { status: 500 },
+    );
+  }
 
-  /* Optionally apply to all existing events in the same organization */
   let appliedExisting = 0;
-  if (applyTo?.existing && allowed.event.organizationId) {
-    const siblings = await Event.find({
-      organizationId: allowed.event.organizationId,
-      _id: { $ne: allowed.event._id },
+
+  if (applyTo.existing) {
+    const siblingEvents = await Event.find({
+      organizationId: canManage.actor!.event.organizationId,
+      _id: { $ne: canManage.actor!.event._id },
     })
       .select("_id")
       .lean<Array<{ _id: Types.ObjectId }>>();
 
-    if (siblings.length) {
-      const ops = siblings.map((e) => ({
-        updateOne: {
-          filter: { eventId: e._id, email: emailLower },
-          update: {
-            $set: {
-              role,
-              temporaryAccess: !!temporaryAccess,
-              expiresAt: temporaryAccess ? expiresAt : undefined,
-              invitedBy: session.user.id,
-              status: "invited",
-              userId: existingUser?._id ?? null,
-              name,
-            },
-          },
-          upsert: true,
-        },
-      }));
-      const res = await EventTeam.bulkWrite(ops, { ordered: false });
-      appliedExisting =
-        (res.upsertedCount ?? 0) +
-        (res.modifiedCount ?? 0) +
-        (res.matchedCount ?? 0);
+    if (siblingEvents.length) {
+      const results = await Promise.all(
+        siblingEvents.map((eventRow) =>
+          upsertEventInvite({
+            eventId: eventRow._id,
+            invitedBy: session.user.id,
+            email: emailLower,
+            role,
+            temporaryAccess,
+            expiresAt,
+            existingUser,
+            displayName,
+          }),
+        ),
+      );
+
+      appliedExisting = results.filter(Boolean).length;
     }
   }
 
-  // NOTE: applyTo.future would require an org-level rule; not persisted here.
   return NextResponse.json(
     {
-      member,
+      member: toSafeMemberResponse(member),
       appliedExisting,
-      note: applyTo?.future ? "future_not_implemented" : undefined,
+      note: applyTo.future ? "future_not_implemented" : undefined,
+      inviteDelivery: "not_implemented",
     },
     { status: 201 },
   );

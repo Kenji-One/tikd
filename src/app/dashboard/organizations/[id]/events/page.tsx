@@ -45,34 +45,60 @@ type Org = {
   website?: string;
 };
 
+type OrgPermissionKey =
+  | "members.view"
+  | "members.invite"
+  | "members.remove"
+  | "members.assignRoles"
+  | "events.create"
+  | "events.edit"
+  | "events.publish"
+  | "events.delete"
+  | "links.createTrackingLinks";
+
+type OrgPermissions = Partial<Record<OrgPermissionKey, boolean>>;
+
+type OrgAccessPayload = {
+  isOwner: boolean;
+  role: {
+    key: string;
+    name: string;
+    color?: string;
+    iconKey?: string | null;
+    iconUrl?: string | null;
+    isSystem: boolean;
+    roleId?: string | null;
+  } | null;
+  permissions: OrgPermissions;
+  canManageProfile: boolean;
+};
+
 type MyEvent = {
   _id: string;
   title: string;
   image?: string;
-  date: string; // ISO string
+  date: string;
   location: string;
   category?: string;
   status?: "draft" | "published";
   pinned?: boolean;
 
-  // Optional dashboard stats (safe: backend can add later)
   revenue?: number;
   revenueTotal?: number;
   grossRevenue?: number;
   ticketsSold?: number;
   sold?: number;
 
-  // Optional: clients requested sort options
   pageViews?: number;
   views?: number;
 
-  // Optional org payloads
   organization?: Org;
   org?: Org;
   organizationId?: string;
 };
 
 type OrgWithEvents = Org & {
+  access?: OrgAccessPayload;
   events?: MyEvent[];
 };
 
@@ -84,6 +110,7 @@ type SortField =
   | "ticketsSold"
   | "revenue"
   | "eventDate";
+
 type SortDir = "asc" | "desc";
 
 type EventLiveStats = {
@@ -219,8 +246,6 @@ function sortEvents(args: {
 
   const dirMul = sortDir === "asc" ? 1 : -1;
 
-  // Default (no sort) behavior: Upcoming by date asc (with pinned first),
-  // Past/Drafts by date desc.
   if (!sortField) {
     if (view === "upcoming") {
       const base = arr.sort(
@@ -277,6 +302,25 @@ function makeUtcDate(year: number, monthIndex: number, day: number) {
   return new Date(Date.UTC(year, monthIndex, day, 12, 0, 0, 0));
 }
 
+function hasAnyOrgEventPermission(access?: OrgAccessPayload | null) {
+  if (!access) return false;
+  if (access.isOwner) return true;
+
+  const perms = access.permissions ?? {};
+  return !!(
+    perms["events.create"] ||
+    perms["events.edit"] ||
+    perms["events.publish"] ||
+    perms["events.delete"]
+  );
+}
+
+function canCreateOrgEvent(access?: OrgAccessPayload | null) {
+  if (!access) return false;
+  if (access.isOwner) return true;
+  return !!access.permissions?.["events.create"];
+}
+
 /* ---------------------- Compact dropdown (Tikd style) -------------- */
 function MiniSelect<T extends string>({
   value,
@@ -310,7 +354,6 @@ function MiniSelect<T extends string>({
         onClick={() => setOpen((v) => !v)}
         className={clsx(
           "inline-flex items-center gap-2 rounded-full border border-white/10",
-          // ✅ match main Events page controls color
           "bg-[#12141f] px-3 py-2 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
           "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer",
@@ -672,7 +715,6 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
                   )}
                 >
                   {orgLogo ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={orgLogo}
                       alt=""
@@ -993,7 +1035,6 @@ function EventRowCard({
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[12px] bg-white/5 ring-1 ring-white/10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={rowImg}
             alt=""
@@ -1114,30 +1155,31 @@ export default function OrgEventsPage() {
   const queryClient = useQueryClient();
 
   const [view, setView] = useState<EventViewId>("upcoming");
-
-  // layout view (grid/list) like main Events page
   const [layout, setLayout] = useState<GridListValue>("grid");
   const [lastUpcomingLayout, setLastUpcomingLayout] =
     useState<GridListValue>("grid");
   const prevViewRef = useRef<EventViewId>("upcoming");
-
-  // header search (events)
   const [eventsQuery, setEventsQuery] = useState("");
-
-  // header sort (match main Events page)
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  // org + events (org-scoped only)
-  const { data: orgPayload, isLoading: eventsLoading } =
-    useQuery<OrgWithEvents>({
-      queryKey: ["orgEvents", orgId],
-      queryFn: () =>
-        fetchJSON<OrgWithEvents>(
-          `/api/organizations/${orgId}?include=events&status=all`,
-        ),
-      enabled: !!orgId && !!session,
-    });
+  const {
+    data: orgPayload,
+    isLoading: eventsLoading,
+    isError: eventsError,
+    error: eventsErrorValue,
+  } = useQuery<OrgWithEvents>({
+    queryKey: ["orgEvents", orgId],
+    queryFn: () =>
+      fetchJSON<OrgWithEvents>(
+        `/api/organizations/${orgId}?include=events&status=all`,
+      ),
+    enabled: !!orgId && !!session,
+  });
+
+  const access = orgPayload?.access ?? null;
+  const canAccessEvents = hasAnyOrgEventPermission(access);
+  const canCreateEvent = canCreateOrgEvent(access);
 
   const org: Org | null = useMemo(() => {
     if (!orgPayload?._id) return null;
@@ -1154,7 +1196,6 @@ export default function OrgEventsPage() {
     if (!list.length) return [];
     if (!org) return list;
 
-    // attach org info so tooltip renders identically
     return list.map((e) => ({
       ...e,
       organization: org,
@@ -1205,7 +1246,7 @@ export default function OrgEventsPage() {
           revenue: revenue?.totals.revenue ?? 0,
         };
       },
-      enabled: !!session && !!event._id,
+      enabled: !!session && !!event._id && canAccessEvents,
       staleTime: 60_000,
     })),
   });
@@ -1242,12 +1283,11 @@ export default function OrgEventsPage() {
     });
   }, [events, liveStatsByEventId]);
 
-  // pins (same system, still useful inside org scope)
   const { data: pinnedIdsResp } = useQuery<{ ids: string[] }>({
     queryKey: ["eventPins"],
     queryFn: () =>
       fetchJSON<{ ids: string[] }>("/api/events/pins", { cache: "no-store" }),
-    enabled: !!session,
+    enabled: !!session && canAccessEvents,
   });
 
   const pinnedIds = useMemo(
@@ -1296,6 +1336,7 @@ export default function OrgEventsPage() {
       ),
     [eventsWithLiveStats, now],
   );
+
   const pastBase = useMemo(
     () =>
       eventsWithLiveStats.filter(
@@ -1303,12 +1344,12 @@ export default function OrgEventsPage() {
       ),
     [eventsWithLiveStats, now],
   );
+
   const draftsBase = useMemo(
     () => eventsWithLiveStats.filter((e) => e.status === "draft"),
     [eventsWithLiveStats],
   );
 
-  // Match main Events behavior: Upcoming can be grid/list, Past+Drafts forced list.
   useEffect(() => {
     const prev = prevViewRef.current;
 
@@ -1324,7 +1365,6 @@ export default function OrgEventsPage() {
     prevViewRef.current = view;
   }, [view, layout, lastUpcomingLayout]);
 
-  // Reset to page-appropriate default sort direction when choosing a new field.
   const defaultDirFor = useMemo(() => {
     return (field: SortField): SortDir => {
       if (field === "title") return "asc";
@@ -1333,7 +1373,6 @@ export default function OrgEventsPage() {
     };
   }, [view]);
 
-  // Keep sortDir in sync when view changes and sortField is eventDate.
   useEffect(() => {
     if (!sortField) return;
     setSortDir((prev) => {
@@ -1349,21 +1388,21 @@ export default function OrgEventsPage() {
     { key: "drafts", label: "Drafts" },
   ];
 
-  // Create event goes straight to org creation (NO org picker modal)
   function handleCreateEvent() {
-    if (!orgId) return;
+    if (!orgId || !canCreateEvent) return;
     router.push(`/dashboard/organizations/${orgId}/events/create`);
   }
 
-  // Apply header search to whichever view is active
   const upcomingFiltered = useMemo(
     () => upcomingBase.filter((e) => matchesEventQuery(e, eventsQuery)),
     [upcomingBase, eventsQuery],
   );
+
   const pastFiltered = useMemo(
     () => pastBase.filter((e) => matchesEventQuery(e, eventsQuery)),
     [pastBase, eventsQuery],
   );
+
   const draftsFiltered = useMemo(
     () => draftsBase.filter((e) => matchesEventQuery(e, eventsQuery)),
     [draftsBase, eventsQuery],
@@ -1403,18 +1442,70 @@ export default function OrgEventsPage() {
     [draftsFiltered, sortField, sortDir],
   );
 
-  // Keep EventCard sizes EXACTLY as main page
   const gridCols =
     "grid-cols-[repeat(auto-fill,minmax(170px,170px))] " +
     "sm:grid-cols-[repeat(auto-fill,minmax(190px,190px))] " +
     "md:grid-cols-[repeat(auto-fill,minmax(200px,200px))] " +
     "lg:grid-cols-[repeat(auto-fill,minmax(210px,210px))]";
 
-  // Org-scoped event “detail” route (keeps you inside org dashboard)
   const eventHref = useCallback(
     (eventId: string) => `/dashboard/events/${eventId}/summary`,
     [],
   );
+
+  if (!eventsLoading && eventsError) {
+    return (
+      <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
+        <section className="pb-16">
+          <section
+            className={clsx(
+              "mt-4 overflow-hidden rounded-2xl border border-white/10",
+              "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
+            )}
+          >
+            <div className="p-6">
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-12 text-center">
+                <div className="text-[13px] font-semibold text-neutral-100">
+                  Couldn’t load organization events
+                </div>
+                <div className="mt-1 text-[12px] text-neutral-500">
+                  {(eventsErrorValue as Error)?.message ||
+                    "Something went wrong."}
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </div>
+    );
+  }
+
+  if (!eventsLoading && !canAccessEvents) {
+    return (
+      <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
+        <section className="pb-16">
+          <section
+            className={clsx(
+              "mt-4 overflow-hidden rounded-2xl border border-white/10",
+              "bg-neutral-950/70 shadow-[0_18px_60px_rgba(0,0,0,0.55)]",
+            )}
+          >
+            <div className="p-6">
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-12 text-center">
+                <div className="text-[13px] font-semibold text-neutral-100">
+                  You do not have permission to access organization events
+                </div>
+                <div className="mt-1 text-[12px] text-neutral-500">
+                  Ask the organization owner or admin to grant an event
+                  permission.
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
@@ -1431,7 +1522,6 @@ export default function OrgEventsPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* Header layout EXACTLY like main Events page */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300">
@@ -1448,11 +1538,9 @@ export default function OrgEventsPage() {
               </div>
 
               <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-                {/* Search bar */}
                 <div
                   className={clsx(
                     "relative w-full sm:w-[420px]",
-                    // ✅ match main Events page controls color
                     "rounded-lg border border-white/10 bg-[#12141f] h-10",
                   )}
                 >
@@ -1489,7 +1577,6 @@ export default function OrgEventsPage() {
                   />
                 </div>
 
-                {/* Controls */}
                 <div className="flex items-center gap-2">
                   <GridListToggle
                     value={layout}
@@ -1498,7 +1585,6 @@ export default function OrgEventsPage() {
                     ariaLabel="Layout view toggle"
                   />
 
-                  {/* ✅ use the same SortControl as main Events page */}
                   <SortControl
                     options={SORT_FIELDS}
                     sortField={sortField}
@@ -1522,7 +1608,7 @@ export default function OrgEventsPage() {
                     variant="primary"
                     icon={<CalendarPlus className="h-4 w-4" />}
                     animation
-                    disabled={!orgId}
+                    disabled={!orgId || !canCreateEvent}
                   >
                     Create Event
                   </Button>
@@ -1530,9 +1616,7 @@ export default function OrgEventsPage() {
               </div>
             </div>
 
-            {/* Content */}
             <div className="mt-4">
-              {/* UPCOMING */}
               {view === "upcoming" ? (
                 eventsLoading ? (
                   layout === "grid" ? (
@@ -1648,7 +1732,6 @@ export default function OrgEventsPage() {
                 )
               ) : null}
 
-              {/* PAST */}
               {view === "past" ? (
                 eventsLoading ? (
                   <div className="space-y-3">
@@ -1710,7 +1793,6 @@ export default function OrgEventsPage() {
                           <div className="relative z-10 flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
                             <div className="flex min-w-0 items-center gap-3">
                               <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={rowImg}
                                   alt=""
@@ -1778,7 +1860,6 @@ export default function OrgEventsPage() {
                 )
               ) : null}
 
-              {/* DRAFTS */}
               {view === "drafts" ? (
                 eventsLoading ? (
                   <div className="space-y-3">
@@ -1798,7 +1879,13 @@ export default function OrgEventsPage() {
                     <button
                       type="button"
                       onClick={handleCreateEvent}
-                      className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary-500 px-4 py-3 text-xs font-medium text-white transition hover:bg-primary-600 cursor-pointer"
+                      disabled={!canCreateEvent}
+                      className={clsx(
+                        "mt-4 inline-flex items-center gap-1.5 rounded-full px-4 py-3 text-xs font-medium text-white transition",
+                        canCreateEvent
+                          ? "bg-primary-500 hover:bg-primary-600 cursor-pointer"
+                          : "bg-neutral-700 cursor-not-allowed opacity-60",
+                      )}
                     >
                       <CalendarPlus className="h-4 w-4" />
                       Create Event
@@ -1845,7 +1932,6 @@ export default function OrgEventsPage() {
                           <div className="relative z-10 flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
                             <div className="flex min-w-0 items-center gap-3">
                               <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={rowImg}
                                   alt=""

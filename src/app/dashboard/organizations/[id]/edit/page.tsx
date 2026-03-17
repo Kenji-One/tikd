@@ -1,6 +1,3 @@
-/* ------------------------------------------------------------------ */
-/*  src/app/dashboard/organizations/[id]/edit/page.tsx                */
-/* ------------------------------------------------------------------ */
 "use client";
 
 import React, { useMemo, useRef, useState, useEffect } from "react";
@@ -36,6 +33,7 @@ const businessTypeValues = [
   "fraternity",
   "charity",
 ] as const;
+
 type BusinessType = (typeof businessTypeValues)[number];
 
 const BUSINESS_TYPES: {
@@ -77,7 +75,6 @@ const BUSINESS_TYPES: {
   },
 ];
 
-/* 🔧 helper: website is truly optional (empty allowed, but invalid URLs rejected) */
 const websiteSchema = z
   .string()
   .trim()
@@ -97,9 +94,6 @@ const websiteSchema = z
     },
   );
 
-/**
- * ✅ Optional URL field that can be "", undefined, or a valid URL.
- */
 const optionalUrlSchema = z
   .string()
   .trim()
@@ -121,11 +115,8 @@ const optionalUrlSchema = z
 const OrgSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
-
-  /** branding */
   banner: optionalUrlSchema,
   logo: optionalUrlSchema,
-
   website: websiteSchema,
   businessType: z.enum(businessTypeValues),
   location: z
@@ -145,6 +136,7 @@ const OrgSchema = z.object({
     .optional()
     .or(z.literal("")),
 });
+
 type OrgFormData = z.infer<typeof OrgSchema>;
 
 type OrgApiResponse = {
@@ -157,9 +149,24 @@ type OrgApiResponse = {
   businessType?: BusinessType;
   location?: string;
   accentColor?: string;
+  access?: {
+    isOwner?: boolean;
+    role?: {
+      key: string;
+      name: string;
+      color?: string;
+      iconKey?: string | null;
+      iconUrl?: string | null;
+      isSystem?: boolean;
+      roleId?: string | null;
+    } | null;
+    permissions?: Record<string, boolean>;
+    canManageProfile?: boolean;
+  };
 };
 
 /* ----------------------------- helpers ---------------------------- */
+
 const meshBg: CSSProperties = {
   background:
     "radial-gradient(1000px 420px at 15% 10%, rgba(130,46,255,.25), transparent 60%)," +
@@ -240,7 +247,6 @@ function getBusinessTypeLabel(value?: BusinessType | null) {
   return BUSINESS_TYPES.find((t) => t.value === value)?.label ?? "";
 }
 
-/** Remove query/hash so we never store cache-busters in DB. */
 function stripQueryAndHash(u?: string) {
   if (!u) return "";
   try {
@@ -253,7 +259,6 @@ function stripQueryAndHash(u?: string) {
   }
 }
 
-/** Force fresh fetch after overwrite/crop (Cloudinary CDN + Next/Image cache). */
 function withCacheBust(u: string, nonce: number) {
   try {
     const url = new URL(u);
@@ -294,6 +299,7 @@ async function commitCloudinaryCrop(args: {
 /* ------------------------------------------------------------------ */
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
+
 export default function EditOrganizationPage() {
   const router = useRouter();
   const params = useParams() as { id?: string };
@@ -302,18 +308,17 @@ export default function EditOrganizationPage() {
   const errorRing =
     "rounded-lg ring-1 ring-inset ring-error-500 border-transparent";
 
-  // ✅ Stable publicIds (session-stable, same idea as New page)
   const bannerPublicId = useMemo(() => uuid(), []);
   const logoPublicId = useMemo(() => uuid(), []);
 
   const bannerOriginalRef = useRef<string | null>(null);
   const logoOriginalRef = useRef<string | null>(null);
 
-  // ✅ Global “cache-bust” nonce used to force fresh Cloudinary/Next fetches
   const [previewNonce, setPreviewNonce] = useState<number>(() => Date.now());
 
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState<boolean>(false);
 
   const {
     register,
@@ -377,7 +382,6 @@ export default function EditOrganizationPage() {
     });
   }
 
-  /* -------------------------- Load org ---------------------------- */
   useEffect(() => {
     if (!orgId) return;
 
@@ -387,6 +391,7 @@ export default function EditOrganizationPage() {
       try {
         setLoading(true);
         setLoadError(null);
+        setForbidden(false);
 
         const res = await fetch(`/api/organizations/${orgId}`, {
           method: "GET",
@@ -402,13 +407,22 @@ export default function EditOrganizationPage() {
         const org = (await res
           .json()
           .catch(() => null)) as OrgApiResponse | null;
+
         if (!org?._id) throw new Error("Invalid organization response");
 
+        if (!org.access?.canManageProfile) {
+          if (!cancelled) {
+            setForbidden(true);
+            setLoading(false);
+          }
+          return;
+        }
+
         const nonce = Date.now();
+
         if (!cancelled) {
           setPreviewNonce(nonce);
 
-          // Store clean originals (no cache bust) for re-editing in crop modal
           const cleanBanner = org.banner ? stripQueryAndHash(org.banner) : "";
           const cleanLogo = org.logo ? stripQueryAndHash(org.logo) : "";
           bannerOriginalRef.current = cleanBanner || null;
@@ -422,9 +436,6 @@ export default function EditOrganizationPage() {
               location: org.location ?? "",
               accentColor: org.accentColor ?? "",
               businessType: (org.businessType ?? "brand") as BusinessType,
-
-              // ✅ Put cache-busted URLs into form so preview updates reliably.
-              // We'll strip query/hash before saving.
               banner: cleanBanner ? withCacheBust(cleanBanner, nonce) : "",
               logo: cleanLogo ? withCacheBust(cleanLogo, nonce) : "",
             },
@@ -449,11 +460,9 @@ export default function EditOrganizationPage() {
     };
   }, [orgId, reset]);
 
-  /* -------------------------- Submit ------------------------------ */
   const onSubmit: SubmitHandler<OrgFormData> = async (data) => {
     if (!orgId) return;
 
-    // ✅ strip cache-busters before saving
     const cleanBanner = data.banner?.trim()
       ? stripQueryAndHash(data.banner)
       : "";
@@ -486,7 +495,6 @@ export default function EditOrganizationPage() {
     }
   };
 
-  /* ---------------------------- preview --------------------------- */
   const name = watch("name");
   const description = watch("description");
   const banner = watch("banner");
@@ -508,7 +516,6 @@ export default function EditOrganizationPage() {
     (businessType ? getBusinessTypeLabel(businessType) : "") ||
     "Public profile";
 
-  // ✅ Always show cache-busted URLs in UI so overwrites/crops reflect instantly
   const uiBanner = useMemo(() => {
     const v = banner?.trim() ? banner.trim() : "";
     return v ? withCacheBust(v, previewNonce) : "";
@@ -518,8 +525,6 @@ export default function EditOrganizationPage() {
     const v = logo?.trim() ? logo.trim() : "";
     return v ? withCacheBust(v, previewNonce) : "";
   }, [logo, previewNonce]);
-
-  /* --------------------------- Render ----------------------------- */
 
   if (loading) {
     return (
@@ -536,6 +541,37 @@ export default function EditOrganizationPage() {
             <p className="mt-2 max-w-prose text-sm text-neutral-300">
               Loading organization details…
             </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (forbidden) {
+    return (
+      <main className="relative bg-neutral-950 text-neutral-0">
+        <div className="relative isolate mt-6 px-4 pt-10 md:py-12 lg:mt-8">
+          <div
+            className="pointer-events-none absolute inset-0 -z-10 opacity-80"
+            style={meshBg}
+          />
+          <div className="mx-auto max-w-[1232px]">
+            <h1 className="text-2xl font-extrabold md:text-3xl">
+              Edit Organization
+            </h1>
+            <p className="mt-2 max-w-prose text-sm text-error-300">
+              You do not have permission to edit this organization.
+            </p>
+
+            <div className="mt-6">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => router.push(`/dashboard/organizations/${orgId}`)}
+              >
+                Back to organization
+              </Button>
+            </div>
           </div>
         </div>
       </main>
@@ -583,8 +619,6 @@ export default function EditOrganizationPage() {
           title={editor.title}
           onClose={() => setEditor(null)}
           onApply={async ({ cropUrl }) => {
-            // ✅ Commit crop to Cloudinary (overwrite the temp asset)
-            // This makes "Apply" actually apply everywhere, immediately.
             const secureUrl = await commitCloudinaryCrop({
               publicId: editor.publicId,
               cropUrl,
@@ -593,14 +627,12 @@ export default function EditOrganizationPage() {
             const nonce = Date.now();
             setPreviewNonce(nonce);
 
-            // Keep track of the true original for re-editing (raw, no cachebust)
             const clean = stripQueryAndHash(secureUrl);
             if (editor.mode === "banner") bannerOriginalRef.current = clean;
             else logoOriginalRef.current = clean;
 
             const fieldName = editor.mode === "banner" ? "banner" : "logo";
 
-            // Store cache-busted URL for instant UI update; strip before submit
             setValue(fieldName, withCacheBust(secureUrl, nonce), {
               shouldDirty: true,
               shouldValidate: true,
@@ -613,7 +645,6 @@ export default function EditOrganizationPage() {
         />
       ) : null}
 
-      {/* Header / mesh */}
       <div className="relative isolate mt-6 px-4 pt-10 md:py-12 lg:mt-8">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-80"
@@ -635,9 +666,7 @@ export default function EditOrganizationPage() {
         className="mx-auto grid max-w-[1232px] grid-cols-1 gap-6 px-4 py-8 md:grid-cols-12"
         noValidate
       >
-        {/* ------------------------- Main form ----------------------- */}
         <div className="space-y-6 md:col-span-7 lg:col-span-8">
-          {/* Required fields note */}
           <div className="rounded-lg border border-white/10 bg-neutral-950/60 p-3">
             <div className="flex items-center gap-3">
               <div className="mt-[2px] grid h-8 w-8 place-items-center rounded-lg bg-white/5 ring-1 ring-white/10">
@@ -650,7 +679,6 @@ export default function EditOrganizationPage() {
             </div>
           </div>
 
-          {/* Error summary after first submit */}
           {submitCount > 0 && hasErrors && (
             <div
               role="alert"
@@ -662,7 +690,6 @@ export default function EditOrganizationPage() {
             </div>
           )}
 
-          {/* Basic info */}
           <Section
             title="Basic Information"
             desc="This appears on your organization page and on event cards."
@@ -724,7 +751,6 @@ export default function EditOrganizationPage() {
             </div>
           </Section>
 
-          {/* Business type */}
           <Section
             title="Type of business"
             desc="Tell us what best describes how you run or host events."
@@ -817,7 +843,6 @@ export default function EditOrganizationPage() {
             />
           </Section>
 
-          {/* Branding */}
           <Section
             title="Branding"
             desc="Upload a banner + a crisp square logo and choose your accent color."
@@ -929,7 +954,6 @@ export default function EditOrganizationPage() {
             </div>
           </Section>
 
-          {/* Links */}
           <Section
             title="Links"
             desc="Add your main website so fans and partners can learn more."
@@ -973,7 +997,6 @@ export default function EditOrganizationPage() {
           </div>
         </div>
 
-        {/* ------------------------- Sidebar -------------------------- */}
         <aside className="md:col-span-5 lg:col-span-4">
           <div className="space-y-6 md:sticky md:top-20">
             <div className="rounded-lg border border-white/10 bg-neutral-950/70 p-5">

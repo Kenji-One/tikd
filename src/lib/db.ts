@@ -1,26 +1,49 @@
-// src/lib/db.ts
-import mongoose from "mongoose";
+import mongoose, { type Mongoose } from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI as string;
+type MongooseCache = {
+  conn: Mongoose | null;
+  promise: Promise<Mongoose> | null;
+};
+
+const MONGODB_URI = String(process.env.MONGODB_URI ?? "").trim();
+const MONGODB_DB = String(process.env.MONGODB_DB ?? "tikd").trim();
 
 if (!MONGODB_URI) {
-  throw new Error("❌  Please define the MONGODB_URI environment variable");
+  throw new Error("Missing environment variable: MONGODB_URI");
 }
 
-/**
- * Ensure the Mongo connection is cached across HMR reloads in dev
- * to prevent creating new connections on every file change.
- */
 declare global {
-  var mongooseConn: typeof mongoose | null | undefined;
+  var __mongooseCache__: MongooseCache | undefined;
 }
 
-export async function connectDB(): Promise<typeof mongoose> {
-  if (global.mongooseConn) return global.mongooseConn;
+const globalForMongoose = globalThis as typeof globalThis & {
+  __mongooseCache__?: MongooseCache;
+};
 
-  global.mongooseConn = await mongoose.connect(MONGODB_URI, {
-    dbName: "tikd",
-  });
+const cached: MongooseCache = globalForMongoose.__mongooseCache__ ?? {
+  conn: null,
+  promise: null,
+};
 
-  return global.mongooseConn;
+if (!globalForMongoose.__mongooseCache__) {
+  globalForMongoose.__mongooseCache__ = cached;
+}
+
+export async function connectDB(): Promise<Mongoose> {
+  if (cached.conn) return cached.conn;
+
+  if (!cached.promise) {
+    cached.promise = mongoose
+      .connect(MONGODB_URI, {
+        dbName: MONGODB_DB || undefined,
+      })
+      .then((m) => m)
+      .catch((error: unknown) => {
+        cached.promise = null;
+        throw error;
+      });
+  }
+
+  cached.conn = await cached.promise;
+  return cached.conn;
 }

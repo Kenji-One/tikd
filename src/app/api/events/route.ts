@@ -1,15 +1,19 @@
-// src/app/api/events/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
 import { Types } from "mongoose";
+
+import { auth } from "@/lib/auth";
+import {
+  requireCreateEventForOrg,
+  listOrganizationsWithAnyEventPermission,
+} from "@/lib/eventAccess";
+import { hasOrgPermission } from "@/lib/orgAccess";
 
 import Event from "@/models/Event";
 import Organization from "@/models/Organization";
 import Artist from "@/models/Artist";
 import User from "@/models/User";
-import OrgTeam from "@/models/OrgTeam";
 import EventTeam from "@/models/EventTeam";
 import { createNotification } from "@/lib/notifications";
 
@@ -20,10 +24,6 @@ function escapeRegex(input: string) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * For preset-like city inputs, match common variants in stored addresses.
- * This prevents "New York City" filter from missing "NYC" / "New York, NY" / etc.
- */
 function locationToRegex(input: string): RegExp {
   const v = input.trim().toLowerCase();
 
@@ -35,13 +35,43 @@ function locationToRegex(input: string): RegExp {
     return /(los\s*angeles|los\s*angeles,\s*ca|\bla\b|\bla,\s*ca\b)/i;
   }
 
-  // Brooklyn is usually present as-is in addresses
   if (v === "brooklyn, ny" || v === "brooklyn") {
     return /(brooklyn)/i;
   }
 
-  // Generic: escape for safe substring match
   return new RegExp(escapeRegex(input), "i");
+}
+
+function normalizeEmail(email?: string | null): string {
+  return String(email ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function buildIdentityMatch(userId: string, email?: string | null) {
+  const or: Array<Record<string, unknown>> = [];
+
+  if (Types.ObjectId.isValid(userId)) {
+    or.push({ userId: new Types.ObjectId(userId) });
+  }
+
+  const emailLower = normalizeEmail(email);
+  if (emailLower) {
+    or.push({ email: emailLower });
+  }
+
+  return or;
+}
+
+function buildActiveEventTeamTimeClause(now: Date) {
+  return {
+    $or: [
+      { temporaryAccess: false },
+      { expiresAt: { $exists: false } },
+      { expiresAt: null },
+      { expiresAt: { $gte: now } },
+    ],
+  };
 }
 
 type SessionLike = {
@@ -129,49 +159,6 @@ async function getSessionIdentity(
   };
 }
 
-async function assertCanCreateEventForOrg(
-  organizationId: string,
-  userId: string,
-): Promise<{ ok: true; isOwner: boolean } | { ok: false; res: NextResponse }> {
-  const org = await Organization.findById(organizationId)
-    .select("_id ownerId")
-    .lean<{ _id: Types.ObjectId; ownerId: Types.ObjectId } | null>();
-
-  if (!org) {
-    return {
-      ok: false,
-      res: NextResponse.json(
-        { error: "Organization not found" },
-        { status: 404 },
-      ),
-    };
-  }
-
-  const isOwner = String(org.ownerId) === String(userId);
-  if (isOwner) return { ok: true, isOwner: true };
-
-  const admin = await OrgTeam.findOne({
-    organizationId: org._id,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-
-  if (!admin) {
-    return {
-      ok: false,
-      res: NextResponse.json(
-        { error: "Forbidden: only organization admins can create events" },
-        { status: 403 },
-      ),
-    };
-  }
-
-  return { ok: true, isOwner: false };
-}
-
 /* ------------------------- Schemas ------------------------- */
 const artistInputSchema = z.object({
   name: z.string().min(1),
@@ -202,7 +189,6 @@ const bodySchema = z.object({
   location: z.string().min(1),
   image: z.string().url().optional(),
 
-  // ✅ NEW
   media: z.array(mediaItemSchema).max(30).default([]),
 
   organizationId: z.string().length(24),
@@ -218,7 +204,6 @@ const bodySchema = z.object({
   status: z.enum(["published", "draft"]).default("draft"),
 });
 
-/* ------------------------- Cursor paging (PUBLIC) ------------------------- */
 const publicPagingSchema = z.object({
   limit: z.coerce.number().int().min(1).max(60).default(30),
   cursor: z.string().optional(),
@@ -274,32 +259,46 @@ export async function GET(req: NextRequest) {
     }
 
     const me = String(session.user.id);
+    const identity = await getSessionIdentity(session);
+    const eventTeamIdentity = buildIdentityMatch(me, identity.email);
+    const now = new Date();
 
-    const [eventTeamRows, orgAdminRows] = await Promise.all([
-      EventTeam.find({ userId: me, status: "active" })
-        .select("eventId")
-        .lean<Array<{ eventId: Types.ObjectId }>>(),
-      OrgTeam.find({ userId: me, role: "admin", status: "active" })
-        .select("organizationId")
-        .lean<Array<{ organizationId: Types.ObjectId }>>(),
+    const [eventTeamRows, manageableOrgIds] = await Promise.all([
+      eventTeamIdentity.length
+        ? EventTeam.find({
+            status: "active",
+            $and: [
+              { $or: eventTeamIdentity },
+              buildActiveEventTeamTimeClause(now),
+            ],
+          })
+            .select("eventId")
+            .lean<Array<{ eventId: Types.ObjectId }>>()
+        : Promise.resolve([] as Array<{ eventId: Types.ObjectId }>),
+      listOrganizationsWithAnyEventPermission({
+        userId: me,
+        email: identity.email,
+      }),
     ]);
 
-    const eventIds = eventTeamRows.map((r) => r.eventId);
-    const orgIds = orgAdminRows.map((r) => r.organizationId);
+    const eventIds = eventTeamRows.map((row) => row.eventId);
+    const ors: Array<Record<string, unknown>> = [{ createdByUserId: me }];
 
-    const filter = {
-      $or: [
-        { createdByUserId: me },
-        ...(eventIds.length ? [{ _id: { $in: eventIds } }] : []),
-        ...(orgIds.length ? [{ organizationId: { $in: orgIds } }] : []),
-      ],
-    };
+    if (eventIds.length) {
+      ors.push({ _id: { $in: eventIds } });
+    }
 
-    const events = await Event.find(filter).lean<unknown[]>();
+    if (manageableOrgIds.length) {
+      ors.push({ organizationId: { $in: manageableOrgIds } });
+    }
+
+    const events = await Event.find({ $or: ors }).lean<unknown[]>();
 
     const orgIdsHydrate = Array.from(
       new Set(
-        events.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean),
+        events
+          .map((event) => getOrgIdFromEventLike(event) ?? "")
+          .filter(Boolean),
       ),
     );
 
@@ -318,42 +317,34 @@ export async function GET(req: NextRequest) {
         >();
 
       orgById = new Map(
-        orgs.map((o) => [
-          String(o._id),
+        orgs.map((org) => [
+          String(org._id),
           {
-            _id: String(o._id),
-            name: o?.name ?? "Organization",
-            logo: o?.logo || undefined,
-            website: o?.website || undefined,
+            _id: String(org._id),
+            name: org?.name ?? "Organization",
+            logo: org?.logo || undefined,
+            website: org?.website || undefined,
           },
         ]),
       );
     }
 
-    const hydrated = events.map((e) => {
-      if (hasOrganizationPayload(e)) return e;
+    const hydrated = events.map((event) => {
+      if (hasOrganizationPayload(event)) return event;
 
-      const orgId = getOrgIdFromEventLike(e);
+      const orgId = getOrgIdFromEventLike(event);
       const org = orgId ? orgById.get(orgId) : undefined;
 
-      if (e && typeof e === "object") {
-        return { ...(e as Record<string, unknown>), organization: org };
+      if (event && typeof event === "object") {
+        return { ...(event as Record<string, unknown>), organization: org };
       }
-      return e;
+      return event;
     });
 
     return NextResponse.json(hydrated);
   }
 
   const now = new Date();
-
-  const wantsPaging =
-    searchParams.has("limit") ||
-    searchParams.has("cursor") ||
-    searchParams.has("page") ||
-    searchParams.has("sort") ||
-    searchParams.has("when") ||
-    searchParams.has("location");
 
   const parsed = publicPagingSchema.safeParse({
     limit: searchParams.get("limit") ?? undefined,
@@ -444,7 +435,6 @@ export async function GET(req: NextRequest) {
     filter = { $and: [filter, cursorClause] };
   }
 
-  // Paged mode
   const docs = await Event.find(filter)
     .sort(sortSpec)
     .limit(limit + 1)
@@ -455,7 +445,9 @@ export async function GET(req: NextRequest) {
 
   const orgIds = Array.from(
     new Set(
-      pageItems.map((e) => getOrgIdFromEventLike(e) ?? "").filter(Boolean),
+      pageItems
+        .map((event) => getOrgIdFromEventLike(event) ?? "")
+        .filter(Boolean),
     ),
   );
 
@@ -474,28 +466,28 @@ export async function GET(req: NextRequest) {
       >();
 
     orgById = new Map(
-      orgs.map((o) => [
-        String(o._id),
+      orgs.map((org) => [
+        String(org._id),
         {
-          _id: String(o._id),
-          name: o?.name ?? "Organization",
-          logo: o?.logo || undefined,
-          website: o?.website || undefined,
+          _id: String(org._id),
+          name: org?.name ?? "Organization",
+          logo: org?.logo || undefined,
+          website: org?.website || undefined,
         },
       ]),
     );
   }
 
-  const hydrated = pageItems.map((e) => {
-    if (hasOrganizationPayload(e)) return e;
+  const hydrated = pageItems.map((event) => {
+    if (hasOrganizationPayload(event)) return event;
 
-    const orgId = getOrgIdFromEventLike(e);
+    const orgId = getOrgIdFromEventLike(event);
     const org = orgId ? orgById.get(orgId) : undefined;
 
-    if (e && typeof e === "object") {
-      return { ...(e as Record<string, unknown>), organization: org };
+    if (event && typeof event === "object") {
+      return { ...(event as Record<string, unknown>), organization: org };
     }
-    return e;
+    return event;
   });
 
   let nextCursor: string | null = null;
@@ -539,11 +531,26 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const perm = await assertCanCreateEventForOrg(
-    parsed.data.organizationId,
-    String(session.user.id),
-  );
-  if (!perm.ok) return perm.res;
+  const canCreate = await requireCreateEventForOrg({
+    organizationId: parsed.data.organizationId,
+    userId: String(session.user.id),
+    email: session.user.email ?? undefined,
+  });
+
+  if (!canCreate.ok) {
+    return NextResponse.json(
+      { error: canCreate.error },
+      { status: canCreate.status },
+    );
+  }
+
+  if (
+    parsed.data.status === "published" &&
+    !canCreate.access.isOwner &&
+    !hasOrgPermission(canCreate.access, "events.publish")
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const identity = await getSessionIdentity(session);
   if (!identity.email) {
@@ -554,10 +561,10 @@ export async function POST(req: NextRequest) {
   }
 
   const artistIds = await Promise.all(
-    parsed.data.artists.map(async (a) => {
+    parsed.data.artists.map(async (artist) => {
       const doc = await Artist.create({
-        stageName: a.name,
-        avatar: a.image ?? "",
+        stageName: artist.name,
+        avatar: artist.image ?? "",
       });
       return doc._id;
     }),
@@ -592,7 +599,6 @@ export async function POST(req: NextRequest) {
     location: parsed.data.location,
     image: parsed.data.image,
 
-    // ✅ NEW
     media: parsed.data.media,
 
     categories: parsed.data.categories,
@@ -611,8 +617,12 @@ export async function POST(req: NextRequest) {
   await createNotification({
     recipientUserId: identity.userId,
     type: "event.created",
-    title: "Event created",
-    message: `Your event “${parsed.data.title}” was created as a draft.`,
+    title:
+      parsed.data.status === "published" ? "Event published" : "Event created",
+    message:
+      parsed.data.status === "published"
+        ? `Your event “${parsed.data.title}” was created and published.`
+        : `Your event “${parsed.data.title}” was created as a draft.`,
     href: `/dashboard/events/${String(event._id)}`,
   });
 

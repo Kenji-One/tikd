@@ -1,4 +1,3 @@
-// src\models\OrgTeam.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 /* ----------------------------- Types ----------------------------- */
@@ -32,7 +31,17 @@ export interface IOrgTeam extends Document {
   expiresAt?: Date;
 
   invitedBy: Types.ObjectId;
+
+  /**
+   * Legacy raw token field kept for backwards compatibility only.
+   * New invites use inviteTokenHash.
+   */
   inviteToken?: string;
+
+  /** Secure invite token storage */
+  inviteTokenHash?: string;
+  inviteExpiresAt?: Date;
+  acceptedAt?: Date;
 
   createdAt: Date;
   updatedAt: Date;
@@ -81,7 +90,11 @@ const OrgTeamSchema = new Schema<IOrgTeam>(
     expiresAt: { type: Date, default: undefined },
 
     invitedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+
     inviteToken: { type: String, default: undefined },
+    inviteTokenHash: { type: String, default: undefined },
+    inviteExpiresAt: { type: Date, default: undefined },
+    acceptedAt: { type: Date, default: undefined },
   },
   { timestamps: true, strict: true },
 );
@@ -91,6 +104,8 @@ OrgTeamSchema.index({ organizationId: 1, email: 1 }, { unique: true });
 
 /** Invite token lookups */
 OrgTeamSchema.index({ inviteToken: 1 }, { unique: true, sparse: true });
+OrgTeamSchema.index({ inviteTokenHash: 1 }, { unique: true, sparse: true });
+OrgTeamSchema.index({ inviteExpiresAt: 1 });
 
 /** Keep status in sync when expired (but never override revoked) */
 OrgTeamSchema.pre("save", function (next) {

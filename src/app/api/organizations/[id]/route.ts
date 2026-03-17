@@ -1,73 +1,21 @@
-// src/app/api/organizations/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import "@/lib/mongoose";
 import Organization, { IOrganization } from "@/models/Organization";
-import OrgTeam from "@/models/OrgTeam";
 import Event from "@/models/Event";
 import { serialize } from "@/lib/serialize";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import {
+  canManageOrganizationProfile,
+  hasAnyOrgEventPermission,
+  requireOrgMembership,
+} from "@/lib/orgAccess";
 
 type OrgLean = Omit<IOrganization, "_id" | "ownerId"> & {
   _id: mongoose.Types.ObjectId;
   ownerId: mongoose.Types.ObjectId;
 };
-
-function isObjectId(val: string) {
-  return /^[a-f\d]{24}$/i.test(val);
-}
-
-async function assertCanViewOrg(orgId: string, userId: string) {
-  const org = await Organization.findById(orgId)
-    .select("_id ownerId")
-    .lean<{
-      _id: mongoose.Types.ObjectId;
-      ownerId: mongoose.Types.ObjectId;
-    } | null>();
-
-  if (!org) return { ok: false as const, status: 404 };
-
-  if (String(org.ownerId) === String(userId)) return { ok: true as const, org };
-
-  const member = await OrgTeam.findOne({
-    organizationId: org._id,
-    userId,
-    status: "active",
-  })
-    .select("_id role")
-    .lean();
-
-  if (member) return { ok: true as const, org };
-
-  return { ok: false as const, status: 403 };
-}
-
-async function assertCanManageOrg(orgId: string, userId: string) {
-  const org = await Organization.findById(orgId)
-    .select("_id ownerId")
-    .lean<{
-      _id: mongoose.Types.ObjectId;
-      ownerId: mongoose.Types.ObjectId;
-    } | null>();
-
-  if (!org) return { ok: false as const, status: 404 };
-
-  if (String(org.ownerId) === String(userId)) return { ok: true as const, org };
-
-  const admin = await OrgTeam.findOne({
-    organizationId: org._id,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-
-  if (admin) return { ok: true as const, org };
-
-  return { ok: false as const, status: 403 };
-}
 
 export async function GET(
   req: NextRequest,
@@ -84,19 +32,26 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const canView = await assertCanViewOrg(id, session.user.id);
-  if (!canView.ok) {
+  const access = await requireOrgMembership({
+    organizationId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+  });
+
+  if (!access.ok) {
     return NextResponse.json(
-      {
-        error: canView.status === 404 ? "Organization not found" : "Forbidden",
-      },
-      { status: canView.status },
+      { error: access.error },
+      { status: access.status },
     );
   }
 
   const include = req.nextUrl.searchParams.get("include")?.split(",") ?? [];
+  const wantsEvents = include.includes("events");
 
-  /* --------------------- fetch org ------------------------------------ */
+  if (wantsEvents && !hasAnyOrgEventPermission(access.access)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const org = await Organization.findById(id).lean<OrgLean>().exec();
   if (!org) {
     return NextResponse.json(
@@ -105,10 +60,17 @@ export async function GET(
     );
   }
 
-  const response: Record<string, unknown> = { ...serialize(org) };
+  const response: Record<string, unknown> = {
+    ...serialize(org),
+    access: {
+      isOwner: access.access.isOwner,
+      role: access.access.effectiveRole,
+      permissions: access.access.permissions,
+      canManageProfile: canManageOrganizationProfile(access.access),
+    },
+  };
 
-  /* --------------------- optionally embed events ---------------------- */
-  if (include.includes("events")) {
+  if (wantsEvents) {
     const status = req.nextUrl.searchParams.get("status") as
       | "upcoming"
       | "past"
@@ -191,15 +153,24 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const can = await assertCanManageOrg(id, session.user.id);
-  if (!can.ok) {
+  const access = await requireOrgMembership({
+    organizationId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+  });
+
+  if (!access.ok) {
     return NextResponse.json(
-      { error: can.status === 404 ? "Organization not found" : "Forbidden" },
-      { status: can.status },
+      { error: access.error },
+      { status: access.status },
     );
   }
 
-  const json = await req.json();
+  if (!canManageOrganizationProfile(access.access)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const json = await req.json().catch(() => null);
   const parsed = updateSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(parsed.error.flatten(), { status: 400 });

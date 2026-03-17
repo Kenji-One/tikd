@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
 import { auth } from "@/lib/auth";
-import Event from "@/models/Event";
-import Organization from "@/models/Organization";
+import {
+  requireEventGuestManageAccess,
+  requireEventGuestViewAccess,
+} from "@/lib/eventAccess";
+
 import Ticket from "@/models/Ticket";
 import EventGuest from "@/models/EventGuest";
 import User from "@/models/User";
@@ -20,57 +23,8 @@ export const dynamic = "force-dynamic";
 const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
 
 type SessionLike = {
-  user?: { id?: string | null } | null;
+  user?: { id?: string | null; email?: string | null } | null;
 } | null;
-
-type EventPermLean = {
-  _id: Types.ObjectId;
-  organizationId?: Types.ObjectId | null;
-  createdByUserId?: Types.ObjectId | null;
-};
-
-type OrgPermLean = {
-  _id: Types.ObjectId;
-  ownerId?: Types.ObjectId | null;
-};
-
-async function ensureCanManageEvent(eventId: string, userId: string) {
-  const event = await Event.findById(eventId)
-    .select({ _id: 1, organizationId: 1, createdByUserId: 1 })
-    .lean<EventPermLean | null>()
-    .exec();
-
-  if (!event) {
-    return {
-      ok: false as const,
-      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
-    };
-  }
-
-  const isCreator =
-    event.createdByUserId != null &&
-    String(event.createdByUserId) === String(userId);
-
-  let isOrgOwner = false;
-
-  if (event.organizationId) {
-    const org = await Organization.findById(event.organizationId)
-      .select({ _id: 1, ownerId: 1 })
-      .lean<OrgPermLean | null>()
-      .exec();
-
-    isOrgOwner = org?.ownerId != null && String(org.ownerId) === String(userId);
-  }
-
-  if (!isCreator && !isOrgOwner) {
-    return {
-      ok: false as const,
-      res: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    };
-  }
-
-  return { ok: true as const };
-}
 
 type GuestStatus = "checked_in" | "pending_arrival";
 
@@ -101,7 +55,6 @@ type GuestRow = {
 function toGuestStatusFromTicketStatus(
   s: string | null | undefined,
 ): GuestStatus {
-  // your PATCH route uses: checked_in => scanned, pending_arrival => paid
   return s === "scanned" ? "checked_in" : "pending_arrival";
 }
 
@@ -115,7 +68,6 @@ function last4(hexish: string): string {
 }
 
 function buildOrderNumber(prefix: string, id: string) {
-  // UI expects "#1527"-like strings; we’ll generate stable-ish values from ObjectIds
   return `${prefix}${last4(id)}`;
 }
 
@@ -158,8 +110,7 @@ function isPhoneLike(s: string) {
 }
 
 /* ------------------------------------------------------------------ */
-/* GET /api/events/:id/guests                                          */
-/* Returns: GuestRow[]                                                 */
+/* GET /api/events/:id/guests                                         */
 /* ------------------------------------------------------------------ */
 export async function GET(
   _req: NextRequest,
@@ -175,10 +126,19 @@ export async function GET(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const perm = await ensureCanManageEvent(eventId, String(session.user.id));
-  if (!perm.ok) return perm.res;
+  const access = await requireEventGuestViewAccess({
+    eventId,
+    userId: String(session.user.id),
+    email: session.user.email ?? undefined,
+  });
 
-  // 1) Tickets (paid/scanned) -> grouped into "order rows"
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
   const tickets = await Ticket.find({
     eventId,
     status: { $in: ["paid", "scanned"] },
@@ -219,7 +179,7 @@ export async function GET(
     >()
     .exec();
 
-  type GroupKey = string; // `${ownerId}:${orderIdOrNone}`
+  type GroupKey = string;
   const groups = new Map<
     GroupKey,
     {
@@ -241,10 +201,12 @@ export async function GET(
     }
   >();
 
-  for (const t of tickets) {
+  for (const ticket of tickets) {
     const ownerObj =
-      typeof t.ownerId === "object" && t.ownerId != null && "_id" in t.ownerId
-        ? (t.ownerId as {
+      typeof ticket.ownerId === "object" &&
+      ticket.ownerId != null &&
+      "_id" in ticket.ownerId
+        ? (ticket.ownerId as {
             _id: Types.ObjectId;
             firstName?: string;
             lastName?: string;
@@ -257,28 +219,27 @@ export async function GET(
     if (!ownerObj) continue;
 
     const ownerIdStr = String(ownerObj._id);
-    const orderIdStr = t.orderId ? String(t.orderId) : null;
-
+    const orderIdStr = ticket.orderId ? String(ticket.orderId) : null;
     const key: GroupKey = `${ownerIdStr}:${orderIdStr ?? "none"}`;
 
-    const labelRaw = safeStr(t.ticketTypeLabel).trim();
-    const legacy = safeStr(t.ticketType).trim();
+    const labelRaw = safeStr(ticket.ticketTypeLabel).trim();
+    const legacy = safeStr(ticket.ticketType).trim();
     const label = labelRaw || legacy || "Ticket";
 
-    const price = typeof t.price === "number" ? t.price : 0;
-    const status = toGuestStatusFromTicketStatus(t.status);
+    const price = typeof ticket.price === "number" ? ticket.price : 0;
+    const status = toGuestStatusFromTicketStatus(ticket.status);
 
     const updated =
-      t.updatedAt instanceof Date
-        ? t.updatedAt.toISOString()
-        : t.createdAt instanceof Date
-          ? t.createdAt.toISOString()
+      ticket.updatedAt instanceof Date
+        ? ticket.updatedAt.toISOString()
+        : ticket.createdAt instanceof Date
+          ? ticket.createdAt.toISOString()
           : undefined;
 
     const prev = groups.get(key);
     if (!prev) {
       groups.set(key, {
-        firstTicketId: String(t._id),
+        firstTicketId: String(ticket._id),
         owner: {
           firstName: ownerObj.firstName,
           lastName: ownerObj.lastName,
@@ -300,22 +261,22 @@ export async function GET(
       prev.ticketLabels.push(label);
       prev.quantity += 1;
 
-      // Keep latest time
       if (updated && (!prev.latestISO || updated > prev.latestISO)) {
         prev.latestISO = updated;
       }
     }
   }
 
-  const ticketRows: GuestRow[] = Array.from(groups.values()).map((g) => {
-    const amount = g.prices.reduce((a, b) => a + b, 0);
+  const ticketRows: GuestRow[] = Array.from(groups.values()).map((group) => {
+    const amount = group.prices.reduce((a, b) => a + b, 0);
 
-    // checked_in if ANY scanned in the group
-    const status: GuestStatus = g.statuses.includes("checked_in")
+    const status: GuestStatus = group.statuses.includes("checked_in")
       ? "checked_in"
       : "pending_arrival";
 
-    const uniqueLabels = Array.from(new Set(g.ticketLabels.filter(Boolean)));
+    const uniqueLabels = Array.from(
+      new Set(group.ticketLabels.filter(Boolean)),
+    );
     const ticketType =
       uniqueLabels.length === 0
         ? "Ticket"
@@ -323,31 +284,32 @@ export async function GET(
           ? uniqueLabels[0]
           : "Multiple";
 
-    const fullName = pickFullName(g.owner);
-    const handle = g.owner.username ? `@${g.owner.username}` : undefined;
+    const fullName = pickFullName(group.owner);
+    const handle = group.owner.username
+      ? `@${group.owner.username}`
+      : undefined;
 
-    const orderNumber = g.orderIdStr
-      ? buildOrderNumber("#", g.orderIdStr)
-      : buildOrderNumber("#", g.firstTicketId);
+    const orderNumber = group.orderIdStr
+      ? buildOrderNumber("#", group.orderIdStr)
+      : buildOrderNumber("#", group.firstTicketId);
 
     return {
-      id: g.firstTicketId,
+      id: group.firstTicketId,
       orderNumber,
       fullName,
       handle,
-      phone: safeStr(g.owner.phone) || undefined,
-      email: safeStr(g.owner.email) || undefined,
+      phone: safeStr(group.owner.phone) || undefined,
+      email: safeStr(group.owner.email) || undefined,
       amount,
       ticketType,
       status,
-      quantity: g.quantity,
-      dateTimeISO: g.latestISO,
+      quantity: group.quantity,
+      dateTimeISO: group.latestISO,
       source: "ticket",
       canRemove: false,
     };
   });
 
-  // 2) Manual guests (EventGuest docs) -> direct rows
   const manualGuests = await EventGuest.find({ eventId })
     .select({
       _id: 1,
@@ -373,27 +335,27 @@ export async function GET(
     >()
     .exec();
 
-  const manualRows: GuestRow[] = manualGuests.map((m) => {
+  const manualRows: GuestRow[] = manualGuests.map((guest) => {
     const name =
-      safeStr(m.fullName).trim() || safeStr(m.name).trim() || "Guest";
+      safeStr(guest.fullName).trim() || safeStr(guest.name).trim() || "Guest";
 
-    const rawStatus = safeStr(m.status).trim();
+    const rawStatus = safeStr(guest.status).trim();
     const status: GuestStatus =
       rawStatus === "checked_in" ? "checked_in" : "pending_arrival";
 
     const updated =
-      m.updatedAt instanceof Date
-        ? m.updatedAt.toISOString()
-        : m.createdAt instanceof Date
-          ? m.createdAt.toISOString()
+      guest.updatedAt instanceof Date
+        ? guest.updatedAt.toISOString()
+        : guest.createdAt instanceof Date
+          ? guest.createdAt.toISOString()
           : undefined;
 
     return {
-      id: String(m._id),
-      orderNumber: buildOrderNumber("#M", String(m._id)),
+      id: String(guest._id),
+      orderNumber: buildOrderNumber("#M", String(guest._id)),
       fullName: name,
-      phone: safeStr(m.phone) || undefined,
-      email: safeStr(m.email) || undefined,
+      phone: safeStr(guest.phone) || undefined,
+      email: safeStr(guest.email) || undefined,
       amount: 0,
       ticketType: "Manual",
       status,
@@ -406,7 +368,6 @@ export async function GET(
 
   const merged = [...ticketRows, ...manualRows];
 
-  // Sort newest first (fallback stable)
   merged.sort((a, b) => {
     const ta = a.dateTimeISO ?? "";
     const tb = b.dateTimeISO ?? "";
@@ -418,10 +379,7 @@ export async function GET(
 }
 
 /* ------------------------------------------------------------------ */
-/* POST /api/events/:id/guests                                         */
-/* Supports either:                                                    */
-/*  - Body: { userIds: string[] }  (legacy)                            */
-/*  - Body: { guests: { fullName, email?, phone? }[] } (new direct input) */
+/* POST /api/events/:id/guests                                        */
 /* ------------------------------------------------------------------ */
 export async function POST(
   req: NextRequest,
@@ -437,8 +395,18 @@ export async function POST(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const perm = await ensureCanManageEvent(eventId, String(session.user.id));
-  if (!perm.ok) return perm.res;
+  const access = await requireEventGuestManageAccess({
+    eventId,
+    userId: String(session.user.id),
+    email: session.user.email ?? undefined,
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   const body = (await req.json().catch(() => null)) as {
     userIds?: unknown;
@@ -468,7 +436,6 @@ export async function POST(
     );
   }
 
-  /* --------------------- NEW: direct input guests --------------------- */
   if (wantsGuests) {
     const prepared = guests
       .map((g) => {
@@ -479,7 +446,6 @@ export async function POST(
         const email = isEmailLike(emailRaw) ? normalizeEmail(emailRaw) : "";
         const phone = isPhoneLike(phoneRaw) ? normalizePhone(phoneRaw) : "";
 
-        // require at least a usable name, or email/phone
         const validName = fullName.length >= 2 ? fullName : "";
         const finalName = validName || (email ? "Guest" : phone ? "Guest" : "");
 
@@ -510,10 +476,6 @@ export async function POST(
       );
     }
 
-    // Avoid duplicates for manual entries:
-    // - if email exists: treat (eventId+email) as unique-ish
-    // - else if phone exists: treat (eventId+phone)
-    // - else: treat (eventId+fullName) (best-effort)
     const emails = prepared.map((g) => g.email).filter(Boolean);
     const phones = prepared.map((g) => g.phone).filter(Boolean);
     const names = prepared.map((g) => g.fullName).filter(Boolean);
@@ -564,12 +526,10 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
-  /* -------------------------- Legacy: userIds -------------------------- */
   if (!userIds.length || userIds.some((id) => !isObjectId(id))) {
     return NextResponse.json({ error: "Invalid userIds" }, { status: 400 });
   }
 
-  // Fetch users (so we can snapshot name/email/phone into EventGuest)
   const users = await User.find({ _id: { $in: userIds } })
     .select({
       _id: 1,
@@ -625,7 +585,7 @@ export async function POST(
 
   if (toInsert.length) {
     await EventGuest.insertMany(toInsert, { ordered: false }).catch(() => {
-      // ignore duplicate insert races; GET will reflect final state
+      // ignore duplicate insert races
     });
   }
 

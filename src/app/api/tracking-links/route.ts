@@ -1,4 +1,3 @@
-// src/app/api/tracking-links/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import mongoose from "mongoose";
@@ -9,6 +8,10 @@ import { serialize } from "@/lib/serialize";
 import Organization from "@/models/Organization";
 import Event from "@/models/Event";
 import TrackingLink from "@/models/TrackingLink";
+import {
+  listAuthorizedOrganizationIdsForUser,
+  requireOrgPermission,
+} from "@/lib/orgAccess";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -21,26 +24,18 @@ type LinkStatus = "Active" | "Paused" | "Disabled";
 type TrackingLinkLean = {
   _id: ObjectId;
   name: string;
-
   organizationId: ObjectId;
-
   destinationKind: DestinationKind;
   destinationId: ObjectId;
-
   code: string;
   path: string;
-
   status: LinkStatus;
-
   iconKey?: string | null;
   iconUrl?: string | null;
-
   views?: number;
   ticketsSold?: number;
   revenue?: number;
-
   archived?: boolean;
-
   createdAt: Date;
 };
 
@@ -54,8 +49,6 @@ type OrgNameLean = {
   _id: ObjectId;
   name?: string;
 };
-
-type OwnedOrgLean = { _id: ObjectId };
 
 const isObjectId = (val: string) => mongoose.Types.ObjectId.isValid(val);
 
@@ -78,18 +71,14 @@ async function generateUniqueCode(organizationId: ObjectId) {
     const exists = await TrackingLink.exists({ organizationId, code });
     if (!exists) return code;
   }
-  // extremely unlikely
   return `${randomCode(10)}${Date.now().toString(36).slice(2, 6)}`;
 }
 
 const createSchema = z.object({
   name: z.string().min(2),
-
   destinationKind: z.enum(["Event", "Organization"]),
   destinationId: z.string().refine(isObjectId, "Invalid destination id"),
-
   status: z.enum(["Active", "Paused", "Disabled"]).default("Active"),
-
   iconKey: z
     .enum([
       "instagram",
@@ -105,50 +94,42 @@ const createSchema = z.object({
     ])
     .nullable()
     .optional(),
-
   iconUrl: z.string().url().nullable().optional(),
 });
 
 type UiRow = {
   id: string;
   name: string;
-
-  // ✅ NEW: lets the frontend filter “org page = this org + its events”
   organizationId: string;
-
   destinationKind: DestinationKind;
   destinationId: string;
   destinationTitle: string;
-
-  url: string; // tracking path: /t/:code/
+  url: string;
   iconKey?: string | null;
   iconUrl?: string | null;
-
   views: number;
   ticketsSold: number;
   revenue: number;
   status: LinkStatus;
-  created: string; // ISO
+  created: string;
 };
 
 async function toUiRow(doc: TrackingLinkLean): Promise<UiRow> {
-  const destinationKind = doc.destinationKind;
-
   let destinationTitle = "";
 
   try {
-    if (destinationKind === "Event") {
-      const e = (await Event.findById(doc.destinationId)
+    if (doc.destinationKind === "Event") {
+      const event = (await Event.findById(doc.destinationId)
         .select("title")
         .lean()) as EventTitleLean | null;
 
-      destinationTitle = e?.title ?? "";
+      destinationTitle = event?.title ?? "";
     } else {
-      const o = (await Organization.findById(doc.destinationId)
+      const org = (await Organization.findById(doc.destinationId)
         .select("name")
         .lean()) as OrgNameLean | null;
 
-      destinationTitle = o?.name ?? "";
+      destinationTitle = org?.name ?? "";
     }
   } catch {
     destinationTitle = "";
@@ -157,18 +138,13 @@ async function toUiRow(doc: TrackingLinkLean): Promise<UiRow> {
   return {
     id: String(doc._id),
     name: doc.name,
-
     organizationId: String(doc.organizationId),
-
-    destinationKind,
+    destinationKind: doc.destinationKind,
     destinationId: String(doc.destinationId),
     destinationTitle,
-
     url: doc.path,
-
     iconKey: doc.iconKey ?? null,
     iconUrl: doc.iconUrl ?? null,
-
     views: doc.views ?? 0,
     ticketsSold: doc.ticketsSold ?? 0,
     revenue: doc.revenue ?? 0,
@@ -177,13 +153,6 @@ async function toUiRow(doc: TrackingLinkLean): Promise<UiRow> {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* GET /api/tracking-links                                            */
-/* - default: all non-archived links for orgs owned by this user       */
-/* - scope=event&eventId=... : only links for that event               */
-/* - scope=organization&organizationId=... : links for that org + its  */
-/*   events (since links store organizationId)                         */
-/* ------------------------------------------------------------------ */
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -196,19 +165,6 @@ export async function GET(req: NextRequest) {
   ).trim();
   const eventIdParam = (req.nextUrl.searchParams.get("eventId") || "").trim();
 
-  const ownedOrgs = (await Organization.find({ ownerId: session.user.id })
-    .select("_id")
-    .lean()) as OwnedOrgLean[];
-
-  const ownedOrgIds: ObjectId[] = ownedOrgs.map((o) => o._id);
-
-  // Base permissions: only within orgs user owns
-  const baseFilter: Record<string, unknown> = {
-    organizationId: { $in: ownedOrgIds },
-    archived: false,
-  };
-
-  // ✅ Scoped filters
   if (scope === "organization") {
     if (!isObjectId(organizationIdParam)) {
       return NextResponse.json(
@@ -217,14 +173,29 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const orgObjId = new mongoose.Types.ObjectId(organizationIdParam);
+    const canAccess = await requireOrgPermission({
+      organizationId: organizationIdParam,
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "links.createTrackingLinks",
+    });
 
-    const isOwned = ownedOrgIds.some((id) => String(id) === String(orgObjId));
-    if (!isOwned) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!canAccess.ok) {
+      return NextResponse.json(
+        { error: canAccess.error },
+        { status: canAccess.status },
+      );
     }
 
-    baseFilter.organizationId = orgObjId;
+    const links = (await TrackingLink.find({
+      organizationId: new mongoose.Types.ObjectId(organizationIdParam),
+      archived: false,
+    })
+      .sort({ createdAt: -1 })
+      .lean()) as unknown as TrackingLinkLean[];
+
+    const rows = await Promise.all(links.map(toUiRow));
+    return NextResponse.json({ rows });
   }
 
   if (scope === "event") {
@@ -232,29 +203,51 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid eventId" }, { status: 400 });
     }
 
-    const eventObjId = new mongoose.Types.ObjectId(eventIdParam);
-
-    const ev = (await Event.findById(eventObjId)
+    const event = (await Event.findById(eventIdParam)
       .select("_id organizationId")
       .lean()) as { _id: ObjectId; organizationId: ObjectId } | null;
 
-    if (!ev) {
+    if (!event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    const isOwned = ownedOrgIds.some(
-      (id) => String(id) === String(ev.organizationId),
-    );
-    if (!isOwned) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canAccess = await requireOrgPermission({
+      organizationId: String(event.organizationId),
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "links.createTrackingLinks",
+    });
+
+    if (!canAccess.ok) {
+      return NextResponse.json(
+        { error: canAccess.error },
+        { status: canAccess.status },
+      );
     }
 
-    baseFilter.organizationId = ev.organizationId;
-    baseFilter.destinationKind = "Event";
-    baseFilter.destinationId = ev._id;
+    const links = (await TrackingLink.find({
+      organizationId: event.organizationId,
+      destinationKind: "Event",
+      destinationId: event._id,
+      archived: false,
+    })
+      .sort({ createdAt: -1 })
+      .lean()) as unknown as TrackingLinkLean[];
+
+    const rows = await Promise.all(links.map(toUiRow));
+    return NextResponse.json({ rows });
   }
 
-  const links = (await TrackingLink.find(baseFilter)
+  const authorizedOrgIds = await listAuthorizedOrganizationIdsForUser({
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "links.createTrackingLinks",
+  });
+
+  const links = (await TrackingLink.find({
+    organizationId: { $in: authorizedOrgIds },
+    archived: false,
+  })
     .sort({ createdAt: -1 })
     .lean()) as unknown as TrackingLinkLean[];
 
@@ -262,10 +255,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ rows });
 }
 
-/* ------------------------------------------------------------------ */
-/* POST /api/tracking-links                                           */
-/* - create a tracking link                                           */
-/* ------------------------------------------------------------------ */
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -283,20 +272,31 @@ export async function POST(req: NextRequest) {
 
   const destObjId = new mongoose.Types.ObjectId(destinationId);
 
-  // Resolve organizationId + permission checks:
   let organizationId: ObjectId;
 
   if (destinationKind === "Organization") {
-    const org = await Organization.findById(destObjId).select("_id ownerId");
+    const org = await Organization.findById(destObjId).select("_id");
     if (!org) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 },
       );
     }
-    if (String(org.ownerId) !== String(session.user.id)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const canCreate = await requireOrgPermission({
+      organizationId: String(org._id),
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "links.createTrackingLinks",
+    });
+
+    if (!canCreate.ok) {
+      return NextResponse.json(
+        { error: canCreate.error },
+        { status: canCreate.status },
+      );
     }
+
     organizationId = org._id as ObjectId;
   } else {
     const event = await Event.findById(destObjId).select("_id organizationId");
@@ -304,19 +304,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
     }
 
-    const org = await Organization.findById(event.organizationId).select(
-      "_id ownerId",
-    );
-    if (!org) {
+    const canCreate = await requireOrgPermission({
+      organizationId: String(event.organizationId),
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "links.createTrackingLinks",
+    });
+
+    if (!canCreate.ok) {
       return NextResponse.json(
-        { error: "Organization not found" },
-        { status: 404 },
+        { error: canCreate.error },
+        { status: canCreate.status },
       );
     }
-    if (String(org.ownerId) !== String(session.user.id)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    organizationId = org._id as ObjectId;
+
+    organizationId = event.organizationId as ObjectId;
   }
 
   const code = await generateUniqueCode(organizationId);

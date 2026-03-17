@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 
 import { auth } from "@/lib/auth";
-import Event from "@/models/Event";
-import Organization from "@/models/Organization";
+import {
+  requireEventGuestCheckInAccess,
+  requireEventGuestManageAccess,
+} from "@/lib/eventAccess";
+
 import Ticket from "@/models/Ticket";
 import EventGuest from "@/models/EventGuest";
 import type { Types } from "mongoose";
@@ -16,63 +19,14 @@ const isObjectId = (val: string): boolean => /^[a-f\d]{24}$/i.test(val);
 type SessionLike = {
   user?: {
     id?: string | null;
+    email?: string | null;
   } | null;
 } | null;
-
-type EventPermLean = {
-  _id: Types.ObjectId;
-  organizationId?: Types.ObjectId | null;
-  createdByUserId?: Types.ObjectId | null;
-};
-
-type OrgPermLean = {
-  _id: Types.ObjectId;
-  ownerId?: Types.ObjectId | null;
-};
-
-async function ensureCanManageEvent(eventId: string, userId: string) {
-  const event = await Event.findById(eventId)
-    .select({ _id: 1, organizationId: 1, createdByUserId: 1 })
-    .lean<EventPermLean | null>()
-    .exec();
-
-  if (!event) {
-    return {
-      ok: false as const,
-      res: NextResponse.json({ error: "Event not found" }, { status: 404 }),
-    };
-  }
-
-  const isCreator =
-    event.createdByUserId != null &&
-    String(event.createdByUserId) === String(userId);
-
-  let isOrgOwner = false;
-
-  if (event.organizationId) {
-    const org = await Organization.findById(event.organizationId)
-      .select({ _id: 1, ownerId: 1 })
-      .lean<OrgPermLean | null>()
-      .exec();
-
-    isOrgOwner = org?.ownerId != null && String(org.ownerId) === String(userId);
-  }
-
-  if (!isCreator && !isOrgOwner) {
-    return {
-      ok: false as const,
-      res: NextResponse.json({ error: "Forbidden" }, { status: 403 }),
-    };
-  }
-
-  return { ok: true as const };
-}
 
 type GuestStatus = "checked_in" | "pending_arrival";
 
 /* ------------------------------------------------------------------ */
-/* PATCH /api/events/:id/guests/:guestId                               */
-/* Body: { status: "checked_in" | "pending_arrival" }                  */
+/* PATCH /api/events/:id/guests/:guestId                              */
 /* ------------------------------------------------------------------ */
 export async function PATCH(
   req: NextRequest,
@@ -88,8 +42,18 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const perm = await ensureCanManageEvent(eventId, String(session.user.id));
-  if (!perm.ok) return perm.res;
+  const access = await requireEventGuestCheckInAccess({
+    eventId,
+    userId: String(session.user.id),
+    email: session.user.email ?? undefined,
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   const body = (await req.json().catch(() => null)) as {
     status?: GuestStatus;
@@ -101,7 +65,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  // 1) Try manual guest first
   const manual = await EventGuest.findOne({ _id: guestId, eventId }).exec();
   if (manual) {
     manual.status = status;
@@ -109,8 +72,6 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   }
 
-  // 2) Otherwise treat as a ticket row id (firstTicketId)
-  // We'll update *that buyer's* tickets:
   const ticket = await Ticket.findOne({ _id: guestId, eventId })
     .select({ _id: 1, ownerId: 1, orderId: 1 })
     .lean<{
@@ -130,10 +91,8 @@ export async function PATCH(
     status: { $in: ["paid", "scanned"] },
   };
 
-  // If orderId exists, apply within that order; else apply to all paid/scanned for that owner in event
   if (ticket.orderId) match.orderId = ticket.orderId;
 
-  // checked_in => scanned, pending_arrival => paid
   const nextTicketStatus = status === "checked_in" ? "scanned" : "paid";
 
   await Ticket.updateMany(match, { $set: { status: nextTicketStatus } }).exec();
@@ -142,8 +101,7 @@ export async function PATCH(
 }
 
 /* ------------------------------------------------------------------ */
-/* DELETE /api/events/:id/guests/:guestId                              */
-/* Only manual guests can be removed                                   */
+/* DELETE /api/events/:id/guests/:guestId                             */
 /* ------------------------------------------------------------------ */
 export async function DELETE(
   _req: NextRequest,
@@ -159,8 +117,18 @@ export async function DELETE(
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
-  const perm = await ensureCanManageEvent(eventId, String(session.user.id));
-  if (!perm.ok) return perm.res;
+  const access = await requireEventGuestManageAccess({
+    eventId,
+    userId: String(session.user.id),
+    email: session.user.email ?? undefined,
+  });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
 
   const doc = await EventGuest.findOneAndDelete({
     _id: guestId,

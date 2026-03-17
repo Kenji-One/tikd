@@ -4,11 +4,15 @@ import { z } from "zod";
 import { Types } from "mongoose";
 
 import { auth } from "@/lib/auth";
-import Organization from "@/models/Organization";
-import OrgTeam from "@/models/OrgTeam";
 import OrgRole, { type IOrgRole } from "@/models/OrgRole";
-import { ORG_PERMISSION_KEYS } from "@/lib/orgPermissions";
+import OrgTeam from "@/models/OrgTeam";
+import {
+  ORG_PERMISSION_KEYS,
+  normalizePermissions,
+} from "@/lib/orgPermissions";
 import { ROLE_ICON_KEYS } from "@/lib/roleIcons";
+import { requireOrgPermission } from "@/lib/orgAccess";
+import { shapeRoleResponse } from "@/lib/orgRoles";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,23 +24,20 @@ type PermissionsMap = Record<string, boolean>;
 
 type RoleLean = Pick<
   IOrgRole,
-  "_id" | "key" | "name" | "color" | "isSystem"
+  "_id" | "key" | "name" | "color" | "isSystem" | "order" | "permissions"
 > & {
-  order?: number;
-  permissions?: PermissionsMap;
   iconKey?: string | null;
   iconUrl?: string | null;
 };
 
-/* ------------------------------ Zod ------------------------------ */
 const permissionsSchema = z
   .record(z.string(), z.boolean())
   .superRefine((obj, ctx) => {
-    for (const k of Object.keys(obj)) {
-      if (!(ORG_PERMISSION_KEYS as readonly string[]).includes(k)) {
+    for (const key of Object.keys(obj)) {
+      if (!(ORG_PERMISSION_KEYS as readonly string[]).includes(key)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `Unknown permission key: ${k}`,
+          message: `Unknown permission key: ${key}`,
         });
       }
     }
@@ -61,38 +62,11 @@ const patchSchema = z
   })
   .strict();
 
-/* ------------------------ Permission guards ----------------------- */
-async function assertCanManageRoles(orgId: string, userId: string) {
-  const org = await Organization.findById(orgId).select("_id ownerId").lean<{
-    _id: Types.ObjectId;
-    ownerId: Types.ObjectId;
-  } | null>();
-
-  if (!org) return { ok: false as const, status: 404 };
-
-  if (String(org.ownerId) === String(userId)) return { ok: true as const, org };
-
-  const admin = await OrgTeam.findOne({
-    organizationId: orgId,
-    userId,
-    role: "admin",
-    status: "active",
-  })
-    .select("_id")
-    .lean();
-
-  if (admin) return { ok: true as const, org };
-
-  return { ok: false as const, status: 403 };
-}
-
-/* --------------------- Helpers: members count --------------------- */
 async function computeMembersCount(
   orgId: string,
   role: Pick<IOrgRole, "_id" | "key" | "isSystem">,
 ) {
   if (role.isSystem) {
-    // system role: counted by OrgTeam.role where roleId is null/absent
     return OrgTeam.countDocuments({
       organizationId: new Types.ObjectId(orgId),
       status: "active",
@@ -101,7 +75,6 @@ async function computeMembersCount(
     });
   }
 
-  // custom role: counted by OrgTeam.roleId
   return OrgTeam.countDocuments({
     organizationId: new Types.ObjectId(orgId),
     status: "active",
@@ -109,37 +82,28 @@ async function computeMembersCount(
   });
 }
 
-function shapeRoleRow(role: RoleLean, membersCount: number) {
-  return {
-    _id: role._id,
-    key: role.key,
-    name: role.name,
-    color: role.color || "",
-    iconKey: role.iconKey ?? null,
-    iconUrl: role.iconUrl ?? null,
-    isSystem: !!role.isSystem,
-    order: role.order ?? 0,
-    permissions: role.permissions ?? {},
-    membersCount,
-  };
-}
-
-/* ------------------------------- PATCH ---------------------------- */
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user?.id)
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id, roleId } = await ctx.params;
   if (!isObjectId(id) || !isObjectId(roleId)) {
     return NextResponse.json({ error: "Invalid ids" }, { status: 400 });
   }
 
-  const can = await assertCanManageRoles(id, session.user.id);
-  if (!can.ok) {
+  const canManage = await requireOrgPermission({
+    organizationId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "members.assignRoles",
+  });
+
+  if (!canManage.ok) {
     return NextResponse.json(
-      { error: can.status === 404 ? "Organization not found" : "Forbidden" },
-      { status: can.status },
+      { error: canManage.error },
+      { status: canManage.status },
     );
   }
 
@@ -156,8 +120,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .select("_id key isSystem")
     .lean<{ _id: Types.ObjectId; key: string; isSystem: boolean } | null>();
 
-  if (!existing)
+  if (!existing) {
     return NextResponse.json({ error: "Role not found" }, { status: 404 });
+  }
 
   const update: Partial<{
     name: string;
@@ -171,18 +136,16 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (typeof parsed.data.name === "string") update.name = parsed.data.name;
   if (typeof parsed.data.color === "string") update.color = parsed.data.color;
 
-  // icon updates (keep them mutually exclusive)
   if (parsed.data.iconKey !== undefined) update.iconKey = parsed.data.iconKey;
   if (parsed.data.iconUrl !== undefined) update.iconUrl = parsed.data.iconUrl;
 
-  // if iconKey is explicitly set to a truthy key, clear iconUrl
   if (parsed.data.iconKey) update.iconUrl = null;
-
-  // if iconUrl is explicitly set to a truthy URL, clear iconKey
   if (parsed.data.iconUrl) update.iconKey = null;
 
   if (typeof parsed.data.order === "number") update.order = parsed.data.order;
-  if (parsed.data.permissions) update.permissions = parsed.data.permissions;
+  if (parsed.data.permissions) {
+    update.permissions = normalizePermissions(parsed.data.permissions);
+  }
 
   const updated = await OrgRole.findOneAndUpdate(
     {
@@ -193,8 +156,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     { new: true },
   ).lean<RoleLean | null>();
 
-  if (!updated)
+  if (!updated) {
     return NextResponse.json({ error: "Role not found" }, { status: 404 });
+  }
 
   const membersCount = await computeMembersCount(id, {
     _id: updated._id,
@@ -202,25 +166,31 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     isSystem: updated.isSystem,
   });
 
-  return NextResponse.json(shapeRoleRow(updated, membersCount));
+  return NextResponse.json(shapeRoleResponse(updated, membersCount));
 }
 
-/* ------------------------------- DELETE --------------------------- */
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const session = await auth();
-  if (!session?.user?.id)
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { id, roleId } = await ctx.params;
   if (!isObjectId(id) || !isObjectId(roleId)) {
     return NextResponse.json({ error: "Invalid ids" }, { status: 400 });
   }
 
-  const can = await assertCanManageRoles(id, session.user.id);
-  if (!can.ok) {
+  const canManage = await requireOrgPermission({
+    organizationId: id,
+    userId: session.user.id,
+    email: session.user.email ?? undefined,
+    permission: "members.assignRoles",
+  });
+
+  if (!canManage.ok) {
     return NextResponse.json(
-      { error: can.status === 404 ? "Organization not found" : "Forbidden" },
-      { status: can.status },
+      { error: canManage.error },
+      { status: canManage.status },
     );
   }
 
@@ -231,8 +201,10 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     .select("_id isSystem")
     .lean<{ _id: Types.ObjectId; isSystem: boolean } | null>();
 
-  if (!role)
+  if (!role) {
     return NextResponse.json({ error: "Role not found" }, { status: 404 });
+  }
+
   if (role.isSystem) {
     return NextResponse.json(
       { error: "System roles cannot be deleted" },

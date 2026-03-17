@@ -1,25 +1,36 @@
-// src/app/t/[code]/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { Types } from "mongoose";
 import "@/lib/mongoose";
 
 import TrackingLink from "@/models/TrackingLink";
+import {
+  applyTrackingAttributionCookie,
+  createTrackingAttributionSession,
+} from "@/lib/trackingAttribution";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function makeDestinationPath(kind: "Event" | "Organization", id: string) {
-  const base = kind === "Event" ? "/events" : "/organizations";
-  const p = `${base}/${id}/`;
-  return p.startsWith("/") ? p : `/${p}`;
-}
-
-// minimal lean shape we need here (keeps TS happy + avoids FlattenMaps weirdness)
 type TrackingLinkLean = {
-  _id: unknown;
-  status?: "Active" | "Paused" | "Disabled" | string;
-  destinationKind?: "Event" | "Organization" | string;
-  destinationId?: unknown;
+  _id: Types.ObjectId;
+  code: string;
+  organizationId: Types.ObjectId;
+  destinationKind: "Event" | "Organization";
+  destinationId: Types.ObjectId;
+  status: "Active" | "Paused" | "Disabled";
+  createdByUserId: Types.ObjectId;
 };
+
+function makeDestinationPath(
+  kind: "Event" | "Organization",
+  id: string,
+): string {
+  if (kind === "Event") {
+    return `/events/${id}`;
+  }
+
+  return `/org/${id}`;
+}
 
 export async function GET(
   req: NextRequest,
@@ -27,41 +38,56 @@ export async function GET(
 ) {
   const { code } = await params;
 
+  const normalizedCode = String(code ?? "").trim();
+  if (!normalizedCode) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const link = await TrackingLink.findOne({
-    code,
+    code: normalizedCode,
     archived: false,
-  }).lean<TrackingLinkLean | null>();
+  })
+    .select(
+      "_id code organizationId destinationKind destinationId status createdByUserId",
+    )
+    .lean<TrackingLinkLean | null>();
 
-  if (!link) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!link) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
-  // respect status
   if (link.status !== "Active") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // validate destination fields (defensive: avoids redirecting with junk data)
-  const kind = link.destinationKind;
-  if (kind !== "Event" && kind !== "Organization") {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const { rawToken, expiresAt } = await createTrackingAttributionSession({
+    trackingLinkId: String(link._id),
+    trackingCode: link.code,
+    organizationId: String(link.organizationId),
+    destinationKind: link.destinationKind,
+    destinationId: String(link.destinationId),
+    trackingCreatorUserId: String(link.createdByUserId),
+  });
 
-  const destId = link.destinationId;
-  if (!destId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  await TrackingLink.updateOne(
+    { _id: link._id },
+    {
+      $inc: { views: 1 },
+      $set: { lastViewedAt: new Date() },
+    },
+  ).catch(() => {
+    // best-effort analytics only; redirect should still work
+  });
 
-  // increment views (best-effort)
-  try {
-    await TrackingLink.updateOne(
-      { _id: link._id },
-      { $inc: { views: 1 }, $set: { lastViewedAt: new Date() } },
-    );
-  } catch {
-    // ignore metric errors
-  }
+  const destinationPath = makeDestinationPath(
+    link.destinationKind,
+    String(link.destinationId),
+  );
 
-  const dest = makeDestinationPath(kind, String(destId));
+  const targetUrl = new URL(destinationPath, req.nextUrl.origin);
+  const response = NextResponse.redirect(targetUrl, 302);
 
-  const url = new URL(dest, req.nextUrl.origin);
-  return NextResponse.redirect(url, 302);
+  applyTrackingAttributionCookie(response, rawToken, expiresAt);
+
+  return response;
 }

@@ -798,7 +798,7 @@ export default function TrackingLinksAllPage() {
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       <section className="w-full py-4 sm:py-6">
-        <div className="mx-auto w-full max-w-[1600px] px-4 md:px-6 space-y-5">
+        <div className="mx-auto w-full max-w-[1600px] space-y-5">
           {/* Header (match My Members styling) */}
           <div>
             <h1 className="text-3xl font-bold tracking-[-0.03em] text-neutral-50">

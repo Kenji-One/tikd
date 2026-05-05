@@ -7,7 +7,7 @@ export function CTA() {
       <Container>
         <h2 className="text-3xl font-bold">Ready to host your own event?</h2>
         <p className="mx-auto mt-2 max-w-md text-brand-50">
-          Join hundreds of organizers using Tikd. to manage their events.
+          Join hundreds of organizers using Tixsy. to manage their events.
         </p>
         <Button
           asChild

@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { memo, useMemo, useId } from "react";
+import { memo, useEffect, useId, useMemo, useState } from "react";
 
 /* ------------------------------ Types ------------------------------ */
 export type RevenueTooltip = {
@@ -219,7 +219,6 @@ function DeltaPill({ text, positive }: { text: string; positive: boolean }) {
     ? "bg-error-900 text-error-500 border-error-800"
     : "bg-success-900 text-success-500 border-success-800";
 
-  // (placeholder SVGs per your request to avoid massive svg path blocks)
   const deltaIcon = isNegative ? (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" />
   ) : (
@@ -269,6 +268,16 @@ function RevenueChart({
   tooltipVariant = "primary",
   gradientId,
 }: Props) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const apply = () => setIsMobile(media.matches);
+    apply();
+    media.addEventListener?.("change", apply);
+    return () => media.removeEventListener?.("change", apply);
+  }, []);
+
   const scaler = useMemo(() => {
     const base = Array.from(new Set([0, ...yTicks, domain[1]])).sort(
       (a, b) => a - b,
@@ -290,37 +299,39 @@ function RevenueChart({
     }));
   }, [data, dates, scaler, labelForIndex]);
 
-  /**
-   * ✅ Key fix:
-   * Use numeric X (index) so Recharts doesn't "dedupe/skip" category labels in weird ways
-   * and render ticks only for UNIQUE day labels (prevents "missing Jan 20" gap).
-   */
   const xTickIndices = useMemo(() => {
     if (!rows.length) return [];
 
-    // If we have dates (expanded modal), collapse ticks to one per unique label.
     if (dates?.length) {
       const seen = new Set<string>();
       const ticks: number[] = [];
 
       for (const r of rows) {
-        const key = r.name; // already "Jan 20" style in modal
+        const key = r.name;
         if (!seen.has(key)) {
           seen.add(key);
           ticks.push(r.i);
         }
       }
 
-      // Always keep last tick visible (nice UX).
       const last = rows[rows.length - 1]?.i;
       if (typeof last === "number" && !ticks.includes(last)) ticks.push(last);
+
+      if (isMobile && ticks.length > 6) {
+        return ticks.filter((tick, idx) => idx % 2 === 0 || tick === last);
+      }
 
       return ticks;
     }
 
-    // Fallback for monthly charts: show all indices (small count anyway)
-    return rows.map((r) => r.i);
-  }, [rows, dates]);
+    const all = rows.map((r) => r.i);
+
+    if (isMobile && all.length > 6) {
+      return all.filter((tick, idx) => idx % 2 === 0 || idx === all.length - 1);
+    }
+
+    return all;
+  }, [rows, dates, isMobile]);
 
   const pinIndex =
     tooltip && Number.isFinite(tooltip.index) ? tooltip.index : undefined;
@@ -332,22 +343,33 @@ function RevenueChart({
 
   const fixedDelta = fixedDeltaFromTooltip(tooltip);
 
-  const tipWrapper =
-    "pointer-events-none rounded-xl border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md px-4 py-3 text-white";
-  const tipValue = "text-[22px] font-extrabold leading-none text-center";
-  const tipDate = "mt-2 text-[14px] font-medium text-white/80 text-center";
+  const tipWrapper = isMobile
+    ? "pointer-events-none max-w-[220px] rounded-xl border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md px-3 py-2.5 text-white"
+    : "pointer-events-none rounded-xl border border-white/10 bg-[rgba(154,70,255,0.18)] backdrop-blur-md px-4 py-3 text-white";
+  const tipValue = isMobile
+    ? "text-[18px] font-extrabold leading-none text-center"
+    : "text-[22px] font-extrabold leading-none text-center";
+  const tipDate = isMobile
+    ? "mt-1.5 text-[12px] font-medium text-white/80 text-center"
+    : "mt-2 text-[14px] font-medium text-white/80 text-center";
   const tipDivider = "my-3 h-px w-full bg-white/10";
-  const tipBottomRow = "flex items-center gap-2 text-[13px] font-medium";
+  const tipBottomRow = isMobile
+    ? "flex items-center gap-2 text-[12px] font-medium"
+    : "flex items-center gap-2 text-[13px] font-medium";
   const tipVs = "text-white/60";
 
   const xMax = Math.max(0, rows.length - 1);
 
   return (
-    <div className="w-full h-full">
+    <div className="h-full w-full min-w-0">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={rows}
-          margin={{ top: 12, right: 18, left: 4, bottom: 14 }}
+          margin={
+            isMobile
+              ? { top: 8, right: 8, left: 0, bottom: 8 }
+              : { top: 12, right: 18, left: 4, bottom: 14 }
+          }
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -380,28 +402,35 @@ function RevenueChart({
             domain={[0, scaler.maxIdx]}
             ticks={scaler.ticksScaled}
             interval={0}
-            tick={{ ...AXIS_TICK_STYLE, textAnchor: "end" }}
+            tick={{
+              ...AXIS_TICK_STYLE,
+              textAnchor: "end",
+              fontSize: isMobile ? 9 : 10,
+            }}
             tickFormatter={scaler.tickLabelForScaled}
-            width={48}
+            width={isMobile ? 38 : 48}
             axisLine={{ stroke: "#2C2C44", strokeWidth: 1 }}
             tickLine={false}
-            tickMargin={12}
+            tickMargin={isMobile ? 8 : 12}
             allowDecimals={false}
           />
 
-          {/* ✅ Numeric X axis (index-based) + stable tick rendering */}
           <XAxis
             dataKey="i"
             type="number"
             domain={[0, xMax]}
             ticks={xTickIndices}
             allowDecimals={false}
-            tick={{ ...AXIS_TICK_STYLE, textAnchor: "middle" }}
+            tick={{
+              ...AXIS_TICK_STYLE,
+              textAnchor: "middle",
+              fontSize: isMobile ? 9 : 10,
+            }}
             tickFormatter={(v) => labelForIndex(Number(v))}
             axisLine={{ stroke: "#2C2C44", strokeWidth: 1 }}
             tickLine={false}
-            tickMargin={12}
-            minTickGap={14}
+            tickMargin={isMobile ? 8 : 12}
+            minTickGap={isMobile ? 8 : 14}
           />
 
           <Area
@@ -445,11 +474,11 @@ function RevenueChart({
                 if (typeof x !== "number" || typeof y !== "number")
                   return <g />;
 
-                const w = 220;
-                const h = 86;
+                const w = isMobile ? 176 : 220;
+                const h = isMobile ? 78 : 86;
 
                 const ox = x - w / 2;
-                const oy = y - h - 16;
+                const oy = y - h - (isMobile ? 12 : 16);
 
                 const raw = (tooltip.deltaText ?? "").trim();
                 const deltaTxt = stripSign(raw);
@@ -467,7 +496,7 @@ function RevenueChart({
                   : "rgba(255,69,74,0.30)";
                 const badgeText = isPos ? "#45FF79" : "#FF454A";
 
-                const badgeW = 64;
+                const badgeW = isMobile ? 58 : 64;
                 const badgeH = 22;
 
                 return (
@@ -492,10 +521,10 @@ function RevenueChart({
                     />
 
                     <text
-                      x="16"
-                      y="30"
+                      x="14"
+                      y={isMobile ? "27" : "30"}
                       fill="#FFFFFF"
-                      fontSize="22"
+                      fontSize={isMobile ? "18" : "22"}
                       fontWeight="800"
                       fontFamily="Gilroy, ui-sans-serif, system-ui"
                     >
@@ -504,10 +533,10 @@ function RevenueChart({
 
                     {tooltip.subLabel ? (
                       <text
-                        x="16"
-                        y="54"
+                        x="14"
+                        y={isMobile ? "47" : "54"}
                         fill="rgba(255,255,255,0.80)"
-                        fontSize="13"
+                        fontSize={isMobile ? "12" : "13"}
                         fontWeight="600"
                         fontFamily="Gilroy, ui-sans-serif, system-ui"
                       >
@@ -516,17 +545,17 @@ function RevenueChart({
                     ) : null}
 
                     <line
-                      x1="16"
-                      y1="64"
-                      x2={w - 16}
-                      y2="64"
+                      x1="14"
+                      y1={isMobile ? "57" : "64"}
+                      x2={w - 14}
+                      y2={isMobile ? "57" : "64"}
                       stroke="rgba(255,255,255,0.12)"
                       strokeWidth="1"
                     />
 
                     {deltaTxt ? (
                       <>
-                        <g transform={`translate(16, 70)`}>
+                        <g transform={`translate(14, ${isMobile ? 61 : 70})`}>
                           <rect
                             x="0"
                             y="0"
@@ -556,16 +585,18 @@ function RevenueChart({
                           </text>
                         </g>
 
-                        <text
-                          x={16 + badgeW + 10}
-                          y={86 - 10}
-                          fill="rgba(255,255,255,0.60)"
-                          fontSize="13"
-                          fontWeight="600"
-                          fontFamily="Gilroy, ui-sans-serif, system-ui"
-                        >
-                          vs previous month.
-                        </text>
+                        {!isMobile ? (
+                          <text
+                            x={14 + badgeW + 10}
+                            y={h - 10}
+                            fill="rgba(255,255,255,0.60)"
+                            fontSize="13"
+                            fontWeight="600"
+                            fontFamily="Gilroy, ui-sans-serif, system-ui"
+                          >
+                            vs previous month.
+                          </text>
+                        ) : null}
                       </>
                     ) : null}
                   </g>
@@ -611,7 +642,13 @@ function RevenueChart({
                   {delta?.text ? (
                     <>
                       <div className={tipDivider} />
-                      <div className={tipBottomRow}>
+                      <div
+                        className={
+                          isMobile
+                            ? "flex flex-col items-center gap-2 text-[12px] font-medium"
+                            : tipBottomRow
+                        }
+                      >
                         <DeltaPill
                           text={delta.text}
                           positive={delta.positive}

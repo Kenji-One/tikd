@@ -1,3 +1,4 @@
+// src\app\dashboard\DashboardClient.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -11,7 +12,7 @@ import SmallKpiChart from "@/components/dashboard/charts/SmallKpiChart";
 import UpcomingEventsTable from "@/components/dashboard/tables/UpcomingEventsTable";
 import TrackingLinksTable from "@/components/dashboard/tables/TrackingLinksTable";
 import MyTeamTable, {
-  DEMO_MY_TEAM,
+  type TeamMember,
 } from "@/components/dashboard/tables/MyTeamTable";
 import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
 
@@ -53,6 +54,60 @@ type ExtendedRevenueAnalytics = RevenueAnalyticsResponse & {
     };
   };
 };
+
+type TrackingMemberMetricRow = {
+  userId: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role?: string;
+  status?: string;
+  links: number;
+  views: number;
+  ticketsSold: number;
+  revenue: number;
+  lastLinkCreatedAt?: string | null;
+};
+
+type TrackingMembersResponse = {
+  rows: TrackingMemberMetricRow[];
+};
+
+function initialsFromName(name: string) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "MB";
+
+  const a = parts[0]?.[0] ?? "";
+  const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
+  return `${a}${b}`.toUpperCase() || "MB";
+}
+
+async function fetchTrackingMembersAll(): Promise<TrackingMembersResponse> {
+  const res = await fetch("/api/tracking-links/members?scope=all", {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    let message = "Failed to load members.";
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (typeof data?.error === "string" && data.error.trim()) {
+        message = data.error;
+      }
+    } catch {
+      // ignore non-json error bodies
+    }
+
+    throw new Error(message);
+  }
+
+  return (await res.json()) as TrackingMembersResponse;
+}
 
 function clampToDay(d: Date) {
   const x = new Date(d);
@@ -400,9 +455,27 @@ export default function DashboardClient() {
       }),
   });
 
+  const trackingMembersQuery = useQuery<TrackingMembersResponse>({
+    queryKey: ["global-tracking-members"],
+    queryFn: fetchTrackingMembersAll,
+    staleTime: 30_000,
+  });
+
   const analytics = analyticsQuery.data;
   const ticketsAnalytics = ticketsAnalyticsQuery.data;
   const revenueAnalytics = revenueAnalyticsQuery.data;
+
+  const liveTeamMembers = useMemo<TeamMember[]>(() => {
+    return (trackingMembersQuery.data?.rows ?? []).map((row) => ({
+      id: row.userId,
+      name: row.name || row.email || "Member",
+      avatarUrl: row.image ?? null,
+      avatarText: initialsFromName(row.name || row.email || "Member"),
+      tickets: Number.isFinite(row.ticketsSold) ? row.ticketsSold : 0,
+      views: Number.isFinite(row.views) ? row.views : 0,
+      earned: Number.isFinite(row.revenue) ? row.revenue : 0,
+    }));
+  }, [trackingMembersQuery.data]);
 
   const rangeDays = useMemo(
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
@@ -619,9 +692,9 @@ export default function DashboardClient() {
   const ticketsHeaderDeltaLabel = `${ticketsSoldDelta.positive ? "+" : "-"}${ticketsSoldDelta.text}`;
 
   return (
-    <div className="space-y-5">
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
-        <div className="grid grid-cols-1 rounded-lg border border-neutral-700 bg-neutral-900 pl-4 lg:grid-cols-[3.15fr_1.74fr]">
+    <div className="space-y-4 md:space-y-5">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[3.10fr_1.51fr]">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 lg:grid lg:grid-cols-[3.15fr_1.74fr] lg:pl-4">
           <KpiCard
             title="Total Revenue"
             value={formatCurrencyCompact(revenueAnalytics?.totals.revenue ?? 0)}
@@ -655,7 +728,7 @@ export default function DashboardClient() {
             />
           </KpiCard>
 
-          <div>
+          <div className="min-w-0">
             <KpiCard
               title="Total Page Views"
               value={(analytics?.totals.pageViews ?? 0).toLocaleString()}
@@ -697,7 +770,7 @@ export default function DashboardClient() {
               }
               delta={ticketsHeaderDeltaLabel}
               accent="from-[#7C3AED] to-[#9A46FF]"
-              className="p-5 pb-4"
+              className="p-4 pb-4 "
               detailsHref="/dashboard/tickets-sold"
             >
               <SmallKpiChart
@@ -719,19 +792,27 @@ export default function DashboardClient() {
           </div>
         </div>
 
-        <RecentSalesTable />
+        <div className="min-w-0">
+          <RecentSalesTable scope="global" />
+        </div>
       </section>
 
-      <section className="grid gap-5 grid-cols-1 xl:grid-cols-[3.10fr_1.51fr]">
-        <UpcomingEventsTable />
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[3.10fr_1.51fr] md:gap-5">
+        <div className="min-w-0">
+          <UpcomingEventsTable />
+        </div>
 
-        <MyTeamTable
-          members={DEMO_MY_TEAM}
-          onDetailedView={() => router.push("/dashboard/my-members")}
-        />
+        <div className="min-w-0">
+          <MyTeamTable
+            members={liveTeamMembers}
+            onDetailedView={() => router.push("/dashboard/my-members")}
+          />
+        </div>
       </section>
 
-      <TrackingLinksTable />
+      <div className="min-w-0">
+        <TrackingLinksTable />
+      </div>
     </div>
   );
 }

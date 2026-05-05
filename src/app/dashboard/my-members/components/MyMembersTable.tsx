@@ -1,3 +1,4 @@
+// src/app/dashboard/my-members/components/MyMembersTable.tsx
 "use client";
 
 import { useMemo, useState } from "react";
@@ -12,7 +13,7 @@ export type MemberRow = {
   avatarText?: string;
   tickets: number;
   views: number;
-  earned: number; // USD
+  earned: number;
 };
 
 type SortKey = "earned" | "tickets" | "views" | "name";
@@ -50,11 +51,12 @@ function Avatar({
       <img
         src={url}
         alt={name}
-        className="h-8 w-8 shrink-0 rounded-full ring-1 ring-white/10 object-cover"
+        className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-white/10"
         loading="lazy"
       />
     );
   }
+
   return (
     <div
       aria-hidden
@@ -81,7 +83,6 @@ export default function MyMembersTable({
   selectedId: string;
   onSelect: (id: string) => void;
   className?: string;
-  /** Auto height up to this max, then scroll */
   maxHeightClass?: string;
 }) {
   const [sortBy, setSortBy] = useState<SortKey>("earned");
@@ -92,9 +93,11 @@ export default function MyMembersTable({
     arr.sort((a, b) => {
       const A = a[sortBy];
       const B = b[sortBy];
+
       if (typeof A === "number" && typeof B === "number") {
         return dir === "asc" ? A - B : B - A;
       }
+
       return dir === "asc"
         ? String(A).localeCompare(String(B))
         : String(B).localeCompare(String(A));
@@ -103,21 +106,22 @@ export default function MyMembersTable({
   }, [members, sortBy, dir]);
 
   const toggleSort = (key: SortKey) => {
-    if (key === sortBy) setDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortBy(key);
-      setDir("desc");
+    if (key === sortBy) {
+      setDir((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
     }
+
+    setSortBy(key);
+    setDir("desc");
   };
 
   const thBase =
     "text-left font-semibold cursor-pointer select-none hover:text-white/80";
 
-  // Cleaner header padding, and we avoid “th looks like a block” by using a subtle glass gradient.
   const thRow = "[&>th]:px-4 [&>th]:py-3";
 
   const thSticky =
-    "sticky top-0 z-10 backdrop-blur-md border-b border-neutral-800/70 " +
+    "sticky top-0 z-10 border-b border-neutral-800/70 backdrop-blur-md " +
     "bg-[linear-gradient(180deg,rgba(18,18,32,0.68)_0%,rgba(18,18,32,0.22)_100%)]";
 
   return (
@@ -143,216 +147,223 @@ export default function MyMembersTable({
           <div className="text-base font-bold tracking-[-0.03em] text-neutral-50">
             {title}
           </div>
+
           <div className="text-[12px] font-semibold text-neutral-400">
-            Click a member to view details
+            {members.length
+              ? `${members.length.toLocaleString()} members`
+              : "No members yet"}
           </div>
         </div>
 
-        {/* Horizontal scroll only if needed */}
-        <div className="relative w-full overflow-x-auto">
-          {/* Auto height, capped by maxHeight; vertical scroll appears only when needed */}
-          <div
-            className={clsx(
-              "min-w-[820px] overflow-y-auto",
-              maxHeightClass,
-              "tikd-scrollbar",
-            )}
-            // IMPORTANT: prevents reserved scrollbar space when there is no scrollbar
-            style={{ scrollbarGutter: "auto" }}
-          >
-            <table className="w-full table-fixed border-collapse font-medium leading-tight">
-              <colgroup>
-                <col style={{ width: "31%" }} />
-                <col style={{ width: "23%" }} />
-                <col style={{ width: "23%" }} />
-                <col style={{ width: "23%" }} />
-              </colgroup>
+        {!sorted.length ? (
+          <div className="px-4 py-10 text-center">
+            <div className="text-[15px] font-extrabold tracking-[-0.03em] text-neutral-50">
+              No members found
+            </div>
+            <p className="mt-2 text-[13px] text-neutral-400">
+              Members will appear here once they have access or live tracking
+              data becomes available.
+            </p>
+          </div>
+        ) : (
+          <div className="relative w-full overflow-x-auto">
+            <div
+              className={clsx(
+                "min-w-[820px] overflow-y-auto",
+                maxHeightClass,
+                "tikd-scrollbar",
+              )}
+              style={{ scrollbarGutter: "auto" }}
+            >
+              <table className="w-full table-fixed border-collapse font-medium leading-tight">
+                <colgroup>
+                  <col style={{ width: "31%" }} />
+                  <col style={{ width: "23%" }} />
+                  <col style={{ width: "23%" }} />
+                  <col style={{ width: "23%" }} />
+                </colgroup>
 
-              <thead className="text-neutral-400">
-                <tr className={thRow}>
-                  <th
-                    className={clsx(thBase, thSticky)}
-                    onClick={() => toggleSort("name")}
-                    aria-sort={
-                      sortBy === "name"
-                        ? dir === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
-                  >
-                    <div className="inline-flex items-center">
-                      Member
-                      <SortArrowsIcon
-                        direction={sortBy === "name" ? dir : null}
-                        className="ml-2 -translate-y-[1px]"
-                      />
-                    </div>
-                  </th>
-
-                  <th
-                    className={clsx(thBase + " text-center", thSticky)}
-                    onClick={() => toggleSort("tickets")}
-                    aria-sort={
-                      sortBy === "tickets"
-                        ? dir === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
-                  >
-                    <div className="inline-flex w-full items-center justify-center">
-                      Tickets Sold
-                      <SortArrowsIcon
-                        direction={sortBy === "tickets" ? dir : null}
-                        className="ml-2 -translate-y-[1px]"
-                      />
-                    </div>
-                  </th>
-
-                  <th
-                    className={clsx(thBase + " text-center", thSticky)}
-                    onClick={() => toggleSort("views")}
-                    aria-sort={
-                      sortBy === "views"
-                        ? dir === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
-                  >
-                    <div className="inline-flex w-full items-center justify-center">
-                      Views
-                      <SortArrowsIcon
-                        direction={sortBy === "views" ? dir : null}
-                        className="ml-2 -translate-y-[1px]"
-                      />
-                    </div>
-                  </th>
-
-                  <th
-                    className={clsx(thBase + " text-center", thSticky)}
-                    onClick={() => toggleSort("earned")}
-                    aria-sort={
-                      sortBy === "earned"
-                        ? dir === "asc"
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
-                  >
-                    <div className="inline-flex w-full items-center justify-center">
-                      Revenue
-                      <SortArrowsIcon
-                        direction={sortBy === "earned" ? dir : null}
-                        className="ml-2 -translate-y-[1px]"
-                      />
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="text-white">
-                {sorted.map((m, i) => {
-                  const active = m.id === selectedId;
-
-                  return (
-                    <tr
-                      key={m.id}
-                      onClick={() => onSelect(m.id)}
-                      className={clsx(
-                        "border-t border-neutral-800/60 cursor-pointer",
-                        "transition-[background-color,box-shadow] duration-200",
-                        !active &&
-                          (i % 2 === 0
-                            ? "bg-neutral-950/10"
-                            : "bg-transparent"),
-                        active
-                          ? [
-                              // Warmer, lighter gradient (not a full purple slab)
-                              "bg-[linear-gradient(90deg,rgba(154,70,255,0.18)_0%,rgba(255,123,69,0.10)_55%,rgba(8,8,15,0.00)_100%)]",
-                              "hover:bg-[linear-gradient(90deg,rgba(154,70,255,0.22)_0%,rgba(255,123,69,0.12)_55%,rgba(8,8,15,0.00)_100%)]",
-                              // Clear but elegant focus ring
-                              "shadow-[inset_0_0_0_1px_rgba(154,70,255,0.30)]",
-                            ].join(" ")
-                          : "hover:bg-neutral-900/25",
-                      )}
+                <thead className="text-neutral-400">
+                  <tr className={thRow}>
+                    <th
+                      className={clsx(thBase, thSticky)}
+                      onClick={() => toggleSort("name")}
+                      aria-sort={
+                        sortBy === "name"
+                          ? dir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
                     >
-                      <td className="px-4 py-3">
-                        <div className="relative flex min-w-0 items-center gap-3">
-                          {/* Selected row accent bar (warm gradient) */}
-                          {active && (
-                            <span className="absolute -left-4 top-[-12px] bottom-[-12px] w-[3px] rounded-full bg-[linear-gradient(180deg,rgba(154,70,255,0.95),rgba(255,123,69,0.75))] shadow-[0_0_22px_rgba(154,70,255,0.28)]" />
-                          )}
+                      <div className="inline-flex items-center">
+                        Member
+                        <SortArrowsIcon
+                          direction={sortBy === "name" ? dir : null}
+                          className="ml-2 -translate-y-[1px]"
+                        />
+                      </div>
+                    </th>
 
-                          <Avatar
-                            name={m.name}
-                            url={m.avatarUrl}
-                            bg={m.avatarBg}
-                            text={m.avatarText}
-                          />
-                          <div className="min-w-0">
-                            <div
-                              className={clsx(
-                                "truncate text-[13px] font-semibold",
-                                active ? "text-neutral-0" : "text-neutral-100",
-                              )}
-                            >
-                              {m.name}
-                            </div>
-                            <div className="mt-1 text-[12px] text-neutral-400">
-                              Member ID:{" "}
-                              <span className="tabular-nums">{m.id}</span>
+                    <th
+                      className={clsx(thBase, thSticky, "text-center")}
+                      onClick={() => toggleSort("tickets")}
+                      aria-sort={
+                        sortBy === "tickets"
+                          ? dir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                    >
+                      <div className="inline-flex w-full items-center justify-center">
+                        Tickets Sold
+                        <SortArrowsIcon
+                          direction={sortBy === "tickets" ? dir : null}
+                          className="ml-2 -translate-y-[1px]"
+                        />
+                      </div>
+                    </th>
+
+                    <th
+                      className={clsx(thBase, thSticky, "text-center")}
+                      onClick={() => toggleSort("views")}
+                      aria-sort={
+                        sortBy === "views"
+                          ? dir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                    >
+                      <div className="inline-flex w-full items-center justify-center">
+                        Views
+                        <SortArrowsIcon
+                          direction={sortBy === "views" ? dir : null}
+                          className="ml-2 -translate-y-[1px]"
+                        />
+                      </div>
+                    </th>
+
+                    <th
+                      className={clsx(thBase, thSticky, "text-center")}
+                      onClick={() => toggleSort("earned")}
+                      aria-sort={
+                        sortBy === "earned"
+                          ? dir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                    >
+                      <div className="inline-flex w-full items-center justify-center">
+                        Revenue
+                        <SortArrowsIcon
+                          direction={sortBy === "earned" ? dir : null}
+                          className="ml-2 -translate-y-[1px]"
+                        />
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="text-white">
+                  {sorted.map((member, i) => {
+                    const active = member.id === selectedId;
+
+                    return (
+                      <tr
+                        key={member.id}
+                        onClick={() => onSelect(member.id)}
+                        className={clsx(
+                          "cursor-pointer border-t border-neutral-800/60 transition-[background-color,box-shadow] duration-200",
+                          !active &&
+                            (i % 2 === 0
+                              ? "bg-neutral-950/10"
+                              : "bg-transparent"),
+                          active
+                            ? [
+                                "bg-[linear-gradient(90deg,rgba(154,70,255,0.18)_0%,rgba(255,123,69,0.10)_55%,rgba(8,8,15,0.00)_100%)]",
+                                "hover:bg-[linear-gradient(90deg,rgba(154,70,255,0.22)_0%,rgba(255,123,69,0.12)_55%,rgba(8,8,15,0.00)_100%)]",
+                                "shadow-[inset_0_0_0_1px_rgba(154,70,255,0.30)]",
+                              ].join(" ")
+                            : "hover:bg-neutral-900/25",
+                        )}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="relative flex min-w-0 items-center gap-3">
+                            {active ? (
+                              <span className="absolute -bottom-[12px] -left-4 -top-[12px] w-[3px] rounded-full bg-[linear-gradient(180deg,rgba(154,70,255,0.95),rgba(255,123,69,0.75))] shadow-[0_0_22px_rgba(154,70,255,0.28)]" />
+                            ) : null}
+
+                            <Avatar
+                              name={member.name}
+                              url={member.avatarUrl}
+                              bg={member.avatarBg}
+                              text={member.avatarText}
+                            />
+
+                            <div className="min-w-0">
+                              <div
+                                className={clsx(
+                                  "truncate text-[13px] font-semibold",
+                                  active
+                                    ? "text-neutral-0"
+                                    : "text-neutral-100",
+                                )}
+                              >
+                                {member.name}
+                              </div>
+                              <div className="mt-1 text-[12px] text-neutral-400">
+                                Member ID:{" "}
+                                <span className="tabular-nums">
+                                  {member.id}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-4 py-3 text-center">
-                        <div
-                          className={clsx(
-                            "text-[13px] font-semibold tabular-nums",
-                            active ? "text-neutral-0" : "text-neutral-100",
-                          )}
-                        >
-                          {m.tickets.toLocaleString()}
-                        </div>
-                      </td>
+                        <td className="px-4 py-3 text-center">
+                          <div
+                            className={clsx(
+                              "text-[13px] font-semibold tabular-nums",
+                              active ? "text-neutral-0" : "text-neutral-100",
+                            )}
+                          >
+                            {member.tickets.toLocaleString()}
+                          </div>
+                        </td>
 
-                      <td className="px-4 py-3 text-center">
-                        <div
-                          className={clsx(
-                            "text-[13px] font-semibold tabular-nums",
-                            active ? "text-neutral-0" : "text-neutral-100",
-                          )}
-                        >
-                          {m.views.toLocaleString()}
-                        </div>
-                      </td>
+                        <td className="px-4 py-3 text-center">
+                          <div
+                            className={clsx(
+                              "text-[13px] font-semibold tabular-nums",
+                              active ? "text-neutral-0" : "text-neutral-100",
+                            )}
+                          >
+                            {member.views.toLocaleString()}
+                          </div>
+                        </td>
 
-                      <td className="px-4 py-3 text-center">
-                        <div className="text-[13px] font-extrabold tabular-nums text-success-400">
-                          {fmtUsd(m.earned)}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {!sorted.length && (
-                  <tr className="border-t border-neutral-800/60">
-                    <td
-                      colSpan={4}
-                      className="px-4 py-10 text-center text-[13px] text-neutral-400"
-                    >
-                      No members found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                        <td className="px-4 py-3 text-center">
+                          <div
+                            className={clsx(
+                              "text-[13px] font-semibold tabular-nums",
+                              active ? "text-success-100" : "text-success-200",
+                            )}
+                          >
+                            {fmtUsd(member.earned)}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

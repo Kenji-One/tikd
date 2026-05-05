@@ -3,18 +3,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  X,
-  Wallet,
-  ArrowRightLeft,
-  RotateCcw,
-  Copy,
-  Check,
-} from "lucide-react";
+import { X, Copy, Check } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 import TicketPassCard, { type TicketPassDesign } from "./TicketPassCard";
-import { Button } from "./Button";
+
+type TicketSeat = {
+  section?: string;
+  row?: string;
+  number?: string;
+} | null;
 
 export interface TicketDialogProps {
   open: boolean;
@@ -32,6 +30,7 @@ export interface TicketDialogProps {
     qrValue?: string;
 
     refCode?: string;
+    seat?: TicketSeat;
 
     design?: Partial<TicketPassDesign> | null;
     eventTitle?: string;
@@ -42,26 +41,73 @@ export interface TicketDialogProps {
   };
 }
 
+function seatLabel(seat?: TicketSeat) {
+  if (!seat) return null;
+
+  const parts = [
+    seat.section ? `Section ${seat.section}` : null,
+    seat.row ? `Row ${seat.row}` : null,
+    seat.number ? `Seat ${seat.number}` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" • ") : null;
+}
+
 export default function TicketDialog({
   open,
   onClose,
   ticket,
 }: TicketDialogProps) {
   const [copied, setCopied] = useState(false);
+  const [qrSize, setQrSize] = useState(300);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }
+
     if (open) {
       document.addEventListener("keydown", onKey);
       document.body.style.overflow = "hidden";
     }
+
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return;
+
+    const syncQrSize = () => {
+      const width = window.innerWidth;
+
+      if (width < 380) {
+        setQrSize(184);
+        return;
+      }
+
+      if (width < 640) {
+        setQrSize(220);
+        return;
+      }
+
+      if (width < 1024) {
+        setQrSize(260);
+        return;
+      }
+
+      setQrSize(300);
+    };
+
+    syncQrSize();
+    window.addEventListener("resize", syncQrSize);
+
+    return () => {
+      window.removeEventListener("resize", syncQrSize);
+    };
+  }, [open]);
 
   const ariaId = useMemo(
     () => `ticket-dialog-${Math.random().toString(36).slice(2)}`,
@@ -72,17 +118,22 @@ export default function TicketDialog({
 
   async function copyRef() {
     if (!ticket.refCode) return;
+
     try {
       await navigator.clipboard.writeText(ticket.refCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
-    } catch {}
+    } catch {
+      // no-op
+    }
   }
 
   const qrValue =
     ticket.qrValue ??
     ticket.refCode ??
     `${ticket.ticketTypeLabel ?? ticket.title}:${ticket.eventTitle ?? ""}:${ticket.venue}`;
+
+  const seatText = seatLabel(ticket.seat);
 
   return createPortal(
     <div
@@ -92,35 +143,34 @@ export default function TicketDialog({
       aria-labelledby={`${ariaId}-title`}
       onClick={onClose}
     >
-      {/* overlay */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_55%_at_50%_0%,rgba(154,70,255,.22),transparent_60%)]" />
 
-      <div className="relative mx-auto grid h-full w-full max-w-6xl place-items-center p-4">
+      <div className="relative mx-auto flex h-full w-full items-end justify-center p-0 sm:p-4 md:items-center">
         <div
           onClick={(e) => e.stopPropagation()}
           className="
-            pointer-events-auto relative w-full overflow-hidden rounded-[26px]
-            border border-white/10 bg-neutral-950/80 text-white ring-1 ring-white/5
-            shadow-[0_28px_90px_rgba(0,0,0,.70)]
+            pointer-events-auto relative flex w-full flex-col overflow-hidden
+            rounded-t-[26px] border border-white/10 bg-neutral-950/90 text-white
+            ring-1 ring-white/5 shadow-[0_28px_90px_rgba(0,0,0,.70)]
             animate-[tikdModalIn_.18s_ease]
+            max-h-[100dvh] sm:max-h-[calc(100dvh-32px)] sm:max-w-6xl sm:rounded-[26px]
           "
         >
-          {/* header close */}
           <button
             aria-label="Close"
             onClick={onClose}
-            className="absolute right-3 top-3 z-10 rounded-full p-2 text-white/80 transition hover:bg-white/10 hover:text-white cursor-pointer"
+            className="absolute right-3 top-3 z-20 rounded-full p-2 text-white/80 transition hover:bg-white/10 hover:text-white cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
 
-          <div className="grid grid-cols-1 gap-0 md:grid-cols-[420px_1fr]">
+          <div className="grid min-h-0 grid-cols-1 overflow-y-auto overscroll-contain md:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
             {/* Left */}
-            <section className="relative border-b border-white/10 bg-neutral-950 md:border-b-0 md:border-r md:border-white/10 p-5 md:p-7">
+            <section className="relative border-b border-white/10 bg-neutral-950 p-4 sm:p-5 md:border-b-0 md:border-r md:border-white/10 md:p-7">
               <h2
                 id={`${ariaId}-title`}
-                className="text-2xl font-semibold leading-[90%] tracking-[-0.42px]"
+                className="pr-12 text-[26px] font-semibold leading-[90%] tracking-[-0.42px]"
               >
                 Your Ticket
               </h2>
@@ -128,7 +178,7 @@ export default function TicketDialog({
               <div className="mt-4">
                 <TicketPassCard
                   chrome="plain"
-                  className="bg-transparent p-0"
+                  className="mx-auto w-full bg-transparent p-0"
                   design={ticket.design ?? undefined}
                   eventTitle={ticket.eventTitle ?? ticket.title}
                   eventDateISO={ticket.eventDateISO}
@@ -138,61 +188,91 @@ export default function TicketDialog({
                 />
               </div>
 
-              {ticket.refCode ? (
-                <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                  <div className="text-sm text-neutral-300">
-                    <span className="text-neutral-400">Reference:</span>{" "}
-                    <span className="font-mono tracking-wide">
-                      {ticket.refCode}
-                    </span>
+              <div className="mt-4 space-y-3">
+                {ticket.refCode ? (
+                  <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:py-2">
+                    <div className="min-w-0 text-sm text-neutral-300">
+                      <span className="text-neutral-400">Reference:</span>{" "}
+                      <span className="break-all font-mono tracking-wide">
+                        {ticket.refCode}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={copyRef}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-2.5 py-2 text-xs font-medium text-white/90 transition hover:bg-white/15 cursor-pointer sm:w-auto"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-4 w-4" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4" />
+                          Copy
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <button
-                    onClick={copyRef}
-                    className="flex items-center gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/15 cursor-pointer"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4" />
-                        Copy
-                      </>
-                    )}
-                  </button>
-                </div>
-              ) : null}
+                ) : null}
+
+                {ticket.badge || seatText ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {ticket.badge ? (
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-neutral-400">
+                          Status
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-neutral-100">
+                          {ticket.badge}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {seatText ? (
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
+                        <p className="text-xs uppercase tracking-[0.16em] text-neutral-400">
+                          Seat
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-neutral-100">
+                          {seatText}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </section>
 
             {/* Right */}
-            <section className="p-5 md:p-7">
-              <h3 className="text-lg font-semibold text-neutral-100 text-center">
+            <section className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5 md:p-7">
+              <h3 className="text-center text-lg font-semibold text-neutral-100">
                 Scan QR Code
               </h3>
 
               <div className="mt-5 flex items-center justify-center">
-                <div className="relative rounded-[28px] bg-white p-6 shadow-[0_22px_80px_-20px_rgba(154,70,255,.35)] ring-1 ring-black/5">
-                  <div className="pointer-events-none absolute -inset-[2px] rounded-[30px] bg-[radial-gradient(60%_50%_at_50%_0%,rgba(154,70,255,.22),transparent_70%)]" />
+                <div className="relative w-fit max-w-full rounded-[24px] bg-white p-4 shadow-[0_22px_80px_-20px_rgba(154,70,255,.35)] ring-1 ring-black/5 sm:rounded-[28px] sm:p-5 md:p-6">
+                  <div className="pointer-events-none absolute -inset-[2px] rounded-[26px] bg-[radial-gradient(60%_50%_at_50%_0%,rgba(154,70,255,.22),transparent_70%)] sm:rounded-[30px]" />
 
                   {ticket.qrSvg ? (
                     <div
-                      className="relative z-10"
+                      className="ticket-dialog-qr-svg relative z-10"
+                      style={{ width: qrSize, height: qrSize }}
                       dangerouslySetInnerHTML={{ __html: ticket.qrSvg }}
                     />
                   ) : ticket.qrUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={ticket.qrUrl}
                       alt="Ticket QR"
-                      className="relative z-10 h-[300px] w-[300px]"
+                      className="relative z-10 block h-auto max-w-full"
+                      style={{ width: qrSize, height: qrSize }}
                     />
                   ) : (
                     <div className="relative z-10">
                       <QRCodeSVG
                         value={qrValue}
-                        size={300}
+                        size={qrSize}
                         bgColor="#ffffff"
                         fgColor="#0b0b12"
                       />
@@ -201,28 +281,14 @@ export default function TicketDialog({
                 </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {/* ❌ no animation on these */}
-                <Button
-                  variant="secondary"
-                  className="h-10 justify-center gap-2"
-                >
-                  <Wallet className="h-4 w-4" />
-                  Add to Wallet
-                </Button>
-                <Button variant="ghost" className="h-10 justify-center gap-2">
-                  <ArrowRightLeft className="h-4 w-4" />
-                  Transfer
-                </Button>
-                <Button variant="ghost" className="h-10 justify-center gap-2">
-                  <RotateCcw className="h-4 w-4" />
-                  Refund
-                </Button>
+              <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center">
+                <p className="text-sm font-medium text-neutral-100">
+                  Keep this QR visible when entering the venue.
+                </p>
+                <p className="mt-1 text-[12px] leading-tight text-neutral-400">
+                  Present this screen to staff for scanning.
+                </p>
               </div>
-
-              <p className="mt-4 text-center text-[12px] leading-tight text-neutral-400">
-                Keep this QR visible when entering the venue.
-              </p>
             </section>
           </div>
         </div>
@@ -230,8 +296,17 @@ export default function TicketDialog({
 
       <style>{`
         @keyframes tikdModalIn {
-          from { transform: translateY(6px) scale(.99); opacity: 0 }
-          to   { transform: translateY(0) scale(1);   opacity: 1 }
+          from { transform: translateY(6px) scale(.99); opacity: 0; }
+          to   { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        .ticket-dialog-qr-svg,
+        .ticket-dialog-qr-svg svg,
+        .ticket-dialog-qr-svg img {
+          display: block;
+          width: 100%;
+          height: 100%;
+          max-width: 100%;
         }
       `}</style>
     </div>,

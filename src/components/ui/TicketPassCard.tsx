@@ -34,7 +34,7 @@ export interface TicketPassCardProps {
   onClick?: () => void;
   className?: string;
 
-  /** used by TicketDialog */
+  /** used by TicketDialog / preview contexts */
   chrome?: "card" | "plain";
 }
 
@@ -66,8 +66,22 @@ function formatEventTime(value?: string) {
   });
 }
 
+function getContentJustifyClass(layout: TicketPassLayout) {
+  switch (layout) {
+    case "up":
+      return "justify-start";
+    case "vertical":
+      return "justify-center";
+    case "down":
+      return "justify-end";
+    case "horizontal":
+    default:
+      return "justify-between";
+  }
+}
+
 const DEFAULT_DESIGN: TicketPassDesign = {
-  layout: "vertical",
+  layout: "horizontal",
   brandColor: "#9a46ff",
   logoUrl: "",
   backgroundUrl: "",
@@ -92,27 +106,9 @@ export default function TicketPassCard({
 }: TicketPassCardProps) {
   const d: TicketPassDesign = { ...DEFAULT_DESIGN, ...(design ?? {}) };
 
-  const layout = d.layout ?? "vertical";
   const ticketColor = d.brandColor || "#9a46ff";
   const barcodeHeight =
     typeof d.qrSize === "number" && d.qrSize > 0 ? d.qrSize : 72;
-
-  // ✅ EXACTLY like TicketTypeDesignStep
-  const artworkHeightClass =
-    layout === "vertical"
-      ? "h-[220px]"
-      : layout === "up"
-        ? "h-[140px]"
-        : layout === "down"
-          ? "h-[190px]"
-          : "h-[164px]";
-
-  const contentPaddingTopClass =
-    layout === "up" ? "pt-3" : layout === "down" ? "pt-6" : "pt-5";
-
-  // ✅ fixed max width so it doesn’t become a giant column ticket
-  const cardWidthClass =
-    layout === "vertical" ? "w-full max-w-[320px]" : "w-full max-w-[360px]";
 
   const hasBackgroundImage = Boolean(d.backgroundUrl);
   const hasCustomLogo = Boolean(d.logoUrl);
@@ -121,11 +117,12 @@ export default function TicketPassCard({
   const topLabel = (eventTitle || "Event").toUpperCase();
   const mainTitle = ticketTypeLabel || "General admission";
   const placeText = eventLocation || "Location TBA";
+  const watermarkText = "TIXSY";
 
   const ticket = (
-    <div className={clsx("mx-auto rounded-3xl bg-transparent", cardWidthClass)}>
+    <div className="mx-auto w-full max-w-[320px] min-w-0">
       <div
-        className="relative overflow-hidden rounded-3xl p-4"
+        className="relative overflow-hidden rounded-[28px] p-3.5 sm:p-4"
         style={
           hasBackgroundImage
             ? {
@@ -136,32 +133,26 @@ export default function TicketPassCard({
             : { backgroundColor: ticketColor }
         }
       >
+        {/* real watermark */}
         {d.watermarkEnabled ? (
-          <div className="pointer-events-none absolute inset-0 z-0 opacity-20">
-            <div className="h-full w-full bg-[radial-gradient(circle_at_0_0,rgba(255,255,255,0.4),transparent_55%),radial-gradient(circle_at_100%_100%,rgba(255,255,255,0.4),transparent_55%)]" />
-          </div>
+          <>
+            <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(120%_90%_at_50%_0%,rgba(255,255,255,0.16),transparent_55%)]" />
+            <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-24deg] whitespace-nowrap text-[54px] font-black uppercase tracking-[0.28em] text-white/[0.10] sm:text-[62px]">
+                {watermarkText}
+              </div>
+            </div>
+          </>
         ) : null}
 
         <div className="relative z-10">
-          <div
-            className={clsx(
-              "relative overflow-hidden rounded-2xl",
-              artworkHeightClass,
-            )}
-          >
+          {/* artwork */}
+          <div className="relative h-[164px] overflow-hidden rounded-2xl sm:h-[176px]">
             {!hasBackgroundImage && hasEventImage ? (
               <img
                 src={eventImageUrl}
                 alt={eventTitle || "Event artwork"}
                 className="absolute inset-0 h-full w-full object-cover"
-                style={{
-                  objectPosition:
-                    layout === "down"
-                      ? "center bottom"
-                      : layout === "up"
-                        ? "center top"
-                        : "center",
-                }}
                 onError={(e) => {
                   e.currentTarget.style.display = "none";
                 }}
@@ -175,18 +166,13 @@ export default function TicketPassCard({
                   backgroundImage:
                     "linear-gradient(135deg,#ffb347,#ff5f6d,#845ef7,#3bc9db)",
                   backgroundSize: "cover",
-                  backgroundPosition:
-                    layout === "down"
-                      ? "center bottom"
-                      : layout === "up"
-                        ? "center top"
-                        : "center",
+                  backgroundPosition: "center",
                 }}
               />
             ) : null}
 
             {d.logoEnabled ? (
-              <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center justify-center">
+              <div className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center justify-center">
                 {hasCustomLogo ? (
                   <img
                     src={d.logoUrl}
@@ -210,89 +196,87 @@ export default function TicketPassCard({
             ) : null}
           </div>
 
-          <div className={contentPaddingTopClass}>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
-              {topLabel}
-            </p>
+          {/* content focus area */}
+          <div
+            className={clsx(
+              "mt-4 flex min-h-[148px] flex-col gap-4 sm:min-h-[158px]",
+              getContentJustifyClass(d.layout),
+            )}
+          >
+            <div className="space-y-1.5">
+              <p className="break-words text-[11px] font-semibold uppercase tracking-[0.18em] text-white/72 sm:text-xs">
+                {topLabel}
+              </p>
 
-            <p className="mt-1 text-[18px] font-semibold leading-tight text-white">
-              {mainTitle}
-            </p>
+              <p className="break-words text-[17px] font-semibold leading-tight text-white sm:text-[18px]">
+                {mainTitle}
+              </p>
+            </div>
 
             {d.eventInfoEnabled ? (
-              <>
-                <div className="mt-5 grid grid-cols-2 gap-y-3 text-sm leading-snug text-white/80">
-                  <div>
-                    <p className="text-white/70">Date</p>
-                    <p className="mt-1 font-semibold text-white">
-                      {formatEventDate(eventDateISO)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white/70">Time</p>
-                    <p className="mt-1 font-semibold text-white">
-                      {formatEventTime(eventDateISO)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-white/70">Check in Type</p>
-                    <p className="mt-1 font-semibold text-white">{mainTitle}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white/70">Order ID</p>
-                    <p className="mt-1 font-semibold text-white">GBD99763JS</p>
-                  </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs leading-snug text-white/85 sm:text-sm">
+                <div className="min-w-0">
+                  <p className="text-white/70">Date</p>
+                  <p className="mt-1 break-words font-semibold text-white">
+                    {formatEventDate(eventDateISO)}
+                  </p>
                 </div>
 
-                <div className="mt-5 text-sm leading-snug text-white/80">
+                <div className="min-w-0 text-right">
+                  <p className="text-white/70">Time</p>
+                  <p className="mt-1 break-words font-semibold text-white">
+                    {formatEventTime(eventDateISO)}
+                  </p>
+                </div>
+
+                <div className="min-w-0 col-span-2">
                   <p className="text-white/70">Place</p>
-                  <p className="mt-1 font-semibold text-white">{placeText}</p>
+                  <p className="mt-1 break-words font-semibold text-white">
+                    {placeText}
+                  </p>
                 </div>
-              </>
+              </div>
             ) : null}
-
-            <div className="relative mt-6">
-              <div className="mx-auto h-px w-[96%] border-t border-dashed border-white/80" />
-              <div className="absolute -left-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
-              <div className="absolute -right-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
-            </div>
-
-            <div className="mt-4 px-2 pb-1">
-              <div
-                className="w-full"
-                style={{
-                  height: `${barcodeHeight}px`,
-                  backgroundImage:
-                    "repeating-linear-gradient(90deg, rgba(0,0,0,0.98) 0, rgba(0,0,0,0.98) 2px, transparent 2px, transparent 4px)",
-                  backgroundRepeat: "repeat",
-                  borderRadius:
-                    typeof d.qrBorderRadius === "number"
-                      ? `${d.qrBorderRadius}px`
-                      : undefined,
-                }}
-              />
-            </div>
           </div>
+
+          {/* perforation */}
+          <div className="relative mt-5 sm:mt-6">
+            <div className="mx-auto h-px w-[96%] border-t border-dashed border-white/80" />
+            <div className="absolute -left-10 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-neutral-950 sm:-left-12 sm:h-12 sm:w-12" />
+            <div className="absolute -right-10 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full bg-neutral-950 sm:-right-12 sm:h-12 sm:w-12" />
+          </div>
+
+          {/* barcode */}
+          <div className="mt-4 px-1 pb-1 sm:px-2">
+            <div
+              className="w-full"
+              style={{
+                height: `${barcodeHeight}px`,
+                backgroundImage:
+                  "repeating-linear-gradient(90deg, rgba(0,0,0,0.98) 0, rgba(0,0,0,0.98) 2px, transparent 2px, transparent 4px)",
+                backgroundRepeat: "repeat",
+                borderRadius:
+                  typeof d.qrBorderRadius === "number"
+                    ? `${d.qrBorderRadius}px`
+                    : undefined,
+              }}
+            />
+          </div>
+
+          {/* bottom line INSIDE ticket */}
+          {d.footerText ? (
+            <p className="mt-3 px-2 text-center text-[10px] font-medium tracking-[0.08em] text-white/78">
+              {d.footerText}
+            </p>
+          ) : null}
         </div>
       </div>
-
-      {d.footerText ? (
-        <p className="mt-3 text-center text-[10px] text-neutral-200">
-          {d.footerText}
-        </p>
-      ) : null}
     </div>
   );
 
   if (chrome === "plain") {
     return (
-      <div
-        className={clsx(
-          "rounded-xl bg-neutral-950 text-[13px] text-neutral-50",
-          className,
-        )}
-      >
+      <div className={clsx("w-full text-[13px] text-neutral-50", className)}>
         {ticket}
       </div>
     );
@@ -303,8 +287,8 @@ export default function TicketPassCard({
       type="button"
       onClick={onClick}
       className={clsx(
-        "w-[360px] rounded-xl text-left text-[13px] text-neutral-50",
-        "transition-colors hover:border-white/14 hover:bg-neutral-950/62",
+        "mx-auto w-full min-w-0 rounded-xl text-left text-[13px] text-neutral-50",
+        "transition-colors hover:bg-neutral-950/62",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/45",
         "cursor-pointer",
         className,

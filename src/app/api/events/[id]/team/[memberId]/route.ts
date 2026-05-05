@@ -1,18 +1,38 @@
+// src\app\api\events\[id]\team\[memberId]\route.ts
 import { NextRequest, NextResponse } from "next/server";
-import "@/lib/mongoose";
 import { z } from "zod";
-import crypto from "crypto";
 import { Types } from "mongoose";
 
+import "@/lib/mongoose";
 import { auth } from "@/lib/auth";
 import EventTeam from "@/models/EventTeam";
+import User from "@/models/User";
 import { resolveEventActor } from "@/lib/eventAccess";
+import { hasOrgPermission } from "@/lib/orgAccess";
+import {
+  createInviteTokenPair,
+  sendEventInviteEmail,
+} from "@/lib/eventInvites";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const preferredRegion = "auto";
+export const maxDuration = 10;
 
 type Ctx = { params: Promise<{ id: string; memberId: string }> };
 
-const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
+const ObjectIdZ = z.string().regex(/^[a-f\d]{24}$/i, "Invalid ObjectId");
 
-type EventTeamRole = "admin" | "promoter" | "scanner" | "collaborator";
+const ParamsZ = z.object({
+  id: ObjectIdZ,
+  memberId: ObjectIdZ,
+});
+
+const EventTeamRoleZ = z.enum(["admin", "promoter", "scanner", "collaborator"]);
+
+type EventTeamRole = z.infer<typeof EventTeamRoleZ>;
+type EventTeamStatus = "invited" | "active" | "revoked" | "expired";
 
 type EventTeamLean = {
   _id: Types.ObjectId;
@@ -21,20 +41,22 @@ type EventTeamLean = {
   userId?: Types.ObjectId | null;
   name?: string;
   role: EventTeamRole;
-  status: "invited" | "active" | "revoked" | "expired";
+  status: EventTeamStatus;
   temporaryAccess: boolean;
   expiresAt?: Date | null;
   invitedBy: Types.ObjectId;
+  inviteExpiresAt?: Date | null;
+  acceptedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
 const SAFE_MEMBER_SELECT =
-  "_id eventId email userId name role status temporaryAccess expiresAt invitedBy createdAt updatedAt";
+  "_id eventId email userId name role status temporaryAccess expiresAt invitedBy inviteExpiresAt acceptedAt createdAt updatedAt";
 
 const patchSchema = z
   .object({
-    role: z.enum(["admin", "promoter", "scanner", "collaborator"]).optional(),
+    role: EventTeamRoleZ.optional(),
     status: z.enum(["revoked"]).optional(),
     temporaryAccess: z.boolean().optional(),
     expiresAt: z.coerce.date().optional(),
@@ -57,10 +79,31 @@ const patchSchema = z
       }
     }
 
+    if (
+      value.status === "revoked" &&
+      (value.role ||
+        typeof value.temporaryAccess === "boolean" ||
+        value.expiresAt)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "revoked status cannot be combined with other update fields",
+        path: ["status"],
+      });
+    }
+
     if (value.temporaryAccess === true && !value.expiresAt) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "expiresAt is required when temporaryAccess is true",
+        path: ["expiresAt"],
+      });
+    }
+
+    if (value.temporaryAccess === false && value.expiresAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "expiresAt cannot be used when temporaryAccess is false",
         path: ["expiresAt"],
       });
     }
@@ -74,6 +117,12 @@ const patchSchema = z
     }
   });
 
+function normalizeEmail(email?: string | null): string {
+  return String(email ?? "")
+    .trim()
+    .toLowerCase();
+}
+
 function toSafeMemberResponse(member: EventTeamLean) {
   return {
     _id: String(member._id),
@@ -86,19 +135,71 @@ function toSafeMemberResponse(member: EventTeamLean) {
     temporaryAccess: member.temporaryAccess,
     expiresAt: member.expiresAt ? member.expiresAt.toISOString() : null,
     invitedBy: String(member.invitedBy),
+    inviteExpiresAt: member.inviteExpiresAt
+      ? member.inviteExpiresAt.toISOString()
+      : null,
+    acceptedAt: member.acceptedAt ? member.acceptedAt.toISOString() : null,
     createdAt: member.createdAt.toISOString(),
     updatedAt: member.updatedAt.toISOString(),
   };
 }
 
-async function assertCanManageEventTeam(input: {
+function roleLabel(role: EventTeamRole): string {
+  switch (role) {
+    case "admin":
+      return "Admin";
+    case "promoter":
+      return "Promoter";
+    case "scanner":
+      return "Scanner";
+    case "collaborator":
+      return "Collaborator";
+    default:
+      return "Collaborator";
+  }
+}
+
+function canAssignEventTeam(
+  actor: Awaited<ReturnType<typeof resolveEventActor>>,
+): boolean {
+  if (!actor) return false;
+  if (actor.isCreator) return true;
+  if (actor.orgAccess.isOwner) return true;
+  if (hasOrgPermission(actor.orgAccess, "members.assignRoles")) return true;
+  if (actor.eventTeam?.role === "admin") return true;
+  return false;
+}
+
+function canInviteEventTeam(
+  actor: Awaited<ReturnType<typeof resolveEventActor>>,
+): boolean {
+  if (!actor) return false;
+  if (actor.isCreator) return true;
+  if (actor.orgAccess.isOwner) return true;
+  if (hasOrgPermission(actor.orgAccess, "members.invite")) return true;
+  if (actor.eventTeam?.role === "admin") return true;
+  return false;
+}
+
+function canRemoveEventTeam(
+  actor: Awaited<ReturnType<typeof resolveEventActor>>,
+): boolean {
+  if (!actor) return false;
+  if (actor.isCreator) return true;
+  if (actor.orgAccess.isOwner) return true;
+  if (hasOrgPermission(actor.orgAccess, "members.remove")) return true;
+  if (actor.eventTeam?.role === "admin") return true;
+  return false;
+}
+
+async function assertCanAssignEventTeam(input: {
   eventId: string;
   userId: string;
   email?: string | null;
 }): Promise<
   | {
       ok: true;
-      actor: Awaited<ReturnType<typeof resolveEventActor>>;
+      actor: NonNullable<Awaited<ReturnType<typeof resolveEventActor>>>;
     }
   | { ok: false; status: number; error: string }
 > {
@@ -108,19 +209,113 @@ async function assertCanManageEventTeam(input: {
     return { ok: false, status: 404, error: "Event not found" };
   }
 
-  if (actor.isCreator || actor.orgAccess.isOwner) {
-    return { ok: true, actor };
+  if (!canAssignEventTeam(actor)) {
+    return { ok: false, status: 403, error: "Forbidden" };
   }
 
-  if (actor.orgAccess.effectiveRole?.key === "admin") {
-    return { ok: true, actor };
+  return { ok: true, actor };
+}
+
+async function assertCanInviteEventTeam(input: {
+  eventId: string;
+  userId: string;
+  email?: string | null;
+}): Promise<
+  | {
+      ok: true;
+      actor: NonNullable<Awaited<ReturnType<typeof resolveEventActor>>>;
+    }
+  | { ok: false; status: number; error: string }
+> {
+  const actor = await resolveEventActor(input);
+
+  if (!actor) {
+    return { ok: false, status: 404, error: "Event not found" };
   }
 
-  if (actor.eventTeam?.role === "admin") {
-    return { ok: true, actor };
+  if (!canInviteEventTeam(actor)) {
+    return { ok: false, status: 403, error: "Forbidden" };
   }
 
-  return { ok: false, status: 403, error: "Forbidden" };
+  return { ok: true, actor };
+}
+
+async function assertCanRemoveEventTeam(input: {
+  eventId: string;
+  userId: string;
+  email?: string | null;
+}): Promise<
+  | {
+      ok: true;
+      actor: NonNullable<Awaited<ReturnType<typeof resolveEventActor>>>;
+    }
+  | { ok: false; status: number; error: string }
+> {
+  const actor = await resolveEventActor(input);
+
+  if (!actor) {
+    return { ok: false, status: 404, error: "Event not found" };
+  }
+
+  if (!canRemoveEventTeam(actor)) {
+    return { ok: false, status: 403, error: "Forbidden" };
+  }
+
+  return { ok: true, actor };
+}
+
+async function loadProtectedEventEmails(input: {
+  createdByUserId: Types.ObjectId;
+  orgOwnerId?: Types.ObjectId | null;
+}): Promise<Set<string>> {
+  const ids = [
+    String(input.createdByUserId),
+    input.orgOwnerId ? String(input.orgOwnerId) : "",
+  ].filter((value, index, arr) => value && arr.indexOf(value) === index);
+
+  const objectIds = ids
+    .filter((value) => Types.ObjectId.isValid(value))
+    .map((value) => new Types.ObjectId(value));
+
+  if (!objectIds.length) {
+    return new Set<string>();
+  }
+
+  const users = await User.find({
+    _id: { $in: objectIds },
+  })
+    .select("email")
+    .lean<Array<{ email?: string }>>();
+
+  return new Set(
+    users
+      .map((user) => normalizeEmail(user.email))
+      .filter((email): email is string => !!email),
+  );
+}
+
+function isProtectedEventAccess(input: {
+  member: EventTeamLean;
+  createdByUserId: Types.ObjectId;
+  orgOwnerId?: Types.ObjectId | null;
+  protectedEmails: Set<string>;
+}): boolean {
+  if (
+    input.member.userId &&
+    String(input.member.userId) === String(input.createdByUserId)
+  ) {
+    return true;
+  }
+
+  if (
+    input.member.userId &&
+    input.orgOwnerId &&
+    String(input.member.userId) === String(input.orgOwnerId)
+  ) {
+    return true;
+  }
+
+  return input.protectedEmails.has(normalizeEmail(input.member.email));
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
@@ -130,35 +325,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id, memberId } = await ctx.params;
+  const parsedParams = ParamsZ.safeParse(await ctx.params);
 
-  if (!isObjectId(id) || !isObjectId(memberId)) {
+  if (!parsedParams.success) {
     return NextResponse.json({ error: "Invalid ids" }, { status: 400 });
   }
 
-  const canManage = await assertCanManageEventTeam({
-    eventId: id,
-    userId: session.user.id,
-    email: session.user.email ?? undefined,
-  });
-
-  if (!canManage.ok) {
-    return NextResponse.json(
-      { error: canManage.error },
-      { status: canManage.status },
-    );
-  }
-
-  const member = await EventTeam.findOne({
-    _id: new Types.ObjectId(memberId),
-    eventId: new Types.ObjectId(id),
-  })
-    .select(SAFE_MEMBER_SELECT)
-    .lean<EventTeamLean | null>();
-
-  if (!member) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  const { id, memberId } = parsedParams.data;
 
   const body: unknown = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
@@ -169,6 +342,62 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
   const { role, status, temporaryAccess, expiresAt, action } = parsed.data;
 
+  const access =
+    action === "resend"
+      ? await assertCanInviteEventTeam({
+          eventId: id,
+          userId: session.user.id,
+          email: session.user.email ?? undefined,
+        })
+      : status === "revoked"
+        ? await assertCanRemoveEventTeam({
+            eventId: id,
+            userId: session.user.id,
+            email: session.user.email ?? undefined,
+          })
+        : await assertCanAssignEventTeam({
+            eventId: id,
+            userId: session.user.id,
+            email: session.user.email ?? undefined,
+          });
+
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
+  const member = await EventTeam.findOne({
+    _id: new Types.ObjectId(memberId),
+    eventId: access.actor.event._id,
+  })
+    .select(SAFE_MEMBER_SELECT)
+    .lean<EventTeamLean | null>();
+
+  if (!member) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const protectedEmails = await loadProtectedEventEmails({
+    createdByUserId: access.actor.event.createdByUserId,
+    orgOwnerId: access.actor.orgAccess.org?.ownerId ?? null,
+  });
+
+  if (
+    isProtectedEventAccess({
+      member,
+      createdByUserId: access.actor.event.createdByUserId,
+      orgOwnerId: access.actor.orgAccess.org?.ownerId ?? null,
+      protectedEmails,
+    })
+  ) {
+    return NextResponse.json(
+      { error: "Protected event access cannot be modified" },
+      { status: 400 },
+    );
+  }
+
   if (action === "resend") {
     if (member.status === "active") {
       return NextResponse.json(
@@ -177,12 +406,19 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       );
     }
 
+    const tokenData = createInviteTokenPair();
+
     const updated = await EventTeam.findOneAndUpdate(
-      { _id: member._id, eventId: member.eventId },
+      { _id: member._id, eventId: access.actor.event._id },
       {
         $set: {
-          inviteToken: crypto.randomBytes(20).toString("hex"),
+          inviteTokenHash: tokenData.tokenHash,
+          inviteExpiresAt: tokenData.expiresAt,
           status: "invited",
+        },
+        $unset: {
+          inviteToken: "",
+          acceptedAt: "",
         },
       },
       { new: true },
@@ -194,9 +430,32 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    const inviterUser = await User.findById(session.user.id)
+      .select("firstName lastName username email")
+      .lean<{
+        firstName?: string;
+        lastName?: string;
+        username?: string;
+        email?: string;
+      } | null>();
+
+    const inviterName =
+      inviterUser?.firstName || inviterUser?.lastName
+        ? `${inviterUser.firstName ?? ""} ${inviterUser.lastName ?? ""}`.trim()
+        : (inviterUser?.username ?? inviterUser?.email ?? "");
+
+    const delivery = await sendEventInviteEmail({
+      to: member.email,
+      eventTitle: access.actor.event.title || "Event",
+      roleName: roleLabel(member.role),
+      inviterName,
+      rawToken: tokenData.rawToken,
+      expiresAt: tokenData.expiresAt,
+    });
+
     return NextResponse.json({
       member: toSafeMemberResponse(updated),
-      inviteDelivery: "not_implemented",
+      inviteDelivery: delivery.ok ? "sent" : "failed",
     });
   }
 
@@ -210,12 +469,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (status === "revoked") {
     setUpdate.status = "revoked";
     unsetUpdate.inviteToken = "";
+    unsetUpdate.inviteTokenHash = "";
+    unsetUpdate.inviteExpiresAt = "";
   }
 
   if (typeof temporaryAccess === "boolean") {
     setUpdate.temporaryAccess = temporaryAccess;
 
-    if (temporaryAccess === false) {
+    if (!temporaryAccess) {
       unsetUpdate.expiresAt = "";
 
       if (member.status === "expired") {
@@ -248,16 +509,16 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     $unset?: Record<string, "">;
   } = {};
 
-  if (Object.keys(setUpdate).length) {
+  if (Object.keys(setUpdate).length > 0) {
     updateDoc.$set = setUpdate;
   }
 
-  if (Object.keys(unsetUpdate).length) {
+  if (Object.keys(unsetUpdate).length > 0) {
     updateDoc.$unset = unsetUpdate;
   }
 
   const updated = await EventTeam.findOneAndUpdate(
-    { _id: member._id, eventId: member.eventId },
+    { _id: member._id, eventId: access.actor.event._id },
     updateDoc,
     { new: true },
   )
@@ -278,28 +539,60 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id, memberId } = await ctx.params;
+  const parsedParams = ParamsZ.safeParse(await ctx.params);
 
-  if (!isObjectId(id) || !isObjectId(memberId)) {
+  if (!parsedParams.success) {
     return NextResponse.json({ error: "Invalid ids" }, { status: 400 });
   }
 
-  const canManage = await assertCanManageEventTeam({
+  const { id, memberId } = parsedParams.data;
+
+  const access = await assertCanRemoveEventTeam({
     eventId: id,
     userId: session.user.id,
     email: session.user.email ?? undefined,
   });
 
-  if (!canManage.ok) {
+  if (!access.ok) {
     return NextResponse.json(
-      { error: canManage.error },
-      { status: canManage.status },
+      { error: access.error },
+      { status: access.status },
+    );
+  }
+
+  const member = await EventTeam.findOne({
+    _id: new Types.ObjectId(memberId),
+    eventId: access.actor.event._id,
+  })
+    .select(SAFE_MEMBER_SELECT)
+    .lean<EventTeamLean | null>();
+
+  if (!member) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const protectedEmails = await loadProtectedEventEmails({
+    createdByUserId: access.actor.event.createdByUserId,
+    orgOwnerId: access.actor.orgAccess.org?.ownerId ?? null,
+  });
+
+  if (
+    isProtectedEventAccess({
+      member,
+      createdByUserId: access.actor.event.createdByUserId,
+      orgOwnerId: access.actor.orgAccess.org?.ownerId ?? null,
+      protectedEmails,
+    })
+  ) {
+    return NextResponse.json(
+      { error: "Protected event access cannot be removed" },
+      { status: 400 },
     );
   }
 
   const res = await EventTeam.deleteOne({
-    _id: new Types.ObjectId(memberId),
-    eventId: new Types.ObjectId(id),
+    _id: member._id,
+    eventId: access.actor.event._id,
   });
 
   if (res.deletedCount === 0) {

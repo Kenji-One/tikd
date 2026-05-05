@@ -9,7 +9,7 @@ import {
   useElements,
 } from "@stripe/react-stripe-js";
 
-import { useCart } from "@/store/useCart";
+import type { CartItem, Coupon } from "@/types/cart";
 import { calcPrices } from "@/lib/pricing";
 
 const stripePromise = loadStripe(
@@ -23,6 +23,8 @@ type PaymentModalProps = {
   onSuccess: () => void;
   customerEmail?: string;
   currencyCode?: string;
+  items: CartItem[];
+  coupon?: Coupon;
 };
 
 type PaymentStatusResponse = {
@@ -32,11 +34,12 @@ type PaymentStatusResponse = {
   finalized: boolean;
   order: {
     id: string;
-    status: string;
+    status: "pending" | "paid" | "refunded" | "cancelled" | "expired";
     ticketIds: string[];
     total: number;
     currency: string;
     eventId: string;
+    itemTicketTypeIds: string[];
   };
 };
 
@@ -63,6 +66,21 @@ async function pollPaymentFinalization(
 
       if (data.finalized) {
         return { ok: true, response: data };
+      }
+
+      if (data.order.status === "expired") {
+        return {
+          ok: false,
+          message:
+            "Checkout expired. Please close this window and start again.",
+        };
+      }
+
+      if (data.order.status === "cancelled") {
+        return {
+          ok: false,
+          message: "Payment was not completed.",
+        };
       }
 
       if (
@@ -94,6 +112,8 @@ export default function PaymentModal({
   onSuccess,
   customerEmail,
   currencyCode,
+  items,
+  coupon,
 }: PaymentModalProps) {
   const options = useMemo<StripeElementsOptions>(
     () => ({
@@ -115,24 +135,21 @@ export default function PaymentModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center">
       <button
         aria-label="Close"
         className="absolute inset-0 bg-black/60"
         onClick={onClose}
       />
-      <div
-        className="relative z-[101] w-screen sm:w-[min(980px,95vw)]
-   sm:rounded-2xl bg-neutral-950
-  max-h-[100dvh] sm:max-h-[90dvh] overflow-y-auto
-  pb-[env(safe-area-inset-bottom)]"
-      >
+      <div className="relative z-[101] w-screen max-h-[100dvh] overflow-y-auto bg-neutral-950 pb-[env(safe-area-inset-bottom)] sm:max-h-[90dvh] sm:w-[min(980px,95vw)] sm:rounded-2xl">
         <Elements stripe={stripePromise} options={options}>
           <CheckoutForm
             onClose={onClose}
             onSuccess={onSuccess}
             customerEmail={customerEmail}
             currencyCode={currencyCode}
+            items={items}
+            coupon={coupon}
           />
         </Elements>
       </div>
@@ -145,16 +162,19 @@ function CheckoutForm({
   onSuccess,
   customerEmail,
   currencyCode,
+  items,
+  coupon,
 }: {
   onClose: () => void;
   onSuccess: () => void;
   customerEmail?: string;
   currencyCode?: string;
+  items: CartItem[];
+  coupon?: Coupon;
 }) {
   const stripe = useStripe();
   const elements = useElements();
 
-  const { items, coupon } = useCart();
   const price = useMemo(() => calcPrices(items, coupon), [items, coupon]);
 
   const normalizeCurrencyCode = (value?: string) =>
@@ -243,8 +263,8 @@ function CheckoutForm({
 
   return (
     <div>
-      <div className="flex items-center justify-between p-4 pb-0 sm:pt-6 sm:px-8">
-        <h2 className="text-xl font-semibold text-neutral-0">Stripe Payment</h2>
+      <div className="flex items-center justify-between p-4 pb-0 sm:px-8 sm:pt-6">
+        <h2 className="text-xl font-semibold text-neutral-0">Tixsy Payment</h2>
         <button
           onClick={onClose}
           className="cursor-pointer text-neutral-300 transition duration-200 hover:text-neutral-0"
@@ -269,16 +289,16 @@ function CheckoutForm({
         </button>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-[420px_1fr] p-4 sm:p-6 sm:px-8">
+      <div className="grid gap-6 p-4 sm:px-8 sm:py-6 md:grid-cols-2 lg:grid-cols-[420px_1fr]">
         <div className="rounded-2xl bg-neutral-900 p-4 sm:p-6">
           <div className="mb-6 flex items-center gap-1">
             <span className="inline-block size-4 rounded-full border border-white bg-gradient-to-tr from-primary-800 to-primary-900" />
-            <span className="text-neutral-0 text-base">Tikd</span>
+            <span className="text-base text-neutral-0">Tixsy</span>
           </div>
 
           <p className="text-neutral-100">One Time Payment</p>
-          <div className="mt-1 text-2xl lg:text-4xl font-extrabold tracking-tight text-white">
-            {fmt(Math.max(price.subtotal, 0))}
+          <div className="mt-1 text-2xl font-extrabold tracking-tight text-white lg:text-4xl">
+            {fmt(Math.max(price.total, 0))}
           </div>
 
           {first && (
@@ -319,39 +339,30 @@ function CheckoutForm({
           />
         </div>
 
-        <div className="rounded-2xl bg-neutral-900 p-4 mb-4 sm:mb-0">
+        <div className="mb-4 rounded-2xl bg-neutral-900 p-4 sm:mb-0">
           <PaymentElement />
 
           {error && <p className="mt-3 text-sm text-error-400">{error}</p>}
 
           {verifying ? (
             <p className="mt-3 text-sm text-neutral-300">
-              Payment received. Finalizing your order…
+              Payment received. Finalizing your order...
             </p>
           ) : null}
 
           <button
-            onClick={handleSubmit}
-            disabled={submitting || verifying || !stripe || !elements}
-            className="hidden sm:block h-12 w-full mt-4 rounded-xl bg-primary-952 font-semibold text-neutral-0 disabled:opacity-60"
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={!stripe || !elements || submitting || verifying}
+            className="mt-6 flex h-11 w-full items-center justify-center rounded-xl bg-primary-952 px-4 text-sm font-semibold text-white transition hover:bg-primary-951 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {verifying ? "Verifying…" : submitting ? "Processing…" : "Pay now"}
+            {verifying
+              ? "Finalizing..."
+              : submitting
+                ? "Processing..."
+                : "Pay now"}
           </button>
         </div>
-      </div>
-
-      <div
-        className="w-full block sm:hidden -mx-4 bg-neutral-900/95 backdrop-blur p-4
-            sticky bottom-0 left-0 right-0
-            sm:static sm:bg-transparent sm:backdrop-blur-0 sm:mx-0 sm:p-0"
-      >
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || verifying || !stripe || !elements}
-          className="h-12 w-full rounded-xl bg-primary-952 font-semibold text-neutral-0 disabled:opacity-60"
-        >
-          {verifying ? "Verifying…" : submitting ? "Processing…" : "Pay now"}
-        </button>
       </div>
     </div>
   );
@@ -369,9 +380,9 @@ function Row({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className={`text-neutral-300 ${labelClass}`}>{label}</span>
-      <span className={`text-neutral-200 ${valueClass}`}>{value}</span>
+    <div className="flex items-center justify-between text-sm text-neutral-200">
+      <span className={labelClass}>{label}</span>
+      <span className={valueClass}>{value}</span>
     </div>
   );
 }

@@ -942,7 +942,7 @@ export default function FinancesClient() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 flex-1 px-6">
+                  <div className="grid grid-cols-3 gap-2 flex-1 sm:px-6">
                     <FinanceTabButton
                       label="Withdrawn"
                       icon={<ArrowUpRight className="h-4 w-4" />}

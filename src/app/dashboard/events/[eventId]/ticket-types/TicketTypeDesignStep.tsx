@@ -1,18 +1,21 @@
 // src/app/dashboard/events/[eventId]/ticket-types/TicketTypeDesignStep.tsx
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
 import { useRef, useState } from "react";
 import type { TicketTypeFormValues } from "./types";
 import type { UseFormRegister, UseFormSetValue } from "react-hook-form";
 
 import clsx from "clsx";
 import Toggle from "@/components/ui/Toggle";
+import TicketPassCard, {
+  type TicketPassDesign,
+} from "@/components/ui/TicketPassCard";
 
 type Props = {
   register: UseFormRegister<TicketTypeFormValues>;
   setValue: UseFormSetValue<TicketTypeFormValues>;
+  eventId: string;
+  ticketTypeId?: string;
   layout: TicketTypeFormValues["layout"];
   watermarkEnabled: boolean;
   eventInfoEnabled: boolean;
@@ -34,9 +37,24 @@ type Props = {
   isSubmitting: boolean;
 };
 
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+function isValidHexColor(value: string) {
+  return /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(value);
+}
+
 export default function TicketTypeDesignStep({
   register,
   setValue,
+  eventId,
+  ticketTypeId,
   layout,
   watermarkEnabled,
   eventInfoEnabled,
@@ -56,272 +74,27 @@ export default function TicketTypeDesignStep({
   onPrev,
   isSubmitting,
 }: Props) {
-  const ticketColor = brandColor || "#9a46ff";
-
-  // Hidden file inputs for LOGO + BACKGROUND
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const backgroundInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Keep track of created object URLs to revoke them (avoid memory leaks)
-  const logoObjectUrlRef = useRef<string | null>(null);
-  const backgroundObjectUrlRef = useRef<string | null>(null);
-
-  // Displayed file names
   const [logoFileName, setLogoFileName] = useState<string>("");
   const [backgroundFileName, setBackgroundFileName] = useState<string>("");
 
-  // Layout variants for the preview “Focus” options
-  const artworkHeightClass =
-    layout === "vertical"
-      ? "h-[220px]"
-      : layout === "up"
-        ? "h-[140px]"
-        : layout === "down"
-          ? "h-[190px]"
-          : "h-[164px]"; // horizontal default
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingBackground, setIsUploadingBackground] = useState(false);
+  const [assetError, setAssetError] = useState<string | null>(null);
 
-  const contentPaddingTopClass =
-    layout === "up" ? "pt-3" : layout === "down" ? "pt-6" : "pt-5";
-
-  const cardWidthClass = layout === "vertical" ? "w-[280px]" : "w-[320px]"; // subtle width change
-
-  const barcodeHeight = qrSize && qrSize > 0 ? qrSize : 72;
-
-  // --- Helpers for formatting event date/time from ISO string ----
-  const formatEventDate = (value?: string) => {
-    if (!value) return "";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  };
-
-  const formatEventTime = (value?: string) => {
-    if (!value) return "";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  };
-
-  const formattedDate = formatEventDate(eventDate);
-  const formattedTime = formatEventTime(eventDate);
-
-  const renderPreviewInner = () => {
-    const hasBackgroundImage = Boolean(backgroundUrl);
-    const hasCustomLogo = Boolean(logoUrl);
-    const hasEventImage = Boolean(eventImageUrl);
-
-    const topLabel = (eventTitle || "Event").toUpperCase();
-    const mainTitle = name || eventTitle || "Untitled ticket";
-
-    const placeText = eventLocation || "Location TBA";
-
-    return (
-      <>
-        <h3 className="text-2xl font-semibold text-neutral-0">
-          Ticket Preview
-        </h3>
-
-        <div className="mt-3 rounded-xl bg-neutral-950 p-4 text-[13px] text-neutral-50">
-          {/* Outer wrapper just to give a little breathing room */}
-          <div
-            className={clsx(
-              "mx-auto rounded-3xl bg-transparent",
-              cardWidthClass,
-            )}
-          >
-            {/* Ticket */}
-            <div
-              className="relative overflow-hidden rounded-3xl p-4"
-              style={
-                hasBackgroundImage
-                  ? {
-                      backgroundImage: `url(${backgroundUrl})`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                    }
-                  : {
-                      backgroundColor: ticketColor,
-                    }
-              }
-            >
-              {/* Watermark overlay */}
-              {watermarkEnabled && (
-                <div className="pointer-events-none absolute inset-0 z-0 opacity-20">
-                  <div className="h-full w-full bg-[radial-gradient(circle_at_0_0,rgba(255,255,255,0.4),transparent_55%),radial-gradient(circle_at_100%_100%,rgba(255,255,255,0.4),transparent_55%)]" />
-                </div>
-              )}
-
-              <div className="relative z-10">
-                <div
-                  className={clsx(
-                    "relative overflow-hidden rounded-2xl",
-                    artworkHeightClass,
-                  )}
-                >
-                  {/* If no custom ticket background is set, show event image as artwork.
-                      Fallback to the old gradient if there is no event image. */}
-                  {!hasBackgroundImage && hasEventImage && (
-                    <img
-                      src={eventImageUrl}
-                      alt={eventTitle || "Event artwork"}
-                      className="absolute inset-0 h-full w-full object-cover"
-                      style={{
-                        objectPosition:
-                          layout === "down"
-                            ? "center bottom"
-                            : layout === "up"
-                              ? "center top"
-                              : "center",
-                      }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  )}
-
-                  {!hasBackgroundImage && !hasEventImage && (
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        backgroundImage:
-                          "linear-gradient(135deg,#ffb347,#ff5f6d,#845ef7,#3bc9db)",
-                        backgroundSize: "cover",
-                        backgroundPosition:
-                          layout === "down"
-                            ? "center bottom"
-                            : layout === "up"
-                              ? "center top"
-                              : "center",
-                      }}
-                    />
-                  )}
-
-                  {/* Logo pill (toggle) */}
-                  {logoEnabled && (
-                    <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center justify-center">
-                      {hasCustomLogo ? (
-                        <img
-                          src={logoUrl}
-                          alt="Logo"
-                          className="h-10 w-10 rounded-full border border-white/40 bg-black/30 object-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <img
-                          src="/Logo.svg"
-                          alt="Logo"
-                          className="h-10 w-10 object-contain"
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className={contentPaddingTopClass}>
-                  {/* Small top label – organization/event label */}
-                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/70">
-                    {topLabel}
-                  </p>
-
-                  {/* Main line – ticket type name with event fallback */}
-                  <p className="mt-1 text-[18px] font-semibold leading-tight text-white">
-                    {mainTitle}
-                  </p>
-
-                  {/* Event info toggle */}
-                  {eventInfoEnabled && (
-                    <>
-                      {/* Date / Time / Check in / Order ID */}
-                      <div className="mt-5 grid grid-cols-2 gap-y-3 text-sm leading-snug text-white/80">
-                        <div>
-                          <p className="text-white/70">Date</p>
-                          <p className="mt-1 font-semibold text-white">
-                            {formattedDate || "Date TBA"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-white/70">Time</p>
-                          <p className="mt-1 font-semibold text-white">
-                            {formattedTime || "Time TBA"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-white/70">Check in Type</p>
-                          <p className="mt-1 font-semibold text-white">
-                            {name || "General admission"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-white/70">Order ID</p>
-                          <p className="mt-1 font-semibold text-white">
-                            GBD99763JS
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Place */}
-                      <div className="mt-5 text-sm leading-snug text-white/80">
-                        <p className="text-white/70">Place</p>
-                        <p className="mt-1 font-semibold text-white">
-                          {placeText}
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Perforation with side cutouts */}
-                  <div className="relative mt-6">
-                    {/* dashed line */}
-                    <div className="mx-auto h-px w-[96%] border-t border-dashed border-white/80" />
-                    {/* left & right cutouts */}
-                    <div className="absolute -left-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
-                    <div className="absolute -right-12 top-1/2 h-12 w-12 -translate-y-1/2 rounded-full bg-neutral-950" />
-                  </div>
-
-                  {/* Barcode area – flush with ticket, like Figma */}
-                  <div className="mt-4 px-2 pb-1">
-                    <div
-                      className="w-full"
-                      style={{
-                        height: `${barcodeHeight}px`,
-                        backgroundImage:
-                          "repeating-linear-gradient(90deg, rgba(0,0,0,0.98) 0, rgba(0,0,0,0.98) 2px, transparent 2px, transparent 4px)",
-                        backgroundRepeat: "repeat",
-                        borderRadius:
-                          typeof qrBorderRadius === "number"
-                            ? `${qrBorderRadius}px`
-                            : undefined,
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Optional bottom line text under ticket */}
-            {footerText && (
-              <p className="mt-3 text-center text-[10px] text-neutral-200">
-                {footerText}
-              </p>
-            )}
-          </div>
-        </div>
-      </>
-    );
+  const previewDesign: Partial<TicketPassDesign> = {
+    layout,
+    brandColor,
+    logoUrl,
+    backgroundUrl,
+    footerText,
+    watermarkEnabled,
+    eventInfoEnabled,
+    logoEnabled,
+    qrSize,
+    qrBorderRadius,
   };
 
   const commonInputClasses =
@@ -329,18 +102,127 @@ export default function TicketTypeDesignStep({
   const commonButtonClasses =
     "inline-flex items-center justify-center gap-1.5 rounded-full border border-white/10 bg-neutral-800 px-6 py-3 text-sm font-medium text-neutral-0 hover:bg-neutral-700 transition-colors cursor-pointer";
 
+  const draftKey =
+    slugify(name || "untitled-ticket-type") || "untitled-ticket-type";
+  const uploadScope = ticketTypeId ? ticketTypeId : `draft-${draftKey}`;
+  const designUploadBase = `ticket-types/${eventId}/${uploadScope}`;
+
+  async function uploadImage(params: {
+    file: File;
+    publicId: string;
+    type: "logo" | "background";
+  }) {
+    const { file, publicId, type } = params;
+
+    const setLoading =
+      type === "logo" ? setIsUploadingLogo : setIsUploadingBackground;
+    const setFileName =
+      type === "logo" ? setLogoFileName : setBackgroundFileName;
+    const fieldName = type === "logo" ? "logoUrl" : "backgroundUrl";
+
+    setAssetError(null);
+    setLoading(true);
+
+    try {
+      const qs = new URLSearchParams({
+        public_id: publicId,
+        overwrite: "1",
+      }).toString();
+
+      const signRes = await fetch(`/api/cloudinary/sign?${qs}`, {
+        method: "GET",
+      });
+
+      if (!signRes.ok) {
+        throw new Error("Failed to sign upload.");
+      }
+
+      const signJson = (await signRes.json()) as {
+        timestamp: number;
+        signature: string;
+      };
+
+      const form = new FormData();
+      form.append("file", file);
+      form.append("public_id", publicId);
+      form.append("timestamp", String(signJson.timestamp));
+      form.append("signature", signJson.signature);
+      form.append(
+        "api_key",
+        process.env.NEXT_PUBLIC_CLOUDINARY_API_KEY as string,
+      );
+      form.append("overwrite", "1");
+      form.append("invalidate", "1");
+
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+      const uploadUrl = `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: "POST",
+        body: form,
+      });
+
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text().catch(() => "");
+        throw new Error(text || "Cloudinary upload failed.");
+      }
+
+      const uploadJson = (await uploadRes.json()) as {
+        secure_url?: string;
+      };
+
+      const uploadedUrl = String(uploadJson.secure_url || "").trim();
+
+      if (!uploadedUrl) {
+        throw new Error("Upload finished but no URL was returned.");
+      }
+
+      setValue(fieldName, uploadedUrl, { shouldDirty: true });
+      setFileName(file.name);
+    } catch (error: unknown) {
+      setAssetError(
+        error instanceof Error ? error.message : "Failed to upload image.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const renderPreviewInner = () => {
+    return (
+      <>
+        <h3 className="text-2xl font-semibold text-neutral-0">
+          Ticket Preview
+        </h3>
+
+        <div className="mt-3 rounded-xl bg-neutral-950 p-4 text-[13px] text-neutral-50">
+          <TicketPassCard
+            chrome="plain"
+            className="mx-auto"
+            design={previewDesign}
+            eventTitle={eventTitle || "Event"}
+            eventDateISO={eventDate}
+            eventLocation={eventLocation || "Location TBA"}
+            eventImageUrl={eventImageUrl}
+            ticketTypeLabel={name || "Untitled ticket"}
+          />
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* Intro text (title is in modal header) */}
       <p className="text-sm text-neutral-300">
-        Customize the visual appearance of your ticket. Layout, artwork and QR
-        code will be applied to every ticket of this type.
+        Customize the visual appearance of your ticket. Focus controls how the
+        content sits inside the ticket, not the outer ticket size.
       </p>
 
-      {/* Layout options */}
+      {/* Layout options - restored compact old design */}
       <div className="grid gap-2 sm:grid-cols-4">
         {(["horizontal", "vertical", "down", "up"] as const).map((value) => {
           const isActive = layout === value;
+
           return (
             <button
               key={value}
@@ -370,6 +252,7 @@ export default function TicketTypeDesignStep({
                       ? "↓"
                       : "↑"}
               </span>
+
               <span>{`${value[0].toUpperCase()}${value.slice(1)} Focus`}</span>
             </button>
           );
@@ -388,6 +271,7 @@ export default function TicketTypeDesignStep({
             }
           />
         </div>
+
         <div className="flex items-center justify-between py-1">
           <span className="text-lg text-neutral-0">Event Info</span>
           <Toggle
@@ -400,6 +284,7 @@ export default function TicketTypeDesignStep({
             }
           />
         </div>
+
         <div className="flex items-center justify-between py-1">
           <span className="text-lg text-neutral-0">Logo</span>
           <Toggle
@@ -412,36 +297,23 @@ export default function TicketTypeDesignStep({
         </div>
       </div>
 
-      {/* LOGO upload (first browse) */}
+      {/* LOGO upload - restored compact old design */}
       <div className="flex flex-col gap-2.5 sm:flex-row">
-        {/* Hidden input: logo file */}
         <input
           type="file"
           accept="image/*"
           ref={logoInputRef}
           className="hidden"
-          onChange={(e) => {
+          onChange={async (e) => {
             const file = e.target.files?.[0] ?? null;
+            if (!file) return;
 
-            // cleanup previous object url
-            if (logoObjectUrlRef.current) {
-              URL.revokeObjectURL(logoObjectUrlRef.current);
-              logoObjectUrlRef.current = null;
-            }
+            await uploadImage({
+              file,
+              publicId: `${designUploadBase}/logo`,
+              type: "logo",
+            });
 
-            if (file) {
-              setLogoFileName(file.name);
-              const url = URL.createObjectURL(file);
-              logoObjectUrlRef.current = url;
-
-              // use object URL for preview (and keep it in form so step changes keep it)
-              setValue("logoUrl", url, { shouldDirty: true });
-            } else {
-              setLogoFileName("");
-              setValue("logoUrl", "", { shouldDirty: true });
-            }
-
-            // allow re-selecting the same file again
             e.currentTarget.value = "";
           }}
         />
@@ -451,12 +323,20 @@ export default function TicketTypeDesignStep({
           className="flex-1 rounded-lg border border-dashed border-primary-500 bg-neutral-900 px-4 py-3 text-left text-xs text-neutral-400"
           onClick={() => logoInputRef.current?.click()}
         >
-          {logoFileName || "Choose a logo file or drag & drop it here"}
+          {isUploadingLogo
+            ? "Uploading logo..."
+            : logoFileName
+              ? logoFileName
+              : logoUrl
+                ? "Logo uploaded"
+                : "Choose a logo file or drag & drop it here"}
         </button>
+
         <button
           type="button"
           className={commonButtonClasses}
           onClick={() => logoInputRef.current?.click()}
+          disabled={isUploadingLogo}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -477,7 +357,7 @@ export default function TicketTypeDesignStep({
       {/* Divider */}
       <div className="h-px w-full bg-white/10" />
 
-      {/* QR code section (settings still stored in form) */}
+      {/* QR code section */}
       <div className="space-y-4">
         <h3 className="text-2xl font-semibold text-neutral-0">QR Code</h3>
 
@@ -492,6 +372,7 @@ export default function TicketTypeDesignStep({
               placeholder="0"
             />
           </div>
+
           <div className="space-y-1">
             <label className="block text-sm text-neutral-200">
               Border Radius
@@ -518,6 +399,7 @@ export default function TicketTypeDesignStep({
               placeholder="Enter Hex Color Code"
               className={clsx(commonInputClasses, "flex-1")}
             />
+
             <button
               type="button"
               className={clsx(commonButtonClasses, "relative")}
@@ -541,11 +423,12 @@ export default function TicketTypeDesignStep({
               Color Picker
               <input
                 type="color"
-                value={brandColor}
+                value={isValidHexColor(brandColor) ? brandColor : "#9a46ff"}
                 onChange={(e) =>
                   setValue("brandColor", e.target.value, { shouldDirty: true })
                 }
                 className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label="Pick brand color"
               />
             </button>
           </div>
@@ -553,35 +436,23 @@ export default function TicketTypeDesignStep({
 
         <p className="text-sm text-neutral-500">or</p>
 
-        {/* BACKGROUND upload (second browse after color chooser) */}
+        {/* BACKGROUND upload - restored compact old design */}
         <div className="flex flex-col gap-2.5 sm:flex-row">
-          {/* Hidden input: background file */}
           <input
             type="file"
             accept="image/*"
             ref={backgroundInputRef}
             className="hidden"
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files?.[0] ?? null;
+              if (!file) return;
 
-              // cleanup previous object url
-              if (backgroundObjectUrlRef.current) {
-                URL.revokeObjectURL(backgroundObjectUrlRef.current);
-                backgroundObjectUrlRef.current = null;
-              }
+              await uploadImage({
+                file,
+                publicId: `${designUploadBase}/background`,
+                type: "background",
+              });
 
-              if (file) {
-                setBackgroundFileName(file.name);
-                const url = URL.createObjectURL(file);
-                backgroundObjectUrlRef.current = url;
-
-                setValue("backgroundUrl", url, { shouldDirty: true });
-              } else {
-                setBackgroundFileName("");
-                setValue("backgroundUrl", "", { shouldDirty: true });
-              }
-
-              // allow re-selecting the same file again
               e.currentTarget.value = "";
             }}
           />
@@ -591,13 +462,20 @@ export default function TicketTypeDesignStep({
             className="flex-1 rounded-lg border border-dashed border-primary-500 bg-neutral-900 px-4 py-3 text-left text-xs text-neutral-400"
             onClick={() => backgroundInputRef.current?.click()}
           >
-            {backgroundFileName ||
-              "Choose a background image file or drag & drop it here"}
+            {isUploadingBackground
+              ? "Uploading background..."
+              : backgroundFileName
+                ? backgroundFileName
+                : backgroundUrl
+                  ? "Background uploaded"
+                  : "Choose a background image file or drag & drop it here"}
           </button>
+
           <button
             type="button"
             className={commonButtonClasses}
             onClick={() => backgroundInputRef.current?.click()}
+            disabled={isUploadingBackground}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -628,6 +506,10 @@ export default function TicketTypeDesignStep({
           className={commonInputClasses}
         />
       </div>
+
+      {assetError ? (
+        <p className="text-center text-sm text-error-400">{assetError}</p>
+      ) : null}
 
       {/* Ticket Preview - inline for smaller screens */}
       <div className="space-y-2.5 2xl:hidden">{renderPreviewInner()}</div>

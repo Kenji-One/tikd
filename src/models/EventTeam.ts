@@ -18,13 +18,7 @@ export interface IEventTeam extends Document {
 
   invitedBy: Types.ObjectId;
 
-  /**
-   * Legacy raw token kept for backwards compatibility only.
-   * New invite flows should prefer inviteTokenHash.
-   */
-  inviteToken?: string;
-
-  /** Secure invite token storage */
+  /** Secure invite token storage (hash only) */
   inviteTokenHash?: string;
   inviteExpiresAt?: Date;
   acceptedAt?: Date;
@@ -70,7 +64,6 @@ const EventTeamSchema = new Schema<IEventTeam>(
 
     invitedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
-    inviteToken: { type: String, default: undefined },
     inviteTokenHash: { type: String, default: undefined },
     inviteExpiresAt: { type: Date, default: undefined },
     acceptedAt: { type: Date, default: undefined },
@@ -82,7 +75,6 @@ const EventTeamSchema = new Schema<IEventTeam>(
 EventTeamSchema.index({ eventId: 1, email: 1 }, { unique: true });
 
 /** Invite token lookups */
-EventTeamSchema.index({ inviteToken: 1 }, { unique: true, sparse: true });
 EventTeamSchema.index({ inviteTokenHash: 1 }, { unique: true, sparse: true });
 EventTeamSchema.index({ inviteExpiresAt: 1 });
 

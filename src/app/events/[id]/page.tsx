@@ -16,6 +16,7 @@ import { EVENT_CARD_DEFAULT_POSTER } from "@/components/ui/EventCard";
 import EventMediaGallery, {
   type EventMediaItem,
 } from "@/components/ui/EventMediaGallery";
+import type { CheckoutRequirementsSnapshot } from "@/types/checkout";
 
 /* ------------------------------------------------------------------ */
 /*  Remote types                                                      */
@@ -35,6 +36,7 @@ interface TicketType {
   currency: string;
   feesIncluded: boolean;
   image?: string;
+  checkoutRequirements: CheckoutRequirementsSnapshot;
 }
 
 interface ApiEvent {
@@ -122,7 +124,7 @@ function AvatarStack({
   const remainder = Math.max(total - visible.length, 0);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex -space-x-3">
         {visible.map((u, i) => (
           <div
@@ -141,7 +143,7 @@ function AvatarStack({
         ))}
 
         {remainder > 0 && (
-          <div className="relative size-8 rounded-full bg-neutral-800 text-center text-xs leading-8 text-white border-2 border-[#08080F]">
+          <div className="relative size-8 rounded-full border-2 border-[#08080F] bg-neutral-800 text-center text-xs leading-8 text-white">
             +{remainder}
           </div>
         )}
@@ -163,12 +165,12 @@ function EventDetailSkeleton() {
       <div className="mx-auto w-full max-w-[1360px] px-4 pt-[112px] pb-16 md:pt-[124px]">
         <div className="grid gap-8 lg:grid-cols-12 lg:gap-x-8 xl:gap-x-10">
           <div className="lg:col-span-4 xl:col-span-5">
-            <div className="lg:sticky lg:top-[112px] md:lg:top-[124px] lg:flex lg:justify-end">
-              <Skeleton className="h-[275px] w-[220px] rounded-xl sm:h-[325px] sm:w-[260px] md:h-[375px] md:w-[300px] lg:h-[428px] lg:w-[342px]" />
+            <div className="lg:sticky lg:top-[112px] lg:flex lg:justify-end md:lg:top-[124px]">
+              <Skeleton className="mx-auto h-[275px] w-[220px] rounded-xl sm:h-[325px] sm:w-[260px] md:h-[375px] md:w-[300px] lg:mx-0 lg:h-[428px] lg:w-[342px]" />
             </div>
           </div>
 
-          <div className="lg:col-span-8 xl:col-span-7 space-y-6">
+          <div className="space-y-6 lg:col-span-8 xl:col-span-7">
             <Skeleton className="h-12 w-3/4" />
             <Skeleton className="h-5 w-44" />
             <div className="flex gap-2">
@@ -264,7 +266,7 @@ export default function EventDetailPage() {
 
   if (isError || !event) {
     return (
-      <div className="mx-auto max-w-[998px] py-24 text-center text-neutral-300">
+      <div className="mx-auto max-w-[998px] px-4 py-24 text-center text-neutral-300">
         {isError ? (error as Error).message : "Event not found."}
       </div>
     );
@@ -296,6 +298,7 @@ export default function EventDetailPage() {
         currency: tt.currency,
         image: heroPoster,
         qty: nextQty,
+        checkoutRequirements: tt.checkoutRequirements,
       });
     } else if (existing && nextQty > 0) {
       setQty(existing.key, nextQty);
@@ -332,11 +335,13 @@ export default function EventDetailPage() {
       selectedCount={selectedCount}
       onCheckout={() => router.push("/checkout")}
     >
-      <div className="space-y-6">
+      <div className="space-y-5 sm:space-y-6">
         {showDetailsCard && (
           <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
-            <div className="p-5 sm:p-6">
-              <h2 className="text-lg font-semibold text-white">Details</h2>
+            <div className="p-4 sm:p-5 md:p-6">
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                Details
+              </h2>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <Pill
@@ -381,7 +386,7 @@ export default function EventDetailPage() {
               </div>
 
               {hasDesc ? (
-                <p className="mt-4 whitespace-pre-wrap text-white/90 font-light leading-[150%]">
+                <p className="mt-4 whitespace-pre-wrap font-light leading-[150%] text-white/90">
                   {eventData.description}
                 </p>
               ) : null}
@@ -406,14 +411,16 @@ export default function EventDetailPage() {
 
         {eventData.artists.length > 0 && (
           <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
-            <div className="p-5 sm:p-6">
-              <h2 className="text-lg font-semibold text-white">Lineup</h2>
+            <div className="p-4 sm:p-5 md:p-6">
+              <h2 className="text-base font-semibold text-white sm:text-lg">
+                Lineup
+              </h2>
 
               <ul className="mt-4 flex flex-wrap gap-2">
                 {eventData.artists.map((artist) => (
                   <li
                     key={artist._id}
-                    className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-1 py-1 pr-3"
+                    className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-1 py-1 pr-3"
                   >
                     <div className="relative size-8 overflow-hidden rounded-full bg-neutral-800">
                       <Image
@@ -424,7 +431,9 @@ export default function EventDetailPage() {
                         className="object-cover"
                       />
                     </div>
-                    <span className="text-white/90">{artist.stageName}</span>
+                    <span className="text-sm text-white/90 sm:text-base">
+                      {artist.stageName}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -433,10 +442,12 @@ export default function EventDetailPage() {
         )}
 
         <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
-          <div className="p-5 sm:p-6">
-            <h2 className="text-lg font-semibold text-white">Venue</h2>
+          <div className="p-4 sm:p-5 md:p-6">
+            <h2 className="text-base font-semibold text-white sm:text-lg">
+              Venue
+            </h2>
 
-            <p className="mt-3 text-white/85 font-light leading-[150%]">
+            <p className="mt-3 font-light leading-[150%] text-white/85">
               {eventData.location}
             </p>
 
@@ -458,13 +469,13 @@ export default function EventDetailPage() {
         </section>
 
         <InfoRow title="Terms">
-          <p className="whitespace-pre-line text-neutral-0 font-light leading-[150%]">
+          <p className="whitespace-pre-line font-light leading-[150%] text-neutral-0">
             All tickets are final sale and cannot be exchanged or refunded…
           </p>
         </InfoRow>
 
-        <section className="rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md overflow-hidden">
-          <div className="relative p-5 sm:p-6">
+        <section className="overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/55 backdrop-blur-md">
+          <div className="relative p-4 sm:p-5 md:p-6">
             <div
               className="pointer-events-none absolute inset-0 opacity-90"
               style={{
@@ -474,7 +485,7 @@ export default function EventDetailPage() {
               }}
             />
             <div className="relative flex flex-col items-center justify-center text-center">
-              <div className="relative size-[52px] overflow-hidden rounded-full bg-white/10 border border-white/10">
+              <div className="relative size-[52px] overflow-hidden rounded-full border border-white/10 bg-white/10">
                 <Image
                   src={
                     eventData.organization.logo ||

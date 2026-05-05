@@ -11,6 +11,7 @@ import {
 import { hasOrgPermission } from "@/lib/orgAccess";
 
 import Event from "@/models/Event";
+import EventPageView from "@/models/EventPageView";
 import Organization from "@/models/Organization";
 import Artist from "@/models/Artist";
 import User from "@/models/User";
@@ -95,6 +96,22 @@ type OrgHydrated = {
   website?: string;
 };
 
+type FeaturedEventLean = {
+  _id: Types.ObjectId;
+  title: string;
+  date: Date;
+  endDate?: Date | null;
+  location: string;
+  image?: string;
+  categories?: string[];
+  organizationId: Types.ObjectId;
+};
+
+type FeaturedViewRow = {
+  _id: Types.ObjectId;
+  views: number;
+};
+
 function getOrgIdFromEventLike(e: unknown): string | null {
   if (!e || typeof e !== "object") return null;
   const obj = e as Record<string, unknown>;
@@ -157,6 +174,79 @@ async function getSessionIdentity(
     email,
     name: sessionName || "",
   };
+}
+
+function buildUpcomingPublicTimeFilter(now: Date): Record<string, unknown> {
+  return {
+    $or: [
+      { endDate: { $gte: now } },
+      { endDate: { $exists: false }, date: { $gte: now } },
+      { endDate: null, date: { $gte: now } },
+    ],
+  };
+}
+
+async function getFeaturedTopViewedEvents(
+  limit: number,
+  now: Date,
+): Promise<FeaturedEventLean[]> {
+  const safeLimit = Math.min(Math.max(limit, 1), 3);
+  const baseFilter: Record<string, unknown> = { status: "published" };
+  const timeFilter = buildUpcomingPublicTimeFilter(now);
+
+  const rankedRows = await EventPageView.aggregate<FeaturedViewRow>([
+    {
+      $group: {
+        _id: "$eventId",
+        views: { $sum: 1 },
+      },
+    },
+    { $sort: { views: -1, _id: 1 } },
+    { $limit: 100 },
+  ]);
+
+  const rankedIds = rankedRows
+    .map((row) => row._id)
+    .filter((id) => Types.ObjectId.isValid(id));
+
+  let featuredDocs: FeaturedEventLean[] = [];
+
+  if (rankedIds.length) {
+    const docs = await Event.find({
+      $and: [baseFilter, timeFilter, { _id: { $in: rankedIds } }],
+    })
+      .select("title date endDate location image categories organizationId")
+      .lean<FeaturedEventLean[]>();
+
+    const docById = new Map(docs.map((doc) => [String(doc._id), doc]));
+
+    featuredDocs = rankedIds
+      .map((id) => docById.get(String(id)))
+      .filter((doc): doc is FeaturedEventLean => Boolean(doc))
+      .slice(0, safeLimit);
+  }
+
+  if (featuredDocs.length < safeLimit) {
+    const fallbackAnd: Array<Record<string, unknown>> = [
+      baseFilter,
+      timeFilter,
+    ];
+    const alreadyIncludedIds = featuredDocs.map((doc) => doc._id);
+
+    if (alreadyIncludedIds.length) {
+      fallbackAnd.push({ _id: { $nin: alreadyIncludedIds } });
+    }
+
+    const fallbackDocs = await Event.find({ $and: fallbackAnd })
+      .select("title date endDate location image categories organizationId")
+      .sort({ date: 1, _id: 1 })
+      .limit(safeLimit - featuredDocs.length)
+      .lean<FeaturedEventLean[]>();
+
+    featuredDocs = [...featuredDocs, ...fallbackDocs];
+  }
+
+  return featuredDocs.slice(0, safeLimit);
 }
 
 /* ------------------------- Schemas ------------------------- */
@@ -346,6 +436,21 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
 
+  if (searchParams.get("featured") === "topViewed") {
+    const rawLimit = searchParams.get("limit");
+    const parsedLimit = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(3)
+      .safeParse(rawLimit);
+
+    const limit = parsedLimit.success ? parsedLimit.data : 3;
+    const items = await getFeaturedTopViewedEvents(limit, now);
+
+    return NextResponse.json(items);
+  }
+
   const parsed = publicPagingSchema.safeParse({
     limit: searchParams.get("limit") ?? undefined,
     cursor: searchParams.get("cursor") ?? undefined,
@@ -369,13 +474,7 @@ export async function GET(req: NextRequest) {
     status: "published",
   };
 
-  let timeFilter: Record<string, unknown> = {
-    $or: [
-      { endDate: { $gte: now } },
-      { endDate: { $exists: false }, date: { $gte: now } },
-      { endDate: null, date: { $gte: now } },
-    ],
-  };
+  let timeFilter: Record<string, unknown> = buildUpcomingPublicTimeFilter(now);
 
   if (when) {
     if (when === "now") {

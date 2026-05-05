@@ -25,28 +25,41 @@ import TicketPassCard, {
 /*  Small fetch helper                                             */
 /* --------------------------------------------------------------- */
 async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return (await res.json()) as T;
 }
+
+type TicketSeat = {
+  section?: string;
+  row?: string;
+  number?: string;
+} | null;
 
 type Ticket = {
   _id: string;
 
   // event-ish
-  eventTitle?: string;
-  event?: { title?: string; date?: string; location?: string; image?: string };
-  date?: string;
-  dateLabel?: string;
-  venue?: string;
-  location?: string;
-  eventImg?: string;
-  image?: string;
+  eventTitle?: string | null;
+  event?: {
+    title?: string | null;
+    date?: string | null;
+    location?: string | null;
+    image?: string | null;
+  };
+  date?: string | null;
+  dateLabel?: string | null;
+  venue?: string | null;
+  location?: string | null;
+  eventImg?: string | null;
+  image?: string | null;
 
   // ticket-ish
   qty?: number;
   quantity?: number;
   badge?: string;
+  status?: string;
+  seat?: TicketSeat;
 
   // qr
   qrUrl?: string;
@@ -57,11 +70,11 @@ type Ticket = {
   reference?: string;
   refCode?: string;
 
-  // ticket type info (varies by API)
+  // ticket type info
   ticketTypeLabel?: string;
   ticketType?: string;
 
-  // optional design (if API provides it)
+  // optional design
   design?: Partial<TicketPassDesign> | null;
 };
 
@@ -78,11 +91,12 @@ type DialogTicket = {
   qrValue?: string;
 
   refCode?: string;
+  seat?: TicketSeat;
 
   design?: Partial<TicketPassDesign> | null;
 
   eventTitle?: string;
-  eventDateISO?: string;
+  eventDateISO?: string | null;
   eventLocation?: string;
   eventImageUrl?: string;
   ticketTypeLabel?: string;
@@ -100,12 +114,14 @@ function EmptyState({
   cta?: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto mt-10 max-w-md rounded-2xl border border-white/10 bg-neutral-950/70 p-10 text-center">
+    <div className="mx-auto mt-8 max-w-md rounded-2xl border border-white/10 bg-neutral-950/70 p-6 text-center sm:mt-10 sm:p-10">
       <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-xl bg-primary-900/50 ring-1 ring-primary-700/40">
         {icon}
       </div>
       <h3 className="text-lg font-semibold">{title}</h3>
-      {sub ? <p className="mt-2 text-sm text-neutral-300">{sub}</p> : null}
+      {sub ? (
+        <p className="mt-2 text-sm leading-6 text-neutral-300">{sub}</p>
+      ) : null}
       {cta ? <div className="mt-5">{cta}</div> : null}
     </div>
   );
@@ -119,10 +135,15 @@ export default function MyTicketsPage() {
 
   const authed = status === "authenticated";
 
-  const { data: tickets, isLoading: tixLoading } = useQuery<Ticket[]>({
+  const {
+    data: tickets,
+    isLoading: tixLoading,
+    isError,
+  } = useQuery<Ticket[]>({
     queryKey: ["tickets", "self"],
     queryFn: () => fetchJSON<Ticket[]>("/api/tickets?scope=self"),
     enabled: authed,
+    staleTime: 15_000,
   });
 
   const ticketsList = tickets ?? [];
@@ -132,14 +153,14 @@ export default function MyTicketsPage() {
     if (!needle) return ticketsList;
 
     return ticketsList.filter((t) => {
-      const title = (t.eventTitle ?? t.event?.title ?? "").toLowerCase();
-      const venue = (
-        t.venue ??
-        t.location ??
-        t.event?.location ??
-        ""
+      const title = String(t.eventTitle ?? t.event?.title ?? "").toLowerCase();
+      const venue = String(
+        t.venue ?? t.location ?? t.event?.location ?? "",
       ).toLowerCase();
-      const type = (t.ticketTypeLabel ?? t.ticketType ?? "").toLowerCase();
+      const type = String(
+        t.ticketTypeLabel ?? t.ticketType ?? "",
+      ).toLowerCase();
+
       return (
         title.includes(needle) ||
         venue.includes(needle) ||
@@ -156,7 +177,7 @@ export default function MyTicketsPage() {
   return (
     <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       {/* Header */}
-      <section className="relative isolate px-4 pt-10 pb-6 md:pt-12 md:pb-8">
+      <section className="relative isolate px-4 pt-8 pb-6 sm:pt-10 md:pt-12 md:pb-8">
         <div
           className="pointer-events-none absolute inset-0 -z-10 opacity-85"
           style={{
@@ -164,27 +185,37 @@ export default function MyTicketsPage() {
               "radial-gradient(1000px 420px at 15% 10%, rgba(130,46,255,.22), transparent 60%), radial-gradient(900px 420px at 85% 0%, rgba(88,101,242,.14), transparent 60%)",
           }}
         />
+
         <div className="mx-auto max-w-[1232px]">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-extrabold md:text-3xl">
+          <div className="flex flex-col gap-4 sm:gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-[28px] font-extrabold leading-none sm:text-3xl">
                 My Tickets
               </h1>
-              <p className="mt-2 max-w-prose text-sm text-neutral-300">
-                Your QR tickets live here. Open any ticket to show details at
-                the door.
+              <p className="mt-2 max-w-prose text-sm leading-6 text-neutral-300">
+                Your QR tickets live here. Open any ticket to show it at the
+                door.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Link href="/account/settings">
-                <Button variant="ghost" size="sm" className="h-10 px-4">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Link href="/account/settings" className="w-full sm:w-auto">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-10 w-full justify-center px-4 sm:w-auto"
+                >
                   <SettingsIcon className="mr-2 h-4 w-4" />
                   Settings
                 </Button>
               </Link>
-              <Link href="/events">
-                <Button variant="secondary" size="sm" className="h-10 px-4">
+
+              <Link href="/events" className="w-full sm:w-auto">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-10 w-full justify-center px-4 sm:w-auto"
+                >
                   Browse events
                 </Button>
               </Link>
@@ -192,17 +223,17 @@ export default function MyTicketsPage() {
           </div>
 
           {/* Search + count */}
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="w-full sm:max-w-[380px]">
-              <div className="inline-flex w-full items-center gap-0.5 rounded-full border border-white/10 bg-neutral-950/60 px-4 py-1.5 backdrop-blur">
-                <Search className="h-4 w-4 text-neutral-300" />
+              <div className="inline-flex w-full items-center gap-2 rounded-full border border-white/10 bg-neutral-950/60 px-4 py-1.5 backdrop-blur">
+                <Search className="h-4 w-4 shrink-0 text-neutral-300" />
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder="Search tickets by event or venue…"
                   aria-label="Search tickets"
                   className="
-                    w-full bg-transparent text-sm text-neutral-0 placeholder:text-neutral-400
+                    w-full min-w-0 bg-transparent text-sm text-neutral-0 placeholder:text-neutral-400
                     focus:outline-none
                     !border-0 !ring-0 !shadow-none
                     focus:!border-0 focus:!ring-0 focus:!shadow-none
@@ -212,7 +243,7 @@ export default function MyTicketsPage() {
                   <button
                     type="button"
                     onClick={() => setQ("")}
-                    className="grid h-8 w-8 place-items-center rounded-full bg-white/6 text-white/80 transition hover:bg-white/10 hover:text-white cursor-pointer"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/6 text-white/80 transition hover:bg-white/10 hover:text-white cursor-pointer"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -223,7 +254,7 @@ export default function MyTicketsPage() {
 
             {authed ? (
               <div className="text-sm text-neutral-300">
-                <span className="rounded-full border border-white/10 bg-neutral-950/60 px-3 py-1.5">
+                <span className="inline-flex rounded-full border border-white/10 bg-neutral-950/60 px-3 py-1.5">
                   {countLabel}
                 </span>
               </div>
@@ -233,7 +264,7 @@ export default function MyTicketsPage() {
       </section>
 
       {/* Content */}
-      <section className="mx-auto max-w-[1232px] px-4 pb-20 pt-2">
+      <section className="mx-auto max-w-[1232px] px-4 pb-16 pt-2 sm:pb-20">
         {!authed ? (
           <EmptyState
             icon={<TicketIcon className="h-5 w-5 text-primary-300" />}
@@ -246,17 +277,25 @@ export default function MyTicketsPage() {
             }
           />
         ) : tixLoading ? (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
             {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-[520px] w-full rounded-2xl" />
+              <Skeleton
+                key={i}
+                className="mx-auto h-[392px] w-full max-w-[320px] rounded-[28px]"
+              />
             ))}
           </div>
+        ) : isError ? (
+          <EmptyState
+            icon={<TicketIcon className="h-5 w-5 text-primary-300" />}
+            title="Unable to load tickets"
+            sub="Please refresh the page and try again."
+          />
         ) : filtered.length ? (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
             {filtered.map((t) => {
               const title = t.eventTitle ?? t.event?.title ?? "Event";
-
-              const eventISO = t.date ?? t.event?.date;
+              const eventISO = t.date ?? t.event?.date ?? null;
               const venue = t.venue ?? t.location ?? t.event?.location ?? "TBA";
               const img =
                 t.eventImg ?? t.image ?? t.event?.image ?? "/placeholder.jpg";
@@ -288,6 +327,7 @@ export default function MyTicketsPage() {
                 qrSvg: t.qrSvg,
                 qrValue: t.qrCode ?? t.reference ?? t.refCode ?? t._id,
                 refCode: t.reference ?? t.refCode,
+                seat: t.seat ?? null,
 
                 design: t.design ?? null,
                 eventTitle: title,
@@ -303,11 +343,11 @@ export default function MyTicketsPage() {
                   onClick={() => setOpenTicket(dialogTicket)}
                   ticketTypeLabel={typeLabel}
                   eventTitle={title}
-                  eventDateISO={eventISO}
+                  eventDateISO={eventISO ?? undefined}
                   eventLocation={venue}
                   eventImageUrl={img}
                   design={t.design ?? undefined}
-                  className="w-full"
+                  className="mx-auto w-full"
                 />
               );
             })}
@@ -319,7 +359,7 @@ export default function MyTicketsPage() {
             sub={
               q.trim()
                 ? "Try a different search term (event name, venue, city)."
-                : "When you book with Tikd., your tickets will appear here for quick access."
+                : "When you book with Tixsy, your tickets will appear here for quick access."
             }
             cta={
               <Link href="/events">
@@ -346,6 +386,7 @@ export default function MyTicketsPage() {
             qrSvg: openTicket?.qrSvg,
             qrValue: openTicket?.qrValue,
             refCode: openTicket?.refCode,
+            seat: openTicket?.seat ?? null,
 
             design: openTicket?.design ?? null,
             eventTitle: openTicket?.eventTitle ?? "",

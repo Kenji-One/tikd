@@ -1,3 +1,4 @@
+// src\models\Ticket.ts
 import {
   Schema,
   models,
@@ -8,10 +9,19 @@ import {
   type HydratedDocument,
 } from "mongoose";
 
+import {
+  CHECKOUT_GENDER_VALUES,
+  type CheckoutPartyDetails,
+} from "@/types/checkout";
+
 export interface ITicketTrackingSnapshot {
   trackingLinkId?: Types.ObjectId | null;
   trackingCode?: string;
   trackingCreatorUserId?: Types.ObjectId | null;
+}
+
+export interface ITicketHolderSnapshot extends CheckoutPartyDetails {
+  userId?: Types.ObjectId | null;
 }
 
 export interface ITicket extends Document {
@@ -45,6 +55,12 @@ export interface ITicket extends Document {
 
   tracking?: ITicketTrackingSnapshot | null;
 
+  /**
+   * Immutable holder snapshot copied from the order at finalization time.
+   * This must not be rebuilt later from the current User document.
+   */
+  holderSnapshot?: ITicketHolderSnapshot | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,6 +93,80 @@ const TicketTrackingSnapshotSchema = new Schema<ITicketTrackingSnapshot>(
       ref: "User",
       default: null,
       index: true,
+    },
+  },
+  { _id: false },
+);
+
+const TicketHolderSnapshotSchema = new Schema<ITicketHolderSnapshot>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    firstName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    lastName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    fullName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 240,
+    },
+
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+      maxlength: 320,
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 40,
+    },
+
+    facebookProfile: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 280,
+    },
+    instagramProfile: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 280,
+    },
+
+    gender: {
+      type: String,
+      enum: [...CHECKOUT_GENDER_VALUES, null],
+      default: null,
+    },
+    dateOfBirth: {
+      type: Date,
+      default: null,
+    },
+
+    declaredAge: {
+      type: Number,
+      min: 0,
+      max: 130,
+      default: null,
     },
   },
   { _id: false },
@@ -179,6 +269,11 @@ const TicketSchema = new Schema<ITicket>(
 
     tracking: {
       type: TicketTrackingSnapshotSchema,
+      default: null,
+    },
+
+    holderSnapshot: {
+      type: TicketHolderSnapshotSchema,
       default: null,
     },
   },

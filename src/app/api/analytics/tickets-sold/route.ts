@@ -1,3 +1,4 @@
+// src\app\api\analytics\tickets-sold\route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { Types } from "mongoose";
@@ -18,12 +19,24 @@ const QuerySchema = z
   .object({
     eventId: z.string().trim().optional(),
     orgId: z.string().trim().optional(),
-    start: z.string().datetime(),
-    end: z.string().datetime(),
+
+    // support both param styles
+    start: z.string().datetime().optional(),
+    end: z.string().datetime().optional(),
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
   })
   .refine((data) => !(data.eventId && data.orgId), {
     message: "Provide either eventId or orgId, not both.",
     path: ["orgId"],
+  })
+  .refine((data) => !!(data.start ?? data.from), {
+    message: "Missing start/from date.",
+    path: ["start"],
+  })
+  .refine((data) => !!(data.end ?? data.to), {
+    message: "Missing end/to date.",
+    path: ["end"],
   });
 
 type SoldTicketLean = {
@@ -304,7 +317,16 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { eventId, orgId, start, end } = parsed.data;
+    const { eventId, orgId, start, end, from, to } = parsed.data;
+    const rangeStart = start ?? from;
+    const rangeEnd = end ?? to;
+
+    if (!rangeStart || !rangeEnd) {
+      return NextResponse.json(
+        { error: "Missing date range" },
+        { status: 400 },
+      );
+    }
 
     if (eventId && !isValidObjectId(eventId)) {
       return NextResponse.json({ error: "Invalid eventId" }, { status: 400 });
@@ -314,8 +336,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid orgId" }, { status: 400 });
     }
 
-    const startDate = new Date(start);
-    const endDate = new Date(end);
+    const startDate = new Date(rangeStart);
+    const endDate = new Date(rangeEnd);
 
     if (
       !Number.isFinite(startDate.getTime()) ||
@@ -369,6 +391,7 @@ export async function GET(req: NextRequest) {
       scopedEventIds = [foundEvent._id];
     } else if (orgId) {
       const orgIdStr = String(orgId);
+
       if (!accessibleOrgIdSet.has(orgIdStr)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }

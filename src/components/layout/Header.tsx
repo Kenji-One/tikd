@@ -134,6 +134,7 @@ export default function Header() {
         setMobileAvatarOpen(false);
       }
     }
+
     function onEsc(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setAvatarOpen(false);
@@ -141,8 +142,10 @@ export default function Header() {
         setMobileOpen(false);
       }
     }
+
     document.addEventListener("mousedown", onDocClick);
     document.addEventListener("keydown", onEsc);
+
     return () => {
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onEsc);
@@ -170,6 +173,25 @@ export default function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  /* lock page scroll when mobile menu is open */
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevBodyTouchAction = document.body.style.touchAction;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.body.style.touchAction = prevBodyTouchAction;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, [mobileOpen]);
+
   const headerShell = clsx(
     "fixed inset-x-0 top-0 z-[100] transition-colors duration-300",
     hasHero && !scrolled
@@ -183,14 +205,14 @@ export default function Header() {
   return (
     <>
       <header className={headerShell}>
-        <div className="flex items-center justify-between px-4 lg:px-8 xl:px-12 py-3 sm:py-4">
+        <div className="flex items-center justify-between px-4 py-3 sm:py-4 lg:px-8 xl:px-12">
           {/* left: logo + desktop search ---------------------------------- */}
-          <div className="flex items-center gap-6 w-full max-w-[420px]">
+          <div className="flex w-full max-w-[420px] items-center gap-6">
             <Link href="/" className="flex items-center">
-              <div className="relative w-[94px] h-[39px]">
+              <div className="relative h-[39px] w-[94px]">
                 <Image
                   src="/Logo.svg"
-                  alt="Tikd."
+                  alt="Tixsy."
                   fill
                   priority
                   className="object-contain"
@@ -199,30 +221,30 @@ export default function Header() {
             </Link>
 
             {/* search trigger (desktop) */}
-            <div className="hidden lg:block w-full">
+            <div className="hidden w-full lg:block">
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
                 aria-label="Open search"
-                className="group flex h-[44px] w-full max-w-[320px] items-center gap-3 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 px-4 text-left text-neutral-300 outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
+                className="group flex h-[44px] w-full max-w-[320px] items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 text-left text-neutral-300 outline-none backdrop-blur-sm focus-visible:ring-2 focus-visible:ring-primary-600/40"
               >
-                <SearchIcon className="h-4 w-4 text-white/80 shrink-0" />
+                <SearchIcon className="h-4 w-4 shrink-0 text-white/80" />
                 <span className="flex-1 truncate">Search events</span>
               </button>
             </div>
           </div>
 
           {/* desktop nav --------------------------------------------------- */}
-          <nav className="hidden lg:flex items-center space-x-6 text-neutral-0">
+          <nav className="hidden items-center space-x-6 text-neutral-0 lg:flex">
             {showDemo && (
-              <Link href="/demo" className="hover:text-primary-500 transition">
+              <Link href="/demo" className="transition hover:text-primary-500">
                 Book a Demo
               </Link>
             )}
-            <Link href="/events" className="hover:text-primary-500 transition">
+            <Link href="/events" className="transition hover:text-primary-500">
               Events
             </Link>
-            <Link href="/about" className="hover:text-primary-500 transition">
+            <Link href="/about" className="transition hover:text-primary-500">
               About us
             </Link>
 
@@ -247,7 +269,7 @@ export default function Header() {
                   <Link
                     href="/checkout"
                     aria-label="Cart"
-                    className="relative w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
+                    className="relative flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-full border border-[#FFFFFF1A] transition hover:border-primary-500"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -274,7 +296,7 @@ export default function Header() {
                     {cartHydrated && cartCount > 0 && (
                       <span
                         className={clsx(
-                          "absolute -top-1 -right-1 z-50",
+                          "absolute -right-1 -top-1 z-50",
                           "min-w-[18px] h-[18px] px-1",
                           "rounded-full bg-primary-500 text-white",
                           "text-[10px] font-extrabold leading-[18px] text-center",
@@ -296,7 +318,7 @@ export default function Header() {
                   <Link
                     href="/checkout"
                     aria-label="Cart"
-                    className="relative w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] hover:border-primary-500 transition flex items-center justify-center cursor-pointer"
+                    className="relative flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-full border border-[#FFFFFF1A] transition hover:border-primary-500"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -323,7 +345,7 @@ export default function Header() {
                     {cartHydrated && cartCount > 0 && (
                       <span
                         className={clsx(
-                          "absolute -top-1 -right-1 z-50",
+                          "absolute -right-1 -top-1 z-50",
                           "min-w-[18px] h-[18px] px-1",
                           "rounded-full bg-primary-500 text-white",
                           "text-[10px] font-extrabold leading-[18px] text-center",
@@ -345,47 +367,44 @@ export default function Header() {
                       onClick={() => setAvatarOpen((v) => !v)}
                       aria-haspopup="menu"
                       aria-expanded={avatarOpen}
-                      className="w-[38px] h-[38px] rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-primary-500 hover:ring-2 hover:ring-white/10 cursor-pointer"
+                      className="h-[38px] w-[38px] cursor-pointer overflow-hidden rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500 hover:ring-2 hover:ring-white/10"
                     >
                       <Image
                         src={avatarSrc}
                         alt={session?.user?.name ?? "Profile"}
                         width={38}
                         height={38}
-                        className="object-cover rounded-full"
+                        className="rounded-full object-cover"
                       />
                     </button>
 
                     {avatarOpen && (
-                      <div className="absolute right-0 mt-2 w-56 z-50">
+                      <div className="absolute right-0 z-50 mt-2 w-56">
                         <div className="relative">
-                          {/* caret */}
-                          <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 bg-neutral-900/95 border border-white/10 border-b-0 border-r-0"></span>
+                          <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-neutral-900/95" />
 
                           <div
                             role="menu"
                             aria-label="Account"
-                            className="overflow-hidden rounded-xl border border-[#FFFFFF1A] bg-neutral-900/95 backdrop-blur shadow-2xl ring-1 ring-black/40"
+                            className="overflow-hidden rounded-xl border border-[#FFFFFF1A] bg-neutral-900/95 shadow-2xl ring-1 ring-black/40 backdrop-blur"
                           >
-                            {/* header */}
-                            <div className="px-4 py-3 border-b border-[#FFFFFF1A]">
+                            <div className="border-b border-[#FFFFFF1A] px-4 py-3">
                               <p className="text-[11px] uppercase tracking-wide text-neutral-400">
                                 Signed in as
                               </p>
-                              <p className="mt-0.5 text-sm font-medium text-neutral-0 truncate">
+                              <p className="mt-0.5 truncate text-sm font-medium text-neutral-0">
                                 {session?.user?.email ||
                                   session?.user?.name ||
                                   "User"}
                               </p>
                             </div>
 
-                            {/* items */}
                             <div className="p-1.5">
                               <Link
                                 href="/account/my-tickets"
                                 role="menuitem"
                                 onClick={() => setAvatarOpen(false)}
-                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                                className="flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                               >
                                 <TicketCheck className="h-4 w-4 opacity-80" />
                                 <span className="text-sm">My Tickets</span>
@@ -394,7 +413,7 @@ export default function Header() {
                                 href="/account/settings"
                                 role="menuitem"
                                 onClick={() => setAvatarOpen(false)}
-                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                                className="flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                               >
                                 <SlidersHorizontal className="h-4 w-4 opacity-80" />
                                 <span className="text-sm">Settings</span>
@@ -403,7 +422,7 @@ export default function Header() {
                                 href="/dashboard"
                                 role="menuitem"
                                 onClick={() => setAvatarOpen(false)}
-                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                                className="flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                               >
                                 <LayoutDashboard className="h-4 w-4 opacity-80" />
                                 <span className="text-sm">
@@ -414,7 +433,7 @@ export default function Header() {
                                 type="button"
                                 role="menuitem"
                                 onClick={() => signOut({ callbackUrl: "/" })}
-                                className="mt-0.5 w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-left text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                                className="mt-0.5 flex w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-left text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                               >
                                 <LogOut className="h-4 w-4 opacity-80" />
                                 <span className="text-sm">Logout</span>
@@ -433,7 +452,7 @@ export default function Header() {
           {/* right utilities (mobile): search + cart + avatar + hamburger --- */}
           <div className="flex items-center gap-3 lg:hidden">
             <button
-              className="w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
+              className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#FFFFFF1A] outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
               aria-label="Open search"
               onClick={() => setSearchOpen(true)}
             >
@@ -444,7 +463,7 @@ export default function Header() {
             <Link
               href="/checkout"
               aria-label="Cart"
-              className="relative w-[38px] h-[38px] rounded-full border border-[#FFFFFF1A] flex items-center justify-center cursor-pointer"
+              className="relative flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-full border border-[#FFFFFF1A]"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -471,7 +490,7 @@ export default function Header() {
               {cartHydrated && cartCount > 0 && (
                 <span
                   className={clsx(
-                    "absolute -top-1 -right-1 z-50",
+                    "absolute -right-1 -top-1 z-50",
                     "min-w-[18px] h-[18px] px-1",
                     "rounded-full bg-primary-500 text-white",
                     "text-[10px] font-extrabold leading-[18px] text-center",
@@ -495,32 +514,32 @@ export default function Header() {
                   onClick={() => setMobileAvatarOpen((v) => !v)}
                   aria-haspopup="menu"
                   aria-expanded={mobileAvatarOpen}
-                  className="w-[38px] h-[38px] rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-primary-500 hover:ring-2 hover:ring-white/10"
+                  className="h-[38px] w-[38px] overflow-hidden rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500 hover:ring-2 hover:ring-white/10"
                 >
                   <Image
                     src={avatarSrc}
                     alt={session?.user?.name ?? "Profile"}
                     width={38}
                     height={38}
-                    className="object-cover rounded-full"
+                    className="rounded-full object-cover"
                   />
                 </button>
+
                 {mobileAvatarOpen && (
-                  <div className="absolute right-0 mt-2 w-56 z-[130]">
+                  <div className="absolute right-0 z-[130] mt-2 w-56">
                     <div className="relative">
-                      {/* caret */}
-                      <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 bg-neutral-900/95 border border-white/10 border-b-0 border-r-0"></span>
+                      <span className="pointer-events-none absolute -top-2 right-4 h-3 w-3 rotate-45 border border-white/10 border-b-0 border-r-0 bg-neutral-900/95" />
 
                       <div
                         role="menu"
                         aria-label="Account"
-                        className="overflow-hidden rounded-xl border border-white/10 bg-neutral-900/95 backdrop-blur shadow-2xl ring-1 ring-black/40"
+                        className="overflow-hidden rounded-xl border border-white/10 bg-neutral-900/95 shadow-2xl ring-1 ring-black/40 backdrop-blur"
                       >
-                        <div className="px-4 py-3 border-b border-white/5">
+                        <div className="border-b border-white/5 px-4 py-3">
                           <p className="text-[11px] uppercase tracking-wide text-neutral-400">
                             Signed in as
                           </p>
-                          <p className="mt-0.5 text-sm font-medium text-neutral-0 truncate">
+                          <p className="mt-0.5 truncate text-sm font-medium text-neutral-0">
                             {session?.user?.email ||
                               session?.user?.name ||
                               "User"}
@@ -532,7 +551,7 @@ export default function Header() {
                             href="/dashboard"
                             role="menuitem"
                             onClick={() => setMobileAvatarOpen(false)}
-                            className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                            className="flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                           >
                             <LayoutDashboard className="h-4 w-4 opacity-80" />
                             <span className="text-sm">Seller Dashboard</span>
@@ -541,17 +560,18 @@ export default function Header() {
                           <Link
                             href="/account/my-tickets"
                             role="menuitem"
-                            onClick={() => setAvatarOpen(false)}
-                            className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                            onClick={() => setMobileAvatarOpen(false)}
+                            className="flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                           >
                             <TicketCheck className="h-4 w-4 opacity-80" />
                             <span className="text-sm">My Tickets</span>
                           </Link>
+
                           <Link
                             href="/account/settings"
                             role="menuitem"
-                            onClick={() => setAvatarOpen(false)}
-                            className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                            onClick={() => setMobileAvatarOpen(false)}
+                            className="flex items-center gap-2 rounded-lg px-3.5 py-2.5 text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                           >
                             <SlidersHorizontal className="h-4 w-4 opacity-80" />
                             <span className="text-sm">Settings</span>
@@ -561,7 +581,7 @@ export default function Header() {
                             type="button"
                             role="menuitem"
                             onClick={() => signOut({ callbackUrl: "/" })}
-                            className="mt-0.5 w-full flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-left text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+                            className="mt-0.5 flex w-full items-center gap-2 rounded-lg px-3.5 py-2.5 text-left text-neutral-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
                           >
                             <LogOut className="h-4 w-4 opacity-80" />
                             <span className="text-sm">Logout</span>
@@ -576,12 +596,12 @@ export default function Header() {
 
             {/* Hamburger toggle */}
             <button
-              className="block lg:hidden text-neutral-0 z-[140]"
+              className="block text-neutral-0 lg:hidden"
               onClick={() => {
-                setMobileOpen(!mobileOpen);
+                setMobileOpen((prev) => !prev);
                 setMobileAvatarOpen(false);
               }}
-              aria-label="Toggle menu"
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
             >
               {mobileOpen ? (
                 <X className="h-6 w-6" />
@@ -602,52 +622,77 @@ export default function Header() {
             </button>
           </div>
         </div>
+      </header>
 
-        {/* mobile menu ------------------------------------------------------ */}
-        {mobileOpen && (
-          <div className="lg:hidden fixed inset-0 z-[120] bg-neutral-950/90 backdrop-blur">
-            <div className="flex flex-col items-center justify-center h-full space-y-6 px-4">
-              {showDemo && (
-                <Link href="/demo" onClick={() => setMobileOpen(false)}>
-                  Book a Demo
-                </Link>
-              )}
-              <Link href="/events" onClick={() => setMobileOpen(false)}>
-                Events
-              </Link>
-              <Link href="/about" onClick={() => setMobileOpen(false)}>
-                About us
-              </Link>
+      {/* mobile menu ------------------------------------------------------ */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-[120] bg-neutral-950/90 backdrop-blur lg:hidden">
+          <div className="absolute inset-x-0 top-0 flex items-center justify-end px-4 py-3 sm:py-4">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close menu"
+              className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-[#FFFFFF1A] text-white outline-none focus-visible:ring-2 focus-visible:ring-primary-600/40"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
 
-              {!loggedIn ? (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="lg"
-                    onClick={() => openModal("login")}
-                  >
-                    Log in
-                  </Button>
-                  <Button size="lg" onClick={() => openModal("register")}>
-                    Sign up
-                  </Button>
-                </>
-              ) : (
+          <div className="flex h-full flex-col items-center justify-center space-y-6 px-4 text-center">
+            {showDemo && (
+              <Link
+                href="/demo"
+                onClick={() => setMobileOpen(false)}
+                className="text-lg text-neutral-0 transition hover:text-primary-500"
+              >
+                Book a Demo
+              </Link>
+            )}
+
+            <Link
+              href="/events"
+              onClick={() => setMobileOpen(false)}
+              className="text-lg text-neutral-0 transition hover:text-primary-500"
+            >
+              Events
+            </Link>
+
+            <Link
+              href="/about"
+              onClick={() => setMobileOpen(false)}
+              className="text-lg text-neutral-0 transition hover:text-primary-500"
+            >
+              About us
+            </Link>
+
+            {!loggedIn ? (
+              <>
                 <Button
                   variant="secondary"
                   size="lg"
-                  onClick={() => {
-                    setMobileOpen(false);
-                    signOut({ callbackUrl: "/" });
-                  }}
+                  onClick={() => openModal("login")}
                 >
-                  Logout
+                  Log in
                 </Button>
-              )}
-            </div>
+                <Button size="lg" onClick={() => openModal("register")}>
+                  Sign up
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={() => {
+                  setMobileOpen(false);
+                  signOut({ callbackUrl: "/" });
+                }}
+              >
+                Logout
+              </Button>
+            )}
           </div>
-        )}
-      </header>
+        </div>
+      )}
 
       {/* spacer so non-hero pages don't hide under fixed header */}
       {!hasHero && <div className="h-[64px]" />}

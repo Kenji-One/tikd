@@ -1,3 +1,5 @@
+import type { CheckoutRequirementsSnapshot } from "@/types/checkout";
+
 export type Currency = "USD" | "EUR" | "GBP" | "GEL" | string;
 
 export interface CartItem {
@@ -22,6 +24,16 @@ export interface CartItem {
 
   image?: string;
   qty: number;
+
+  /**
+   * Lightweight client-side checkout requirement snapshot used to render the
+   * checkout form immediately from cart state.
+   *
+   * IMPORTANT:
+   * This is never authoritative for purchase validation.
+   * The server must always re-read ticket types and re-resolve requirements.
+   */
+  checkoutRequirements: CheckoutRequirementsSnapshot;
 }
 
 export interface Coupon {

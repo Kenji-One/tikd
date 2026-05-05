@@ -72,17 +72,23 @@ function buildOrderNumber(prefix: string, id: string) {
 }
 
 function pickFullName(u: {
+  fullName?: string;
   firstName?: string;
   lastName?: string;
   username?: string;
   email?: string;
 }) {
+  const fullName = safeStr(u.fullName).trim();
+  if (fullName) return fullName;
+
   const fn = safeStr(u.firstName).trim();
   const ln = safeStr(u.lastName).trim();
   const name = `${fn} ${ln}`.trim();
   if (name) return name;
+
   const un = safeStr(u.username).trim();
   if (un) return un;
+
   return safeStr(u.email).trim() || "Guest";
 }
 
@@ -107,6 +113,52 @@ function isEmailLike(s: string) {
 function isPhoneLike(s: string) {
   const digits = normalizePhone(s).replace(/^\+/, "");
   return digits.length >= 7 && digits.length <= 15;
+}
+
+function mapSnapshotGenderToUi(value: unknown): "Male" | "Female" | undefined {
+  const normalized = safeStr(value).trim().toLowerCase();
+
+  if (normalized === "male") return "Male";
+  if (normalized === "female") return "Female";
+  return undefined;
+}
+
+function deriveAge(input: {
+  declaredAge?: unknown;
+  dateOfBirth?: unknown;
+}): number | undefined {
+  if (
+    typeof input.declaredAge === "number" &&
+    Number.isInteger(input.declaredAge) &&
+    input.declaredAge >= 0 &&
+    input.declaredAge <= 130
+  ) {
+    return input.declaredAge;
+  }
+
+  const dob =
+    input.dateOfBirth instanceof Date &&
+    !Number.isNaN(input.dateOfBirth.getTime())
+      ? input.dateOfBirth
+      : null;
+
+  if (!dob) return undefined;
+
+  const now = new Date();
+  let age = now.getUTCFullYear() - dob.getUTCFullYear();
+
+  const monthDiff = now.getUTCMonth() - dob.getUTCMonth();
+  const dayDiff = now.getUTCDate() - dob.getUTCDate();
+
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+    age -= 1;
+  }
+
+  if (!Number.isInteger(age) || age < 0 || age > 130) {
+    return undefined;
+  }
+
+  return age;
 }
 
 /* ------------------------------------------------------------------ */
@@ -153,6 +205,7 @@ export async function GET(
       status: 1,
       createdAt: 1,
       updatedAt: 1,
+      holderSnapshot: 1,
     })
     .populate("ownerId", "firstName lastName username email phone")
     .lean<
@@ -175,6 +228,19 @@ export async function GET(
         status?: string;
         createdAt?: Date;
         updatedAt?: Date;
+        holderSnapshot?: {
+          userId?: Types.ObjectId | null;
+          firstName?: string;
+          lastName?: string;
+          fullName?: string;
+          email?: string;
+          phone?: string;
+          facebookProfile?: string;
+          instagramProfile?: string;
+          gender?: string | null;
+          dateOfBirth?: Date | null;
+          declaredAge?: number | null;
+        } | null;
       }>
     >()
     .exec();
@@ -184,12 +250,16 @@ export async function GET(
     GroupKey,
     {
       firstTicketId: string;
-      owner: {
+      holder: {
+        fullName?: string;
         firstName?: string;
         lastName?: string;
         username?: string;
         email?: string;
         phone?: string;
+        gender?: string | null;
+        dateOfBirth?: Date | null;
+        declaredAge?: number | null;
       };
       ownerIdStr: string;
       orderIdStr: string | null;
@@ -216,9 +286,45 @@ export async function GET(
           })
         : null;
 
-    if (!ownerObj) continue;
+    const holder = {
+      fullName: safeStr(ticket.holderSnapshot?.fullName) || undefined,
+      firstName:
+        safeStr(ticket.holderSnapshot?.firstName) ||
+        safeStr(ownerObj?.firstName) ||
+        undefined,
+      lastName:
+        safeStr(ticket.holderSnapshot?.lastName) ||
+        safeStr(ownerObj?.lastName) ||
+        undefined,
+      username: safeStr(ownerObj?.username) || undefined,
+      email:
+        safeStr(ticket.holderSnapshot?.email) ||
+        safeStr(ownerObj?.email) ||
+        undefined,
+      phone:
+        safeStr(ticket.holderSnapshot?.phone) ||
+        safeStr(ownerObj?.phone) ||
+        undefined,
+      gender:
+        typeof ticket.holderSnapshot?.gender === "string"
+          ? ticket.holderSnapshot.gender
+          : null,
+      dateOfBirth:
+        ticket.holderSnapshot?.dateOfBirth instanceof Date
+          ? ticket.holderSnapshot.dateOfBirth
+          : null,
+      declaredAge:
+        typeof ticket.holderSnapshot?.declaredAge === "number"
+          ? ticket.holderSnapshot.declaredAge
+          : null,
+    };
 
-    const ownerIdStr = String(ownerObj._id);
+    const ownerIdStr = ownerObj
+      ? String(ownerObj._id)
+      : ticket.holderSnapshot?.userId
+        ? String(ticket.holderSnapshot.userId)
+        : String(ticket._id);
+
     const orderIdStr = ticket.orderId ? String(ticket.orderId) : null;
     const key: GroupKey = `${ownerIdStr}:${orderIdStr ?? "none"}`;
 
@@ -240,13 +346,7 @@ export async function GET(
     if (!prev) {
       groups.set(key, {
         firstTicketId: String(ticket._id),
-        owner: {
-          firstName: ownerObj.firstName,
-          lastName: ownerObj.lastName,
-          username: ownerObj.username,
-          email: ownerObj.email,
-          phone: ownerObj.phone,
-        },
+        holder,
         ownerIdStr,
         orderIdStr,
         prices: [price],
@@ -284,9 +384,9 @@ export async function GET(
           ? uniqueLabels[0]
           : "Multiple";
 
-    const fullName = pickFullName(group.owner);
-    const handle = group.owner.username
-      ? `@${group.owner.username}`
+    const fullName = pickFullName(group.holder);
+    const handle = group.holder.username
+      ? `@${group.holder.username}`
       : undefined;
 
     const orderNumber = group.orderIdStr
@@ -298,8 +398,13 @@ export async function GET(
       orderNumber,
       fullName,
       handle,
-      phone: safeStr(group.owner.phone) || undefined,
-      email: safeStr(group.owner.email) || undefined,
+      gender: mapSnapshotGenderToUi(group.holder.gender),
+      age: deriveAge({
+        declaredAge: group.holder.declaredAge,
+        dateOfBirth: group.holder.dateOfBirth,
+      }),
+      phone: safeStr(group.holder.phone) || undefined,
+      email: safeStr(group.holder.email) || undefined,
       amount,
       ticketType,
       status,

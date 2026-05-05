@@ -2,7 +2,16 @@
 "use client";
 
 import clsx from "clsx";
-import { Eye, Ticket, BadgeDollarSign, User } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  Eye,
+  Ticket,
+  BadgeDollarSign,
+  User,
+  Link2,
+  Mail,
+  Clock3,
+} from "lucide-react";
 
 export type DetailedMember = {
   id: string;
@@ -14,6 +23,10 @@ export type DetailedMember = {
   revenue: number;
   pageViews: number;
   ticketsSold: number;
+  email?: string;
+  status?: string;
+  links?: number;
+  lastLinkCreatedAt?: string | null;
 };
 
 function initials(full: string) {
@@ -34,12 +47,23 @@ function fmtUsd(n: number) {
   });
 }
 
+function fmtDateTime(input?: string | null) {
+  if (!input) return "";
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function IconOrb({
   tone,
   icon,
 }: {
   tone: "primary" | "success" | "neutral";
-  icon: React.ReactNode;
+  icon: ReactNode;
 }) {
   const orb =
     tone === "primary"
@@ -79,7 +103,7 @@ function Stat({
 }: {
   label: string;
   value: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   tone: "primary" | "success" | "neutral";
 }) {
   const bg =
@@ -114,12 +138,11 @@ function Stat({
             <div className="text-[12px] font-semibold text-neutral-300">
               {label}
             </div>
-            <div className="mt-2 text-[20px] font-extrabold tracking-[-0.03em] text-neutral-50 tabular-nums">
+            <div className="mt-2 tabular-nums text-[20px] font-extrabold tracking-[-0.03em] text-neutral-50">
               {value}
             </div>
           </div>
 
-          {/* ✅ Match top summary icon orb styling */}
           <div className="mt-[2px]">
             <IconOrb tone={tone} icon={icon} />
           </div>
@@ -129,14 +152,25 @@ function Stat({
   );
 }
 
+function MetaPill({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-neutral-300">
+      <span className="text-neutral-400">{icon}</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export default function DetailedMemberCard({
   member,
 }: {
   member: DetailedMember;
 }) {
+  const hasLinks = typeof member.links === "number";
+  const formattedLastLink = fmtDateTime(member.lastLinkCreatedAt);
+
   return (
     <div className="relative overflow-hidden rounded-xl border border-neutral-800/70 bg-neutral-948/70 p-5">
-      {/* Warmer, richer purple base */}
       <div
         className="pointer-events-none absolute inset-0 opacity-95"
         style={{
@@ -159,7 +193,8 @@ export default function DetailedMemberCard({
               Member stats & role
             </div>
           </div>
-          <div className="pt-[1px] text-[12px] font-semibold text-neutral-400 tabular-nums">
+
+          <div className="pt-[1px] text-[12px] font-semibold tabular-nums text-neutral-400">
             #{member.id}
           </div>
         </div>
@@ -176,7 +211,7 @@ export default function DetailedMemberCard({
               <div
                 className={clsx(
                   "absolute inset-0 grid place-items-center text-[12px] font-extrabold text-neutral-100",
-                  member.avatarBg ?? "",
+                  member.avatarBg ?? "bg-white/10",
                 )}
               >
                 {(member.avatarText || initials(member.name)).slice(0, 2)}
@@ -188,22 +223,53 @@ export default function DetailedMemberCard({
             <div className="truncate text-[16px] font-extrabold tracking-[-0.03em] text-neutral-50">
               {member.name}
             </div>
+
             <div className="mt-1">
               <span
                 className={clsx(
-                  "inline-flex items-center gap-1",
-                  "text-[12px] font-semibold tracking-[-0.01em]",
-                  "bg-gradient-to-r from-primary-200 via-primary-999 to-primary-400",
-                  "bg-clip-text text-transparent",
+                  "inline-flex items-center gap-1 text-[12px] font-semibold tracking-[-0.01em]",
+                  "bg-gradient-to-r from-primary-200 via-primary-999 to-primary-400 bg-clip-text text-transparent",
                   "drop-shadow-[0_1px_10px_rgba(154,70,255,0.20)]",
                 )}
               >
                 <User className="h-3.5 w-3.5 text-primary-200/90 drop-shadow-[0_1px_10px_rgba(154,70,255,0.18)]" />
-                {member.role}
+                {member.role || "Member"}
               </span>
             </div>
           </div>
         </div>
+
+        {member.email || member.status || hasLinks || formattedLastLink ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {member.email ? (
+              <MetaPill
+                icon={<Mail className="h-3.5 w-3.5" />}
+                label={member.email}
+              />
+            ) : null}
+
+            {member.status ? (
+              <MetaPill
+                icon={<User className="h-3.5 w-3.5" />}
+                label={`Status: ${member.status}`}
+              />
+            ) : null}
+
+            {hasLinks ? (
+              <MetaPill
+                icon={<Link2 className="h-3.5 w-3.5" />}
+                label={`Links: ${member.links?.toLocaleString() ?? 0}`}
+              />
+            ) : null}
+
+            {formattedLastLink ? (
+              <MetaPill
+                icon={<Clock3 className="h-3.5 w-3.5" />}
+                label={`Last link: ${formattedLastLink}`}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Stat
@@ -212,40 +278,27 @@ export default function DetailedMemberCard({
             icon={<BadgeDollarSign className="h-4 w-4" />}
             tone="success"
           />
+
           <Stat
             label="Page Views"
             value={member.pageViews.toLocaleString()}
             icon={<Eye className="h-4 w-4" />}
             tone="neutral"
           />
+
           <Stat
             label="Tickets Sold"
             value={member.ticketsSold.toLocaleString()}
             icon={<Ticket className="h-4 w-4" />}
             tone="primary"
           />
-          {/*
-          <div className="relative overflow-hidden rounded-xl border border-white/10 p-4">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-95"
-              style={{
-                background: [
-                  "radial-gradient(720px 420px at 15% 10%, rgba(255,123,69,0.10), transparent 60%)",
-                  "radial-gradient(650px 420px at 90% 30%, rgba(154,70,255,0.12), transparent 62%)",
-                  "linear-gradient(180deg, rgba(18,18,32,0.58), rgba(8,8,15,0.30))",
-                ].join(","),
-              }}
-            />
-            <div className="relative">
-              <div className="text-[12px] font-semibold text-neutral-300">
-                Notes
-              </div>
-              <div className="mt-2 text-[12px] leading-[1.45] text-neutral-400">
-                Placeholder for future: conversion rate, top event, and payout
-                status.
-              </div>
-            </div>
-          </div> */}
+
+          <Stat
+            label="Conversion Assets"
+            value={(member.links ?? 0).toLocaleString()}
+            icon={<Link2 className="h-4 w-4" />}
+            tone="neutral"
+          />
         </div>
       </div>
     </div>

@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { Eye, Ticket } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import KpiCard from "@/components/dashboard/cards/KpiCard";
 import RevenueChart from "@/components/dashboard/charts/RevenueChart";
 import SmallKpiChart from "@/components/dashboard/charts/SmallKpiChart";
 import TrackingLinksTable from "@/components/dashboard/tables/TrackingLinksTable";
 import MyTeamTable, {
-  DEMO_MY_TEAM,
+  type TeamMember,
 } from "@/components/dashboard/tables/MyTeamTable";
 import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
 import BreakdownCard from "@/components/dashboard/cards/BreakdownCard";
@@ -16,6 +17,65 @@ import BreakdownCard from "@/components/dashboard/cards/BreakdownCard";
 import DateRangePicker, {
   type DateRangeValue,
 } from "@/components/ui/DateRangePicker";
+
+type TrackingMemberMetricRow = {
+  userId: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role?: string;
+  status?: string;
+  links: number;
+  views: number;
+  ticketsSold: number;
+  revenue: number;
+  lastLinkCreatedAt?: string | null;
+};
+
+type TrackingMembersResponse = {
+  rows: TrackingMemberMetricRow[];
+};
+
+function initialsFromName(name: string) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "MB";
+
+  const a = parts[0]?.[0] ?? "";
+  const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
+  return `${a}${b}`.toUpperCase() || "MB";
+}
+
+async function fetchTeamTrackingMembers(
+  teamId: string,
+): Promise<TrackingMembersResponse> {
+  const res = await fetch(
+    `/api/tracking-links/members?scope=team&teamId=${encodeURIComponent(teamId)}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    let message = "Failed to load team members.";
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (typeof data?.error === "string" && data.error.trim()) {
+        message = data.error;
+      }
+    } catch {
+      // ignore non-json error bodies
+    }
+
+    throw new Error(message);
+  }
+
+  return (await res.json()) as TrackingMembersResponse;
+}
 
 /* Demo series (MONTHLY) */
 const sparkA = [6, 10, 18, 28, 42, 120, 140, 125, 130, 170, 210, 230].map(
@@ -272,6 +332,12 @@ function stableDummyTotal(seed: string, min = 8000, max = 48000) {
 }
 
 export default function TeamSummaryClient({ teamId }: { teamId: string }) {
+  const teamTrackingMembersQuery = useQuery<TrackingMembersResponse>({
+    queryKey: ["team-tracking-members", teamId],
+    queryFn: () => fetchTeamTrackingMembers(teamId),
+    enabled: !!teamId,
+    staleTime: 30_000,
+  });
   const today = useMemo(() => clampToDay(new Date()), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
 
@@ -456,6 +522,18 @@ export default function TeamSummaryClient({ teamId }: { teamId: string }) {
     ];
   }, [breakdownTotal]);
 
+  const liveTeamMembers = useMemo<TeamMember[]>(() => {
+    return (teamTrackingMembersQuery.data?.rows ?? []).map((row) => ({
+      id: row.userId,
+      name: row.name || row.email || "Member",
+      avatarUrl: row.image ?? null,
+      avatarText: initialsFromName(row.name || row.email || "Member"),
+      tickets: Number.isFinite(row.ticketsSold) ? row.ticketsSold : 0,
+      views: Number.isFinite(row.views) ? row.views : 0,
+      earned: Number.isFinite(row.revenue) ? row.revenue : 0,
+    }));
+  }, [teamTrackingMembersQuery.data]);
+
   return (
     <div className="space-y-5 px-4 md:px-6 lg:px-8">
       {/* TOP: charts left + recent sales right (EXACT like Event summary) */}
@@ -552,7 +630,7 @@ export default function TeamSummaryClient({ teamId }: { teamId: string }) {
           </div>
         </div>
 
-        <RecentSalesTable />
+        <RecentSalesTable scope="team" teamId={teamId} />
       </section>
 
       {/* MID: breakdowns left + my team right (EXACT like Event summary) */}
@@ -578,7 +656,7 @@ export default function TeamSummaryClient({ teamId }: { teamId: string }) {
         </div>
 
         <MyTeamTable
-          members={DEMO_MY_TEAM}
+          members={liveTeamMembers}
           onDetailedView={() => {
             // later: /dashboard/teams/:id/members
           }}

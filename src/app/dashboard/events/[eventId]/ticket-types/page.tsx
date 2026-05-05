@@ -137,18 +137,26 @@ const zTicketTypeDoc = z
       .optional()
       .default(null),
 
-    accessMode: z.enum(["public", "password"]).optional().default("public"),
+    accessMode: z
+      .enum(["public", "restricted", "password"])
+      .optional()
+      .default("public"),
     password: z.string().optional().default(""),
 
     checkout: z
       .object({
         requireFullName: z.boolean().optional(),
+        requireEmail: z.boolean().optional(),
         requirePhone: z.boolean().optional(),
+        requireFacebook: z.boolean().optional(),
+        requireInstagram: z.boolean().optional(),
         requireGender: z.boolean().optional(),
         requireDob: z.boolean().optional(),
+        requireAge: z.boolean().optional(),
         subjectToApproval: z.boolean().optional(),
         addBuyerDetailsToOrder: z.boolean().optional(),
         addPurchasedTicketsToAttendeesCount: z.boolean().optional(),
+        enableEmailAttachments: z.boolean().optional(),
       })
       .optional()
       .default({}),
@@ -160,6 +168,11 @@ const zTicketTypeDoc = z
         logoUrl: z.string().optional(),
         backgroundUrl: z.string().optional(),
         footerText: z.string().optional(),
+        watermarkEnabled: z.boolean().optional(),
+        eventInfoEnabled: z.boolean().optional(),
+        logoEnabled: z.boolean().optional(),
+        qrSize: z.number().optional(),
+        qrBorderRadius: z.number().optional(),
       })
       .optional()
       .default({}),
@@ -223,27 +236,23 @@ function mapDocToFormValues(docRaw: unknown): TicketTypeFormValues {
     salesStartAt,
     salesEndAt,
 
-    accessMode:
-      doc?.accessMode === "password"
-        ? "password"
-        : ("public" as TicketTypeFormValues["accessMode"]),
+    accessMode: (doc?.accessMode ??
+      "public") as TicketTypeFormValues["accessMode"],
     password: doc?.password ?? "",
 
-    // The UI currently supports a bigger set of fields than backend stores.
-    // Keep safe defaults for the extra ones so the wizard renders correctly.
     requireFullName: checkout.requireFullName ?? true,
-    requireEmail: true,
+    requireEmail: checkout.requireEmail ?? true,
     requirePhone: checkout.requirePhone ?? false,
-    requireFacebook: false,
-    requireInstagram: false,
+    requireFacebook: checkout.requireFacebook ?? false,
+    requireInstagram: checkout.requireInstagram ?? false,
     requireGender: checkout.requireGender ?? false,
     requireDob: checkout.requireDob ?? false,
-    requireAge: false,
+    requireAge: checkout.requireAge ?? false,
     subjectToApproval: checkout.subjectToApproval ?? false,
     addBuyerDetailsToOrder: checkout.addBuyerDetailsToOrder ?? true,
     addPurchasedTicketsToAttendeesCount:
       checkout.addPurchasedTicketsToAttendeesCount ?? true,
-    enableEmailAttachments: true,
+    enableEmailAttachments: checkout.enableEmailAttachments ?? true,
 
     layout: (design.layout ?? "horizontal") as TicketTypeFormValues["layout"],
     brandColor: design.brandColor ?? "#9a46ff",
@@ -251,11 +260,12 @@ function mapDocToFormValues(docRaw: unknown): TicketTypeFormValues {
     backgroundUrl: design.backgroundUrl ?? "",
     footerText: design.footerText ?? "",
 
-    watermarkEnabled: true,
-    eventInfoEnabled: true,
-    logoEnabled: false,
-    qrSize: 0,
-    qrBorderRadius: 0,
+    watermarkEnabled: design.watermarkEnabled ?? true,
+    eventInfoEnabled: design.eventInfoEnabled ?? true,
+    logoEnabled: design.logoEnabled ?? false,
+    qrSize: typeof design.qrSize === "number" ? design.qrSize : 0,
+    qrBorderRadius:
+      typeof design.qrBorderRadius === "number" ? design.qrBorderRadius : 0,
   };
 }
 
@@ -332,8 +342,8 @@ function TicketTypeWizard({
         requireDob: false,
         requireAge: false,
         subjectToApproval: false,
-        addBuyerDetailsToOrder: false,
-        addPurchasedTicketsToAttendeesCount: false,
+        addBuyerDetailsToOrder: true,
+        addPurchasedTicketsToAttendeesCount: true,
         enableEmailAttachments: true,
 
         layout: "horizontal",
@@ -356,10 +366,17 @@ function TicketTypeWizard({
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { isSubmitting },
   } = useForm<TicketTypeFormValues>({
     defaultValues,
   });
+
+  useEffect(() => {
+    reset(defaultValues);
+    setActiveStep(0);
+    setServerError(null);
+  }, [defaultValues, reset]);
 
   const price = watch("price");
   const isFree = watch("isFree");
@@ -521,14 +538,14 @@ function TicketTypeWizard({
       return [
         "Edit Ticket Type",
         "Quantities",
-        "Checkout Requirments",
+        "Checkout Requirements",
         "Customize the way your ticket looks",
       ] as const;
     }
     return [
       "Create Ticket Type",
       "Quantities",
-      "Checkout Requirments",
+      "Checkout Requirements",
       "Customize the way your ticket looks",
     ] as const;
   }, [mode]);
@@ -811,6 +828,8 @@ function TicketTypeWizard({
           <TicketTypeDesignStep
             register={register}
             setValue={setValue}
+            eventId={eventId}
+            ticketTypeId={ticketTypeId}
             layout={layout}
             watermarkEnabled={!!watermarkEnabled}
             eventInfoEnabled={!!eventInfoEnabled}

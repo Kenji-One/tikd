@@ -14,19 +14,19 @@ type FaqItem = { q: string; a: string };
 
 const faqItems: FaqItem[] = [
   {
-    q: "How do tickets work on Tikd?",
+    q: "How do tickets work on Tixsy?",
     a: "Buy a ticket, get instant delivery, and scan it at the door. No mystery steps, no weird redirects.",
   },
   {
     q: "Can I refund or transfer tickets?",
-    a: "Policies depend on the organizer. Tikd supports transfers and refunds when the event allows it.",
+    a: "Policies depend on the organizer. Tixsy supports transfers and refunds when the event allows it.",
   },
   {
     q: "Is checkout secure?",
     a: "Yes — secure payments, clear totals, and a smooth flow designed to minimize drop-offs.",
   },
   {
-    q: "How do I host an event on Tikd?",
+    q: "How do I host an event on Tixsy?",
     a: "Create an organizer account, set up your event page, publish, and start selling. Tools included for promotion and check-in.",
   },
 ];
@@ -404,7 +404,7 @@ function ProcreateStyleHeroDevices() {
           <div className="relative mx-auto aspect-[5/4] w-full">
             <Image
               src="/landing/hero-phones.svg"
-              alt="Tikd iPhone previews"
+              alt="Tixsy iPhone previews"
               fill
               priority
               sizes="(min-width: 1024px) 660px, 92vw"
@@ -511,7 +511,7 @@ export default function LandingPage() {
 
               <p className="max-w-[390px] text-[13px] leading-[1.3] tracking-[-0.28px] text-white/70 sm:text-[14px]">
                 From ticket creation to seamless check-ins, promotion, and
-                payouts, Tikd gives you everything you need to run a successful
+                payouts, Tixsy gives you everything you need to run a successful
                 event—whether you’re hosting a nightclub party, concert, or
                 private gathering—all in one place.
               </p>
@@ -619,7 +619,7 @@ export default function LandingPage() {
               <div className="relative mx-auto aspect-[9/16] w-[280px] sm:w-[340px] lg:w-[380px]">
                 <Image
                   src={unlockPhoneSrc}
-                  alt="Tikd app preview"
+                  alt="Tixsy app preview"
                   fill
                   sizes="(min-width: 1024px) 380px, (min-width: 640px) 340px, 280px"
                   className="drop-shadow-[0_60px_140px_rgba(0,0,0,.75)]"

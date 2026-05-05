@@ -1,3 +1,4 @@
+// src\app\api\events\[id]\guests\[guestId]\route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 

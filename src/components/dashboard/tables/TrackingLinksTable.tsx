@@ -603,7 +603,6 @@ function TrackingIcon({
   className?: string;
 }) {
   if (iconUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={iconUrl}
@@ -878,54 +877,53 @@ function ArchiveLinkDialog({
         onClick={loading ? undefined : onClose}
         aria-hidden="true"
       />
+
       <div
         role="dialog"
         aria-modal="true"
         className={clsx(
-          "relative mx-4 w-full max-w-[700px] overflow-hidden rounded-xl",
-          "border border-white/10 bg-neutral-900",
+          "relative mx-auto w-full max-w-[700px] overflow-hidden rounded-xl border border-white/10 bg-neutral-900",
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pb-7 pt-10 md:px-12 md:pb-10">
-          <h2 className="text-center text-3xl font-semibold tracking-[-0.48px] text-neutral-0">
+        <div className="px-4 pb-6 pt-8 sm:px-6 sm:pb-7 sm:pt-10 md:px-12 md:pb-10">
+          <h2 className="text-center text-2xl font-semibold tracking-[-0.48px] text-neutral-0 sm:text-3xl">
             Archive Link
           </h2>
-          <p className="mt-2.5 text-center text-base text-neutral-400 tracking-[-0.32px]">
+
+          <p className="mt-2 text-center text-sm tracking-[-0.32px] text-neutral-400 sm:mt-2.5 sm:text-base">
             Are you sure you want to Archive “{row.name}”?
           </p>
 
-          <div
-            className={clsx(
-              "mt-5 rounded-lg border border-error-500 bg-neutral-800 p-4",
-            )}
-          >
-            <div className="flex flex-col items-start gap-0.5">
-              <div className="items-center flex-shrink-0 gap-1 inline-flex">
+          <div className="mt-5 rounded-lg border border-error-500 bg-neutral-800 p-4">
+            <div className="flex flex-col gap-2 sm:gap-1">
+              <div className="inline-flex items-center gap-1">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="16"
                   height="16"
                   viewBox="0 0 16 16"
                   fill="none"
-                  className="w-4 h-4 flex-shrink-0"
+                  className="h-4 w-4 shrink-0"
                 >
                   <path
                     d="M14.5067 10.6133L10.24 2.93333C9.66665 1.9 8.87332 1.33333 7.99998 1.33333C7.12665 1.33333 6.33332 1.9 5.75998 2.93333L1.49332 10.6133C0.953318 11.5933 0.893318 12.5333 1.32665 13.2733C1.75999 14.0133 2.61332 14.42 3.73332 14.42H12.2667C13.3867 14.42 14.24 14.0133 14.6733 13.2733C15.1067 12.5333 15.0467 11.5867 14.5067 10.6133ZM7.49998 6C7.49998 5.72666 7.72665 5.5 7.99998 5.5C8.27332 5.5 8.49998 5.72666 8.49998 6V9.33333C8.49998 9.60666 8.27332 9.83333 7.99998 9.83333C7.72665 9.83333 7.49998 9.60666 7.49998 9.33333V6ZM8.47332 11.8067C8.43998 11.8333 8.40665 11.86 8.37332 11.8867C8.33332 11.9133 8.29332 11.9333 8.25332 11.9467C8.21332 11.9667 8.17332 11.98 8.12665 11.9867C8.08665 11.9933 8.03998 12 7.99998 12C7.95998 12 7.91332 11.9933 7.86665 11.9867C7.82665 11.98 7.78665 11.9667 7.74665 11.9467C7.70665 11.9333 7.66665 11.9133 7.62665 11.8867C7.59332 11.86 7.55998 11.8333 7.52665 11.8067C7.40665 11.68 7.33332 11.5067 7.33332 11.3333C7.33332 11.16 7.40665 10.9867 7.52665 10.86C7.55998 10.8333 7.59332 10.8067 7.62665 10.78C7.66665 10.7533 7.70665 10.7333 7.74665 10.72C7.78665 10.7 7.82665 10.6867 7.86665 10.68C7.95332 10.66 8.04665 10.66 8.12665 10.68C8.17332 10.6867 8.21332 10.7 8.25332 10.72C8.29332 10.7333 8.33332 10.7533 8.37332 10.78C8.40665 10.8067 8.43998 10.8333 8.47332 10.86C8.59332 10.9867 8.66665 11.16 8.66665 11.3333C8.66665 11.5067 8.59332 11.68 8.47332 11.8067Z"
                     fill="#FF454A"
                   />
                 </svg>
-                <p className="text-base font-medium uppercase text-error-500 tracking-[-0.32px]">
+
+                <p className="text-sm font-medium uppercase tracking-[-0.32px] text-error-500 sm:text-base">
                   Reminder
                 </p>
               </div>
+
               <div className="min-w-0">
-                <p className="text-base text-neutral-0">
+                <p className="text-sm leading-6 text-neutral-0 sm:text-base">
                   Links cannot be deleted as this may cause issues with your
                   records. Instead, they’ll be safely moved to your
                   <a
                     href="/dashboard/tracking/archives"
-                    className="text-primary-500 underline decoration-primary-500 underline-offset-4 hover:text-primary-500 ml-1"
+                    className="ml-1 text-primary-500 underline decoration-primary-500 underline-offset-4 hover:text-primary-500"
                     onClick={(e) => {
                       e.preventDefault();
                       onClose();
@@ -939,15 +937,14 @@ function ArchiveLinkDialog({
             </div>
           </div>
 
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          <div className="mt-8 flex flex-col gap-3 sm:mt-10 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
               className={clsx(
-                "rounded-full",
-                "border border-white/40 bg-transparent py-3 px-6 text-base font-medium text-neutral-0 leading-[100%]",
-                "transition hover:border-white/60 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
+                "w-full rounded-full border border-white/40 bg-transparent px-6 py-3 text-base font-medium leading-[100%] text-neutral-0 transition hover:border-white/60 sm:w-auto",
+                "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
               Cancel
@@ -958,9 +955,8 @@ function ArchiveLinkDialog({
               onClick={() => onConfirm(row)}
               disabled={loading}
               className={clsx(
-                "rounded-full px-6 py-3",
-                "bg-error-500 text-base font-semibold text-white leading-[100%]",
-                "transition hover:bg-error-400 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
+                "w-full rounded-full bg-error-500 px-6 py-3 text-base font-semibold leading-[100%] text-white transition hover:bg-error-400 sm:w-auto",
+                "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
               <span className="inline-flex items-center justify-center gap-2">
@@ -1014,7 +1010,7 @@ function QrDialog({
         return;
       }
     } catch {
-      // ignore
+      //
     }
 
     try {
@@ -1022,7 +1018,7 @@ function QrDialog({
         await navigator.clipboard.writeText(qrValue);
       }
     } catch {
-      // ignore
+      //
     }
   };
 
@@ -1035,53 +1031,47 @@ function QrDialog({
       a.click();
       a.remove();
     } catch {
-      // ignore
+      //
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
         aria-hidden="true"
       />
+
       <div
         role="dialog"
         aria-modal="true"
         className={clsx(
-          "relative mx-4 w-full max-w-[487px] overflow-hidden rounded-xl",
-          "border border-white/10 bg-neutral-900 ",
+          "relative mx-auto w-full max-w-[487px] overflow-hidden rounded-xl border border-white/10 bg-neutral-900",
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-8 pb-4 pt-10 md:px-12">
+        <div className="px-4 pb-5 pt-8 sm:px-8 sm:pb-4 sm:pt-10 md:px-12">
           <div className="mx-auto flex w-full max-w-[360px] flex-col items-center">
-            <div
-              className={clsx(
-                "relative w-full max-w-[170px] overflow-hidden rounded-lg bg-white p-2",
-              )}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+            <div className="relative w-full max-w-[170px] overflow-hidden rounded-lg bg-white p-2">
               <img src={qrImg} alt="QR Code" className="h-auto w-full" />
             </div>
 
-            <p className="mt-6 text-center text-neutral-400">
+            <p className="mt-5 text-center text-sm text-neutral-400 sm:mt-6">
               {row.name.toUpperCase()}
             </p>
 
-            <p className="mt-1 text-center text-3xl font-semibold uppercase tracking-[-0.48px] text-neutral-0 ">
+            <p className="mt-1 break-words text-center text-2xl font-semibold uppercase tracking-[-0.48px] text-neutral-0 sm:text-3xl">
               {row.url.replaceAll("/", " ").trim() || "TRACKING LINK"}
             </p>
 
-            <div className="mt-6 flex w-full items-center justify-center gap-4">
+            <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-4">
               <button
                 type="button"
                 onClick={handleShare}
                 className={clsx(
-                  "rounded-full",
-                  "border border-white/40 bg-transparent py-3 px-6 text-base font-medium text-neutral-0",
-                  "transition hover:border-white/60 cursor-pointer",
+                  "w-full rounded-full border border-white/40 bg-transparent px-6 py-3 text-base font-medium text-neutral-0 transition hover:border-white/60 sm:w-auto",
+                  "cursor-pointer",
                 )}
               >
                 <span className="inline-flex items-center justify-center gap-2">
@@ -1105,9 +1095,8 @@ function QrDialog({
                 type="button"
                 onClick={handleSave}
                 className={clsx(
-                  "rounded-full px-6 py-3",
-                  "bg-primary-500 text-base font-semibold text-white",
-                  "transition hover:bg-primary-400 cursor-pointer",
+                  "w-full rounded-full bg-primary-500 px-6 py-3 text-base font-semibold text-white transition hover:bg-primary-400 sm:w-auto",
+                  "cursor-pointer",
                 )}
               >
                 <span className="inline-flex items-center justify-center gap-2">
@@ -1135,7 +1124,7 @@ function QrDialog({
             <button
               type="button"
               onClick={onClose}
-              className="mt-10 text-sm font-medium text-neutral-500 hover:text-neutral-0 cursor-pointer"
+              className="mt-8 cursor-pointer text-sm font-medium text-neutral-500 hover:text-neutral-0 sm:mt-10"
             >
               Close
             </button>
@@ -1246,17 +1235,14 @@ function SelectedDestinationCard({
   return (
     <div
       className={clsx(
-        "rounded-lg border",
-        "border-primary-500/55 bg-primary-500/12",
+        "rounded-lg border border-primary-500/55 bg-primary-500/12",
       )}
     >
-      <div className="flex items-center gap-3 px-3 py-3">
-        {/* Thumb */}
+      <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center">
         {loading ? (
           <div
             className={clsx(
-              "h-12 w-12 shrink-0 rounded-xl border border-white/10 bg-white/5",
-              "animate-pulse",
+              "h-12 w-12 shrink-0 rounded-xl border border-white/10 bg-white/5 animate-pulse",
             )}
             aria-hidden
           />
@@ -1268,7 +1254,6 @@ function SelectedDestinationCard({
           />
         )}
 
-        {/* Title + subtitle */}
         <div className="min-w-0 flex-1">
           {loading ? (
             <>
@@ -1277,45 +1262,37 @@ function SelectedDestinationCard({
             </>
           ) : (
             <>
-              <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
+              <p className="truncate text-[15px] font-semibold tracking-[-0.2px] text-neutral-0">
                 {dest.title}
               </p>
 
-              <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-neutral-400">
                 {dest.kind === "Event" ? (
                   <>
                     {dest.orgName ? (
-                      <>
-                        <span className="truncate">{dest.orgName}</span>
-                        {dest.date ? (
-                          <>
-                            <span className="text-neutral-600">•</span>
-                            <span className="inline-flex items-center gap-1 text-neutral-400">
-                              <Calendar className="h-3.5 w-3.5 text-neutral-500" />
-                              <span>{formatShortDate(dest.date)}</span>
-                            </span>
-                          </>
-                        ) : null}
-                      </>
-                    ) : dest.date ? (
+                      <span className="truncate">{dest.orgName}</span>
+                    ) : null}
+
+                    {dest.date ? (
                       <span className="inline-flex items-center gap-1 text-neutral-400">
                         <Calendar className="h-3.5 w-3.5 text-neutral-500" />
                         <span>{formatShortDate(dest.date)}</span>
                       </span>
-                    ) : (
+                    ) : null}
+
+                    {!dest.orgName && !dest.date ? (
                       <span className="truncate">Event</span>
-                    )}
+                    ) : null}
                   </>
                 ) : (
                   <span className="truncate">{dest.subtitle}</span>
                 )}
-              </p>
+              </div>
             </>
           )}
         </div>
 
-        {/* Right side pills + clear */}
-        <div className="shrink-0 flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
           <DestinationPill kind={dest.kind} />
 
           {!disabled && (
@@ -1328,10 +1305,9 @@ function SelectedDestinationCard({
               }}
               disabled={disabled}
               className={clsx(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md border cursor-pointer",
-                "transition",
+                "inline-flex h-8 w-8 items-center justify-center rounded-md border cursor-pointer transition",
                 disabled
-                  ? "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
+                  ? "cursor-not-allowed border-white/10 bg-white/5 text-white/30"
                   : "border-primary-500/30 bg-primary-500/15 text-primary-200 hover:bg-primary-500/22",
                 "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
               )}
@@ -1955,8 +1931,7 @@ function TrackingLinkDialog({
   const hasNoIcon = !draft.iconKey && !draft.iconUrl;
 
   return (
-    // ✅ NO page scroll. Dialog is capped to viewport and scrolls internally.
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 md:p-6">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={saving ? undefined : onClose}
@@ -1967,17 +1942,13 @@ function TrackingLinkDialog({
         role="dialog"
         aria-modal="true"
         className={clsx(
-          "relative mx-4 w-full max-w-[720px] rounded-xl",
-          "border border-white/10 bg-neutral-900",
-          "max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]",
-          "overflow-hidden flex flex-col",
+          "relative mx-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-900 sm:max-h-[calc(100vh-2rem)]",
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header (fixed) */}
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 md:px-8">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-6 md:px-8">
           <div className="min-w-0">
-            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.48px] text-neutral-0">
+            <h2 className="mt-1 text-xl font-semibold tracking-[-0.48px] text-neutral-0 sm:text-2xl">
               {title}
             </h2>
           </div>
@@ -1986,17 +1957,15 @@ function TrackingLinkDialog({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-md border border-white/10 p-2 text-white/70 hover:text-white hover:border-white/20 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-white/10 p-2 text-white/70 hover:border-white/20 hover:text-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
             title="Close"
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Body (scrolls) */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 md:px-8 tikdHideScrollbar">
+        <div className="tikdHideScrollbar flex-1 overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {/* Name */}
             <div className="md:col-span-2">
               <LabelledInput
                 id="tracking-link-name"
@@ -2016,7 +1985,7 @@ function TrackingLinkDialog({
                     : null
                 }
                 className={clsx(
-                  "bg-neutral-900 border-white/10",
+                  "border-white/10 bg-neutral-900",
                   errName
                     ? "border-error-500 focus:border-error-400"
                     : "focus:border-primary-600/50",
@@ -2024,17 +1993,15 @@ function TrackingLinkDialog({
               />
             </div>
 
-            {/* Icon selector (optional) */}
             <div className="md:col-span-2">
-              <label className="block leading-[90%] font-normal text-white mb-2">
+              <label className="mb-2 block font-normal leading-[90%] text-white">
                 Icon (optional)
               </label>
 
               <div className="rounded-lg border border-white/10 bg-neutral-900 p-3">
                 <div
                   className={clsx(
-                    "relative w-full",
-                    "rounded-lg border border-white/10 bg-white/5 h-11",
+                    "relative w-full rounded-lg border border-white/10 bg-white/5 h-11",
                   )}
                 >
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
@@ -2044,16 +2011,14 @@ function TrackingLinkDialog({
                     placeholder="Search icons..."
                     disabled={saving}
                     className={clsx(
-                      "h-11 w-full rounded-lg bg-transparent",
-                      "pl-10 pr-4 text-[12px] text-neutral-100",
+                      "h-11 w-full rounded-lg border-none bg-transparent pl-10 pr-4 text-[12px] text-neutral-100 outline-none focus:ring-1 focus:ring-primary-500",
                       "placeholder:text-neutral-500",
-                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
-                      "disabled:opacity-60 disabled:cursor-not-allowed",
+                      "disabled:cursor-not-allowed disabled:opacity-60",
                     )}
                   />
                 </div>
 
-                <div className={clsx("mt-3 flex gap-3", "flex-wrap")}>
+                <div className="mt-3 flex flex-wrap gap-2 sm:gap-3">
                   <button
                     type="button"
                     disabled={saving}
@@ -2065,14 +2030,11 @@ function TrackingLinkDialog({
                     aria-pressed={hasNoIcon}
                     title="No icon"
                     className={clsx(
-                      "group inline-flex items-center justify-center shrink-0",
-                      "h-10 w-10 md:h-11 md:w-11 rounded-md border",
-                      "transition cursor-pointer",
-                      "focus:outline-none focus:ring-1 focus:ring-primary-500/40",
-                      "disabled:cursor-not-allowed disabled:opacity-60",
+                      "group inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition focus:outline-none focus:ring-1 focus:ring-primary-500/40 md:h-11 md:w-11",
+                      "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
                       hasNoIcon
                         ? "border-primary-500/40 bg-primary-500/10"
-                        : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20",
+                        : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10",
                     )}
                   >
                     <Ban
@@ -2106,14 +2068,11 @@ function TrackingLinkDialog({
                         aria-pressed={selected}
                         title={p.label}
                         className={clsx(
-                          "group inline-flex items-center justify-center shrink-0",
-                          "h-10 w-10 md:h-11 md:w-11 rounded-md border",
-                          "transition cursor-pointer",
-                          "focus:outline-none focus:ring-1 focus:ring-primary-500/40",
-                          "disabled:cursor-not-allowed disabled:opacity-60",
+                          "group inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border transition focus:outline-none focus:ring-1 focus:ring-primary-500/40 md:h-11 md:w-11",
+                          "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
                           selected
                             ? "border-primary-500/40 bg-primary-500/10"
-                            : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20",
+                            : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10",
                         )}
                       >
                         <span className="text-[#A7A7BC]">
@@ -2124,7 +2083,7 @@ function TrackingLinkDialog({
                   })}
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
+                <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -2141,9 +2100,8 @@ function TrackingLinkDialog({
                     disabled={saving}
                     onClick={() => fileInputRef.current?.click()}
                     className={clsx(
-                      "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
-                      "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10 transition cursor-pointer",
-                      "disabled:cursor-not-allowed disabled:opacity-60",
+                      "inline-flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-300 transition hover:bg-white/10 sm:justify-start",
+                      "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
                     )}
                     title="Upload (preview only until you wire Cloudinary)"
                   >
@@ -2158,10 +2116,9 @@ function TrackingLinkDialog({
                     disabled={saving}
                     onClick={clearCustomIcon}
                     className={clsx(
-                      "ml-auto inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-300 hover:bg-white/10 transition cursor-pointer",
-                      "min-w-[116px] justify-center",
-                      "disabled:cursor-not-allowed disabled:opacity-60",
-                      draft.iconUrl ? "" : "opacity-0 pointer-events-none",
+                      "inline-flex min-w-[116px] items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-300 transition hover:bg-white/10 sm:ml-auto",
+                      "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
+                      draft.iconUrl ? "" : "pointer-events-none opacity-0",
                     )}
                     title="Remove custom icon"
                     aria-hidden={!draft.iconUrl}
@@ -2172,7 +2129,7 @@ function TrackingLinkDialog({
                   </button>
                 </div>
 
-                <div className="mt-3 flex items-center gap-3 text-sm text-neutral-400 min-h-[28px]">
+                <div className="mt-3 flex min-h-[28px] flex-wrap items-center gap-2 text-sm text-neutral-400">
                   <span className="text-neutral-300">Selected:</span>
 
                   {draft.iconUrl ? (
@@ -2185,7 +2142,7 @@ function TrackingLinkDialog({
                     </>
                   ) : draft.iconKey ? (
                     <>
-                      <span className=" flex text-[#A7A7BC]">
+                      <span className="flex text-[#A7A7BC]">
                         <PresetIcon
                           iconKey={draft.iconKey}
                           className="h-6 w-6"
@@ -2197,7 +2154,7 @@ function TrackingLinkDialog({
                       </span>
                     </>
                   ) : (
-                    <span className="text-neutral-500 h-6 flex items-center">
+                    <span className="flex h-6 items-center text-neutral-500">
                       None
                     </span>
                   )}
@@ -2205,13 +2162,12 @@ function TrackingLinkDialog({
               </div>
             </div>
 
-            {/* Destination search selector */}
             <div ref={destWrapRef} className="relative md:col-span-2">
-              <label className="block leading-[90%] font-normal text-white mb-2">
+              <label className="mb-2 block font-normal leading-[90%] text-white">
                 Link Path
               </label>
 
-              <p className="text-sm text-neutral-500">
+              <p className="text-sm leading-5 text-neutral-500">
                 Search and select an Event or Organization this tracking link
                 will route to.
               </p>
@@ -2228,8 +2184,7 @@ function TrackingLinkDialog({
                   <>
                     <div
                       className={clsx(
-                        "relative w-full",
-                        "rounded-lg border border-white/10 bg-white/5 h-12",
+                        "relative h-12 w-full rounded-lg border border-white/10 bg-white/5",
                         errDest && "border-error-500",
                       )}
                     >
@@ -2250,11 +2205,9 @@ function TrackingLinkDialog({
                         placeholder="Search events or organizations…"
                         disabled={saving || isEventScope}
                         className={clsx(
-                          "h-12 w-full rounded-lg bg-transparent",
-                          "pl-10 pr-10 text-[12px] text-neutral-100",
+                          "h-12 w-full rounded-lg border-none bg-transparent pl-10 pr-10 text-[12px] text-neutral-100 outline-none focus:ring-1 focus:ring-primary-500",
                           "placeholder:text-neutral-500",
-                          "outline-none border-none focus:ring-1 focus:ring-primary-500",
-                          "disabled:opacity-60 disabled:cursor-not-allowed",
+                          "disabled:cursor-not-allowed disabled:opacity-60",
                         )}
                       />
 
@@ -2272,12 +2225,8 @@ function TrackingLinkDialog({
                             }, 0);
                           }}
                           className={clsx(
-                            "absolute right-2 top-1/2 -translate-y-1/2",
-                            "inline-flex h-8 w-8 items-center justify-center",
-                            "rounded-md border border-white/10 bg-white/5",
-                            "text-white/60 hover:text-white hover:bg-white/10 hover:border-white/20",
-                            "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
-                            "transition cursor-pointer",
+                            "absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/60 transition hover:border-white/20 hover:bg-white/10 hover:text-white focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+                            "cursor-pointer",
                           )}
                           title="Clear search"
                           aria-label="Clear search"
@@ -2289,12 +2238,7 @@ function TrackingLinkDialog({
 
                     {destOpen && !isEventScope ? (
                       <div className={dropdownPanelOverlayCls} role="listbox">
-                        <div
-                          className={clsx(
-                            "max-h-[min(360px,60vh)] overflow-y-auto p-2 overscroll-contain",
-                            "tikdHideScrollbar",
-                          )}
-                        >
+                        <div className="tikdHideScrollbar max-h-[min(360px,60vh)] overflow-y-auto overscroll-contain p-2">
                           {destLoading ? (
                             <div className="px-3 py-3 text-sm text-neutral-400">
                               {isOrgScope && !destQuery.trim()
@@ -2328,41 +2272,35 @@ function TrackingLinkDialog({
                                     aria-selected={selected}
                                     onClick={() => handlePickDestination(opt)}
                                     className={clsx(
-                                      "w-full text-left",
-                                      "rounded-lg border",
-                                      "px-3 py-3",
-                                      "transition cursor-pointer",
-                                      "focus:outline-none focus:ring-1 focus:ring-primary-500/55",
+                                      "w-full rounded-lg border px-3 py-3 text-left transition focus:outline-none focus:ring-1 focus:ring-primary-500/55",
+                                      "cursor-pointer",
                                       selected
                                         ? "border-primary-500/55 bg-primary-500/12"
-                                        : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15",
+                                        : "border-white/10 bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.06]",
                                     )}
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <DestinationThumb
-                                        kind={opt.kind}
-                                        image={opt.image}
-                                        title={opt.title}
-                                      />
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                                        <DestinationThumb
+                                          kind={opt.kind}
+                                          image={opt.image}
+                                          title={opt.title}
+                                        />
 
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div className="min-w-0">
-                                            <p className="truncate text-[15px] font-semibold text-neutral-0 tracking-[-0.2px]">
-                                              {opt.title}
-                                            </p>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                                            <div className="min-w-0">
+                                              <p className="truncate text-[15px] font-semibold tracking-[-0.2px] text-neutral-0">
+                                                {opt.title}
+                                              </p>
 
-                                            <p className="mt-0.5 flex items-center gap-1.5 text-[12px] text-neutral-400">
-                                              {opt.kind === "Event" ? (
-                                                <>
-                                                  <span className="truncate">
-                                                    {opt.orgName || "Event"}
-                                                  </span>
-                                                  {opt.date ? (
-                                                    <>
-                                                      <span className="text-neutral-600">
-                                                        •
-                                                      </span>
+                                              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-neutral-400">
+                                                {opt.kind === "Event" ? (
+                                                  <>
+                                                    <span className="truncate">
+                                                      {opt.orgName || "Event"}
+                                                    </span>
+                                                    {opt.date ? (
                                                       <span className="inline-flex items-center gap-1 text-neutral-400">
                                                         <Calendar className="h-3.5 w-3.5 text-neutral-500" />
                                                         <span>
@@ -2371,31 +2309,31 @@ function TrackingLinkDialog({
                                                           )}
                                                         </span>
                                                       </span>
-                                                    </>
-                                                  ) : null}
-                                                </>
-                                              ) : (
-                                                <span className="truncate">
-                                                  {opt.subtitle}
-                                                </span>
-                                              )}
-                                            </p>
-                                          </div>
+                                                    ) : null}
+                                                  </>
+                                                ) : (
+                                                  <span className="truncate">
+                                                    {opt.subtitle}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
 
-                                          <div className="shrink-0 pt-0.5">
-                                            <DestinationPill
-                                              kind={opt.kind}
-                                              accentColor={
-                                                opt.kind === "Organization"
-                                                  ? destOrgAccentById[opt.id]
-                                                  : null
-                                              }
-                                            />
+                                            <div className="shrink-0">
+                                              <DestinationPill
+                                                kind={opt.kind}
+                                                accentColor={
+                                                  opt.kind === "Organization"
+                                                    ? destOrgAccentById[opt.id]
+                                                    : null
+                                                }
+                                              />
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
 
-                                      <div className="shrink-0">
+                                      <div className="flex justify-end sm:block">
                                         {selected ? (
                                           <button
                                             type="button"
@@ -2405,10 +2343,8 @@ function TrackingLinkDialog({
                                               clearDestination();
                                             }}
                                             className={clsx(
-                                              "inline-flex h-8 w-8 items-center justify-center rounded-md border",
-                                              "border-primary-500/30 bg-primary-500/15 text-primary-200",
-                                              "hover:bg-primary-500/22 transition cursor-pointer",
-                                              "focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+                                              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-primary-500/30 bg-primary-500/15 text-primary-200 transition hover:bg-primary-500/22 focus:outline-none focus:ring-1 focus:ring-primary-500/35",
+                                              "cursor-pointer",
                                             )}
                                             title="Clear selection"
                                             aria-label="Clear selection"
@@ -2418,9 +2354,7 @@ function TrackingLinkDialog({
                                         ) : (
                                           <span
                                             className={clsx(
-                                              "inline-flex h-8 w-8 items-center justify-center rounded-md border",
-                                              "transition",
-                                              "border-white/10 bg-white/5 text-white/20",
+                                              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-white/20 transition",
                                             )}
                                             aria-hidden
                                           >
@@ -2429,12 +2363,6 @@ function TrackingLinkDialog({
                                         )}
                                       </div>
                                     </div>
-
-                                    {/* {selected ? (
-                                      <div className="mt-2 text-[12px] text-primary-200/80">
-                                        Selected — click X to unselect
-                                      </div>
-                                    ) : null} */}
                                   </button>
                                 );
                               })}
@@ -2448,9 +2376,8 @@ function TrackingLinkDialog({
               </div>
             </div>
 
-            {/* Status (custom select) */}
             <div ref={statusWrapRef} className="relative md:col-span-2">
-              <label className="block leading-[90%] font-normal text-white mb-2">
+              <label className="mb-2 block font-normal leading-[90%] text-white">
                 Status
               </label>
 
@@ -2458,10 +2385,8 @@ function TrackingLinkDialog({
                 type="button"
                 disabled={saving}
                 className={clsx(
-                  "mt-2 w-full rounded-lg border bg-neutral-900 px-4 py-3 text-base text-neutral-0 outline-none",
-                  "border-white/10 hover:border-white/20 focus:border-primary-500 transition cursor-pointer",
-                  "flex items-center justify-between gap-3",
-                  "disabled:cursor-not-allowed disabled:opacity-60",
+                  "mt-2 flex w-full items-center justify-between gap-3 rounded-lg border border-white/10 bg-neutral-900 px-4 py-3 text-base text-neutral-0 outline-none transition hover:border-white/20 focus:border-primary-500",
+                  "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
                 )}
                 aria-haspopup="listbox"
                 aria-expanded={statusOpen}
@@ -2503,8 +2428,7 @@ function TrackingLinkDialog({
                           role="option"
                           aria-selected={selected}
                           className={clsx(
-                            "w-full text-left px-4 py-3 transition flex items-start justify-between gap-3",
-                            "hover:bg-white/5 focus:bg-white/5 focus:outline-none",
+                            "flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/5 focus:bg-white/5 focus:outline-none",
                             selected && "bg-primary-500/10",
                           )}
                           onClick={() => {
@@ -2550,8 +2474,7 @@ function TrackingLinkDialog({
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="mt-8 flex flex-col items-center justify-end gap-3 sm:flex-row">
+          <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center sm:justify-end">
             <Button
               type="button"
               variant="secondary"
@@ -2559,8 +2482,7 @@ function TrackingLinkDialog({
               onClick={onClose}
               disabled={saving}
               className={clsx(
-                "py-3 px-6 text-base font-medium leading-[100%]",
-                "border-white/40 hover:border-white/60 hover:bg-transparent",
+                "w-full px-6 py-3 text-base font-medium leading-[100%] border-white/40 hover:border-white/60 hover:bg-transparent sm:w-auto",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
@@ -2590,7 +2512,7 @@ function TrackingLinkDialog({
                 });
               }}
               className={clsx(
-                "py-3 px-6 text-base font-semibold leading-[100%]",
+                "w-full px-6 py-3 text-base font-semibold leading-[100%] sm:w-auto",
                 !canSave && "bg-white/10 hover:bg-white/10",
               )}
               animation
@@ -3195,19 +3117,21 @@ export default function TrackingLinksTable({
       `}</style>
 
       {/* Header */}
-      <div className="mb-2 pb-2 border-b border-neutral-700 flex items-center justify-between px-4">
-        <div className="flex items-center gap-3">
-          <h3 className="text-base font-bold uppercase text-neutral-400">
+      <div className="mb-2 flex items-center justify-between gap-3 border-b border-neutral-700 px-4 pb-2">
+        <div className="min-w-0 flex items-center gap-3">
+          <h3 className="truncate text-base font-bold uppercase text-neutral-400">
             Tracking Links
           </h3>
 
           {loading ? (
-            <span className="text-xs text-neutral-500">Loading...</span>
+            <span className="shrink-0 text-xs text-neutral-500">
+              Loading...
+            </span>
           ) : loadError ? (
             <button
               type="button"
               onClick={() => reload()}
-              className="text-xs text-error-400 hover:text-error-300 underline underline-offset-4 cursor-pointer"
+              className="shrink-0 cursor-pointer text-xs text-error-400 underline underline-offset-4 hover:text-error-300"
               title="Retry"
             >
               Failed to load — Retry
@@ -3215,19 +3139,16 @@ export default function TrackingLinksTable({
           ) : null}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {headerLeftAction ? headerLeftAction : null}
-          {/* + Create (top-right) */}
+
           <button
             type="button"
             onClick={openCreate}
             disabled={loading}
             className={clsx(
-              "inline-flex items-center justify-center",
-              "h-8 w-8 rounded-md",
-              "border border-neutral-500 bg-neutral-700 text-white",
-              "hover:text-white hover:border-white",
-              "focus:outline-none",
+              "inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-500 bg-neutral-700 text-white",
+              "hover:border-white hover:text-white focus:outline-none",
               "cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
             )}
             title="Create Tracking Link"
@@ -3241,7 +3162,7 @@ export default function TrackingLinksTable({
       {/* Empty state */}
       {!loading && !loadError && sorted.length === 0 ? (
         <div className="px-4 py-10 text-center">
-          <p className="text-neutral-200 font-semibold">
+          <p className="font-semibold text-neutral-200">
             No tracking links yet.
           </p>
           <p className="mt-1 text-sm text-neutral-500">
@@ -3262,13 +3183,241 @@ export default function TrackingLinksTable({
         </div>
       ) : (
         <>
-          {/* Table */}
-          <div
-            className={clsx(
-              "relative rounded-lg overflow-hidden",
-              // No bottom padding — overlay must sit on top of the last row
-            )}
-          >
+          {/* Mobile cards */}
+          <div className="space-y-3 px-3 pb-3 md:hidden">
+            {visibleRows.map((r) => {
+              const created = formatCreatedParts(r.created);
+
+              return (
+                <div
+                  key={r.id}
+                  className="overflow-hidden rounded-xl border border-white/10 bg-neutral-948"
+                >
+                  {/* top */}
+                  <div className="flex items-start gap-3 p-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                      {r.iconKey || r.iconUrl ? (
+                        <TrackingIcon
+                          iconKey={r.iconKey}
+                          iconUrl={r.iconUrl}
+                          className="h-5 w-5"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold text-neutral-300">
+                          {titleInitial(r.name)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-neutral-200">
+                        {r.name}
+                      </p>
+
+                      <div className="mt-2 flex min-w-0 items-center gap-2 text-neutral-400">
+                        <span className="min-w-0 truncate text-sm text-neutral-300">
+                          {r.url}
+                        </span>
+
+                        <CopyButton
+                          text={fullTrackingUrl(r.url) || r.url}
+                          title="Copy tracking link"
+                          ariaLabel="Copy tracking link"
+                          className="ml-1 inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:border-white/20 hover:text-white"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                          >
+                            <path
+                              d="M4.6665 6.44469C4.6665 5.97313 4.85383 5.52089 5.18727 5.18745C5.52071 4.85401 5.97295 4.66669 6.4445 4.66669H12.2218C12.4553 4.66669 12.6865 4.71268 12.9022 4.80203C13.118 4.89138 13.314 5.02235 13.4791 5.18745C13.6442 5.35255 13.7751 5.54856 13.8645 5.76428C13.9538 5.97999 13.9998 6.2112 13.9998 6.44469V12.222C13.9998 12.4555 13.9538 12.6867 13.8645 12.9024C13.7751 13.1181 13.6442 13.3142 13.4791 13.4793C13.314 13.6444 13.118 13.7753 12.9022 13.8647C12.6865 13.954 12.4553 14 12.2218 14H6.4445C6.21101 14 5.97981 13.954 5.76409 13.8647C5.54838 13.7753 5.35237 13.6444 5.18727 13.4793C5.02217 13.3142 4.8912 13.1181 4.80185 12.9024C4.71249 12.6867 4.6665 12.4555 4.6665 12.222V6.44469Z"
+                              stroke="#727293"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M2.67467 11.158C2.47 11.0417 2.29977 10.8733 2.18127 10.6699C2.06277 10.4665 2.00023 10.2354 2 10V3.33333C2 2.6 2.6 2 3.33333 2H10C10.5 2 10.772 2.25667 11 2.66667"
+                              stroke="#727293"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </CopyButton>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <DestinationPill
+                          kind={r.destinationKind}
+                          accentColor={orgAccentById[r.organizationId] ?? null}
+                        />
+                        <StatusPill status={r.status} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* stats */}
+                  <div className="grid grid-cols-2 gap-2 border-t border-white/10 px-4 py-3">
+                    <div className="rounded-lg bg-white/[0.03] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">
+                        Views
+                      </p>
+                      <div className="mt-1 flex items-center gap-1.5 text-neutral-0">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          className="h-4 w-4"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            clipRule="evenodd"
+                            d="M10.8749 6.00001L11.1862 5.84401V5.84251L11.1839 5.84026L11.1794 5.83126L11.1637 5.80126L11.1037 5.69326C11.0304 5.56696 10.9526 5.44338 10.8704 5.32276C10.596 4.91997 10.2806 4.54673 9.92916 4.20901C9.08467 3.39901 7.78491 2.57251 5.99992 2.57251C4.21642 2.57251 2.91592 3.39826 2.07142 4.20901C1.72001 4.54673 1.40457 4.91997 1.13017 5.32276C1.01882 5.48704 0.915692 5.65675 0.821166 5.83126L0.816666 5.84026L0.815166 5.84251V5.84326C0.815166 5.84326 0.814416 5.84401 1.12567 6.00001L0.814416 5.84326C0.790351 5.89188 0.777832 5.94539 0.777832 5.99963C0.777832 6.05388 0.790351 6.10739 0.814416 6.15601L0.813666 6.15751L0.815916 6.15976L0.820416 6.16876C0.843802 6.21562 0.868817 6.26165 0.895416 6.30676C1.21836 6.85232 1.61343 7.35182 2.06992 7.79176C2.91517 8.60176 4.21492 9.42676 5.99992 9.42676C7.78416 9.42676 9.08466 8.60176 9.92991 7.79101C10.2807 7.45289 10.5958 7.07969 10.8704 6.67726C10.9756 6.52242 11.0734 6.36275 11.1637 6.19876L11.1794 6.16876L11.1839 6.15976L11.1854 6.15751V6.15676C11.1854 6.15676 11.1862 6.15601 10.8749 6.00001ZM10.8749 6.00001L11.1862 6.15676C11.2102 6.10814 11.2227 6.05463 11.2227 6.00038C11.2227 5.94614 11.2102 5.89262 11.1862 5.84401L10.8749 6.00001ZM5.95492 4.84801C5.64939 4.84801 5.35637 4.96938 5.14033 5.18542C4.92429 5.40146 4.80292 5.69448 4.80292 6.00001C4.80292 6.30554 4.92429 6.59855 5.14033 6.8146C5.35637 7.03064 5.64939 7.15201 5.95492 7.15201C6.26044 7.15201 6.55346 7.03064 6.7695 6.8146C6.98554 6.59855 7.10691 6.30554 7.10691 6.00001C7.10691 5.69448 6.98554 5.40146 6.7695 5.18542C6.55346 4.96938 6.26044 4.84801 5.95492 4.84801ZM4.10842 6.00001C4.10842 5.50989 4.30311 5.03984 4.64968 4.69328C4.99625 4.34671 5.4663 4.15201 5.95642 4.15201C6.44654 4.15201 6.91658 4.34671 7.26315 4.69328C7.60972 5.03984 7.80442 5.50989 7.80442 6.00001C7.80442 6.49013 7.60972 6.96018 7.26315 7.30674C6.91658 7.65331 6.44654 7.84801 5.95642 7.84801C5.4663 7.84801 4.99625 7.65331 4.64968 7.30674C4.30311 6.96018 4.10842 6.49013 4.10842 6.00001Z"
+                            fill="#A7A7BC"
+                          />
+                        </svg>
+                        <span className="tabular-nums text-sm font-semibold">
+                          {r.views}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-white/[0.03] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">
+                        Tickets Sold
+                      </p>
+                      <div className="mt-1 flex items-center gap-1.5 text-neutral-0">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 12 12"
+                          fill="none"
+                          className="h-4 w-4"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            clipRule="evenodd"
+                            d="M7.00413 9.5015L7.00713 8.5C7.00713 8.36706 7.05994 8.23957 7.15394 8.14556C7.24794 8.05156 7.37544 7.99875 7.50838 7.99875C7.64132 7.99875 7.76881 8.05156 7.86281 8.14556C7.95682 8.23957 8.00963 8.36706 8.00963 8.5V9.4885C8.00963 9.729 8.00963 9.8495 8.08663 9.9235C8.16413 9.997 8.28163 9.992 8.51813 9.982C9.44963 9.9425 10.0221 9.817 10.4251 9.414C10.8301 9.011 10.9556 8.4385 10.9951 7.5055C11.0026 7.3205 11.0066 7.2275 10.9721 7.166C10.9371 7.1045 10.7996 7.0275 10.5236 6.873C10.3682 6.78633 10.2387 6.65971 10.1485 6.50624C10.0584 6.35276 10.0108 6.17799 10.0108 6C10.0108 5.82201 10.0584 5.64724 10.1485 5.49376C10.2387 5.34029 10.3682 5.21367 10.5236 5.127C10.7996 4.973 10.9376 4.8955 10.9721 4.834C11.0066 4.7725 11.0026 4.68 10.9946 4.4945C10.9556 3.5615 10.8296 2.9895 10.4251 2.586C9.98663 2.148 9.34763 2.0375 8.26413 2.0095C8.23095 2.00863 8.19794 2.01442 8.16703 2.02652C8.13613 2.03862 8.10796 2.05678 8.08419 2.07995C8.06043 2.10311 8.04154 2.1308 8.02865 2.16138C8.01575 2.19196 8.00912 2.22481 8.00913 2.258V3.5C8.00913 3.63294 7.95632 3.76043 7.86232 3.85444C7.76831 3.94844 7.64082 4.00125 7.50788 4.00125C7.37494 4.00125 7.24744 3.94844 7.15344 3.85444C7.05944 3.76043 7.00663 3.63294 7.00663 3.5L7.00313 2.2495C7.003 2.18328 6.9766 2.11982 6.92973 2.07305C6.88286 2.02627 6.81934 2 6.75313 2H4.99713C3.10713 2 2.16213 2 1.57463 2.586C1.16963 2.989 1.04413 3.5615 1.00463 4.4945C0.997127 4.6795 0.993127 4.7725 1.02763 4.834C1.06263 4.8955 1.20013 4.973 1.47613 5.127C1.63159 5.21367 1.7611 5.34029 1.85125 5.49376C1.9414 5.64724 1.98893 5.82201 1.98893 6C1.98893 6.17799 1.9414 6.35276 1.85125 6.50624C1.7611 6.65971 1.63159 6.78633 1.47613 6.873C1.20013 7.0275 1.06213 7.1045 1.02763 7.166C0.993127 7.2275 0.997127 7.32 1.00513 7.505C1.04413 8.4385 1.17013 9.011 1.57463 9.414C2.16213 10 3.10713 10 4.99763 10H6.50263C6.73863 10 6.85613 10 6.92963 9.927C7.00313 9.854 7.00363 9.737 7.00413 9.5015ZM8.00913 6.5V5.5C8.00913 5.36706 7.95632 5.23957 7.86232 5.14556C7.76831 5.05156 7.64082 4.99875 7.50788 4.99875C7.37494 4.99875 7.24744 5.05156 7.15344 5.14556C7.05944 5.23957 7.00663 5.36706 7.00663 5.5V6.5C7.00663 6.63301 7.05946 6.76056 7.15351 6.85461C7.24756 6.94866 7.37512 7.0015 7.50813 7.0015C7.64113 7.0015 7.76869 6.94866 7.86274 6.85461C7.95679 6.76056 8.00913 6.63301 8.00913 6.5Z"
+                            fill="#A7A7BC"
+                          />
+                        </svg>
+                        <span className="tabular-nums text-sm font-semibold">
+                          {r.ticketsSold}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg bg-white/[0.03] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">
+                        Revenue
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-neutral-0">
+                        {formatMoneyUSD(r.revenue)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-white/[0.03] px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">
+                        Created
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-neutral-0">
+                        {created.date}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-neutral-500">
+                        {created.time || "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* actions */}
+                  <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => openQr(r)}
+                      className={clsx(
+                        "inline-flex items-center justify-center rounded-md p-2",
+                        "hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
+                      )}
+                      title="Open QR"
+                      aria-label="Open QR"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="22"
+                        height="22"
+                        viewBox="0 0 22 22"
+                        fill="none"
+                        className="h-7 w-7"
+                      >
+                        <path
+                          d="M12.8333 11.9167C13.0579 11.9167 13.2746 11.9991 13.4423 12.1483C13.6101 12.2975 13.7173 12.5031 13.7436 12.7261L13.75 12.8333V18.3333C13.7497 18.567 13.6603 18.7917 13.4999 18.9616C13.3395 19.1315 13.1203 19.2337 12.8871 19.2474C12.6538 19.2611 12.4242 19.1852 12.245 19.0353C12.0658 18.8853 11.9507 18.6726 11.9231 18.4406L11.9167 18.3333V12.8333C11.9167 12.5902 12.0132 12.3571 12.1852 12.1852C12.3571 12.0132 12.5902 11.9167 12.8333 11.9167ZM15.5833 16.0417C15.8264 16.0417 16.0596 16.1382 16.2315 16.3102C16.4034 16.4821 16.5 16.7152 16.5 16.9583V18.3333C16.5 18.5764 16.4034 18.8096 16.2315 18.9815C16.0596 19.1534 15.8264 19.25 15.5833 19.25C15.3402 19.25 15.1071 19.1534 14.9352 18.9815C14.7632 18.8096 14.6667 18.5764 14.6667 18.3333V16.9583C14.6667 16.7152 14.7632 16.4821 14.9352 16.3102C15.1071 16.1382 15.3402 16.0417 15.5833 16.0417ZM18.3333 11.9167C18.5579 11.9167 18.7746 11.9991 18.9423 12.1483C19.1101 12.2975 19.2173 12.5031 19.2436 12.7261L19.25 12.8333V18.3333C19.2497 18.567 19.1603 18.7917 18.9999 18.9616C18.8395 19.1315 18.6203 19.2337 18.3871 19.2474C18.1538 19.2611 17.9242 19.1852 17.745 19.0353C17.5658 18.8853 17.4507 18.6726 17.4231 18.4406L17.4167 18.3333V12.8333C17.4167 12.5902 17.5132 12.3571 17.6852 12.1852C17.8571 12.0132 18.0902 11.9167 18.3333 11.9167ZM8.25 11.9167C8.73623 11.9167 9.20255 12.1098 9.54636 12.4536C9.89018 12.7975 10.0833 13.2638 10.0833 13.75V17.4167C10.0833 17.9029 9.89018 18.3692 9.54636 18.713C9.20255 19.0568 8.73623 19.25 8.25 19.25H4.58333C4.0971 19.25 3.63079 19.0568 3.28697 18.713C2.94315 18.3692 2.75 17.9029 2.75 17.4167V13.75C2.75 13.2638 2.94315 12.7975 3.28697 12.4536C3.63079 12.1098 4.0971 11.9167 4.58333 11.9167H8.25ZM15.5833 11.9167C15.8079 11.9167 16.0246 11.9991 16.1923 12.1483C16.3601 12.2975 16.4673 12.5031 16.4936 12.7261L16.5 12.8333V14.2083C16.4997 14.442 16.4103 14.6667 16.2499 14.8366C16.0895 15.0065 15.8703 15.1087 15.6371 15.1224C15.4038 15.1361 15.1742 15.0602 14.995 14.9103C14.8158 14.7603 14.7007 14.5476 14.6731 14.3156L14.6667 14.2083V12.8333C14.6667 12.5902 14.7632 12.3571 14.9352 12.1852C15.1071 12.0132 15.3402 11.9167 15.5833 11.9167ZM8.25 2.75C8.73623 2.75 9.20255 2.94315 9.54636 3.28697C9.89018 3.63079 10.0833 4.0971 10.0833 4.58333V8.25C10.0833 8.73623 9.89018 9.20255 9.54636 9.54636C9.20255 9.89018 8.73623 10.0833 8.25 10.0833H4.58333C4.0971 10.0833 3.63079 9.89018 3.28697 9.54636C2.94315 9.20255 2.75 8.73623 2.75 8.25V4.58333C2.75 4.0971 2.94315 3.63079 3.28697 3.28697C3.63079 2.94315 4.0971 2.75 4.58333 2.75H8.25ZM17.4167 2.75C17.9029 2.75 18.3692 2.94315 18.713 3.28697C19.0568 3.63079 19.25 4.0971 19.25 4.58333V8.25C19.25 8.73623 19.0568 9.20255 18.713 9.54636C18.3692 9.89018 17.9029 10.0833 17.4167 10.0833H13.75C13.2638 10.0833 12.7975 9.89018 12.4536 9.54636C12.1098 9.20255 11.9167 8.73623 11.9167 8.25V4.58333C11.9167 4.0971 12.1098 3.63079 12.4536 3.28697C12.7975 2.94315 13.2638 2.75 13.75 2.75H17.4167Z"
+                          fill="#A7A7BC"
+                        />
+                      </svg>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => openEdit(r)}
+                      title="Edit"
+                      aria-label="Edit"
+                      className={clsx(
+                        "inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5",
+                        "text-white/80 transition hover:border-white/20 hover:bg-white/10",
+                        "focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
+                        "tikdIconBtn tikdIconBtn--edit",
+                      )}
+                    >
+                      <span className="tikdEditMotion" aria-hidden="true">
+                        <TikdEditIcon />
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => openArchive(r)}
+                      title="Archive"
+                      aria-label="Archive"
+                      className={clsx(
+                        "inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5",
+                        "text-white/80 transition hover:border-error-500/35 hover:bg-error-500/15",
+                        "focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
+                        "tikdIconBtn tikdIconBtn--trash",
+                      )}
+                    >
+                      <TikdTrashIcon />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {showViewAll &&
+            computedViewAllHref &&
+            sorted.length > VISIBLE_LIMIT ? (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  variant="viewAction"
+                  size="sm"
+                  onClick={() => router.push(computedViewAllHref)}
+                  title="View all tracking links"
+                  aria-label="View all tracking links"
+                  className="w-full"
+                >
+                  View All
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Desktop table */}
+          <div className="relative hidden overflow-hidden rounded-lg md:block">
             {showViewAll && sorted.length > VISIBLE_LIMIT ? (
               <div
                 className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-neutral-900 to-transparent"
@@ -3426,7 +3575,6 @@ export default function TrackingLinksTable({
               <tbody className="text-white">
                 {visibleRows.flatMap((r, i) => {
                   const isLast = i === visibleRows.length - 1;
-
                   const rowBg =
                     i % 2 === 0 ? "bg-neutral-948" : "bg-neutral-900";
 
@@ -3458,7 +3606,7 @@ export default function TrackingLinksTable({
                               text={fullTrackingUrl(r.url) || r.url}
                               title="Copy tracking link"
                               ariaLabel="Copy tracking link"
-                              className="inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:text-white hover:border-white/20 ml-1"
+                              className="ml-1 inline-flex items-center rounded-sm border border-white/10 p-1 text-white/70 hover:border-white/20 hover:text-white"
                             >
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
@@ -3491,10 +3639,11 @@ export default function TrackingLinksTable({
                           type="button"
                           onClick={() => openQr(r)}
                           className={clsx(
-                            "inline-flex items-center justify-center rounded-md p-1 mr-1",
-                            "hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
+                            "mr-1 inline-flex items-center justify-center rounded-md p-1",
+                            "cursor-pointer hover:bg-white/5 focus:outline-none focus:ring-1 focus:ring-primary-600/35",
                           )}
                           title="Open QR"
+                          aria-label="Open QR"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -3502,7 +3651,7 @@ export default function TrackingLinksTable({
                             height="22"
                             viewBox="0 0 22 22"
                             fill="none"
-                            className="w-7 h-7"
+                            className="h-7 w-7"
                           >
                             <path
                               d="M12.8333 11.9167C13.0579 11.9167 13.2746 11.9991 13.4423 12.1483C13.6101 12.2975 13.7173 12.5031 13.7436 12.7261L13.75 12.8333V18.3333C13.7497 18.567 13.6603 18.7917 13.4999 18.9616C13.3395 19.1315 13.1203 19.2337 12.8871 19.2474C12.6538 19.2611 12.4242 19.1852 12.245 19.0353C12.0658 18.8853 11.9507 18.6726 11.9231 18.4406L11.9167 18.3333V12.8333C11.9167 12.5902 12.0132 12.3571 12.1852 12.1852C12.3571 12.0132 12.5902 11.9167 12.8333 11.9167ZM15.5833 16.0417C15.8264 16.0417 16.0596 16.1382 16.2315 16.3102C16.4034 16.4821 16.5 16.7152 16.5 16.9583V18.3333C16.5 18.5764 16.4034 18.8096 16.2315 18.9815C16.0596 19.1534 15.8264 19.25 15.5833 19.25C15.3402 19.25 15.1071 19.1534 14.9352 18.9815C14.7632 18.8096 14.6667 18.5764 14.6667 18.3333V16.9583C14.6667 16.7152 14.7632 16.4821 14.9352 16.3102C15.1071 16.1382 15.3402 16.0417 15.5833 16.0417ZM18.3333 11.9167C18.5579 11.9167 18.7746 11.9991 18.9423 12.1483C19.1101 12.2975 19.2173 12.5031 19.2436 12.7261L19.25 12.8333V18.3333C19.2497 18.567 19.1603 18.7917 18.9999 18.9616C18.8395 19.1315 18.6203 19.2337 18.3871 19.2474C18.1538 19.2611 17.9242 19.1852 17.745 19.0353C17.5658 18.8853 17.4507 18.6726 17.4231 18.4406L17.4167 18.3333V12.8333C17.4167 12.5902 17.5132 12.3571 17.6852 12.1852C17.8571 12.0132 18.0902 11.9167 18.3333 11.9167ZM8.25 11.9167C8.73623 11.9167 9.20255 12.1098 9.54636 12.4536C9.89018 12.7975 10.0833 13.2638 10.0833 13.75V17.4167C10.0833 17.9029 9.89018 18.3692 9.54636 18.713C9.20255 19.0568 8.73623 19.25 8.25 19.25H4.58333C4.0971 19.25 3.63079 19.0568 3.28697 18.713C2.94315 18.3692 2.75 17.9029 2.75 17.4167V13.75C2.75 13.2638 2.94315 12.7975 3.28697 12.4536C3.63079 12.1098 4.0971 11.9167 4.58333 11.9167H8.25ZM15.5833 11.9167C15.8079 11.9167 16.0246 11.9991 16.1923 12.1483C16.3601 12.2975 16.4673 12.5031 16.4936 12.7261L16.5 12.8333V14.2083C16.4997 14.442 16.4103 14.6667 16.2499 14.8366C16.0895 15.0065 15.8703 15.1087 15.6371 15.1224C15.4038 15.1361 15.1742 15.0602 14.995 14.9103C14.8158 14.7603 14.7007 14.5476 14.6731 14.3156L14.6667 14.2083V12.8333C14.6667 12.5902 14.7632 12.3571 14.9352 12.1852C15.1071 12.0132 15.3402 11.9167 15.5833 11.9167ZM8.25 2.75C8.73623 2.75 9.20255 2.94315 9.54636 3.28697C9.89018 3.63079 10.0833 4.0971 10.0833 4.58333V8.25C10.0833 8.73623 9.89018 9.20255 9.54636 9.54636C9.20255 9.89018 8.73623 10.0833 8.25 10.0833H4.58333C4.0971 10.0833 3.63079 9.89018 3.28697 9.54636C2.94315 9.20255 2.75 8.73623 2.75 8.25V4.58333C2.75 4.0971 2.94315 3.63079 3.28697 3.28697C3.63079 2.94315 4.0971 2.75 4.58333 2.75H8.25ZM17.4167 2.75C17.9029 2.75 18.3692 2.94315 18.713 3.28697C19.0568 3.63079 19.25 4.0971 19.25 4.58333V8.25C19.25 8.73623 19.0568 9.20255 18.713 9.54636C18.3692 9.89018 17.9029 10.0833 17.4167 10.0833H13.75C13.2638 10.0833 12.7975 9.89018 12.4536 9.54636C12.1098 9.20255 11.9167 8.73623 11.9167 8.25V4.58333C11.9167 4.0971 12.1098 3.63079 12.4536 3.28697C12.7975 2.94315 13.2638 2.75 13.75 2.75H17.4167Z"
@@ -3530,7 +3679,7 @@ export default function TrackingLinksTable({
                               fill="#A7A7BC"
                             />
                           </svg>
-                          <span className="tabular-nums inline-flex items-center justify-center gap-1">
+                          <span className="inline-flex items-center justify-center gap-1 tabular-nums">
                             {r.views}
                           </span>
                         </div>
@@ -3554,7 +3703,7 @@ export default function TrackingLinksTable({
                               fill="#A7A7BC"
                             />
                           </svg>
-                          <span className="tabular-nums inline-flex items-center justify-center gap-1">
+                          <span className="inline-flex items-center justify-center gap-1 tabular-nums">
                             {r.ticketsSold}
                           </span>
                         </div>
@@ -3562,12 +3711,11 @@ export default function TrackingLinksTable({
 
                       {/* Revenue */}
                       <td className="px-4 py-3 text-center">
-                        <span className="tabular-nums ">
+                        <span className="tabular-nums">
                           {formatMoneyUSD(r.revenue)}
                         </span>
                       </td>
 
-                      {/* Destination */}
                       {/* Destination */}
                       <td className="px-4 py-3 text-center">
                         <div className="inline-block">
@@ -3590,6 +3738,7 @@ export default function TrackingLinksTable({
                       {/* Date */}
                       {(() => {
                         const c = formatCreatedParts(r.created);
+
                         return (
                           <td className="px-4 py-3 text-center">
                             <div className="flex flex-col items-center leading-tight">
@@ -3613,13 +3762,9 @@ export default function TrackingLinksTable({
                             title="Edit"
                             aria-label="Edit"
                             className={clsx(
-                              // ✅ your box design (keep consistent with your UI)
-                              "inline-flex items-center justify-center",
-                              "h-9 w-9 rounded-md border border-white/10 bg-white/5",
-                              "text-white/80 hover:bg-white/10 hover:border-white/20",
-                              "focus:outline-none focus:ring-1 focus:ring-primary-600/35",
-                              "transition cursor-pointer",
-                              // ✅ animation-only hook
+                              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5",
+                              "text-white/80 transition hover:border-white/20 hover:bg-white/10",
+                              "focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
                               "tikdIconBtn tikdIconBtn--edit",
                             )}
                           >
@@ -3634,13 +3779,9 @@ export default function TrackingLinksTable({
                             title="Archive"
                             aria-label="Archive"
                             className={clsx(
-                              // ✅ same box design
-                              "inline-flex items-center justify-center",
-                              "h-9 w-9 rounded-md border border-white/10 bg-white/5",
-                              "text-white/80 hover:bg-error-500/15 hover:border-error-500/35",
-                              "focus:outline-none focus:ring-1 focus:ring-primary-600/35",
-                              "transition cursor-pointer",
-                              // ✅ animation-only hook
+                              "inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5",
+                              "text-white/80 transition hover:border-error-500/35 hover:bg-error-500/15",
+                              "focus:outline-none focus:ring-1 focus:ring-primary-600/35 cursor-pointer",
                               "tikdIconBtn tikdIconBtn--trash",
                             )}
                           >
@@ -3667,6 +3808,7 @@ export default function TrackingLinksTable({
                 })}
               </tbody>
             </table>
+
             {showViewAll && computedViewAllHref ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
                 <div className="pointer-events-auto">

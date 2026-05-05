@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  X,
 } from "lucide-react";
 
 export type DateRangeValue = {
@@ -42,15 +43,15 @@ type Props = {
   /** Marks trigger as errored (only affects variant="field") */
   error?: boolean;
 
-  /** ✅ controlled open support (optional) */
+  /** controlled open support (optional) */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 
-  /** ✅ hide built-in trigger button (popover still renders/works) */
+  /** hide built-in trigger button (popover still renders/works) */
   hideTrigger?: boolean;
 
   /**
-   * ✅ Selection mode:
+   * Selection mode:
    * - range (default): pick start + end, confirm via Done
    * - single: pick one day, apply + close immediately (no To, no Done)
    */
@@ -245,6 +246,10 @@ export default function DateRangePicker({
   const isSingle = selectionMode === "single";
 
   const [openInternal, setOpenInternal] = useState(false);
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [yearOpen, setYearOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
   const isControlled = typeof openProp === "boolean";
   const open = isControlled ? (openProp as boolean) : openInternal;
 
@@ -258,8 +263,43 @@ export default function DateRangePicker({
     onOpenChange?.(resolved);
   };
 
-  const [monthOpen, setMonthOpen] = useState(false);
-  const [yearOpen, setYearOpen] = useState(false);
+  const closePicker = () => {
+    setOpen(false);
+    setMonthOpen(false);
+    setYearOpen(false);
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const media = window.matchMedia("(max-width: 639px)");
+    const sync = () => setIsMobileViewport(media.matches);
+
+    sync();
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobileViewport(event.matches);
+    };
+
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", handleChange);
+      return () => media.removeEventListener("change", handleChange);
+    }
+
+    media.addListener(handleChange);
+    return () => media.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !isMobileViewport) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [open, isMobileViewport]);
 
   const today = useMemo(() => clampToDay(new Date()), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
@@ -289,14 +329,11 @@ export default function DateRangePicker({
   const [viewYear, setViewYear] = useState(initialAnchor.getFullYear());
   const [viewMonth, setViewMonth] = useState(initialAnchor.getMonth());
 
-  // Draft selection (only applied on "Done" for range mode)
   const [draft, setDraft] = useState<DateRangeValue>({
     start: value.start ? clampToDay(value.start) : null,
     end: value.end ? clampToDay(value.end) : null,
   });
 
-  // Tracks whether the user actually clicked a day during the current open session.
-  // If they didn't, changing the year selector should shift the draft year (expected UX).
   const [didPickInThisOpen, setDidPickInThisOpen] = useState(false);
 
   const committedStart = value.start ? clampToDay(value.start) : null;
@@ -317,34 +354,30 @@ export default function DateRangePicker({
     const anchor = s ?? e ?? today;
     setViewYear(anchor.getFullYear());
     setViewMonth(anchor.getMonth());
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, value.start, value.end, today]);
 
   useEffect(() => {
     function onDocDown(e: MouseEvent) {
-      if (!open) return;
+      if (!open || isMobileViewport) return;
       const el = rootRef.current;
       if (!el) return;
       if (e.target instanceof Node && !el.contains(e.target)) {
-        setOpen(false);
-        setMonthOpen(false);
-        setYearOpen(false);
+        closePicker();
       }
     }
+
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
-  }, [open]);
+  }, [open, isMobileViewport]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!open) return;
       if (e.key === "Escape") {
-        setOpen(false);
-        setMonthOpen(false);
-        setYearOpen(false);
+        closePicker();
       }
     }
+
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
@@ -362,23 +395,17 @@ export default function DateRangePicker({
 
   const canPrev = useMemo(() => {
     const prevMonthStart = startOfMonth(viewYear, viewMonth - 1);
-    return (
-      !effMin ||
-      !isBefore(
-        prevMonthStart,
-        startOfMonth(effMin.getFullYear(), effMin.getMonth()),
-      )
+    return !isBefore(
+      prevMonthStart,
+      startOfMonth(effMin.getFullYear(), effMin.getMonth()),
     );
   }, [viewYear, viewMonth, effMin]);
 
   const canNext = useMemo(() => {
     const nextMonthEnd = endOfMonth(viewYear, viewMonth + 1);
-    return (
-      !effMax ||
-      !isAfter(
-        nextMonthEnd,
-        endOfMonth(effMax.getFullYear(), effMax.getMonth()),
-      )
+    return !isAfter(
+      nextMonthEnd,
+      endOfMonth(effMax.getFullYear(), effMax.getMonth()),
     );
   }, [viewYear, viewMonth, effMax]);
 
@@ -403,10 +430,7 @@ export default function DateRangePicker({
   function applyRange(next: DateRangeValue) {
     const normalized = normalizeRange(next, effMin, effMax);
     onChange(normalized);
-
-    setOpen(false);
-    setMonthOpen(false);
-    setYearOpen(false);
+    closePicker();
   }
 
   function commitPick(day: number) {
@@ -415,13 +439,11 @@ export default function DateRangePicker({
     const picked = clampToDay(new Date(viewYear, viewMonth, day));
     if (isDisabled(picked, effMin, effMax)) return;
 
-    // ✅ single mode: apply immediately + close
     if (isSingle) {
       applyRange({ start: picked, end: picked });
       return;
     }
 
-    // range mode (existing behavior)
     if (!start || (start && end)) {
       setDraft({ start: picked, end: null });
       return;
@@ -494,16 +516,8 @@ export default function DateRangePicker({
     return null;
   }, [variant, presets, value]);
 
-  const popover = clsx(
-    "absolute z-30 rounded-xl border border-white/10 bg-neutral-950/92 p-2.5 backdrop-blur-md",
-    variant === "compact" ? "w-[min(420px,calc(100vw-24px))]" : "w-[292px]",
-    side === "top" ? "bottom-full mb-2" : "mt-2",
-    align === "right" ? "right-0" : "left-0",
-    popoverClassName,
-  );
-
   const compactBtn =
-    "inline-flex w-full items-center gap-2 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-1.5 text-[11px] font-semibold text-white/80 hover:text-white hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer";
+    "inline-flex w-full items-center gap-2 rounded-md border border-white/10 bg-neutral-700 px-2.5 py-1.5 text-[11px] font-semibold text-white/80 hover:border-primary-500 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer";
 
   const fieldBtn = clsx(
     "w-full rounded-lg border bg-neutral-950/60 px-4 py-3 transition",
@@ -520,9 +534,436 @@ export default function DateRangePicker({
         : "text-white/80 hover:bg-white/5 hover:text-white",
     );
 
-  const showSidebar = variant === "compact";
+  const mobileSectionBtn = (active: boolean) =>
+    clsx(
+      "rounded-lg border px-3 py-2 text-[11px] font-semibold transition",
+      active
+        ? "border-primary-500/35 bg-primary-500/16 text-primary-200"
+        : "border-white/10 bg-white/[0.03] text-white/82 hover:border-primary-500/40 hover:text-white",
+    );
 
+  const showSidebar = variant === "compact";
   const hasRange = !!start && !!end;
+
+  const desktopPopoverClass = clsx(
+    "absolute z-30 mt-2 rounded-xl border border-white/10 bg-neutral-950/92 p-2.5 backdrop-blur-md",
+    variant === "compact" ? "w-[420px]" : "w-[292px]",
+    side === "top" ? "bottom-full mb-2 mt-0" : "mt-2",
+    align === "right" ? "right-0" : "left-0",
+    popoverClassName,
+  );
+
+  const renderPanel = (mobile: boolean) => (
+    <div
+      className={clsx(
+        mobile
+          ? "w-full max-w-[420px] rounded-[24px] border border-white/10 bg-neutral-950/96 p-3.5 shadow-[0_30px_90px_rgba(0,0,0,0.65)] backdrop-blur-xl"
+          : desktopPopoverClass,
+      )}
+      role="dialog"
+      aria-modal={mobile || undefined}
+      aria-label="Select date range"
+    >
+      <div className="sm:hidden mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-white/90">
+            Select Dates
+          </div>
+          <div className="truncate text-[11px] text-white/45">{label}</div>
+        </div>
+
+        <button
+          type="button"
+          onClick={closePicker}
+          className="grid size-9 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.04] text-white/75 transition hover:border-primary-500 hover:text-white"
+          aria-label="Close date picker"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <div
+        className={clsx(
+          "grid grid-cols-1 gap-3 sm:gap-2.5",
+          showSidebar && "sm:grid-cols-[124px_1fr]",
+        )}
+      >
+        {showSidebar && (
+          <div className="rounded-xl border border-white/10 bg-neutral-900/60 p-2 sm:p-1.5">
+            <div className="sm:hidden space-y-3">
+              {!!presets.length && (
+                <div>
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                    Quick ranges
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {presets.map((p) => (
+                      <button
+                        key={p.key}
+                        type="button"
+                        onClick={() => applyRange(p.range)}
+                        className={mobileSectionBtn(activeKey === p.key)}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="h-px bg-white/10" />
+
+              <div>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                  Years
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {years.map((y) => {
+                    const yrRange = {
+                      start: startOfYear(y),
+                      end: endOfYear(y),
+                    };
+                    const active = rangeEq(value, yrRange);
+
+                    return (
+                      <button
+                        key={y}
+                        type="button"
+                        onClick={() => applyRange(yrRange)}
+                        className={mobileSectionBtn(active)}
+                      >
+                        {y}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden sm:block">
+              <div className="tikd-scroll max-h-[250px] overflow-auto pr-1">
+                <div className="space-y-1">
+                  {presets.map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => applyRange(p.range)}
+                      className={sidebarBtn(activeKey === p.key)}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="my-2 h-px bg-white/10" />
+
+                <div className="space-y-1">
+                  {years.map((y) => {
+                    const yrRange = {
+                      start: startOfYear(y),
+                      end: endOfYear(y),
+                    };
+                    const active = rangeEq(value, yrRange);
+
+                    return (
+                      <button
+                        key={y}
+                        type="button"
+                        onClick={() => applyRange(yrRange)}
+                        className={sidebarBtn(active)}
+                      >
+                        {y}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => canPrev && moveMonth(-1)}
+              className={clsx(
+                "grid size-8 shrink-0 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white sm:size-7",
+                !canPrev && "pointer-events-none opacity-40",
+              )}
+              aria-label="Previous month"
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            <div className="relative flex min-w-0 flex-1 items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMonthOpen((v) => !v);
+                  setYearOpen(false);
+                }}
+                className={clsx(
+                  "inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white/90 sm:flex-none sm:px-2.5 sm:py-1.5 sm:text-[11px]",
+                  "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                )}
+                aria-expanded={monthOpen}
+                aria-haspopup="listbox"
+              >
+                <span className="truncate">{MONTHS[viewMonth]}</span>
+                <ChevronDown
+                  size={13}
+                  className={clsx(
+                    "shrink-0 opacity-70 transition-transform",
+                    monthOpen && "rotate-180",
+                  )}
+                />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setYearOpen((v) => !v);
+                  setMonthOpen(false);
+                }}
+                className={clsx(
+                  "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white/90 sm:px-2.5 sm:py-1.5 sm:text-[11px]",
+                  "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                )}
+                aria-expanded={yearOpen}
+                aria-haspopup="listbox"
+              >
+                {viewYear}
+                <ChevronDown
+                  size={13}
+                  className={clsx(
+                    "opacity-70 transition-transform",
+                    yearOpen && "rotate-180",
+                  )}
+                />
+              </button>
+
+              {monthOpen && (
+                <div
+                  className="absolute left-0 top-[44px] z-40 w-[126px] overflow-hidden rounded-md border border-white/10 bg-neutral-900 sm:top-[38px] sm:w-[89px]"
+                  role="listbox"
+                  aria-label="Select month"
+                >
+                  <div className="tikd-scroll max-h-[207px] overflow-auto p-1">
+                    {MONTHS.map((m, i) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setViewMonth(i);
+                          setMonthOpen(false);
+                        }}
+                        className={clsx(
+                          "w-full rounded-md px-2 py-2 text-left text-xs font-semibold transition sm:px-2 sm:py-1.5 sm:text-[11px]",
+                          i === viewMonth
+                            ? "bg-primary-500/15 text-primary-300"
+                            : "text-white/80 hover:bg-white/5 hover:text-white",
+                        )}
+                        role="option"
+                        aria-selected={i === viewMonth}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {yearOpen && (
+                <div
+                  className="absolute right-0 top-[44px] z-40 w-[82px] overflow-hidden rounded-md border border-white/10 bg-neutral-900 sm:top-[38px] sm:w-[68px]"
+                  role="listbox"
+                  aria-label="Select year"
+                >
+                  <div className="tikd-scroll max-h-[207px] overflow-auto p-1">
+                    {years.map((y) => (
+                      <button
+                        key={y}
+                        type="button"
+                        onClick={() => {
+                          if (
+                            !didPickInThisOpen &&
+                            (draft.start || draft.end)
+                          ) {
+                            const nextStart = draft.start
+                              ? setYearPreserveMonthDay(draft.start, y)
+                              : null;
+
+                            const nextEnd = draft.end
+                              ? setYearPreserveMonthDay(draft.end, y)
+                              : null;
+
+                            setDraft(
+                              normalizeRange(
+                                { start: nextStart, end: nextEnd },
+                                effMin,
+                                effMax,
+                              ),
+                            );
+                          }
+
+                          setViewYear(y);
+                          setYearOpen(false);
+                        }}
+                        className={clsx(
+                          "w-full rounded-md px-2.5 py-2 text-left text-xs font-semibold transition sm:px-2.5 sm:py-1.5 sm:text-[11px]",
+                          y === viewYear
+                            ? "bg-primary-500/15 text-primary-300"
+                            : "text-white/80 hover:bg-white/5 hover:text-white",
+                        )}
+                        role="option"
+                        aria-selected={y === viewYear}
+                      >
+                        {y}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => canNext && moveMonth(1)}
+              className={clsx(
+                "grid size-8 shrink-0 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white sm:size-7",
+                !canNext && "pointer-events-none opacity-40",
+              )}
+              aria-label="Next month"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-7 gap-1 px-1 sm:mt-2.5">
+            {WEEKDAYS.map((w) => (
+              <div
+                key={w}
+                className="text-center text-[10px] font-semibold text-neutral-400"
+              >
+                {w}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-2 grid grid-cols-7 gap-1 px-1 sm:mt-1.5">
+            {Array.from({ length: offset }).map((_, i) => (
+              <div key={`sp-${i}`} className="h-9 sm:h-8" />
+            ))}
+
+            {Array.from({ length: dim }).map((_, idx) => {
+              const day = idx + 1;
+              const d = clampToDay(new Date(viewYear, viewMonth, day));
+
+              const disabled = isDisabled(d, effMin, effMax);
+
+              const isStart = !!start && sameDay(d, start);
+              const isEnd = !!end && sameDay(d, end);
+
+              const between =
+                hasRange &&
+                start &&
+                end &&
+                inRange(d, start, end) &&
+                !isStart &&
+                !isEnd;
+
+              const isToday = sameDay(d, today);
+
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => commitPick(day)}
+                  disabled={disabled}
+                  className={clsx(
+                    "h-9 rounded-lg text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 sm:h-8 sm:text-[11px]",
+                    disabled
+                      ? "cursor-not-allowed text-white/20 opacity-45"
+                      : "cursor-pointer text-white/85 hover:bg-white/5",
+                    between && !disabled && "bg-primary-500/12 text-white",
+                    (isStart || isEnd) &&
+                      !disabled &&
+                      "bg-primary-500 text-white shadow-[0_10px_24px_rgba(154,70,255,0.26)]",
+                    isToday &&
+                      !disabled &&
+                      !isStart &&
+                      !isEnd &&
+                      "border border-white/10",
+                  )}
+                  aria-label={d.toLocaleDateString(undefined, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2.5 sm:mt-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="min-w-0 rounded-lg border border-white/6 bg-white/[0.03] px-2.5 py-2 text-[11px] font-semibold text-white/70 sm:rounded-none sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:text-[10px]">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-white/50">From:</span>
+                <span className="text-white/85">
+                  {start ? fmtFull(start) : "—"}
+                </span>
+
+                {!isSingle && (
+                  <>
+                    <span className="hidden text-white/25 sm:inline">•</span>
+                    <span className="text-white/50">To:</span>
+                    <span className="text-white/85">
+                      {end ? fmtFull(end) : "—"}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+              <button
+                type="button"
+                onClick={clear}
+                className="flex-1 rounded-md border border-white/10 bg-neutral-900 px-3 py-2 text-[11px] font-semibold text-white/75 hover:border-primary-500 hover:text-white sm:flex-none sm:px-2.5 sm:py-1.5 sm:text-[10px]"
+              >
+                Clear
+              </button>
+
+              {!isSingle && (
+                <button
+                  type="button"
+                  onClick={applyDone}
+                  disabled={!draft.start}
+                  className={clsx(
+                    "flex-1 rounded-md border px-3 py-2 text-[11px] font-semibold transition sm:flex-none sm:px-2.5 sm:py-1.5 sm:text-[10px]",
+                    draft.start
+                      ? "cursor-pointer border-primary-500/35 bg-primary-500/20 text-primary-100 hover:border-primary-500/55 hover:bg-primary-500/26"
+                      : "cursor-not-allowed border-white/10 bg-white/5 text-white/30 opacity-80",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
+                  )}
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <span className="sr-only">
+        {viewStart.toISOString()} {viewEnd.toISOString()} {String(open)}
+      </span>
+    </div>
+  );
 
   return (
     <div ref={rootRef} className={clsx("relative", className)}>
@@ -607,351 +1048,21 @@ export default function DateRangePicker({
         </>
       )}
 
-      {open && (
-        <div className={popover} role="dialog" aria-label="Select date range">
-          <div
-            className={clsx(
-              "gap-2.5",
-              showSidebar ? "grid grid-cols-[124px_1fr]" : "grid grid-cols-1",
-            )}
-          >
-            {showSidebar && (
-              <div className="rounded-xl border border-white/10 bg-neutral-900/60 p-1.5">
-                <div
-                  className={clsx(
-                    "tikd-scroll max-h-[250px] overflow-auto pr-1",
-                  )}
-                >
-                  <div className="space-y-1">
-                    {presets.map((p) => (
-                      <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => applyRange(p.range)}
-                        className={
-                          sidebarBtn(activeKey === p.key) + " cursor-pointer"
-                        }
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="my-2 h-px bg-white/10" />
-
-                  <div className="space-y-1">
-                    {years.map((y) => {
-                      const yrRange = {
-                        start: startOfYear(y),
-                        end: endOfYear(y),
-                      };
-                      const active = rangeEq(value, yrRange);
-                      return (
-                        <button
-                          key={y}
-                          type="button"
-                          onClick={() => applyRange(yrRange)}
-                          className={sidebarBtn(active) + " cursor-pointer"}
-                        >
-                          {y}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => canPrev && moveMonth(-1)}
-                  className={clsx(
-                    "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white cursor-pointer",
-                    !canPrev && "opacity-40 pointer-events-none",
-                  )}
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-
-                <div className="relative flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMonthOpen((v) => !v);
-                      setYearOpen(false);
-                    }}
-                    className={clsx(
-                      "inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-semibold text-white/90",
-                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer",
-                    )}
-                    aria-expanded={monthOpen}
-                    aria-haspopup="listbox"
-                  >
-                    {MONTHS[viewMonth]}
-                    <ChevronDown
-                      size={13}
-                      className={clsx(
-                        "opacity-70 transition-transform",
-                        monthOpen && "rotate-180",
-                      )}
-                    />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setYearOpen((v) => !v);
-                      setMonthOpen(false);
-                    }}
-                    className={clsx(
-                      "inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[11px] font-semibold text-white/90",
-                      "hover:border-primary-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer",
-                    )}
-                    aria-expanded={yearOpen}
-                    aria-haspopup="listbox"
-                  >
-                    {viewYear}
-                    <ChevronDown
-                      size={13}
-                      className={clsx(
-                        "opacity-70 transition-transform",
-                        yearOpen && "rotate-180",
-                      )}
-                    />
-                  </button>
-
-                  {monthOpen && (
-                    <div
-                      className="absolute left-0 top-[38px] z-40 w-[89px] overflow-hidden rounded-md border border-white/10 bg-neutral-900"
-                      role="listbox"
-                      aria-label="Select month"
-                    >
-                      <div
-                        className={clsx(
-                          "tikd-scroll max-h-[207px] overflow-auto p-1",
-                        )}
-                      >
-                        {MONTHS.map((m, i) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => {
-                              setViewMonth(i);
-                              setMonthOpen(false);
-                            }}
-                            className={clsx(
-                              "w-full rounded-md px-2 py-1.5 text-left text-[11px] font-semibold transition cursor-pointer",
-                              i === viewMonth
-                                ? "bg-primary-500/15 text-primary-300"
-                                : "text-white/80 hover:bg-white/5 hover:text-white",
-                            )}
-                            role="option"
-                            aria-selected={i === viewMonth}
-                          >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {yearOpen && (
-                    <div
-                      className="absolute right-0 top-[38px] z-40 w-[68px] overflow-hidden rounded-md border border-white/10 bg-neutral-900"
-                      role="listbox"
-                      aria-label="Select year"
-                    >
-                      <div
-                        className={clsx(
-                          "tikd-scroll max-h-[207px] overflow-auto p-1",
-                        )}
-                      >
-                        {years.map((y) => (
-                          <button
-                            key={y}
-                            type="button"
-                            onClick={() => {
-                              // ✅ Fix: if user changes year but doesn't click a day,
-                              // they expect "Done" to apply that year (same month/day).
-                              if (
-                                !didPickInThisOpen &&
-                                (draft.start || draft.end)
-                              ) {
-                                const nextStart = draft.start
-                                  ? setYearPreserveMonthDay(draft.start, y)
-                                  : null;
-
-                                const nextEnd = draft.end
-                                  ? setYearPreserveMonthDay(draft.end, y)
-                                  : null;
-
-                                setDraft(
-                                  normalizeRange(
-                                    { start: nextStart, end: nextEnd },
-                                    effMin,
-                                    effMax,
-                                  ),
-                                );
-                              }
-
-                              setViewYear(y);
-                              setYearOpen(false);
-                            }}
-                            className={clsx(
-                              "w-full rounded-md px-2.5 py-1.5 text-left text-[11px] font-semibold transition cursor-pointer",
-                              y === viewYear
-                                ? "bg-primary-500/15 text-primary-300"
-                                : "text-white/80 hover:bg-white/5 hover:text-white",
-                            )}
-                            role="option"
-                            aria-selected={y === viewYear}
-                          >
-                            {y}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => canNext && moveMonth(1)}
-                  className={clsx(
-                    "grid size-7 place-items-center rounded-full border border-white/10 bg-neutral-900 text-white/80 transition hover:border-primary-500 hover:text-white cursor-pointer",
-                    !canNext && "opacity-40 pointer-events-none",
-                  )}
-                  aria-label="Next month"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-
-              <div className="mt-2.5 grid grid-cols-7 gap-1 px-1">
-                {WEEKDAYS.map((w) => (
-                  <div
-                    key={w}
-                    className="text-center text-[10px] font-semibold text-neutral-400"
-                  >
-                    {w}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-1.5 grid grid-cols-7 gap-1 px-1">
-                {Array.from({ length: offset }).map((_, i) => (
-                  <div key={`sp-${i}`} className="h-8" />
-                ))}
-
-                {Array.from({ length: dim }).map((_, idx) => {
-                  const day = idx + 1;
-                  const d = clampToDay(new Date(viewYear, viewMonth, day));
-
-                  const disabled = isDisabled(d, effMin, effMax);
-
-                  const isStart = !!start && sameDay(d, start);
-                  const isEnd = !!end && sameDay(d, end);
-
-                  const between =
-                    hasRange &&
-                    start &&
-                    end &&
-                    inRange(d, start, end) &&
-                    !isStart &&
-                    !isEnd;
-
-                  const isToday = sameDay(d, today);
-
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => commitPick(day)}
-                      disabled={disabled}
-                      className={clsx(
-                        "h-8 rounded-lg text-[11px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 cursor-pointer",
-                        disabled
-                          ? "cursor-not-allowed text-white/20 opacity-45"
-                          : "text-white/85 hover:bg-white/5",
-                        between && !disabled && "bg-primary-500/12 text-white",
-                        (isStart || isEnd) &&
-                          !disabled &&
-                          "bg-primary-500 text-white shadow-[0_10px_24px_rgba(154,70,255,0.26)]",
-                        isToday &&
-                          !disabled &&
-                          !isStart &&
-                          !isEnd &&
-                          "border border-white/10",
-                      )}
-                      aria-label={d.toLocaleDateString(undefined, {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-2.5 flex items-center justify-between gap-3">
-                <div className="min-w-0 text-[10px] font-semibold text-white/70">
-                  <span className="text-white/50">From:</span>{" "}
-                  <span className="text-white/85">
-                    {start ? fmtFull(start) : "—"}
-                  </span>
-                  {!isSingle && (
-                    <>
-                      <span className="mx-2 text-white/25">•</span>
-                      <span className="text-white/50">To:</span>{" "}
-                      <span className="text-white/85">
-                        {end ? fmtFull(end) : "—"}
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                <div className="shrink-0 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={clear}
-                    className="rounded-md border border-white/10 bg-neutral-900 px-2.5 py-1.5 text-[10px] font-semibold text-white/75 hover:border-primary-500 hover:text-white cursor-pointer"
-                  >
-                    Clear
-                  </button>
-
-                  {!isSingle && (
-                    <button
-                      type="button"
-                      onClick={applyDone}
-                      disabled={!draft.start}
-                      className={clsx(
-                        "rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition",
-                        "border",
-                        draft.start
-                          ? "cursor-pointer border-primary-500/35 bg-primary-500/20 text-primary-100 hover:bg-primary-500/26 hover:border-primary-500/55"
-                          : "cursor-not-allowed border-white/10 bg-white/5 text-white/30 opacity-80",
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40",
-                      )}
-                    >
-                      Done
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+      {open && isMobileViewport && (
+        <div className="fixed inset-0 z-[120] sm:hidden">
+          <button
+            type="button"
+            onClick={closePicker}
+            className="absolute inset-0 bg-black/72 backdrop-blur-md"
+            aria-label="Close date picker backdrop"
+          />
+          <div className="relative z-[121] flex min-h-full items-start justify-center overflow-y-auto px-3 py-4">
+            {renderPanel(true)}
           </div>
-
-          <span className="sr-only">
-            {viewStart.toISOString()} {viewEnd.toISOString()} {String(open)}
-          </span>
         </div>
       )}
+
+      {open && !isMobileViewport && renderPanel(false)}
     </div>
   );
 }

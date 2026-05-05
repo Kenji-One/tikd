@@ -191,7 +191,7 @@ export default function AboutUsPage() {
 
         <div className="mx-auto max-w-3xl">
           <p className="mb-3 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-neutral-300">
-            <Music4 className="h-4 w-4" /> About Tikd.
+            <Music4 className="h-4 w-4" /> About Tixsy.
           </p>
           <h1 className="text-balance text-4xl font-extrabold leading-tight md:text-6xl">
             We’re building the most delightful way to{" "}
@@ -202,7 +202,7 @@ export default function AboutUsPage() {
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-pretty text-neutral-200">
             Born from late nights, loud speakers and a love for community —
-            Tikd. connects fans with unforgettable experiences and helps
+            Tixsy. connects fans with unforgettable experiences and helps
             organizers sell out with ease.
           </p>
 
@@ -245,7 +245,7 @@ export default function AboutUsPage() {
           <div className="space-y-4 text-sm leading-relaxed text-neutral-300 md:text-base">
             <p>
               We’ve all dealt with clunky checkouts, surprise fees, and QR codes
-              that don’t scan. Tikd. fixes that with an experience crafted for
+              that don’t scan. Tixsy. fixes that with an experience crafted for
               real life — mobile first, wallet ready, and lightning quick.
             </p>
             <p>
@@ -272,7 +272,7 @@ export default function AboutUsPage() {
             <TimelineItem
               icon={<Globe2 className="h-4 w-4" />}
               title="Scaling the vibes"
-              text="From pop-ups to major venues — today Tikd. powers events across dozens of cities."
+              text="From pop-ups to major venues — today Tixsy. powers events across dozens of cities."
             />
           </div>
         </div>
@@ -283,7 +283,7 @@ export default function AboutUsPage() {
         <SectionTitle
           kicker="Our Values"
           title="Principles that guide every decision"
-          sub="We keep these close when we design, build, and support Tikd."
+          sub="We keep these close when we design, build, and support Tixsy."
         />
         <div className="grid items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {values.map((v) => (
@@ -329,7 +329,7 @@ export default function AboutUsPage() {
           Let’s make your next event unforgettable
         </h2>
         <p className="mx-auto mt-2 max-w-xl text-pretty text-neutral-300">
-          Join hundreds of organizers using Tikd. for fast checkout, fair
+          Join hundreds of organizers using Tixsy. for fast checkout, fair
           pricing, and happier guests.
         </p>
         <div className="mt-7 flex items-center justify-center gap-3">

@@ -114,7 +114,7 @@ export async function GET() {
 
         // Keep UI fields stable (you can later map org/team roles here)
         role: "Contact",
-        company: "Tikd",
+        company: "Tixsy",
         companyHref: "#",
 
         createdAt: f.createdAt ? new Date(f.createdAt).toISOString() : null,

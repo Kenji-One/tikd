@@ -13,11 +13,12 @@ type PaymentStatusResponse = {
   finalized: boolean;
   order: {
     id: string;
-    status: string;
+    status: "pending" | "paid" | "refunded" | "cancelled" | "expired";
     ticketIds: string[];
     total: number;
     currency: string;
     eventId: string;
+    itemTicketTypeIds: string[];
   };
 };
 
@@ -45,6 +46,22 @@ async function pollPaymentFinalization(
 
       if (data.finalized) {
         return { ok: true, response: data };
+      }
+
+      if (data.order.status === "expired") {
+        return {
+          ok: false,
+          message: "Checkout expired. Please start your purchase again.",
+          status: "expired",
+        };
+      }
+
+      if (data.order.status === "cancelled") {
+        return {
+          ok: false,
+          message: "Payment was not completed.",
+          status: "cancelled",
+        };
       }
 
       if (
@@ -100,7 +117,7 @@ function parsePaymentIntentId(input: string | null): string | null {
 
 export default function CheckoutReturn() {
   const search = useSearchParams();
-  const { clear } = useCart();
+  const { removeItem, clear } = useCart();
 
   const [status, setStatus] = useState<
     "loading" | "succeeded" | "processing" | "failed"
@@ -127,7 +144,23 @@ export default function CheckoutReturn() {
       if (cancelled) return;
 
       if (result.ok) {
-        clear();
+        const purchasedKeys = Array.from(
+          new Set(
+            (result.response.order.itemTicketTypeIds ?? []).map(
+              (ticketTypeId) =>
+                `${result.response.order.eventId}:${ticketTypeId}`,
+            ),
+          ),
+        );
+
+        if (purchasedKeys.length > 0) {
+          for (const key of purchasedKeys) {
+            removeItem(key);
+          }
+        } else {
+          clear();
+        }
+
         setStatus("succeeded");
         return;
       }
@@ -145,7 +178,7 @@ export default function CheckoutReturn() {
     return () => {
       cancelled = true;
     };
-  }, [search, clear]);
+  }, [search, removeItem, clear]);
 
   return (
     <main className="min-h-[60vh] bg-neutral-950">

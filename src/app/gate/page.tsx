@@ -61,7 +61,7 @@ export default function GatePage() {
               <div className="relative w-[110px] h-[44px]">
                 <Image
                   src="/Logo.svg"
-                  alt="Tikd."
+                  alt="Tixsy."
                   fill
                   priority
                   className="object-contain"

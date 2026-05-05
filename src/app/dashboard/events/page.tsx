@@ -309,8 +309,8 @@ async function fetchEventLiveStats(
 
   const ticketsSoldUrl =
     `/api/analytics/tickets-sold?eventId=${encodeURIComponent(eventId)}` +
-    `&from=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
-    `&to=${encodeURIComponent(endIso)}`;
+    `&start=${encodeURIComponent(ANALYTICS_RANGE_START_ISO)}` +
+    `&end=${encodeURIComponent(endIso)}`;
 
   const revenueUrl =
     `/api/analytics/revenue?eventId=${encodeURIComponent(eventId)}` +
@@ -391,22 +391,23 @@ function MiniSelect<T extends string>({
     options.find((o) => o.key === value)?.label ?? options[0]?.label;
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div ref={wrapRef} className="relative w-full sm:w-auto">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={clsx(
-          "inline-flex items-center gap-2 rounded-full border border-white/10",
+          "inline-flex w-full items-center justify-between gap-2 rounded-full border border-white/10",
           "bg-[#12141f] px-3 py-2 font-medium text-neutral-200",
           "transition hover:bg-white/8 hover:text-neutral-0",
           "focus:outline-none hover:border-primary-500 focus-visible:border-primary-500 cursor-pointer",
+          "sm:w-auto sm:justify-center",
           btnClassName,
         )}
       >
         {label}
         <ChevronDown
           className={clsx(
-            "h-4 w-4 transition-transform",
+            "h-4 w-4 shrink-0 transition-transform",
             open ? "rotate-180 text-neutral-100" : "text-neutral-400",
           )}
         />
@@ -548,20 +549,18 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
 
-  // track for hover/tilt motion
   const trackRafRef = useRef<number | null>(null);
   const trackUntilRef = useRef<number>(0);
 
   const closeTimer = useRef<number | null>(null);
 
-  // cache tooltip height just to decide top/bottom (NOT for positioning)
   const heightCacheRef = useRef<number>(170);
 
   const [pos, setPos] = useState<{
     top: number;
     left: number;
     placement: "top" | "bottom";
-    arrowLeft: number; // px inside tooltip
+    arrowLeft: number;
   }>({ top: 0, left: 0, placement: "top", arrowLeft: 146 });
 
   useEffect(() => setMounted(true), []);
@@ -575,12 +574,11 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
 
     const r = btn.getBoundingClientRect();
 
-    const tooltipW = 222; // keep as-is
-    const gap = 10; // a touch more breathing room (tweak if you want)
+    const tooltipW = 222;
+    const gap = 10;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // update cached height when we can (only used to choose top/bottom)
     const measuredH =
       tipRef.current?.getBoundingClientRect().height ?? heightCacheRef.current;
     heightCacheRef.current = measuredH;
@@ -590,12 +588,10 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
 
     const centerX = r.left + r.width / 2;
 
-    // clamp CENTER, because we will use translateX(-50%)
     const minCenter = 12 + tooltipW / 2;
     const maxCenter = vw - 12 - tooltipW / 2;
     const clampedCenterX = clamp(centerX, minCenter, maxCenter);
 
-    // decide top/bottom (only decision uses height; position does NOT)
     const spaceTop = r.top;
     const spaceBottom = vh - r.bottom;
 
@@ -603,14 +599,9 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
     const placement: "top" | "bottom" =
       wantTop || spaceTop > spaceBottom ? "top" : "bottom";
 
-    // KEY FIX:
-    // We anchor the tooltip to the icon and let CSS transform handle "above"
     const top = placement === "top" ? r.top - gap : r.bottom + gap;
     const left = clampedCenterX;
 
-    // arrow inside tooltip should point to the REAL icon center,
-    // even if the tooltip is clamped horizontally.
-    // tooltip left edge (because transformX(-50%)) = left - tooltipW/2
     const tooltipLeftEdge = left - tooltipW / 2;
     const arrowLeftRaw = centerX - tooltipLeftEdge;
     const arrowLeft = clamp(arrowLeftRaw, 18, tooltipW - 18);
@@ -675,7 +666,6 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
 
     setOpen(true);
 
-    // do a couple of immediate syncs: first frame + a bit of tracking
     requestAnimationFrame(() => {
       recalc();
       startTracking(520);
@@ -706,7 +696,6 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
         "transition-opacity duration-150 ease-out",
         open ? "opacity-100" : "pointer-events-none opacity-0",
       )}
-      // ✅ Anchor to icon and pull above using transform — no height math.
       style={{
         top: pos.top,
         left: pos.left,
@@ -717,14 +706,12 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
       }}
       role="tooltip"
     >
-      {/* We animate a tiny inner nudge, WITHOUT touching the outer transform */}
       <div
         className={clsx(
           "transition-transform duration-150 ease-out",
           open ? "translate-y-0" : "translate-y-1",
         )}
       >
-        {/* Border / shell */}
         <div
           className={clsx(
             "relative isolate rounded-[12px] p-[1px]",
@@ -835,7 +822,6 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
             </div>
           </div>
 
-          {/* Arrow */}
           <div
             className={clsx(
               "pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 rotate-45",
@@ -936,6 +922,32 @@ function OrgPickerModal({
     });
   }, [orgs, query]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollBarGap =
+      window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = "hidden";
+    if (scrollBarGap > 0) {
+      document.body.style.paddingRight = `${scrollBarGap}px`;
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const canConfirm = orgs.length > 0 && !!selectedOrgId && !loading;
@@ -953,7 +965,7 @@ function OrgPickerModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-md sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
     >
@@ -965,11 +977,11 @@ function OrgPickerModal({
 
       <div
         className={clsx(
-          "relative z-10 w-[92vw] max-w-[480px]",
-          "rounded-2xl border border-white/12",
+          "relative z-10 flex w-full max-w-[480px] flex-col",
+          "rounded-t-[24px] border border-white/12 border-b-0",
           "bg-neutral-950/95 shadow-[0_28px_80px_rgba(0,0,0,0.85)]",
-          "h-[min(578px,80vh)]",
-          "p-5 sm:p-6",
+          "h-[min(88svh,720px)] max-h-[88svh]",
+          "px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:h-[min(578px,80vh)] sm:max-h-[80vh] sm:rounded-2xl sm:border sm:p-6",
         )}
         onClick={handlePanelClick}
       >
@@ -980,7 +992,7 @@ function OrgPickerModal({
                 Choose an organization
               </h2>
 
-              <p className="mt-1 text-xs text-neutral-300">
+              <p className="mt-1 text-xs leading-5 text-neutral-300">
                 Events operate under an organization. Pick which one this new
                 event belongs to, or create a new organization first.
               </p>
@@ -1009,14 +1021,14 @@ function OrgPickerModal({
               className={clsx(
                 "focus-visible:!ring-primary-500",
                 "!text-[13px] placeholder:!text-neutral-500",
-                "!min-h-[44px] w-full",
+                "!min-h-[46px] w-full",
               )}
             />
           </div>
 
-          <div className="mt-4 flex-1 min-h-0">
+          <div className="mt-4 min-h-0 flex-1">
             {loading ? (
-              <div className="h-full tikd-scrollbar overflow-y-auto pr-2">
+              <div className="tikd-scrollbar h-full overflow-y-auto pr-1 sm:pr-2">
                 <div className="space-y-3">
                   {[...Array(6)].map((_, i) => (
                     <Skeleton key={i} className="h-[74px] rounded-2xl" />
@@ -1035,8 +1047,8 @@ function OrgPickerModal({
                     </p>
                   </div>
                 ) : (
-                  <div className="tikd-scrollbar max-h-[312px] overflow-y-auto pr-2">
-                    <div className="grid grid-cols-2 gap-3">
+                  <div className="tikd-scrollbar h-full overflow-y-auto pr-1 sm:pr-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {filteredOrgs.map((org) => {
                         const selected = org._id === selectedOrgId;
 
@@ -1051,7 +1063,6 @@ function OrgPickerModal({
                             )}
                             onClick={(e) => handleCardClick(e, org._id)}
                           >
-                            {/* ✅ FIX: stable vertical layout with reserved bottom slot */}
                             <div className="flex h-full flex-col items-center justify-between">
                               <div className="flex w-full flex-col items-center gap-3 pt-1">
                                 <div
@@ -1087,8 +1098,7 @@ function OrgPickerModal({
                                 </div>
                               </div>
 
-                              {/* ✅ reserved slot (always present) */}
-                              <div className="pb-1 mt-3 h-6">
+                              <div className="mt-3 h-6 pb-1">
                                 {selected ? (
                                   <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary-900/90 via-primary-700/90 to-primary-500/90 px-2.5 py-1 text-[11px] font-medium text-neutral-0 shadow-[0_0_0_1px_rgba(255,255,255,0.08)]">
                                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1113,7 +1123,7 @@ function OrgPickerModal({
                 <p className="font-medium text-neutral-0">
                   You don&apos;t have any organizations yet.
                 </p>
-                <p className="mt-1 text-xs text-neutral-400">
+                <p className="mt-1 text-xs leading-5 text-neutral-400">
                   Create an organization first, then you can launch events under
                   that brand.
                 </p>
@@ -1129,17 +1139,20 @@ function OrgPickerModal({
           </div>
 
           {orgs.length > 0 ? (
-            <div className="pt-8">
+            <div className="mt-4 border-t border-white/10 pt-4">
               <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={!canConfirm}
-                  onClick={onConfirm}
-                >
-                  <CalendarPlus className="h-4 w-4" />
-                  Continue
-                </Button>
+                <div className="w-full sm:w-auto">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={!canConfirm}
+                    onClick={onConfirm}
+                    className="w-full justify-center"
+                  >
+                    <CalendarPlus className="h-4 w-4" />
+                    Continue
+                  </Button>
+                </div>
               </div>
             </div>
           ) : null}
@@ -1148,6 +1161,7 @@ function OrgPickerModal({
     </div>
   );
 }
+
 /* -------------------- Shared sort fields --------------------------- */
 const SORT_FIELDS: { key: SortField; label: string }[] = [
   { key: "title", label: "Title" },
@@ -1164,10 +1178,7 @@ function PinGlyph({
   active: boolean;
   className?: string;
 }) {
-  // Uiverse colors (kept true to reference)
   const accent = "rgb(179, 139, 255)";
-
-  // Inactive stroke tuned for dark UI while keeping the same SVG shape
   const idleStroke = "rgba(255,255,255,0.72)";
 
   const stroke = active ? accent : idleStroke;
@@ -1202,7 +1213,6 @@ function PinOverlayButton({
     <button
       type="button"
       onClick={(e) => {
-        // ✅ critical: prevent EventCard/Link navigation
         e.preventDefault();
         e.stopPropagation();
         onToggle();
@@ -1212,7 +1222,6 @@ function PinOverlayButton({
         "inline-flex items-center gap-2 cursor-pointer",
         pinned
           ? clsx(
-              // “Pinned” pill (matches your screenshot vibe)
               "h-8 w-8 rounded-lg flex items-center justify-center",
               "border border-primary-500/35",
               "bg-neutral-950/55 backdrop-blur-md",
@@ -1222,7 +1231,6 @@ function PinOverlayButton({
               "active:scale-[0.97]",
             )
           : clsx(
-              // Unpinned = compact icon button
               "h-8 w-8 justify-center rounded-lg",
               "border border-white/10 bg-neutral-950/45 backdrop-blur-md",
               "text-neutral-200",
@@ -1236,6 +1244,24 @@ function PinOverlayButton({
     >
       <PinGlyph active={pinned} />
     </button>
+  );
+}
+
+function MobileMetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      className={clsx(
+        "rounded-[12px] border border-white/10 bg-white/[0.04] px-2.5 py-2.5 text-center",
+        "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]",
+      )}
+    >
+      <p className="truncate text-[12px] font-semibold leading-tight text-neutral-0">
+        {value}
+      </p>
+      <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-neutral-500">
+        {label}
+      </p>
+    </div>
   );
 }
 
@@ -1272,7 +1298,7 @@ function EventRowCard({
       <span
         className={clsx(
           "inline-flex items-center gap-1.5 rounded-full",
-          "border border-white/10 bg-white/[0.04] px-2.5 py-1",
+          "border border-white/10 bg-white/[0.04] px-2.5 py-1.5",
           "text-[11px] font-medium text-neutral-200",
           "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]",
         )}
@@ -1333,23 +1359,23 @@ function EventRowCard({
     <Link
       href={`/dashboard/events/${ev._id}`}
       className={clsx(
-        "group relative flex w-full items-center gap-4",
-        "rounded-[14px] border border-white/10",
-        "bg-white/[0.04] px-4 py-3.5",
+        "group relative flex w-full flex-col gap-3",
+        "rounded-[16px] border border-white/10",
+        "bg-white/[0.04] px-4 py-4",
         "shadow-[0_18px_55px_rgba(0,0,0,0.35)]",
         "transition-colors",
         "hover:border-primary-500/55 hover:bg-white/[0.06]",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+        "md:flex-row md:items-center md:gap-4 md:rounded-[14px] md:px-4 md:py-3.5",
       )}
     >
-      {/* Left */}
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[12px] bg-white/5 ring-1 ring-white/10">
+      <div className="flex min-w-0 items-start gap-3 md:items-center">
+        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[12px] bg-white/5 ring-1 ring-white/10 md:h-11 md:w-11">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={rowImg}
             alt=""
-            className="h-11 w-11 object-cover"
+            className="h-full w-full object-cover"
             onError={(e) => {
               const img = e.currentTarget;
               if (img.src !== EVENT_CARD_DEFAULT_POSTER) {
@@ -1360,31 +1386,21 @@ function EventRowCard({
           />
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="truncate text-[14px] font-semibold text-neutral-50">
+            <div className="truncate text-[14px] font-semibold text-neutral-50 sm:text-[15px]">
               {ev.title}
             </div>
-
-            {/* {pinned ? (
-              <span
-                className={clsx(
-                  "hidden sm:inline-flex items-center gap-1.5 rounded-full",
-                  "border border-primary-500/25 bg-primary-500/10 px-2 py-1",
-                  "text-[10px] font-semibold text-primary-200",
-                )}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-primary-300" />
-                Pinned
-              </span>
-            ) : null} */}
           </div>
 
-          <div className="mt-0.5 truncate text-[12px] text-neutral-400">
-            {clampText(`${formatDateLine(ev.date)} • ${ev.location ?? ""}`, 68)}
+          <div className="mt-0.5 truncate text-[12px] leading-5 text-neutral-400">
+            {clampText(`${formatDateLine(ev.date)} • ${ev.location ?? ""}`, 72)}
           </div>
 
-          {/* Mobile metrics */}
+          <div className="mt-1 truncate text-[11px] text-neutral-500 md:hidden">
+            {orgName}
+          </div>
+
           <div className="mt-2 flex flex-wrap gap-2 md:hidden">
             <MobileChip
               label="Sold"
@@ -1405,10 +1421,9 @@ function EventRowCard({
         </div>
       </div>
 
-      {/* Desktop metrics (clean, aligned) */}
       <div
         className={clsx(
-          "hidden md:grid flex-1 items-center",
+          "hidden md:grid md:flex-1 md:items-center",
           "grid-cols-[minmax(220px,1fr)_110px_110px_140px]",
           "gap-6 px-2",
         )}
@@ -1439,8 +1454,7 @@ function EventRowCard({
         />
       </div>
 
-      {/* Right */}
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div className="flex w-full items-center justify-between pt-1 md:ml-auto md:w-auto md:justify-end md:pt-0">
         <button
           type="button"
           onClick={(e) => {
@@ -1480,20 +1494,15 @@ export default function DashboardEventsPage() {
 
   const [view, setView] = useState<EventViewId>("upcoming");
 
-  // ✅ layout view (grid/list) like Organizations page
   const [layout, setLayout] = useState<GridListValue>("grid");
 
-  // ✅ remember what the user last chose for Upcoming view
   const [lastUpcomingLayout, setLastUpcomingLayout] =
     useState<GridListValue>("grid");
 
-  // ✅ track transitions between tabs
   const prevViewRef = useRef<EventViewId>("upcoming");
 
-  // ✅ header search (events)
   const [eventsQuery, setEventsQuery] = useState("");
 
-  // ✅ header sort (reused existing SortControls, moved next to GridListToggle)
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -1514,7 +1523,6 @@ export default function DashboardEventsPage() {
 
   const { data: pinnedIdsResp } = useQuery<{ ids: string[] }>({
     queryKey: ["eventPins"],
-    // ✅ prevent browser/proxy caching from returning stale `{ ids: [] }`
     queryFn: () =>
       fetchJSON<{ ids: string[] }>("/api/events/pins", { cache: "no-store" }),
     enabled: !!session,
@@ -1559,7 +1567,6 @@ export default function DashboardEventsPage() {
 
   const orgsList = useMemo<Org[]>(() => orgs ?? [], [orgs]);
 
-  // Defensive fallback: if API doesn't send `organization/org`, attach it from orgsList via organizationId
   const events = useMemo<MyEvent[]>(() => {
     const list = (allEvents ?? []) as MyEvent[];
     if (!list.length) return list;
@@ -1633,13 +1640,11 @@ export default function DashboardEventsPage() {
   useEffect(() => {
     const prev = prevViewRef.current;
 
-    // Leaving Upcoming → remember the user's chosen layout, then force list for Past/Drafts
     if (prev === "upcoming" && view !== "upcoming") {
       setLastUpcomingLayout(layout);
       setLayout("list");
     }
 
-    // Returning to Upcoming → restore the user's previous layout (grid/list)
     if (prev !== "upcoming" && view === "upcoming") {
       setLayout(lastUpcomingLayout);
     }
@@ -1647,7 +1652,6 @@ export default function DashboardEventsPage() {
     prevViewRef.current = view;
   }, [view, layout, lastUpcomingLayout]);
 
-  // ✅ Reset to page-appropriate default sort direction when choosing a new field.
   const defaultDirFor = useMemo(() => {
     return (field: SortField): SortDir => {
       if (field === "title") return "asc";
@@ -1656,12 +1660,10 @@ export default function DashboardEventsPage() {
     };
   }, [view]);
 
-  // Keep sortDir in sync when view changes and sortField is eventDate (so “Upcoming” feels natural).
   useEffect(() => {
     if (!sortField) return;
     setSortDir((prev) => {
       const ideal = defaultDirFor(sortField);
-      // only auto-adjust for eventDate; leave other fields as user last picked
       if (sortField === "eventDate") return ideal;
       return prev;
     });
@@ -1685,7 +1687,6 @@ export default function DashboardEventsPage() {
     router.push(`/dashboard/organizations/${selectedOrgId}/events/create`);
   }
 
-  // ✅ Apply header search to whichever view is active
   const upcomingFiltered = useMemo(
     () => upcomingBase.filter((e) => matchesEventQuery(e, eventsQuery)),
     [upcomingBase, eventsQuery],
@@ -1733,17 +1734,15 @@ export default function DashboardEventsPage() {
     [draftsFiltered, sortField, sortDir],
   );
 
-  // ✅ Keep EventCard sizes EXACTLY as-is
   const gridCols =
-    "grid-cols-[repeat(auto-fill,minmax(170px,170px))] " +
-    "sm:grid-cols-[repeat(auto-fill,minmax(190px,190px))] " +
+    "grid-cols-1 justify-items-center gap-4 " +
+    "sm:grid-cols-[repeat(auto-fill,minmax(190px,190px))] sm:justify-start sm:gap-3 " +
     "md:grid-cols-[repeat(auto-fill,minmax(200px,200px))] " +
     "lg:grid-cols-[repeat(auto-fill,minmax(210px,210px))]";
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       <section className="pb-16">
-        {/* ✅ Match Organizations page structure: one main card wrapper */}
         <section
           className={clsx(
             "mt-4 overflow-hidden rounded-2xl border border-white/10",
@@ -1756,23 +1755,21 @@ export default function DashboardEventsPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* ✅ Header layout */}
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
+            <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300">
                   EVENTS
                 </div>
-                <div className="mt-1 text-neutral-400">
+                <div className="mt-1 text-sm leading-6 text-neutral-400">
                   Track performance, manage drafts, and jump into event setup.
                 </div>
               </div>
 
-              <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-                {/* Search bar */}
+              <div className="flex w-full min-w-0 flex-col gap-3 xl:w-auto xl:flex-row xl:items-center">
                 <div
                   className={clsx(
-                    "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 bg-[#12141f] h-10",
+                    "relative h-12 w-full min-w-0 sm:h-10 xl:w-[420px]",
+                    "rounded-[22px] border border-white/10 bg-[#12141f] sm:rounded-lg",
                   )}
                 >
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
@@ -1781,8 +1778,8 @@ export default function DashboardEventsPage() {
                     onChange={(e) => setEventsQuery(e.target.value)}
                     placeholder="Search here"
                     className={clsx(
-                      "h-10 w-full rounded-lg bg-transparent",
-                      "pl-10 pr-4 text-[12px] text-neutral-100",
+                      "h-12 w-full rounded-[22px] bg-transparent sm:h-10 sm:rounded-lg",
+                      "pl-10 pr-4 text-[14px] text-neutral-100 sm:text-[12px]",
                       "placeholder:text-neutral-500",
                       "outline-none border-none focus:ring-1 focus:ring-primary-500",
                     )}
@@ -1790,55 +1787,103 @@ export default function DashboardEventsPage() {
                   />
                 </div>
 
-                {/* Controls */}
-                <div className="flex items-center gap-2">
-                  <GridListToggle
-                    value={layout}
-                    onChange={setLayout}
-                    disabled={view !== "upcoming"}
-                    ariaLabel="Layout view toggle"
-                  />
-                  <SortControl
-                    options={SORT_FIELDS}
-                    sortField={sortField}
-                    sortDir={sortDir}
-                    setSortField={setSortField}
-                    setSortDir={setSortDir}
-                    defaultDirFor={defaultDirFor}
-                    dropdownWidthClass="w-[220px]"
-                  />
-
+                <div className="flex flex-col gap-3 sm:hidden">
                   <MiniSelect
                     value={view}
                     onChange={setView}
                     options={viewOptions}
-                    btnClassName="h-10"
+                    btnClassName="h-12 w-full px-4 text-[15px]"
                   />
 
-                  <Button
-                    onClick={openOrgPicker}
-                    type="button"
-                    variant="primary"
-                    icon={<CalendarPlus className="h-4 w-4" />}
-                    animation
-                  >
-                    Create Event
-                  </Button>
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0">
+                      <GridListToggle
+                        value={layout}
+                        onChange={setLayout}
+                        disabled={view !== "upcoming"}
+                        ariaLabel="Layout view toggle"
+                      />
+                    </div>
+
+                    <div className="shrink-0">
+                      <SortControl
+                        options={SORT_FIELDS}
+                        sortField={sortField}
+                        sortDir={sortDir}
+                        setSortField={setSortField}
+                        setSortDir={setSortDir}
+                        defaultDirFor={defaultDirFor}
+                        dropdownWidthClass="w-[min(18rem,calc(100vw-2.5rem))]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="w-full pt-1">
+                    <Button
+                      onClick={openOrgPicker}
+                      type="button"
+                      variant="primary"
+                      icon={<CalendarPlus className="h-4 w-4" />}
+                      animation
+                      className="w-full justify-center"
+                    >
+                      Create Event
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="hidden sm:flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center xl:flex-nowrap">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <GridListToggle
+                      value={layout}
+                      onChange={setLayout}
+                      disabled={view !== "upcoming"}
+                      ariaLabel="Layout view toggle"
+                    />
+
+                    <SortControl
+                      options={SORT_FIELDS}
+                      sortField={sortField}
+                      sortDir={sortDir}
+                      setSortField={setSortField}
+                      setSortDir={setSortDir}
+                      defaultDirFor={defaultDirFor}
+                      dropdownWidthClass="w-[min(18rem,calc(100vw-2.5rem))] sm:w-[220px]"
+                    />
+
+                    <MiniSelect
+                      value={view}
+                      onChange={setView}
+                      options={viewOptions}
+                      btnClassName="h-10 w-full sm:w-auto"
+                    />
+                  </div>
+
+                  <div className="w-full sm:w-auto">
+                    <Button
+                      onClick={openOrgPicker}
+                      type="button"
+                      variant="primary"
+                      icon={<CalendarPlus className="h-4 w-4" />}
+                      animation
+                    >
+                      Create Event
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Content */}
             <div className="mt-4">
-              {/* UPCOMING */}
               {view === "upcoming" ? (
                 eventsLoading ? (
                   layout === "grid" ? (
-                    <div
-                      className={clsx("grid gap-3", gridCols, "justify-start")}
-                    >
+                    <div className={clsx("grid content-start", gridCols)}>
                       {Array.from({ length: 10 }).map((_, i) => (
-                        <div key={i} className="w-full">
+                        <div
+                          key={i}
+                          className="w-full max-w-[280px] sm:w-full sm:max-w-none"
+                        >
                           <Skeleton className="aspect-[71/114] w-full rounded-lg" />
                           <div className="mt-2 space-y-1">
                             <Skeleton className="h-4 w-3/4 rounded-md" />
@@ -1852,33 +1897,30 @@ export default function DashboardEventsPage() {
                       {Array.from({ length: 8 }).map((_, i) => (
                         <Skeleton
                           key={`up-row-skel-${i}`}
-                          className="h-[56px] w-full rounded-[12px]"
+                          className="h-[110px] w-full rounded-[16px] md:h-[92px] md:rounded-[12px]"
                         />
                       ))}
                     </div>
                   )
                 ) : upcomingSorted.length === 0 ? (
-                  <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-10 text-center">
+                  <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-8 text-center sm:p-10">
                     <p className="text-sm font-medium text-neutral-0">
                       No upcoming events yet
                     </p>
-                    <p className="mt-2 text-[12px] text-neutral-400">
+                    <p className="mt-2 text-[12px] leading-5 text-neutral-400">
                       Create an event and it will appear here once scheduled.
                     </p>
                   </div>
                 ) : layout === "grid" ? (
-                  <div
-                    className={clsx(
-                      "grid gap-3",
-                      gridCols,
-                      "justify-start content-start",
-                    )}
-                  >
+                  <div className={clsx("grid content-start", gridCols)}>
                     {upcomingSorted.map((ev) => {
                       const isPinned = pinnedIds.has(String(ev._id));
 
                       return (
-                        <div key={ev._id} className="relative group">
+                        <div
+                          key={ev._id}
+                          className="relative group w-full max-w-[280px] sm:w-full sm:max-w-none"
+                        >
                           <EventCard
                             id={ev._id}
                             title={ev.title}
@@ -1890,8 +1932,8 @@ export default function DashboardEventsPage() {
                             className="w-full"
                             topLeftOverlay={<EventInfoTooltip ev={ev} />}
                             topLeftOverlayClassName={clsx(
-                              "opacity-0 transition-opacity duration-200",
-                              "group-hover:opacity-100 group-focus-within:opacity-100",
+                              "opacity-100 transition-opacity duration-200",
+                              "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
                             )}
                             topRightOverlay={
                               <PinOverlayButton
@@ -1906,11 +1948,10 @@ export default function DashboardEventsPage() {
                               isPinned
                                 ? "opacity-100 pointer-events-auto"
                                 : clsx(
-                                    "opacity-0 pointer-events-none",
-                                    "[@media(hover:hover)]:group-hover:opacity-100",
-                                    "[@media(hover:hover)]:group-hover:pointer-events-auto",
-                                    "[@media(hover:hover)]:group-focus-within:opacity-100",
-                                    "[@media(hover:hover)]:group-focus-within:pointer-events-auto",
+                                    "opacity-100 pointer-events-auto",
+                                    "sm:opacity-0 sm:pointer-events-none",
+                                    "sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto",
+                                    "sm:group-focus-within:opacity-100 sm:group-focus-within:pointer-events-auto",
                                   ),
                             )}
                           />
@@ -1937,25 +1978,24 @@ export default function DashboardEventsPage() {
                 )
               ) : null}
 
-              {/* PAST */}
               {view === "past" ? (
                 eventsLoading ? (
                   <div className="space-y-3">
-                    <Skeleton className="h-[92px] rounded-2xl" />
-                    <Skeleton className="h-[92px] rounded-2xl" />
-                    <Skeleton className="h-[92px] rounded-2xl" />
+                    <Skeleton className="h-[116px] rounded-[16px] md:h-[92px] md:rounded-2xl" />
+                    <Skeleton className="h-[116px] rounded-[16px] md:h-[92px] md:rounded-2xl" />
+                    <Skeleton className="h-[116px] rounded-[16px] md:h-[92px] md:rounded-2xl" />
                   </div>
                 ) : pastSorted.length === 0 ? (
-                  <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-10 text-center">
+                  <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-8 text-center sm:p-10">
                     <p className="text-sm font-medium text-neutral-0">
                       No past events yet
                     </p>
-                    <p className="mt-2 text-[12px] text-neutral-400">
+                    <p className="mt-2 text-[12px] leading-5 text-neutral-400">
                       Once you’ve hosted events, they’ll show up here.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3 sm:space-y-2">
                     {pastSorted.map((ev, idx) => {
                       const revenue = revenueOf(ev);
                       const ticketsSold = ticketsOf(ev);
@@ -1972,15 +2012,17 @@ export default function DashboardEventsPage() {
                           key={ev._id}
                           href={`/dashboard/events/${ev._id}`}
                           className={clsx(
-                            "group relative block rounded-lg border transition-colors duration-200 ease-out",
+                            "group relative block rounded-[16px] border border-white/10 bg-white/[0.04] shadow-[0_18px_55px_rgba(0,0,0,0.30)] transition-colors duration-200 ease-out",
+                            "hover:border-primary-500/35 hover:bg-white/[0.06]",
+                            "md:shadow-none md:rounded-lg",
                             activeRow
-                              ? "border-white/10 bg-neutral-948/10"
-                              : "border-transparent bg-transparent hover:bg-white/4",
+                              ? "md:border-white/10 md:bg-neutral-948/10"
+                              : "md:border-transparent md:bg-transparent md:hover:bg-white/4",
                           )}
                         >
                           <span
                             className={clsx(
-                              "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                              "pointer-events-none absolute inset-0 z-0 rounded-[16px] md:rounded-lg",
                               "opacity-0 transition-opacity duration-250 ease-out",
                               "group-hover:opacity-100",
                               "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]",
@@ -1988,16 +2030,16 @@ export default function DashboardEventsPage() {
                           />
                           <span
                             className={clsx(
-                              "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                              "pointer-events-none absolute inset-0 z-0 rounded-[16px] md:rounded-lg",
                               "opacity-0 transition-opacity duration-250 ease-out",
                               "group-hover:opacity-100",
                               "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]",
                             )}
                           />
 
-                          <div className="relative z-10 flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
+                          <div className="relative z-10 flex flex-col gap-3 p-4 md:flex-row md:items-center md:gap-4 md:p-4">
+                            <div className="flex min-w-0 items-start gap-3 md:items-center">
+                              <div className="h-[58px] w-[58px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 md:h-[54px] md:w-[54px] md:rounded-lg">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={rowImg}
@@ -2013,17 +2055,35 @@ export default function DashboardEventsPage() {
                                 />
                               </div>
 
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <p className="truncate text-[15px] font-semibold text-neutral-0">
                                   {ev.title}
                                 </p>
                                 <p className="mt-1 truncate text-xs text-primary-500">
                                   {formatDateLine(ev.date)}
                                 </p>
+                                <p className="mt-1 truncate text-[11px] text-neutral-500 md:hidden">
+                                  {ev.location}
+                                </p>
                               </div>
                             </div>
 
-                            <div className="grid flex-1 grid-cols-1 gap-3 text-left sm:grid-cols-3 sm:text-center">
+                            <div className="grid grid-cols-3 gap-2 md:hidden">
+                              <MobileMetricCard
+                                label="Revenue"
+                                value={money(revenue)}
+                              />
+                              <MobileMetricCard
+                                label="Sold"
+                                value={ticketsSold.toLocaleString()}
+                              />
+                              <MobileMetricCard
+                                label="Date"
+                                value={formatEventDate(ev.date)}
+                              />
+                            </div>
+
+                            <div className="hidden flex-1 grid-cols-1 gap-3 text-left sm:grid-cols-3 sm:text-center md:grid">
                               <div>
                                 <p className="text-base font-semibold text-neutral-0">
                                   {money(revenue)}
@@ -2057,20 +2117,19 @@ export default function DashboardEventsPage() {
                 )
               ) : null}
 
-              {/* DRAFTS */}
               {view === "drafts" ? (
                 eventsLoading ? (
                   <div className="space-y-3">
-                    <Skeleton className="h-[92px] rounded-2xl" />
-                    <Skeleton className="h-[92px] rounded-2xl" />
-                    <Skeleton className="h-[92px] rounded-2xl" />
+                    <Skeleton className="h-[108px] rounded-[16px] md:h-[92px] md:rounded-2xl" />
+                    <Skeleton className="h-[108px] rounded-[16px] md:h-[92px] md:rounded-2xl" />
+                    <Skeleton className="h-[108px] rounded-[16px] md:h-[92px] md:rounded-2xl" />
                   </div>
                 ) : draftsSorted.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-10 text-center">
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-neutral-950/50 p-8 text-center sm:p-10">
                     <p className="text-sm font-medium text-neutral-0">
                       No drafts yet
                     </p>
-                    <p className="mt-1 text-xs text-neutral-300">
+                    <p className="mt-1 text-xs leading-5 text-neutral-300">
                       Start creating an event and save it as a draft to keep
                       building it later.
                     </p>
@@ -2084,7 +2143,7 @@ export default function DashboardEventsPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3 sm:space-y-2">
                     {draftsSorted.map((ev, idx) => {
                       const activeRow = idx === 0;
 
@@ -2098,15 +2157,17 @@ export default function DashboardEventsPage() {
                           key={ev._id}
                           href={`/dashboard/events/${ev._id}`}
                           className={clsx(
-                            "group relative block rounded-lg border transition-colors duration-200 ease-out",
+                            "group relative block rounded-[16px] border border-white/10 bg-white/[0.04] shadow-[0_18px_55px_rgba(0,0,0,0.30)] transition-colors duration-200 ease-out",
+                            "hover:border-primary-500/35 hover:bg-white/[0.06]",
+                            "md:shadow-none md:rounded-lg",
                             activeRow
-                              ? "border-white/10 bg-neutral-948/10"
-                              : "border-transparent bg-transparent hover:bg-white/4",
+                              ? "md:border-white/10 md:bg-neutral-948/10"
+                              : "md:border-transparent md:bg-transparent md:hover:bg-white/4",
                           )}
                         >
                           <span
                             className={clsx(
-                              "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                              "pointer-events-none absolute inset-0 z-0 rounded-[16px] md:rounded-lg",
                               "opacity-0 transition-opacity duration-250 ease-out",
                               "group-hover:opacity-100",
                               "bg-[radial-gradient(900px_220px_at_20%_0%,rgba(154,70,255,0.10),transparent_55%),radial-gradient(700px_220px_at_95%_120%,rgba(66,139,255,0.08),transparent_55%)]",
@@ -2114,16 +2175,16 @@ export default function DashboardEventsPage() {
                           />
                           <span
                             className={clsx(
-                              "pointer-events-none absolute inset-0 z-0 rounded-lg",
+                              "pointer-events-none absolute inset-0 z-0 rounded-[16px] md:rounded-lg",
                               "opacity-0 transition-opacity duration-250 ease-out",
                               "group-hover:opacity-100",
                               "shadow-[0_0_0_1px_rgba(154,70,255,0.22),0_0_22px_rgba(154,70,255,0.14)]",
                             )}
                           />
 
-                          <div className="relative z-10 flex flex-col gap-3 p-3 md:flex-row md:items-center md:gap-4 md:p-4">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="h-[54px] w-[54px] shrink-0 overflow-hidden rounded-lg border border-white/10 bg-neutral-900">
+                          <div className="relative z-10 flex flex-col gap-3 p-4 md:flex-row md:items-center md:gap-4 md:p-4">
+                            <div className="flex min-w-0 items-start gap-3 md:items-center">
+                              <div className="h-[58px] w-[58px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 md:h-[54px] md:w-[54px] md:rounded-lg">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={rowImg}
@@ -2139,17 +2200,25 @@ export default function DashboardEventsPage() {
                                 />
                               </div>
 
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <p className="truncate text-[15px] font-semibold text-neutral-0">
                                   {ev.title}
                                 </p>
                                 <p className="mt-1 truncate text-xs text-primary-500">
                                   {formatDateLine(ev.date)}
                                 </p>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
+                                  <span className="inline-flex items-center rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1 text-[11px] font-semibold text-primary-200">
+                                    Draft
+                                  </span>
+                                  <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium text-neutral-300">
+                                    Saved
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
-                            <div className="flex flex-1 items-center justify-start sm:justify-end">
+                            <div className="hidden flex-1 items-center justify-start sm:justify-end md:flex">
                               <div className="text-left sm:text-center">
                                 <p className="text-sm font-semibold text-neutral-0">
                                   Draft

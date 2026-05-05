@@ -339,12 +339,12 @@ export default function OrgDashboardShell({
           </div>
 
           <div className="mt-5 px-4">
-            <div className="no-scrollbar overflow-x-auto overflow-y-visible">
-              <div className="flex w-full justify-center">
+            <div className="no-scrollbar -mx-4 overflow-x-auto overflow-y-visible px-4 sm:mx-0 sm:px-0">
+              <div className="flex w-max min-w-full justify-start md:w-full md:justify-center">
                 <nav
                   aria-label="Organization dashboard tabs"
                   role="tablist"
-                  className="tikd-tabs-shell relative inline-flex min-w-max items-center gap-3 px-2 py-2"
+                  className="tikd-tabs-shell relative inline-flex min-w-max snap-x snap-mandatory items-center gap-2 px-1.5 py-1.5 sm:gap-3 sm:px-2 sm:py-2"
                 >
                   {visibleTabs.map((tab) => {
                     const href = basePath ? tab.href(basePath) : "#";
@@ -362,13 +362,13 @@ export default function OrgDashboardShell({
                         aria-current={isActive ? "page" : undefined}
                         title={!isActive ? tab.label : undefined}
                         className={clsx(
-                          "relative z-10 min-h-[44px] px-3.5 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
+                          "relative z-10 min-h-[42px] shrink-0 snap-start px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0 sm:min-h-[44px] sm:px-3.5",
                           isActive ? "tikd-tab-active" : "tikd-tab-icon",
                         )}
                       >
-                        <Icon className={clsx("shrink-0", "h-5.5 w-5.5")} />
+                        <Icon className="h-5 w-5 shrink-0 sm:h-[22px] sm:w-[22px]" />
                         {isActive ? (
-                          <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.2px]">
+                          <span className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.2px] sm:text-[15px]">
                             {tab.label}
                           </span>
                         ) : (

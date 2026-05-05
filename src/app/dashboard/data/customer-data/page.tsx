@@ -29,10 +29,10 @@ const ROWS: Row[] = Array.from({ length: 10 }).map((_, i) => ({
     i % 3 === 0 ? "Nina Johnson" : i % 3 === 1 ? "Alex Rivera" : "Chris Stone",
   email:
     i % 3 === 0
-      ? "nina@tikd.com"
+      ? "nina@tixsy.com"
       : i % 3 === 1
-        ? "alex@tikd.com"
-        : "chris@tikd.com",
+        ? "alex@tixsy.com"
+        : "chris@tixsy.com",
   orders: 1 + (i % 6),
   spent: 120 + i * 55,
   dateCreated: "Sep 19, 2025",

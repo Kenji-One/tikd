@@ -1,4 +1,10 @@
+// src\models\User.ts
 import { Schema, models, model, Document, Model } from "mongoose";
+
+import {
+  CHECKOUT_GENDER_VALUES,
+  type UserCheckoutProfile,
+} from "@/types/checkout";
 
 /* ───────── Types ───────── */
 export type Channel = "call" | "email" | "sms";
@@ -46,8 +52,15 @@ export interface IUser extends Document {
   company?: string;
   companyHref?: string;
 
-  /** Instagram on Friend card */
+  /** Instagram on Friend card / reusable checkout autofill */
   instagram?: string;
+
+  /**
+   * Dedicated reusable checkout autofill fields.
+   * Historical purchases must NOT depend on these values directly;
+   * orders/tickets should snapshot buyer data at purchase time.
+   */
+  checkoutProfile?: UserCheckoutProfile;
 
   // Security audit
   passwordUpdatedAt?: Date;
@@ -82,6 +95,31 @@ const NotificationsSchema = new Schema<UserNotifications>(
       special: { type: Boolean, default: false },
       weekly: { type: Boolean, default: false },
       outlet: { type: Boolean, default: true },
+    },
+  },
+  { _id: false },
+);
+
+const CheckoutProfileSchema = new Schema<UserCheckoutProfile>(
+  {
+    facebookProfile: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 280,
+    },
+    gender: {
+      type: String,
+      enum: [...CHECKOUT_GENDER_VALUES, null],
+      default: null,
+    },
+    dateOfBirth: {
+      type: Date,
+      default: null,
+    },
+    updatedAt: {
+      type: Date,
+      default: null,
     },
   },
   { _id: false },
@@ -136,6 +174,16 @@ const UserSchema = new Schema<IUser>(
     companyHref: { type: String, trim: true, default: "" },
 
     instagram: { type: String, trim: true, default: "" },
+
+    checkoutProfile: {
+      type: CheckoutProfileSchema,
+      default: () => ({
+        facebookProfile: "",
+        gender: null,
+        dateOfBirth: null,
+        updatedAt: null,
+      }),
+    },
 
     passwordUpdatedAt: { type: Date },
 

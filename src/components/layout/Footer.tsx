@@ -29,7 +29,7 @@ const groups: LinkGroup[] = [
   {
     title: "Company",
     links: [
-      { label: "Sell on TIKD", href: "/organizers" },
+      { label: "Sell on TIXSY", href: "/organizers" },
       { label: "About", href: "/about" },
       { label: "Discover", href: "/discover" },
       { label: "Fan Support", href: "/help" },
@@ -184,12 +184,12 @@ export default function Footer() {
               src="/Logo.svg"
               width={96}
               height={34}
-              alt="Tikd Logo"
+              alt="Tixsy Logo"
               className="opacity-95"
             />
             <span className="hidden h-6 w-px bg-white/10 md:block" />
             <p className="hidden text-neutral-300 md:block">
-              Discover, buy, and enjoy the night with Tikd.
+              Discover, buy, and enjoy the night with Tixsy.
             </p>
           </div>
         </section>
@@ -202,7 +202,7 @@ export default function Footer() {
 
           <div>
             <h4 className="mb-4 text-sm font-semibold text-neutral-200/80 tracking-wide">
-              Get Tikd.
+              Get Tixsy.
             </h4>
             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
               <StoreBadge
@@ -276,7 +276,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <section className="flex flex-col-reverse items-center justify-between gap-6 py-6 md:flex-row">
           <p className="text-xs text-neutral-400">
-            © {new Date().getFullYear()} TIKD. All rights reserved.
+            © {new Date().getFullYear()} TIXSY. All rights reserved.
           </p>
 
           <ul className="flex flex-wrap items-center gap-5 text-sm">

@@ -140,7 +140,7 @@ function TicketTypeWizard({
   const subjectToApproval = watch("subjectToApproval");
   const addBuyerDetailsToOrder = watch("addBuyerDetailsToOrder");
   const addPurchasedTicketsToAttendeesCount = watch(
-    "addPurchasedTicketsToAttendeesCount"
+    "addPurchasedTicketsToAttendeesCount",
   );
   const enableEmailAttachments = watch("enableEmailAttachments");
   const watermarkEnabled = watch("watermarkEnabled");
@@ -274,7 +274,7 @@ function TicketTypeWizard({
   const stepTitles = [
     "Create ticket type",
     "Quantities",
-    "Checkout Requirments",
+    "Checkout Requirements",
     "Customize the way your ticket looks",
   ] as const;
 
@@ -378,7 +378,7 @@ function TicketTypeWizard({
                       ? "border-transparent bg-primary-600 shadow-[0_0_28px_rgba(133,0,255,0.65)]"
                       : isCompleted
                         ? "border-primary-600 bg-neutral-0"
-                        : "border-neutral-700 bg-neutral-0"
+                        : "border-neutral-700 bg-neutral-0",
                   )}
                 >
                   <Icon
@@ -388,7 +388,7 @@ function TicketTypeWizard({
                         ? "text-neutral-0"
                         : isCompleted
                           ? "text-primary-600"
-                          : "text-neutral-500"
+                          : "text-neutral-500",
                     )}
                   />
                 </div>
@@ -399,7 +399,7 @@ function TicketTypeWizard({
                       ? "text-neutral-0"
                       : isCompleted
                         ? "text-neutral-100"
-                        : "text-neutral-300"
+                        : "text-neutral-300",
                   )}
                 >
                   {step.label}
@@ -555,7 +555,7 @@ export default function TicketTypesPage() {
     const list = ticketTypes ?? [];
     if (!query.trim()) return list;
     return list.filter((t) =>
-      t.name.toLowerCase().includes(query.toLowerCase())
+      t.name.toLowerCase().includes(query.toLowerCase()),
     );
   }, [ticketTypes, query]);
 
@@ -669,7 +669,7 @@ export default function TicketTypesPage() {
                         ? "border border-success-700/40 bg-success-900/40 text-success-300"
                         : t.status === "sale_ended"
                           ? "border border-white/10 bg-neutral-900 text-neutral-200"
-                          : "border border-warning-700/40 bg-warning-900/40 text-warning-200"
+                          : "border border-warning-700/40 bg-warning-900/40 text-warning-200",
                     )}
                   >
                     {t.status.replace("_", " ")}

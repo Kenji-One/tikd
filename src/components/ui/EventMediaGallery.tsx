@@ -43,13 +43,11 @@ function getYouTubeId(url: string): string | null {
   try {
     const u = new URL(raw);
 
-    // youtu.be/<id>
     if (u.hostname === "youtu.be") {
       const id = u.pathname.replace("/", "").trim();
       return id ? id : null;
     }
 
-    // youtube.com/watch?v=<id>
     if (
       u.hostname.endsWith("youtube.com") ||
       u.hostname.endsWith("youtube-nocookie.com")
@@ -61,13 +59,11 @@ function getYouTubeId(url: string): string | null {
         return id || null;
       }
 
-      // /embed/<id>
       if (path.startsWith("/embed/")) {
         const id = path.replace("/embed/", "").split("/")[0]?.trim() ?? "";
         return id || null;
       }
 
-      // /shorts/<id>
       if (path.startsWith("/shorts/")) {
         const id = path.replace("/shorts/", "").split("/")[0]?.trim() ?? "";
         return id || null;
@@ -76,7 +72,6 @@ function getYouTubeId(url: string): string | null {
 
     return null;
   } catch {
-    // Non-URL strings: try basic patterns
     const m1 = raw.match(/v=([a-zA-Z0-9_-]{6,})/);
     if (m1?.[1]) return m1[1];
 
@@ -180,7 +175,6 @@ function VideoCard({ item, index }: { item: EventMediaItem; index: number }) {
             referrerPolicy="strict-origin-when-cross-origin"
           />
         ) : isDirectVideoUrl(url) ? (
-          // uploaded/hosted video file (Cloudinary, S3, etc.)
           <video
             className="absolute inset-0 h-full w-full object-cover"
             controls
@@ -191,7 +185,6 @@ function VideoCard({ item, index }: { item: EventMediaItem; index: number }) {
             Your browser does not support the video tag.
           </video>
         ) : (
-          // fallback: treat as embeddable iframe link (e.g. already an embed URL)
           <iframe
             src={url}
             title={title}
@@ -206,7 +199,7 @@ function VideoCard({ item, index }: { item: EventMediaItem; index: number }) {
       </div>
 
       {item.caption?.trim() ? (
-        <figcaption className="px-4 py-3 text-sm text-white/75">
+        <figcaption className="px-3 py-3 text-sm text-white/75 sm:px-4">
           {item.caption.trim()}
         </figcaption>
       ) : null}
@@ -277,8 +270,8 @@ function ImageCarousel({ items }: { items: EventMediaItem[] }) {
               onClick={goPrev}
               aria-label="Previous photo"
               className={[
-                "absolute left-3 top-1/2 -translate-y-1/2",
-                "grid size-10 place-items-center rounded-full",
+                "absolute left-2 top-1/2 -translate-y-1/2 sm:left-3",
+                "grid size-9 place-items-center rounded-full sm:size-10",
                 "border border-white/12 bg-black/30 backdrop-blur-md cursor-pointer",
                 "text-white/90 hover:bg-black/40 hover:text-white",
                 "shadow-[0_18px_50px_rgba(0,0,0,0.55)]",
@@ -295,8 +288,8 @@ function ImageCarousel({ items }: { items: EventMediaItem[] }) {
               onClick={goNext}
               aria-label="Next photo"
               className={[
-                "absolute right-3 top-1/2 -translate-y-1/2",
-                "grid size-10 place-items-center rounded-full",
+                "absolute right-2 top-1/2 -translate-y-1/2 sm:right-3",
+                "grid size-9 place-items-center rounded-full sm:size-10",
                 "border border-white/12 bg-black/30 backdrop-blur-md cursor-pointer",
                 "text-white/90 hover:bg-black/40 hover:text-white",
                 "shadow-[0_18px_50px_rgba(0,0,0,0.55)]",
@@ -311,14 +304,13 @@ function ImageCarousel({ items }: { items: EventMediaItem[] }) {
         ) : null}
       </div>
 
-      {/* Caption + dots */}
-      <div className="px-4 py-3">
+      <div className="px-3 py-3 sm:px-4">
         {current.caption?.trim() ? (
           <div className="text-sm text-white/75">{current.caption.trim()}</div>
         ) : null}
 
         {count > 1 ? (
-          <div className="flex items-center justify-center gap-2">
+          <div className="mt-2 flex items-center justify-center gap-2">
             {images.map((_, i) => (
               <Dot
                 key={i}
@@ -363,7 +355,6 @@ export default function EventMediaGallery({
 
   return (
     <div className="space-y-4">
-      {/* Videos / YouTube embeds (one-by-one) */}
       {videos.length > 0 ? (
         <div className="space-y-4">
           {videos.map((v, i) => (
@@ -372,7 +363,6 @@ export default function EventMediaGallery({
         </div>
       ) : null}
 
-      {/* Images as carousel */}
       {images.length > 0 ? <ImageCarousel items={images} /> : null}
     </div>
   );

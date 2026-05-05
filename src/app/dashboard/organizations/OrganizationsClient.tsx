@@ -150,7 +150,6 @@ function roleMetaFromOrg(org: Org): RoleBadgeMeta {
 
 function resolveOrgAccentColor(org: Org) {
   const v = String(org.accentColor || "").trim();
-  // if empty, use default "what it is now" (primary)
   return v || "var(--color-primary-500)";
 }
 
@@ -174,7 +173,7 @@ function Pagination({
   }, [totalPages]);
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1">
+    <div className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 p-1 sm:w-auto">
       <button
         type="button"
         onClick={() => onPage(clamp(page - 1, 1, totalPages))}
@@ -242,10 +241,8 @@ function OrganizationListRow({
   const accent = resolveOrgAccentColor(org);
 
   const styleVars: OrgRowStyle = { ["--org-accent"]: accent };
-
   const isHexAccent = String(accent || "").startsWith("#");
 
-  // Accent-driven visuals (fallback to your primary-purple vibe)
   const borderIdle = isHexAccent ? `${accent}2B` : "rgba(154,70,255,0.22)";
   const borderHover = isHexAccent ? `${accent}55` : "rgba(154,70,255,0.40)";
   const glow = isHexAccent ? `${accent}55` : "rgba(154,70,255,0.45)";
@@ -259,24 +256,23 @@ function OrganizationListRow({
       href={`/dashboard/organizations/${org._id}`}
       style={styleVars}
       className={clsx(
-        "group relative flex w-full items-center justify-between gap-4",
-        "rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
+        "group relative flex w-full flex-col gap-3",
+        "rounded-[16px] border border-white/10 bg-white/5 px-4 py-4",
         "transition-colors",
-        // ✅ same behavior as before, but driven by org accent
         "hover:bg-white/7 hover:border-[color:var(--org-accent)]",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--org-accent)]/60",
+        "md:flex-row md:items-center md:justify-between md:gap-4 md:rounded-[12px] md:px-4 md:py-3",
       )}
     >
-      {/* Left (title + description) */}
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+      <div className="flex min-w-0 items-start gap-3 md:items-center">
+        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-[12px] bg-white/5 ring-1 ring-white/10 md:h-10 md:w-10 md:rounded-[10px]">
           {org.logo ? (
             <Image
               src={org.logo}
               alt={org.name}
-              width={40}
-              height={40}
-              className="h-10 w-10 object-cover"
+              width={44}
+              height={44}
+              className="h-full w-full object-cover"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
@@ -285,8 +281,8 @@ function OrganizationListRow({
           )}
         </div>
 
-        <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold text-neutral-50">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[14px] font-semibold text-neutral-50 md:text-[13px]">
             {org.name}
           </div>
           <div className="mt-0.5 truncate text-[12px] text-neutral-400">
@@ -295,13 +291,62 @@ function OrganizationListRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-6">
-        {/* ✅ True-centered meta (center of the whole row) */}
-        <div className="pointer-events-none md:flex items-center gap-6">
-          {/* ✅ Role pill */}
+      <div className="flex items-center justify-between gap-3 md:gap-6">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:hidden">
           <RoleBadge meta={roleMeta} />
 
-          {/* ✅ Total Members (better-looking pill bubble) */}
+          <div
+            className={clsx(
+              "relative inline-flex items-center gap-2 overflow-hidden rounded-full border px-2.5 py-1.5",
+              "backdrop-blur-xl shadow-[0_12px_30px_rgba(0,0,0,0.45)]",
+            )}
+            style={{
+              borderColor: borderIdle,
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))",
+            }}
+            aria-label={`${formatMembers(org.totalMembers)} members`}
+          >
+            <span
+              aria-hidden
+              className="pointer-events-none absolute -left-8 -top-8 h-20 w-20 rounded-full blur-2xl opacity-80"
+              style={{
+                background: `radial-gradient(circle at 30% 30%, ${glow}, transparent 62%)`,
+              }}
+            />
+
+            <span
+              className="relative inline-flex h-5 w-5 items-center justify-center rounded-full ring-1 ring-inset"
+              style={{
+                background: iconBg,
+                borderColor: iconBorder,
+                color: iconColor,
+                boxShadow: `0 0 0 1px ${iconBorder}`,
+              }}
+            >
+              <Users className="h-3.5 w-3.5" />
+            </span>
+
+            <span className="relative text-[11px] font-semibold text-neutral-50">
+              {formatMembers(org.totalMembers)}
+            </span>
+            <span className="relative text-[11px] text-neutral-300">
+              Members
+            </span>
+
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-full opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+              style={{
+                boxShadow: `inset 0 0 0 1px ${borderHover}`,
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="pointer-events-none hidden items-center gap-6 md:flex">
+          <RoleBadge meta={roleMeta} />
+
           <div
             className={clsx(
               "relative inline-flex items-center gap-2.5 overflow-hidden",
@@ -318,7 +363,6 @@ function OrganizationListRow({
             }}
             aria-label={`${formatMembers(org.totalMembers)} Total Members`}
           >
-            {/* subtle accent glow blob */}
             <span
               aria-hidden
               className={clsx(
@@ -329,7 +373,6 @@ function OrganizationListRow({
                 background: `radial-gradient(circle at 30% 30%, ${glow}, transparent 62%)`,
               }}
             />
-            {/* top sheen */}
             <span
               aria-hidden
               className="pointer-events-none absolute inset-0 opacity-70"
@@ -339,7 +382,6 @@ function OrganizationListRow({
               }}
             />
 
-            {/* icon chip */}
             <span
               className={clsx(
                 "relative inline-flex h-7 w-7 items-center justify-center",
@@ -355,7 +397,6 @@ function OrganizationListRow({
               <Users className="h-4 w-4" />
             </span>
 
-            {/* text */}
             <span className="relative inline-flex items-center gap-2">
               <span className="text-[12px] font-extrabold tracking-[-0.01em] text-neutral-50">
                 {formatMembers(org.totalMembers)}
@@ -365,7 +406,6 @@ function OrganizationListRow({
               </span>
             </span>
 
-            {/* hover border pop */}
             <span
               aria-hidden
               className="pointer-events-none absolute inset-0 rounded-full opacity-0 transition-opacity duration-200 group-hover:opacity-100"
@@ -376,7 +416,6 @@ function OrganizationListRow({
           </div>
         </div>
 
-        {/* Right (chevron) */}
         <div className="shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-neutral-200 group-hover:bg-white/10">
           <ChevronRight className="h-4 w-4" />
         </div>
@@ -386,14 +425,6 @@ function OrganizationListRow({
 }
 
 /* ------------------------------ Page ------------------------------- */
-/**
- * ✅ Match the “GOOD” reference list:
- * - Title
- * - Page Views
- * - Tickets Sold
- * - Revenue
- * ❌ NO “Event Date”
- */
 type OrgSortField = "title" | "pageViews" | "ticketsSold" | "revenue";
 
 const ORG_SORT_OPTIONS: SortOption<OrgSortField>[] = [
@@ -412,7 +443,6 @@ export default function OrganizationsClient() {
 
   const [view, setView] = useState<GridListValue>("grid");
 
-  // ✅ Organizations-only sort state
   const [sortField, setSortField] = useState<OrgSortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -457,7 +487,6 @@ export default function OrganizationsClient() {
         return (safeNumber(a.ticketsSold) - safeNumber(b.ticketsSold)) * dirMul;
       }
 
-      // revenue
       return (safeNumber(a.revenue) - safeNumber(b.revenue)) * dirMul;
     });
 
@@ -516,7 +545,6 @@ export default function OrganizationsClient() {
               </div>
 
               <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-                {/* ✅ Search container color now matches the "Upcoming" pill container */}
                 <div
                   className={clsx(
                     "relative w-full sm:w-[420px]",
@@ -544,7 +572,6 @@ export default function OrganizationsClient() {
                 <div className="flex items-center gap-2">
                   <GridListToggle value={view} onChange={setView} />
 
-                  {/* ✅ Sort button goes LEFT of "New organization" */}
                   <SortControl<OrgSortField>
                     options={ORG_SORT_OPTIONS}
                     sortField={sortField}
@@ -573,15 +600,17 @@ export default function OrganizationsClient() {
                 view === "grid" ? (
                   <div
                     className={clsx(
-                      "grid gap-4",
-                      "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
+                      "grid grid-cols-1 justify-items-center gap-4",
+                      "sm:grid-cols-[repeat(auto-fit,minmax(240px,1fr))] sm:justify-items-stretch",
                     )}
                   >
                     {Array.from({ length: 10 }).map((_, i) => (
-                      <Skeleton
+                      <div
                         key={`org-skel-${i}`}
-                        className="h-[224px] w-full rounded-[12px]"
-                      />
+                        className="w-full max-w-[360px] sm:max-w-none"
+                      >
+                        <Skeleton className="h-[224px] w-full rounded-[12px]" />
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -589,7 +618,7 @@ export default function OrganizationsClient() {
                     {Array.from({ length: 10 }).map((_, i) => (
                       <Skeleton
                         key={`org-row-skel-${i}`}
-                        className="h-[56px] w-full rounded-[12px]"
+                        className="h-[108px] w-full rounded-[16px] md:h-[56px] md:rounded-[12px]"
                       />
                     ))}
                   </div>
@@ -598,9 +627,10 @@ export default function OrganizationsClient() {
                 view === "grid" ? (
                   <div
                     className={clsx(
-                      orgsSlice.length > 4 ? "grid" : "flex flex-wrap",
+                      orgsSlice.length > 4
+                        ? "grid grid-cols-1 justify-items-center sm:grid-cols-[repeat(auto-fit,minmax(240px,1fr))] sm:justify-items-stretch"
+                        : "flex flex-wrap justify-center sm:justify-start",
                       "gap-4",
-                      "grid-cols-[repeat(auto-fit,minmax(240px,1fr))]",
                     )}
                   >
                     {orgsSlice.map((o) => {
@@ -614,26 +644,30 @@ export default function OrganizationsClient() {
                       const roleMeta = roleMetaFromOrg(o);
 
                       return (
-                        <ConnectionProfileCard
+                        <div
                           key={o._id}
-                          href={`/dashboard/organizations/${o._id}`}
-                          kind="organization"
-                          title={o.name}
-                          description={desc}
-                          bannerUrl={o.banner}
-                          iconUrl={o.logo}
-                          totalMembers={o.totalMembers}
-                          joinDateLabel={joinLabel(o.createdAt)}
-                          userRoleMeta={roleMeta}
-                          accentColor={resolveOrgAccentColor(o)}
-                          tilt
-                          tiltMaxDeg={3.5}
-                          tiltPerspective={1600}
-                          tiltLiftPx={2}
-                          cardWidth={
-                            orgsSlice.length > 4 ? "compact" : "default"
-                          }
-                        />
+                          className="w-full max-w-[360px] sm:max-w-none"
+                        >
+                          <ConnectionProfileCard
+                            href={`/dashboard/organizations/${o._id}`}
+                            kind="organization"
+                            title={o.name}
+                            description={desc}
+                            bannerUrl={o.banner}
+                            iconUrl={o.logo}
+                            totalMembers={o.totalMembers}
+                            joinDateLabel={joinLabel(o.createdAt)}
+                            userRoleMeta={roleMeta}
+                            accentColor={resolveOrgAccentColor(o)}
+                            tilt
+                            tiltMaxDeg={3.5}
+                            tiltPerspective={1600}
+                            tiltLiftPx={2}
+                            cardWidth={
+                              orgsSlice.length > 4 ? "compact" : "default"
+                            }
+                          />
+                        </div>
                       );
                     })}
                   </div>
@@ -658,18 +692,18 @@ export default function OrganizationsClient() {
                   </div>
                 )
               ) : (
-                <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-10 text-center">
+                <div className="w-full rounded-2xl border border-dashed border-white/15 bg-transparent p-8 text-center sm:p-10">
                   <p className="text-sm font-medium text-neutral-0">
                     No organizations yet.
                   </p>
-                  <p className="mt-2 text-[12px] text-neutral-400">
+                  <p className="mt-2 text-[12px] leading-5 text-neutral-400">
                     Create one to start hosting events and inviting members.
                   </p>
                 </div>
               )}
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-[12px] text-neutral-300">
+              <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-center text-[12px] text-neutral-300 sm:text-left">
                   {orgsShowingLabel}
                 </div>
                 <Pagination

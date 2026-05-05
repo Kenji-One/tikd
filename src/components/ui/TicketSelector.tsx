@@ -54,14 +54,13 @@ export default function TicketSelector({
   return (
     <div
       className={[
-        "relative group overflow-hidden rounded-xl border", // ✅ smaller radius
+        "relative group overflow-hidden rounded-xl border",
         "transition-[transform,background-color,border-color,box-shadow] duration-200",
         isSelected
           ? "border-primary-951/35 bg-white/10 shadow-[0_18px_55px_rgba(0,0,0,0.45)]"
           : "border-white/10 bg-white/5 hover:bg-white/7 hover:border-white/15",
       ].join(" ")}
     >
-      {/* subtle premium rim */}
       <div
         className={[
           "pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200",
@@ -75,11 +74,11 @@ export default function TicketSelector({
         }}
       />
 
-      <div className="relative grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 sm:px-5 sm:py-3.5">
+      <div className="relative grid grid-cols-1 gap-3 px-4 py-3 sm:grid-cols-[1fr_auto] sm:items-center sm:px-5 sm:py-3.5">
         {/* Left block */}
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <p className="truncate text-[16px] sm:text-[18px] font-extrabold tracking-[-0.2px] text-white">
+            <p className="truncate text-[15px] font-extrabold tracking-[-0.2px] text-white sm:text-[18px]">
               {label}
             </p>
 
@@ -93,7 +92,7 @@ export default function TicketSelector({
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <p
               className={[
-                "tracking-[-0.18px]",
+                "text-[13px] tracking-[-0.18px] sm:text-sm",
                 feesIncluded ? "text-success-400" : "text-white/75",
               ].join(" ")}
             >
@@ -101,9 +100,9 @@ export default function TicketSelector({
             </p>
 
             {isSelected ? (
-              <span className=" text-white/75">
+              <span className="text-[13px] text-white/75 sm:text-sm">
                 Line total:{" "}
-                <span className="font-semibold text-white/80 tabular-nums">
+                <span className="tabular-nums font-semibold text-white/80">
                   {sym}
                   {lineTotal.toFixed(2)}
                 </span>
@@ -113,23 +112,20 @@ export default function TicketSelector({
         </div>
 
         {/* Right block: price + stepper */}
-        <div className="flex items-center gap-3">
-          {/* Price */}
-          <div className="text-right">
-            {/* ✅ prevent gradient clip cutting last digit:
-                add tiny horizontal padding and negative margin so layout doesn’t grow */}
-            <p className="inline-block whitespace-nowrap px-[2px] -mx-[2px] text-[16px] sm:text-[20px] italic font-extrabold tracking-[-0.32px] tabular-nums bg-gradient-to-r from-primary-999 via-primary-952 to-primary-951 text-transparent bg-clip-text">
+        <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+          <div className="text-left sm:text-right">
+            <p className="inline-block whitespace-nowrap -mx-[2px] px-[2px] text-[15px] italic font-extrabold tracking-[-0.28px] tabular-nums text-transparent bg-gradient-to-r from-primary-999 via-primary-952 to-primary-951 bg-clip-text sm:text-[20px] sm:tracking-[-0.32px]">
               {sym}
               {price.toFixed(2)}
             </p>
-            <p className="text-[13px] text-white/65">per ticket</p>
+            <p className="text-[12px] text-white/65 sm:text-[13px]">
+              per ticket
+            </p>
           </div>
 
-          {/* Stepper */}
           <div
             className={[
-              "flex items-center rounded-full px-1.5 py-1",
-              "border border-white/10 bg-neutral-950/40 backdrop-blur-xl",
+              "flex items-center rounded-full border border-white/10 bg-neutral-950/40 px-1.5 py-1 backdrop-blur-xl",
               "shadow-[0_14px_40px_rgba(0,0,0,0.35)]",
               isSelected ? "ring-1 ring-primary-951/25" : "",
             ].join(" ")}
@@ -140,8 +136,8 @@ export default function TicketSelector({
               disabled={decDisabled}
               aria-label="Decrease quantity"
               className={[
-                "grid size-8 place-items-center rounded-full transition cursor-pointer",
-                "text-white/85",
+                "grid size-7 place-items-center rounded-full transition sm:size-8",
+                "cursor-pointer text-white/85",
                 decDisabled
                   ? "cursor-not-allowed opacity-35"
                   : "hover:bg-white/10 hover:text-white active:bg-black/20",
@@ -161,7 +157,7 @@ export default function TicketSelector({
               </svg>
             </button>
 
-            <span className="w-8 text-center font-semibold tabular-nums text-white">
+            <span className="w-7 text-center font-semibold tabular-nums text-white sm:w-8">
               {qty}
             </span>
 
@@ -169,7 +165,7 @@ export default function TicketSelector({
               type="button"
               onClick={() => onChange(qty + 1)}
               aria-label="Increase quantity"
-              className="grid size-8 place-items-center rounded-full transition text-white/85 hover:bg-white/10 hover:text-white active:bg-black/20 cursor-pointer"
+              className="grid size-7 place-items-center rounded-full cursor-pointer text-white/85 transition hover:bg-white/10 hover:text-white active:bg-black/20 sm:size-8"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -188,7 +184,6 @@ export default function TicketSelector({
         </div>
       </div>
 
-      {/* micro “scan line” accent */}
       <div
         className={[
           "pointer-events-none absolute inset-x-0 bottom-0 h-px opacity-0 transition-opacity duration-200",

@@ -13,7 +13,7 @@ import { ReactNode } from "react";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Tikd.",
+  title: "Tixsy",
   description: "Discover and book events effortlessly.",
 };
 

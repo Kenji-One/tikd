@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +25,7 @@ import {
   Ticket,
   CircleDollarSign,
   X,
-  Plus,
+  Info,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
@@ -28,13 +35,22 @@ import InviteTeamModal, {
   type Role as InviteRole,
 } from "@/components/bits/InviteTeamModal";
 
-import { fetchEventById, type EventWithMeta } from "@/lib/api/events";
-
 /* ----------------------------- Types ----------------------------- */
-type Role = InviteRole;
+type Role = Exclude<InviteRole, "member">;
 type Status = "invited" | "active" | "revoked" | "expired";
 
-type TeamMember = {
+type OrgPermissionKey =
+  | "members.view"
+  | "members.invite"
+  | "members.remove"
+  | "members.assignRoles"
+  | "events.create"
+  | "events.edit"
+  | "events.publish"
+  | "events.delete"
+  | "links.createTrackingLinks";
+
+type EventTeamMember = {
   _id: string;
   eventId: string;
   email: string;
@@ -44,7 +60,6 @@ type TeamMember = {
   status: Status;
   temporaryAccess: boolean;
   expiresAt?: string | null;
-  scope?: "full" | "checkin" | "promo" | "custom";
   createdAt: string;
   updatedAt: string;
 };
@@ -81,13 +96,52 @@ type MemberMetrics = {
   revenue: number;
 };
 
+type EventAccessResponse = {
+  event: {
+    id: string;
+    title: string;
+    organizationId: string;
+    createdByUserId: string;
+    status: "published" | "draft";
+  };
+  access: {
+    hasAccess: boolean;
+    isCreator: boolean;
+    isOrgOwner: boolean;
+    orgRole: {
+      key: string;
+      name: string;
+      color?: string;
+      iconKey?: string | null;
+      iconUrl?: string | null;
+      isSystem: boolean;
+      roleId?: string | null;
+    } | null;
+    orgPermissions: Partial<Record<OrgPermissionKey, boolean>>;
+    eventTeam: {
+      role: Role;
+      status: Status;
+      temporaryAccess: boolean;
+      expiresAt?: string | null;
+    } | null;
+    canViewMembers: boolean;
+    canInviteMembers: boolean;
+    canAssignRoles: boolean;
+    canRemoveMembers: boolean;
+  };
+};
+
 /* ---------------------------- Helpers ---------------------------- */
 async function json<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const res = await fetch(input, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
-  if (!res.ok) throw new Error(await res.text());
+
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+
   return res.json();
 }
 
@@ -135,12 +189,23 @@ function useFluidTabIndicator(
     const c = containerRef.current;
     const i = indicatorRef.current;
     if (!c || !i) return;
+
     const active = c.querySelector<HTMLButtonElement>(`[data-tab="${tab}"]`);
     if (!active) return;
+
     const { offsetLeft, offsetWidth } = active;
     i.style.transform = `translateX(${offsetLeft}px)`;
     i.style.width = `${offsetWidth}px`;
   }, [containerRef, indicatorRef, tab]);
+}
+
+function isEventInviteRole(role?: InvitePayload["role"]): role is Role {
+  return (
+    role === "admin" ||
+    role === "promoter" ||
+    role === "scanner" ||
+    role === "collaborator"
+  );
 }
 
 /* ----------------------------- UI bits --------------------------- */
@@ -151,17 +216,17 @@ const ROLE_META: Record<
   admin: {
     label: "Admin",
     icon: <ShieldCheck className="h-4 w-4" />,
-    blurb: "Full access",
+    blurb: "Full event-team access",
   },
   promoter: {
     label: "Promoter",
     icon: <Megaphone className="h-4 w-4" />,
-    blurb: "Marketing & promos",
+    blurb: "Marketing and outreach",
   },
   scanner: {
     label: "Scanner",
     icon: <ScanLine className="h-4 w-4" />,
-    blurb: "Check-in access",
+    blurb: "Check-in and door access",
   },
   collaborator: {
     label: "Collaborator",
@@ -219,14 +284,14 @@ function RolePill({ role }: { role: Role }) {
       className={clsx(
         "inline-flex items-center gap-1 rounded-full px-2.5 pl-2 py-1.5",
         "text-[13px] font-semibold ring-1 ring-inset",
-        map[role] ?? map.collaborator,
+        map[role],
       )}
-      aria-label={`Role: ${meta?.label ?? role}`}
+      aria-label={`Role: ${meta.label}`}
     >
       <span className="inline-flex items-center justify-center">
-        {meta?.icon}
+        {meta.icon}
       </span>
-      <span className="leading-none">{meta?.label ?? "—"}</span>
+      <span className="leading-none">{meta.label}</span>
     </span>
   );
 }
@@ -264,13 +329,15 @@ function MetricChip({
 
 /* ----------------------- Actions menu (3 dots) --------------------- */
 function MemberActionsMenu({
-  canManage,
+  canChangeRoles,
+  canRemove,
   member,
   onRemove,
   onChangeRole,
 }: {
-  canManage: boolean;
-  member: TeamMember;
+  canChangeRoles: boolean;
+  canRemove: boolean;
+  member: EventTeamMember;
   onRemove: () => void;
   onChangeRole: (r: Role) => void;
 }) {
@@ -354,7 +421,7 @@ function MemberActionsMenu({
     };
   }, [open]);
 
-  if (!canManage) return null;
+  if (!canChangeRoles && !canRemove) return null;
 
   return (
     <div className="relative">
@@ -386,71 +453,85 @@ function MemberActionsMenu({
                 "shadow-[0_18px_70px_rgba(0,0,0,0.60)] backdrop-blur-[10px]",
               )}
             >
-              <div className="px-3 py-2.5 border-b border-white/10">
-                <div className="text-[12px] font-semibold text-neutral-200">
-                  Edit Role
-                </div>
-                <div className="mt-0.5 text-[11px] text-neutral-500">
-                  Current:{" "}
-                  <span className="text-neutral-300 font-semibold">
-                    {ROLE_META[member.role].label}
-                  </span>
-                </div>
-              </div>
+              {canChangeRoles ? (
+                <>
+                  <div className="border-b border-white/10 px-3 py-2.5">
+                    <div className="text-[12px] font-semibold text-neutral-200">
+                      Edit Role
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-neutral-500">
+                      Current:{" "}
+                      <span className="font-semibold text-neutral-300">
+                        {ROLE_META[member.role].label}
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
-                <div className="p-2 space-y-1">
-                  {(
-                    ["admin", "promoter", "scanner", "collaborator"] as Role[]
-                  ).map((r) => {
-                    const active = r === member.role;
-                    return (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => {
-                          onChangeRole(r);
-                          setOpen(false);
-                        }}
-                        className={clsx(
-                          "w-full px-2.5 py-2 rounded-lg text-left",
-                          "flex items-center gap-2",
-                          "border border-white/10",
-                          active
-                            ? "bg-primary-500/12 text-primary-100 ring-1 ring-primary-500/20"
-                            : "bg-white/5 text-neutral-200 hover:bg-white/10",
-                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                        )}
-                      >
-                        <span
-                          className={clsx(
-                            "inline-flex h-7 w-7 items-center justify-center rounded-lg",
-                            active
-                              ? "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/25"
-                              : "bg-white/5 text-neutral-200 ring-1 ring-white/10",
-                          )}
-                        >
-                          {ROLE_META[r].icon}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[12px] font-semibold">
-                            {ROLE_META[r].label}
-                          </div>
-                          <div className="text-[11px] text-neutral-500">
-                            {ROLE_META[r].blurb}
-                          </div>
-                        </div>
-                        {active ? (
-                          <span className="text-[11px] font-semibold text-primary-200">
-                            Selected
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
+                  <div className="max-h-[calc(100vh-160px)] overflow-y-auto">
+                    <div className="space-y-1 p-2">
+                      {(
+                        [
+                          "admin",
+                          "promoter",
+                          "scanner",
+                          "collaborator",
+                        ] as Role[]
+                      ).map((r) => {
+                        const active = r === member.role;
+                        return (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => {
+                              onChangeRole(r);
+                              setOpen(false);
+                            }}
+                            className={clsx(
+                              "w-full rounded-lg border border-white/10 px-2.5 py-2 text-left",
+                              "flex items-center gap-2",
+                              active
+                                ? "bg-primary-500/12 text-primary-100 ring-1 ring-primary-500/20"
+                                : "bg-white/5 text-neutral-200 hover:bg-white/10",
+                              "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                            )}
+                          >
+                            <span
+                              className={clsx(
+                                "inline-flex h-7 w-7 items-center justify-center rounded-lg",
+                                active
+                                  ? "bg-primary-500/20 text-primary-200 ring-1 ring-primary-500/25"
+                                  : "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                              )}
+                            >
+                              {ROLE_META[r].icon}
+                            </span>
 
-                <div className="border-t border-white/10">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[12px] font-semibold">
+                                {ROLE_META[r].label}
+                              </div>
+                              <div className="text-[11px] text-neutral-500">
+                                {ROLE_META[r].blurb}
+                              </div>
+                            </div>
+
+                            {active ? (
+                              <span className="text-[11px] font-semibold text-primary-200">
+                                Selected
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
+              {canRemove ? (
+                <div
+                  className={clsx(canChangeRoles && "border-t border-white/10")}
+                >
                   <button
                     type="button"
                     onClick={() => {
@@ -458,19 +539,17 @@ function MemberActionsMenu({
                       onRemove();
                     }}
                     className={clsx(
-                      "w-full px-3 py-2.5 text-left",
-                      "flex items-center gap-2",
-                      "text-[12px] font-semibold",
-                      "text-red-300 hover:text-red-200",
-                      "hover:bg-red-500/10",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60 cursor-pointer",
+                      "flex w-full items-center gap-2 px-3 py-2.5 text-left",
+                      "cursor-pointer text-[12px] font-semibold",
+                      "text-red-300 hover:bg-red-500/10 hover:text-red-200",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
                     )}
                   >
                     <Trash2 className="h-4 w-4" />
                     Remove
                   </button>
                 </div>
-              </div>
+              ) : null}
             </div>,
             document.body,
           )
@@ -504,13 +583,13 @@ function RolesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
       className="fixed inset-0 z-[85] flex items-center justify-center px-3 py-6"
       role="dialog"
       aria-modal="true"
-      aria-label="Roles"
+      aria-label="Event roles"
     >
       <button
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className={clsx("absolute inset-0 bg-black/60 backdrop-blur-[10px]")}
+        className="absolute inset-0 bg-black/60 backdrop-blur-[10px]"
       />
 
       <div
@@ -536,14 +615,14 @@ function RolesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
                 "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20",
               )}
             >
-              <ShieldCheck className="h-5 w-5" />
+              <Info className="h-5 w-5" />
             </div>
             <div>
               <div className="text-[16px] font-semibold tracking-[-0.2px] text-neutral-0">
-                Roles & Permissions
+                Event Team Roles
               </div>
               <div className="mt-1 text-[12px] text-neutral-400">
-                Create roles and edit permissions. UI only for now.
+                Events use fixed system roles for now.
               </div>
             </div>
           </div>
@@ -570,16 +649,16 @@ function RolesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             )}
           >
             <div className="text-[13px] font-semibold text-neutral-100">
-              Default roles
+              Available roles
             </div>
+
             <div className="mt-2 grid gap-3 md:grid-cols-2">
               {(["admin", "promoter", "scanner", "collaborator"] as Role[]).map(
                 (r) => (
                   <div
                     key={r}
                     className={clsx(
-                      "rounded-2xl border border-white/10 bg-neutral-950/35 p-4",
-                      "flex items-start gap-3",
+                      "flex items-start gap-3 rounded-2xl border border-white/10 bg-neutral-950/35 p-4",
                     )}
                   >
                     <div
@@ -590,6 +669,7 @@ function RolesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
                     >
                       {ROLE_META[r].icon}
                     </div>
+
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-semibold text-neutral-0">
                         {ROLE_META[r].label}
@@ -597,23 +677,15 @@ function RolesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
                       <div className="mt-1 text-[12px] text-neutral-400">
                         {ROLE_META[r].blurb}
                       </div>
-                      <div className="mt-3 text-[11px] text-neutral-500">
-                        Permissions editor coming next.
-                      </div>
                     </div>
                   </div>
                 ),
               )}
             </div>
 
-            <div className="mt-4 flex items-center justify-end gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                icon={<Plus className="h-4 w-4" />}
-              >
-                Create Role
-              </Button>
+            <div className="mt-4 rounded-xl border border-white/10 bg-neutral-950/35 px-3 py-3 text-[12px] text-neutral-400">
+              Custom event roles are intentionally not enabled yet. This page
+              uses fixed system roles only.
             </div>
           </div>
         </div>
@@ -707,44 +779,34 @@ export default function EventTeamPage() {
   const indicatorRef = useRef<HTMLSpanElement | null>(null);
   useFluidTabIndicator(tabBarRef, indicatorRef, tab);
 
-  // TODO: replace with explicit event-team permission UI state if you expose it in a dedicated access route.
-  const canManageMembers = true;
-
-  const { data: event, isLoading: isEventLoading } = useQuery<EventWithMeta>({
-    queryKey: ["event", eventId],
-    queryFn: () => fetchEventById(eventId!),
+  const {
+    data: accessData,
+    isLoading: accessLoading,
+    isError: accessError,
+    error: accessErrorValue,
+  } = useQuery<EventAccessResponse>({
+    queryKey: ["event-access", eventId],
     enabled: !!eventId,
-    staleTime: 5 * 60_000,
-    gcTime: 30 * 60_000,
+    queryFn: () => json<EventAccessResponse>(`/api/events/${eventId}/access`),
+    staleTime: 30_000,
   });
 
-  const organizationId = event?.organization?._id ?? "";
+  const canViewMembers = !!accessData?.access.canViewMembers;
+  const canInviteMembers = !!accessData?.access.canInviteMembers;
+  const canAssignRoles = !!accessData?.access.canAssignRoles;
+  const canRemoveMembers = !!accessData?.access.canRemoveMembers;
 
-  /* ---------------------- Shared Grid Template ---------------------- */
-  const GRID =
-    "md:grid md:items-center md:gap-6 md:grid-cols-[minmax(300px,2.2fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(200px,1fr)]";
+  const canLoadMetrics = canViewMembers;
 
-  /* ---------------------- Row purple GRID-style background ---------- */
-  const rowBgStyle: React.CSSProperties = {
-    background:
-      "repeating-linear-gradient(0deg, rgba(154,70,255,0.09) 0px, rgba(154,70,255,0.09) 1px, transparent 1px, transparent 34px)," +
-      "repeating-linear-gradient(90deg, rgba(154,70,255,0.07) 0px, rgba(154,70,255,0.07) 1px, transparent 1px, transparent 34px)," +
-      "radial-gradient(900px 220px at 18% 55%, rgba(154,70,255,0.18), transparent 62%)," +
-      "radial-gradient(700px 220px at 92% 45%, rgba(231,222,255,0.08), transparent 62%)," +
-      "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))," +
-      "rgba(8,8,15,0.38)",
-  };
-
-  /* --------------------------- Data --------------------------- */
   const {
     data: members,
     isLoading: isMembersLoading,
     isError: isMembersError,
     error: membersError,
-  } = useQuery<TeamMember[]>({
+  } = useQuery<EventTeamMember[]>({
     queryKey: ["event-team", eventId],
-    enabled: !!eventId,
-    queryFn: () => json<TeamMember[]>(`/api/events/${eventId}/team`),
+    enabled: !!eventId && canViewMembers,
+    queryFn: () => json<EventTeamMember[]>(`/api/events/${eventId}/team`),
     staleTime: 30_000,
   });
 
@@ -754,7 +816,7 @@ export default function EventTeamPage() {
     isError: trackingMetricsError,
   } = useQuery<TrackingMembersResponse>({
     queryKey: ["event-team-tracking-metrics", eventId],
-    enabled: !!eventId,
+    enabled: !!eventId && canViewMembers && canLoadMetrics,
     queryFn: () =>
       json<TrackingMembersResponse>(
         `/api/tracking-links/members?scope=event&eventId=${encodeURIComponent(
@@ -780,7 +842,7 @@ export default function EventTeamPage() {
 
   const inviteMutation = useMutation({
     mutationFn: (payload: InvitePayload) =>
-      json<{ member: TeamMember }>(`/api/events/${eventId}/team`, {
+      json<{ member: EventTeamMember }>(`/api/events/${eventId}/team`, {
         method: "POST",
         body: JSON.stringify(payload),
       }),
@@ -789,13 +851,14 @@ export default function EventTeamPage() {
       qc.invalidateQueries({
         queryKey: ["event-team-tracking-metrics", eventId],
       });
+      qc.invalidateQueries({ queryKey: ["event-access", eventId] });
       setInviteOpen(false);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: (args: { memberId: string; body: UpdateBody }) =>
-      json<TeamMember>(`/api/events/${eventId}/team/${args.memberId}`, {
+      json<EventTeamMember>(`/api/events/${eventId}/team/${args.memberId}`, {
         method: "PATCH",
         body: JSON.stringify(args.body),
       }),
@@ -804,6 +867,7 @@ export default function EventTeamPage() {
       qc.invalidateQueries({
         queryKey: ["event-team-tracking-metrics", eventId],
       });
+      qc.invalidateQueries({ queryKey: ["event-access", eventId] });
     },
   });
 
@@ -817,6 +881,7 @@ export default function EventTeamPage() {
       qc.invalidateQueries({
         queryKey: ["event-team-tracking-metrics", eventId],
       });
+      qc.invalidateQueries({ queryKey: ["event-access", eventId] });
     },
   });
 
@@ -836,13 +901,13 @@ export default function EventTeamPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return baseList;
+
     return baseList.filter((m) => {
       const hay = `${m.name ?? ""} ${m.email}`.toLowerCase();
       return hay.includes(q);
     });
   }, [baseList, query]);
 
-  /* --------------------------- Pagination --------------------------- */
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -852,11 +917,13 @@ export default function EventTeamPage() {
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
   useEffect(() => {
     setPage((p) => clamp(p, 1, totalPages));
   }, [totalPages]);
 
   const pageSafe = clamp(page, 1, totalPages);
+
   const slice = useMemo(() => {
     const start = (pageSafe - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
@@ -869,11 +936,26 @@ export default function EventTeamPage() {
     return `Showing ${start}-${end} from ${total} data`;
   }, [total, pageSafe]);
 
+  const GRID =
+    "md:grid md:items-center md:gap-6 md:grid-cols-[minmax(300px,2.2fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(200px,1fr)]";
+
+  const rowBgStyle: CSSProperties = {
+    background:
+      "repeating-linear-gradient(0deg, rgba(154,70,255,0.09) 0px, rgba(154,70,255,0.09) 1px, transparent 1px, transparent 34px)," +
+      "repeating-linear-gradient(90deg, rgba(154,70,255,0.07) 0px, rgba(154,70,255,0.07) 1px, transparent 1px, transparent 34px)," +
+      "radial-gradient(900px 220px at 18% 55%, rgba(154,70,255,0.18), transparent 62%)," +
+      "radial-gradient(700px 220px at 92% 45%, rgba(231,222,255,0.08), transparent 62%)," +
+      "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))," +
+      "rgba(8,8,15,0.38)",
+  };
+
   const isLoading =
-    isEventLoading || isMembersLoading || trackingMetricsLoading;
+    accessLoading ||
+    (canViewMembers &&
+      (isMembersLoading || (canLoadMetrics && trackingMetricsLoading)));
 
   return (
-    <div className="relative overflow-hidden bg-neutral-950 text-neutral-0 px-4 md:px-6 lg:px-8">
+    <div className="relative overflow-hidden bg-neutral-950 px-4 text-neutral-0 md:px-6 lg:px-8">
       <section className="pb-16">
         <section
           className={clsx(
@@ -887,11 +969,10 @@ export default function EventTeamPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* Header */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="text-base font-semibold tracking-[0.18em] text-neutral-300 uppercase">
-                  Team
+                <div className="text-base font-semibold uppercase tracking-[0.18em] text-neutral-300">
+                  Event Team
                 </div>
                 <div className="mt-1 text-neutral-400">
                   Manage members, roles, and access for this event
@@ -901,8 +982,7 @@ export default function EventTeamPage() {
               <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
                 <div
                   className={clsx(
-                    "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 bg-white/5 h-10",
+                    "relative h-10 w-full rounded-lg border border-white/10 bg-white/5 sm:w-[420px]",
                   )}
                 >
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
@@ -912,347 +992,371 @@ export default function EventTeamPage() {
                     placeholder="Search here"
                     className={clsx(
                       "h-10 w-full rounded-lg bg-transparent",
-                      "pl-10 pr-4 text-[12px] text-neutral-100",
+                      "border-none pl-10 pr-4 text-[12px] text-neutral-100",
                       "placeholder:text-neutral-500",
-                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                      "outline-none focus:ring-1 focus:ring-primary-500",
                     )}
                   />
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    icon={<ShieldCheck className="h-4 w-4" />}
-                    onClick={() => setRolesOpen(true)}
-                  >
-                    Roles
-                  </Button>
+                  {canAssignRoles ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      icon={<ShieldCheck className="h-4 w-4" />}
+                      onClick={() => setRolesOpen(true)}
+                    >
+                      Roles
+                    </Button>
+                  ) : null}
 
-                  <Button
-                    onClick={() => setInviteOpen(true)}
-                    type="button"
-                    variant="primary"
-                    icon={<UsersIcon className="h-4 w-4" />}
-                    animation
-                    disabled={!eventId}
-                  >
-                    Invite Member
-                  </Button>
+                  {canInviteMembers ? (
+                    <Button
+                      onClick={() => setInviteOpen(true)}
+                      type="button"
+                      variant="primary"
+                      icon={<UsersIcon className="h-4 w-4" />}
+                      animation
+                      disabled={!eventId}
+                    >
+                      Invite Member
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
 
-            {isMembersError ? (
+            {accessError ? (
               <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-10 text-center">
                 <div className="text-[13px] font-semibold text-neutral-100">
-                  Couldn’t load event team
+                  Couldn’t load event access
                 </div>
                 <div className="mt-1 text-[12px] text-neutral-500">
-                  {(membersError as Error)?.message || "Something went wrong."}
+                  {(accessErrorValue as Error)?.message ||
+                    "Something went wrong."}
                 </div>
               </div>
-            ) : null}
-
-            {trackingMetricsError ? (
-              <div className="mb-4 rounded-xl border border-warning-500/20 bg-warning-500/10 px-4 py-3 text-[12px] text-warning-200">
-                Team performance metrics could not be loaded right now. Team
-                data is still available.
-              </div>
-            ) : null}
-
-            {/* Tabs */}
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div
-                ref={tabBarRef}
-                className="relative inline-flex rounded-full border border-white/10 bg-neutral-950"
-              >
-                <button
-                  data-tab="active"
-                  className={clsx(
-                    "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold",
-                    tab === "active"
-                      ? "text-neutral-0"
-                      : "text-neutral-300 hover:text-neutral-0 cursor-pointer",
-                  )}
-                  onClick={() => setTab("active")}
-                >
-                  Active Members
-                </button>
-                <button
-                  data-tab="temporary"
-                  className={clsx(
-                    "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold ",
-                    tab === "temporary"
-                      ? "text-neutral-0"
-                      : "text-neutral-300 hover:text-neutral-0 cursor-pointer",
-                  )}
-                  onClick={() => setTab("temporary")}
-                >
-                  Temporary Access
-                </button>
-                <span
-                  ref={indicatorRef}
-                  className="absolute left-0 top-0 h-full w-0 rounded-full bg-white/10 ring-1 ring-inset ring-white/15 transition-[transform,width] duration-200 ease-out"
-                  aria-hidden="true"
-                />
-              </div>
-
-              <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[12px] text-neutral-300">
-                <span className="text-neutral-400">Members:</span>{" "}
-                <span className="font-semibold text-neutral-100">{total}</span>
-              </div>
-            </div>
-
-            {/* Column header */}
-            <div
-              className={clsx(
-                "hidden md:block",
-                "rounded-[12px] border border-white/10 bg-white/5 px-4 py-2.5",
-                "text-[13px] font-semibold text-neutral-300",
-              )}
-            >
-              <div className={GRID}>
-                <div>Name</div>
-                <div>Page Views</div>
-                <div>Tickets Sold</div>
-                <div>Revenue</div>
-                <div>Role</div>
-                <div>Date Added</div>
-                <div>Status</div>
-              </div>
-            </div>
-
-            {/* List */}
-            <div className="mt-3">
-              {isLoading ? (
-                <div className="space-y-3">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-[88px] rounded-[12px]" />
-                  ))}
+            ) : !accessLoading && !canViewMembers ? (
+              <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-10 text-center">
+                <div className="text-[13px] font-semibold text-neutral-100">
+                  You do not have permission to view event members
                 </div>
-              ) : slice.length ? (
-                <div className="space-y-3">
-                  {slice.map((m) => {
-                    const title = m.name || m.email;
-                    const badge = initialsFromName(title);
+                <div className="mt-1 text-[12px] text-neutral-500">
+                  Ask an event admin, event creator, or organization owner to
+                  grant access.
+                </div>
+              </div>
+            ) : (
+              <>
+                {isMembersError ? (
+                  <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-10 text-center">
+                    <div className="text-[13px] font-semibold text-neutral-100">
+                      Couldn’t load event team
+                    </div>
+                    <div className="mt-1 text-[12px] text-neutral-500">
+                      {(membersError as Error)?.message ||
+                        "Something went wrong."}
+                    </div>
+                  </div>
+                ) : null}
 
-                    const met =
-                      m.userId && trackingMetricsByUserId.has(m.userId)
-                        ? (trackingMetricsByUserId.get(
-                            m.userId,
-                          ) as MemberMetrics)
-                        : { views: 0, tickets: 0, revenue: 0 };
+                {trackingMetricsError ? (
+                  <div className="mb-4 rounded-xl border border-warning-500/20 bg-warning-500/10 px-4 py-3 text-[12px] text-warning-200">
+                    Team performance metrics could not be loaded right now. Team
+                    data is still available.
+                  </div>
+                ) : null}
 
-                    return (
-                      <div
-                        key={m._id}
-                        className={clsx(
-                          "relative rounded-[12px] border border-white/10 px-4 py-3",
-                          "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-                          "transition-colors",
-                          "hover:border-white/14 hover:brightness-[1.02]",
-                        )}
-                        style={rowBgStyle}
-                      >
-                        {/* Desktop row */}
-                        <div className={clsx("hidden md:block")}>
-                          <div className={GRID}>
-                            {/* Name */}
-                            <div className="min-w-0">
-                              <div className="flex min-w-0 items-center gap-3">
-                                <div className="relative">
-                                  <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
-                                    <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div
+                    ref={tabBarRef}
+                    className="relative inline-flex rounded-full border border-white/10 bg-neutral-950"
+                  >
+                    <button
+                      data-tab="active"
+                      className={clsx(
+                        "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold",
+                        tab === "active"
+                          ? "text-neutral-0"
+                          : "cursor-pointer text-neutral-300 hover:text-neutral-0",
+                      )}
+                      onClick={() => setTab("active")}
+                    >
+                      Active Members
+                    </button>
+                    <button
+                      data-tab="temporary"
+                      className={clsx(
+                        "relative z-10 rounded-full px-4 py-2 text-[12px] font-semibold",
+                        tab === "temporary"
+                          ? "text-neutral-0"
+                          : "cursor-pointer text-neutral-300 hover:text-neutral-0",
+                      )}
+                      onClick={() => setTab("temporary")}
+                    >
+                      Temporary Access
+                    </button>
+                    <span
+                      ref={indicatorRef}
+                      className="absolute left-0 top-0 h-full w-0 rounded-full bg-white/10 ring-1 ring-inset ring-white/15 transition-[transform,width] duration-200 ease-out"
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[12px] text-neutral-300 md:inline-flex">
+                    <span className="text-neutral-400">Members:</span>{" "}
+                    <span className="font-semibold text-neutral-100">
+                      {total}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  className={clsx(
+                    "hidden md:block",
+                    "rounded-[12px] border border-white/10 bg-white/5 px-4 py-2.5",
+                    "text-[13px] font-semibold text-neutral-300",
+                  )}
+                >
+                  <div className={GRID}>
+                    <div>Name</div>
+                    <div>Page Views</div>
+                    <div>Tickets Sold</div>
+                    <div>Revenue</div>
+                    <div>Role</div>
+                    <div>Date Added</div>
+                    <div>Status</div>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  {isLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[88px] rounded-[12px]" />
+                      ))}
+                    </div>
+                  ) : slice.length ? (
+                    <div className="space-y-3">
+                      {slice.map((m) => {
+                        const title = m.name || m.email;
+                        const badge = initialsFromName(title);
+
+                        const met =
+                          m.userId && trackingMetricsByUserId.has(m.userId)
+                            ? (trackingMetricsByUserId.get(
+                                m.userId,
+                              ) as MemberMetrics)
+                            : { views: 0, tickets: 0, revenue: 0 };
+
+                        return (
+                          <div
+                            key={m._id}
+                            className={clsx(
+                              "relative rounded-[12px] border border-white/10 px-4 py-3",
+                              "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+                              "transition-colors",
+                              "hover:border-white/14 hover:brightness-[1.02]",
+                            )}
+                            style={rowBgStyle}
+                          >
+                            <div className="hidden md:block">
+                              <div className={GRID}>
+                                <div className="min-w-0">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <div className="relative">
+                                      <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+                                        <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
+                                          {badge}
+                                        </div>
+                                      </div>
+                                      <div className="absolute -bottom-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
+                                        {badge}
+                                      </div>
+                                    </div>
+
+                                    <div className="min-w-0">
+                                      <div className="truncate text-[14px] font-semibold text-neutral-0">
+                                        {title}
+                                      </div>
+                                      <div className="truncate text-[13px] text-neutral-400">
+                                        {m.email}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="text-[13px] text-neutral-200">
+                                  <span className="font-semibold text-neutral-100">
+                                    {fmtNum(met.views)}
+                                  </span>
+                                </div>
+
+                                <div className="text-[13px] text-neutral-200">
+                                  <span className="font-semibold text-neutral-100">
+                                    {fmtNum(met.tickets)}
+                                  </span>
+                                </div>
+
+                                <div className="text-[13px] text-neutral-200">
+                                  <span className="font-semibold text-neutral-100">
+                                    {fmtUsd(met.revenue)}
+                                  </span>
+                                </div>
+
+                                <div className="text-[13px] text-neutral-200">
+                                  <RolePill role={m.role} />
+                                </div>
+
+                                <div className="text-[13px] text-neutral-400">
+                                  {prettyDateShort(m.createdAt)}
+                                </div>
+
+                                <div className="flex items-center justify-between gap-3">
+                                  <StatusPill status={m.status} />
+                                  <MemberActionsMenu
+                                    canChangeRoles={canAssignRoles}
+                                    canRemove={canRemoveMembers}
+                                    member={m}
+                                    onRemove={() =>
+                                      deleteMutation.mutate(m._id)
+                                    }
+                                    onChangeRole={(r) =>
+                                      updateMutation.mutate({
+                                        memberId: m._id,
+                                        body: { role: r },
+                                      })
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="md:hidden">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="relative">
+                                    <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+                                      <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
+                                        {badge}
+                                      </div>
+                                    </div>
+                                    <div className="absolute -bottom-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
                                       {badge}
                                     </div>
                                   </div>
-                                  <div className="absolute -right-2 -bottom-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-                                    {badge}
+
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[14px] font-semibold text-neutral-0">
+                                      {title}
+                                    </div>
+                                    <div className="truncate text-[13px] text-neutral-400">
+                                      {m.email}
+                                    </div>
                                   </div>
                                 </div>
 
-                                <div className="min-w-0">
-                                  <div className="truncate text-[14px] font-semibold text-neutral-0">
-                                    {title}
-                                  </div>
-                                  <div className="truncate text-[13px] text-neutral-400">
-                                    {m.email}
-                                  </div>
+                                <div className="flex items-center gap-2">
+                                  <StatusPill status={m.status} />
+                                  <MemberActionsMenu
+                                    canChangeRoles={canAssignRoles}
+                                    canRemove={canRemoveMembers}
+                                    member={m}
+                                    onRemove={() =>
+                                      deleteMutation.mutate(m._id)
+                                    }
+                                    onChangeRole={(r) =>
+                                      updateMutation.mutate({
+                                        memberId: m._id,
+                                        body: { role: r },
+                                      })
+                                    }
+                                  />
                                 </div>
                               </div>
-                            </div>
 
-                            {/* Views */}
-                            <div className="text-[13px] text-neutral-200">
-                              <span className="font-semibold text-neutral-100">
-                                {fmtNum(met.views)}
-                              </span>
-                            </div>
-
-                            {/* Tickets */}
-                            <div className="text-[13px] text-neutral-200">
-                              <span className="font-semibold text-neutral-100">
-                                {fmtNum(met.tickets)}
-                              </span>
-                            </div>
-
-                            {/* Revenue */}
-                            <div className="text-[13px] text-neutral-200">
-                              <span className="font-semibold text-neutral-100">
-                                {fmtUsd(met.revenue)}
-                              </span>
-                            </div>
-
-                            {/* Role */}
-                            <div className="text-[13px] text-neutral-200">
-                              <RolePill role={m.role} />
-                            </div>
-
-                            {/* Date */}
-                            <div className="text-[13px] text-neutral-400">
-                              {prettyDateShort(m.createdAt)}
-                            </div>
-
-                            {/* Status + menu */}
-                            <div className="flex items-center justify-between gap-3">
-                              <StatusPill status={m.status} />
-                              <MemberActionsMenu
-                                canManage={canManageMembers}
-                                member={m}
-                                onRemove={() => deleteMutation.mutate(m._id)}
-                                onChangeRole={(r) =>
-                                  updateMutation.mutate({
-                                    memberId: m._id,
-                                    body: { role: r },
-                                  })
-                                }
-                              />
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <MetricChip
+                                  icon={<Eye className="h-4 w-4" />}
+                                  label="Views"
+                                  value={fmtNum(met.views)}
+                                />
+                                <MetricChip
+                                  icon={<Ticket className="h-4 w-4" />}
+                                  label="Tickets"
+                                  value={fmtNum(met.tickets)}
+                                />
+                                <MetricChip
+                                  icon={
+                                    <CircleDollarSign className="h-4 w-4" />
+                                  }
+                                  label="Revenue"
+                                  value={fmtUsd(met.revenue)}
+                                />
+                                <MetricChip
+                                  icon={ROLE_META[m.role].icon}
+                                  label="Role"
+                                  value={ROLE_META[m.role].label}
+                                />
+                                <MetricChip
+                                  icon={<CalendarDays className="h-4 w-4" />}
+                                  label="Added"
+                                  value={prettyDateShort(m.createdAt)}
+                                />
+                              </div>
                             </div>
                           </div>
+                        );
+                      })}
+
+                      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="text-[12px] text-neutral-300">
+                          {showingLabel}
                         </div>
-
-                        {/* Mobile stacked */}
-                        <div className="md:hidden">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="relative">
-                                <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
-                                  <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
-                                    {badge}
-                                  </div>
-                                </div>
-                                <div className="absolute -right-2 -bottom-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-                                  {badge}
-                                </div>
-                              </div>
-
-                              <div className="min-w-0">
-                                <div className="truncate text-[14px] font-semibold text-neutral-0">
-                                  {title}
-                                </div>
-                                <div className="truncate text-[13px] text-neutral-400">
-                                  {m.email}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <StatusPill status={m.status} />
-                              <MemberActionsMenu
-                                canManage={canManageMembers}
-                                member={m}
-                                onRemove={() => deleteMutation.mutate(m._id)}
-                                onChangeRole={(r) =>
-                                  updateMutation.mutate({
-                                    memberId: m._id,
-                                    body: { role: r },
-                                  })
-                                }
-                              />
-                            </div>
-                          </div>
-
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <MetricChip
-                              icon={<Eye className="h-4 w-4" />}
-                              label="Views"
-                              value={fmtNum(met.views)}
-                            />
-                            <MetricChip
-                              icon={<Ticket className="h-4 w-4" />}
-                              label="Tickets"
-                              value={fmtNum(met.tickets)}
-                            />
-                            <MetricChip
-                              icon={<CircleDollarSign className="h-4 w-4" />}
-                              label="Revenue"
-                              value={fmtUsd(met.revenue)}
-                            />
-                            <MetricChip
-                              icon={
-                                ROLE_META[m.role]?.icon ?? (
-                                  <UsersIcon className="h-4 w-4" />
-                                )
-                              }
-                              label="Role"
-                              value={ROLE_META[m.role]?.label ?? "—"}
-                            />
-                            <MetricChip
-                              icon={<CalendarDays className="h-4 w-4" />}
-                              label="Added"
-                              value={prettyDateShort(m.createdAt)}
-                            />
-                          </div>
-                        </div>
+                        <Pagination
+                          page={pageSafe}
+                          totalPages={totalPages}
+                          onPage={setPage}
+                        />
                       </div>
-                    );
-                  })}
-
-                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-[12px] text-neutral-300">
-                      {showingLabel}
                     </div>
-                    <Pagination
-                      page={pageSafe}
-                      totalPages={totalPages}
-                      onPage={setPage}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className={clsx(
-                    "rounded-2xl border border-white/10 bg-white/5 px-4 py-12",
-                    "text-center",
+                  ) : (
+                    <div
+                      className={clsx(
+                        "rounded-2xl border border-white/10 bg-white/5 px-4 py-12",
+                        "text-center",
+                      )}
+                    >
+                      <div className="text-[13px] font-semibold text-neutral-100">
+                        No members found
+                      </div>
+                      <div className="mt-1 text-[12px] text-neutral-500">
+                        Try a different search or invite a new member.
+                      </div>
+                    </div>
                   )}
-                >
-                  <div className="text-[13px] font-semibold text-neutral-100">
-                    No members found
-                  </div>
-                  <div className="mt-1 text-[12px] text-neutral-500">
-                    Try a different search or invite a new member.
-                  </div>
                 </div>
-              )}
-            </div>
 
-            {/* Mobile FAB */}
-            <button
-              onClick={() => setInviteOpen(true)}
-              className={clsx(
-                "fixed bottom-6 right-6 sm:hidden",
-                "relative inline-flex items-center justify-center overflow-hidden rounded-full",
-                "bg-primary-700 px-4 py-2 text-sm font-medium text-white",
-                "ring-1 ring-primary-600/60 hover:bg-primary-600",
-                "focus:outline-none focus:ring-2 focus:ring-primary-500",
-                "before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:transition-transform before:duration-700 hover:before:translate-x-full",
-              )}
-              disabled={!eventId}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Invite
-            </button>
+                {canInviteMembers ? (
+                  <button
+                    onClick={() => setInviteOpen(true)}
+                    className={clsx(
+                      "fixed bottom-6 right-6 sm:hidden",
+                      "relative inline-flex items-center justify-center overflow-hidden rounded-full",
+                      "bg-primary-700 px-4 py-2 text-sm font-medium text-white",
+                      "ring-1 ring-primary-600/60 hover:bg-primary-600",
+                      "focus:outline-none focus:ring-2 focus:ring-primary-500",
+                      "before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent before:transition-transform before:duration-700 hover:before:translate-x-full",
+                    )}
+                    disabled={!eventId}
+                  >
+                    <UsersIcon className="mr-2 h-4 w-4" />
+                    Invite
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         </section>
       </section>
@@ -1260,9 +1364,14 @@ export default function EventTeamPage() {
       <InviteTeamModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
-        onInvite={(payload) => inviteMutation.mutate(payload)}
+        onInvite={(payload) => {
+          if (payload.role && !isEventInviteRole(payload.role)) {
+            return;
+          }
+          inviteMutation.mutate(payload);
+        }}
         isSubmitting={inviteMutation.isPending}
-        orgId={organizationId}
+        scope="event"
       />
 
       <RolesModal open={rolesOpen} onClose={() => setRolesOpen(false)} />

@@ -1,3 +1,4 @@
+// src\models\TrackingAttributionSession.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 export type TrackingAttributionDestinationKind = "Event" | "Organization";

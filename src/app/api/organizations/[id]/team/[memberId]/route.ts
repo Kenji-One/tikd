@@ -1,3 +1,4 @@
+// src\app\api\organizations\[id]\team\[memberId]\route.ts
 import { NextRequest, NextResponse } from "next/server";
 import "@/lib/mongoose";
 import { z } from "zod";
@@ -14,6 +15,12 @@ import {
   sendOrganizationInviteEmail,
 } from "@/lib/orgInvites";
 import { getSystemRoleFallback } from "@/lib/orgRoles";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const preferredRegion = "auto";
+export const maxDuration = 10;
 
 type Ctx = { params: Promise<{ id: string; memberId: string }> };
 const isObjectId = (val: string) => /^[a-f\d]{24}$/i.test(val);
@@ -82,6 +89,20 @@ const patchSchema = z
       });
     }
 
+    if (
+      v.status === "revoked" &&
+      (v.role ||
+        v.roleId ||
+        typeof v.temporaryAccess === "boolean" ||
+        v.expiresAt)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "revoked status cannot be combined with other update fields",
+        path: ["status"],
+      });
+    }
+
     if (v.temporaryAccess === true && !v.expiresAt) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -98,6 +119,38 @@ const patchSchema = z
       });
     }
   });
+
+function normalizeEmail(email?: string | null): string {
+  return String(email ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+async function loadOwnerEmail(ownerId: Types.ObjectId): Promise<string> {
+  const owner = await User.findById(ownerId)
+    .select("email")
+    .lean<{ email?: string } | null>();
+
+  return normalizeEmail(owner?.email);
+}
+
+function isProtectedOwnerMembership(input: {
+  member: OrgTeamLean;
+  ownerId: Types.ObjectId;
+  ownerEmail: string;
+}): boolean {
+  if (
+    input.member.userId &&
+    String(input.member.userId) === String(input.ownerId)
+  ) {
+    return true;
+  }
+
+  return (
+    !!input.ownerEmail &&
+    normalizeEmail(input.member.email) === input.ownerEmail
+  );
+}
 
 function toSafeMemberResponse(
   member: OrgTeamLean,
@@ -163,7 +216,15 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (member.userId && String(member.userId) === String(org.ownerId)) {
+  const ownerEmail = await loadOwnerEmail(org.ownerId);
+
+  if (
+    isProtectedOwnerMembership({
+      member,
+      ownerId: org.ownerId,
+      ownerEmail,
+    })
+  ) {
     return NextResponse.json(
       { error: "Owner membership cannot be modified" },
       { status: 400 },
@@ -263,18 +324,41 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     });
   }
 
-  const canAssign = await requireOrgPermission({
-    organizationId: id,
-    userId: session.user.id,
-    email: session.user.email ?? undefined,
-    permission: "members.assignRoles",
-  });
+  const wantsRoleChange = Boolean(role || roleId);
+  const wantsRevoke = status === "revoked";
+  const wantsAccessWindowChange =
+    typeof temporaryAccess === "boolean" || Boolean(expiresAt);
 
-  if (!canAssign.ok) {
-    return NextResponse.json(
-      { error: canAssign.error },
-      { status: canAssign.status },
-    );
+  if (wantsRoleChange || wantsAccessWindowChange) {
+    const canAssign = await requireOrgPermission({
+      organizationId: id,
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "members.assignRoles",
+    });
+
+    if (!canAssign.ok) {
+      return NextResponse.json(
+        { error: canAssign.error },
+        { status: canAssign.status },
+      );
+    }
+  }
+
+  if (wantsRevoke) {
+    const canRemove = await requireOrgPermission({
+      organizationId: id,
+      userId: session.user.id,
+      email: session.user.email ?? undefined,
+      permission: "members.remove",
+    });
+
+    if (!canRemove.ok) {
+      return NextResponse.json(
+        { error: canRemove.error },
+        { status: canRemove.status },
+      );
+    }
   }
 
   const setUpdate: Record<string, unknown> = {};
@@ -407,14 +491,22 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     _id: new Types.ObjectId(memberId),
     organizationId: org._id,
   })
-    .select("_id userId")
-    .lean<{ _id: Types.ObjectId; userId?: Types.ObjectId | null } | null>();
+    .select(SAFE_MEMBER_SELECT)
+    .lean<OrgTeamLean | null>();
 
   if (!member) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (member.userId && String(member.userId) === String(org.ownerId)) {
+  const ownerEmail = await loadOwnerEmail(org.ownerId);
+
+  if (
+    isProtectedOwnerMembership({
+      member,
+      ownerId: org.ownerId,
+      ownerEmail,
+    })
+  ) {
     return NextResponse.json(
       { error: "Owner membership cannot be removed" },
       { status: 400 },

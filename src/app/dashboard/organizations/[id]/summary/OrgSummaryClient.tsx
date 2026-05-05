@@ -10,7 +10,7 @@ import RevenueChart from "@/components/dashboard/charts/RevenueChart";
 import SmallKpiChart from "@/components/dashboard/charts/SmallKpiChart";
 import TrackingLinksTable from "@/components/dashboard/tables/TrackingLinksTable";
 import MyTeamTable, {
-  DEMO_MY_TEAM,
+  type TeamMember,
 } from "@/components/dashboard/tables/MyTeamTable";
 import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
 
@@ -89,6 +89,65 @@ type ExtendedRevenueAnalytics = RevenueAnalyticsResponse & {
     };
   };
 };
+
+type TrackingMemberMetricRow = {
+  userId: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role?: string;
+  status?: string;
+  links: number;
+  views: number;
+  ticketsSold: number;
+  revenue: number;
+  lastLinkCreatedAt?: string | null;
+};
+
+type TrackingMembersResponse = {
+  rows: TrackingMemberMetricRow[];
+};
+
+function initialsFromName(name: string) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "MB";
+
+  const a = parts[0]?.[0] ?? "";
+  const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
+  return `${a}${b}`.toUpperCase() || "MB";
+}
+
+async function fetchOrganizationTrackingMembers(
+  organizationId: string,
+): Promise<TrackingMembersResponse> {
+  const res = await fetch(
+    `/api/tracking-links/members?scope=organization&organizationId=${encodeURIComponent(organizationId)}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    let message = "Failed to load organization members.";
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (typeof data?.error === "string" && data.error.trim()) {
+        message = data.error;
+      }
+    } catch {
+      // ignore non-json error bodies
+    }
+
+    throw new Error(message);
+  }
+
+  return (await res.json()) as TrackingMembersResponse;
+}
 
 function clampToDay(d: Date) {
   const x = new Date(d);
@@ -737,9 +796,28 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
     enabled: !!orgId && summaryAllowed,
   });
 
+  const orgTrackingMembersQuery = useQuery<TrackingMembersResponse>({
+    queryKey: ["org-tracking-members", orgId],
+    queryFn: () => fetchOrganizationTrackingMembers(orgId),
+    enabled: !!orgId && summaryAllowed,
+    staleTime: 30_000,
+  });
+
   const analytics = analyticsQuery.data;
   const ticketsAnalytics = ticketsAnalyticsQuery.data;
   const revenueAnalytics = revenueAnalyticsQuery.data;
+
+  const liveTeamMembers = useMemo<TeamMember[]>(() => {
+    return (orgTrackingMembersQuery.data?.rows ?? []).map((row) => ({
+      id: row.userId,
+      name: row.name || row.email || "Member",
+      avatarUrl: row.image ?? null,
+      avatarText: initialsFromName(row.name || row.email || "Member"),
+      tickets: Number.isFinite(row.ticketsSold) ? row.ticketsSold : 0,
+      views: Number.isFinite(row.views) ? row.views : 0,
+      earned: Number.isFinite(row.revenue) ? row.revenue : 0,
+    }));
+  }, [orgTrackingMembersQuery.data]);
 
   const rangeDays = useMemo(
     () => diffDaysInclusive(effectiveStart, effectiveEnd),
@@ -1161,7 +1239,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
           </div>
         </div>
 
-        <RecentSalesTable />
+        <RecentSalesTable scope="organization" orgId={orgId} />
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
@@ -1242,7 +1320,7 @@ export default function OrgSummaryClient({ orgId }: { orgId: string }) {
         </div>
 
         <MyTeamTable
-          members={DEMO_MY_TEAM}
+          members={liveTeamMembers}
           onDetailedView={() => {
             // later: /dashboard/organizations/:id/team
           }}

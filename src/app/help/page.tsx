@@ -57,12 +57,12 @@ const FAQ_CATEGORIES: FAQCat[] = [
         a: "Lido is the name of a family of open-source peer-to-system software tools deployed and functioning on the Ethereum blockchain network. The software enables users to mint transferable utility tokens, which receive rewards linked to the related validation activities of writing data to the blockchain, while the tokens can be used in other on-chain activities.",
       },
       {
-        q: "How does Tikd work?",
+        q: "How does Tixsy work?",
         a: "We connect organisers with attendees, providing secure payments via Stripe, real-time analytics, and QR-code entry scanning.",
       },
       {
-        q: "Why TIKD?",
-        a: "Because life’s better when the queue is shorter. Tikd removes friction for guests and overhead for organisers.",
+        q: "Why TIXSY?",
+        a: "Because life’s better when the queue is shorter. Tixsy removes friction for guests and overhead for organisers.",
       },
     ],
   },
@@ -186,7 +186,7 @@ function FAQSection() {
                     className={clsx(
                       "flex w-full items-start justify-between gap-4 py-6 text-left text-2xl tracking-[-0.48px] text-white",
                       open ? "pb-4" : "",
-                      idx == 0 ? "pt-0" : ""
+                      idx == 0 ? "pt-0" : "",
                     )}
                   >
                     {q}
@@ -238,7 +238,7 @@ export default function HelpPage() {
   });
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = (e: FormEvent) => {
@@ -309,7 +309,7 @@ export default function HelpPage() {
                 </svg>
               }
               label="Email Address"
-              value="admin@tikd.vip"
+              value="admin@tixsy.vip"
             />
             {/* <ContactItem
               icon={

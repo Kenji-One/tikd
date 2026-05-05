@@ -1,3 +1,4 @@
+// src/app/dashboard/events/[eventId]/guests/page.tsx
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -21,6 +22,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { fetchSales, type SaleOrderStatus } from "@/lib/api/sales";
 
 /* ----------------------------- Fetch helpers ----------------------------- */
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -90,6 +92,20 @@ type GuestRow = {
   canRemove?: boolean;
 };
 
+type OrderInfoRow = {
+  id: string;
+  orderNumber: string;
+  buyerName: string;
+  buyerEmail?: string;
+  amount: number;
+  currency: string;
+  ticketSummary: string;
+  quantity: number;
+  status: SaleOrderStatus;
+  statusLabel: string;
+  dateTimeISO: string;
+};
+
 type ManualGuestPayload = {
   fullName: string;
   email?: string;
@@ -115,8 +131,11 @@ function initialsFromName(name: string) {
   return two || "GU";
 }
 
-function fmtUsd(n: number) {
-  return n.toLocaleString(undefined, { style: "currency", currency: "USD" });
+function fmtCurrency(n: number, currency = "USD") {
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency,
+  });
 }
 
 function fmtNum(n: number) {
@@ -158,7 +177,6 @@ function normalizeEmail(s: string) {
 }
 
 function normalizePhone(s: string) {
-  // keep leading +, strip other non-digits
   const trimmed = s.trim();
   const hasPlus = trimmed.startsWith("+");
   const digits = trimmed.replace(/[^\d]/g, "");
@@ -168,13 +186,11 @@ function normalizePhone(s: string) {
 function isEmailLike(s: string) {
   const v = s.trim();
   if (!v.includes("@")) return false;
-  // intentionally simple + safe
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
 
 function isPhoneLike(s: string) {
   const digits = normalizePhone(s).replace(/^\+/, "");
-  // allow 7..15 digits-ish
   return digits.length >= 7 && digits.length <= 15;
 }
 
@@ -198,7 +214,7 @@ const ICON_BTN_40 = clsx(
   "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
 );
 
-function StatusPill({ status }: { status: GuestStatus }) {
+function GuestStatusPill({ status }: { status: GuestStatus }) {
   const map: Record<GuestStatus, string> = {
     checked_in:
       "bg-success-900/35 text-success-300 ring-success-700/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
@@ -226,6 +242,37 @@ function StatusPill({ status }: { status: GuestStatus }) {
   );
 }
 
+function OrderStatusPill({
+  status,
+  label,
+}: {
+  status: SaleOrderStatus;
+  label: string;
+}) {
+  const map: Record<SaleOrderStatus, string> = {
+    paid: "bg-success-900/35 text-success-300 ring-success-700/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    pending:
+      "bg-warning-900/25 text-warning-200 ring-warning-700/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+    refunded:
+      "bg-primary-900/20 text-primary-200 ring-primary-700/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+    cancelled:
+      "bg-red-500/10 text-red-200 ring-red-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+  };
+
+  return (
+    <span
+      className={clsx(
+        "inline-flex items-center gap-1.5 rounded-md px-2 py-1",
+        "text-[13px] font-semibold ring-1 ring-inset whitespace-nowrap",
+        map[status],
+      )}
+    >
+      <span className="h-2 w-2 rounded-full bg-current opacity-80" />
+      <span className="leading-none">{label}</span>
+    </span>
+  );
+}
+
 function TicketPill({ label }: { label: string }) {
   return (
     <span
@@ -246,9 +293,9 @@ function TicketPill({ label }: { label: string }) {
 /* ---------------------------- Add Guest Modal ---------------------------- */
 
 type ChipGuest = {
-  key: string; // stable unique key in UI
-  label: string; // what we show on chip
-  payload: ManualGuestPayload; // what we send to API
+  key: string;
+  label: string;
+  payload: ManualGuestPayload;
 };
 
 function AddGuestModal({
@@ -357,7 +404,6 @@ function AddGuestModal({
       key = `phone:${phone}`;
       label = phone;
     } else {
-      // treat as name
       const name = v.replace(/\s+/g, " ").trim();
       if (name.length < 2) {
         setErrorMsg("Please enter a valid email, phone number, or full name.");
@@ -652,8 +698,6 @@ function AddGuestModal({
               </div>
             ) : null}
           </div>
-
-          {/* ✅ Removed "Results / Suggestions" completely */}
 
           <div className="mt-4 flex justify-end">
             <button
@@ -981,7 +1025,40 @@ export default function GuestsPage() {
     },
   });
 
+  const eventOrdersQ = useQuery({
+    queryKey: ["event-sales-orders", eventId],
+    enabled: Boolean(eventId),
+    queryFn: async () => {
+      const response = await fetchSales({
+        scope: "event",
+        eventId: eventId ?? null,
+        page: 1,
+        pageSize: 200,
+        sortBy: "createdAt",
+        sortDir: "desc",
+      });
+
+      return response.rows;
+    },
+  });
+
   const guests = guestsQ.data ?? [];
+
+  const orderRows = useMemo<OrderInfoRow[]>(() => {
+    return (eventOrdersQ.data ?? []).map((sale) => ({
+      id: sale.id,
+      orderNumber: sale.orderDisplay,
+      buyerName: sale.buyer.name,
+      buyerEmail: sale.buyer.email || undefined,
+      amount: sale.amount,
+      currency: sale.currency,
+      ticketSummary: sale.ticketSummary,
+      quantity: sale.quantity,
+      status: sale.status,
+      statusLabel: sale.statusLabel,
+      dateTimeISO: sale.createdAt,
+    }));
+  }, [eventOrdersQ.data]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async (p: { guestId: string; status: GuestStatus }) => {
@@ -1009,9 +1086,6 @@ export default function GuestsPage() {
     },
   });
 
-  /* ------------------------------------------------------------------
-     ✅ Real responsive table (NO horizontal scroll)
-  ------------------------------------------------------------------ */
   const GRID_GUEST =
     "md:grid md:items-center md:gap-4 " +
     "md:[grid-template-columns:88px_minmax(0,2.6fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_72px] " +
@@ -1020,11 +1094,11 @@ export default function GuestsPage() {
 
   const GRID_ORDER =
     "md:grid md:items-center md:gap-4 " +
-    "md:[grid-template-columns:88px_minmax(0,2.7fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_72px] " +
-    "lg:[grid-template-columns:88px_minmax(0,2.2fr)_minmax(0,1.8fr)_80px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_72px] " +
-    "xl:[grid-template-columns:88px_minmax(0,2.0fr)_88px_minmax(0,1.8fr)_80px_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_72px]";
+    "md:[grid-template-columns:88px_minmax(0,2.6fr)_80px_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_72px] " +
+    "lg:[grid-template-columns:88px_minmax(0,2.0fr)_minmax(0,1.5fr)_80px_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_72px] " +
+    "xl:[grid-template-columns:88px_minmax(0,1.8fr)_minmax(0,1.4fr)_96px_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_72px]";
 
-  const filtered = useMemo(() => {
+  const filteredGuests = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return guests;
 
@@ -1044,7 +1118,26 @@ export default function GuestsPage() {
     });
   }, [query, guests]);
 
-  /* --------------------------- Pagination --------------------------- */
+  const filteredOrders = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return orderRows;
+
+    return orderRows.filter((o) => {
+      const hay = [
+        o.orderNumber,
+        o.buyerName,
+        o.buyerEmail ?? "",
+        o.ticketSummary,
+        o.statusLabel,
+        prettyDateTime(o.dateTimeISO),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return hay.includes(q);
+    });
+  }, [query, orderRows]);
+
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -1052,7 +1145,8 @@ export default function GuestsPage() {
     setPage(1);
   }, [query, view]);
 
-  const total = filtered.length;
+  const total =
+    view === "guest" ? filteredGuests.length : filteredOrders.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   useEffect(() => {
@@ -1060,10 +1154,16 @@ export default function GuestsPage() {
   }, [totalPages]);
 
   const pageSafe = clamp(page, 1, totalPages);
-  const slice = useMemo(() => {
+
+  const guestSlice = useMemo(() => {
     const start = (pageSafe - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, pageSafe]);
+    return filteredGuests.slice(start, start + pageSize);
+  }, [filteredGuests, pageSafe]);
+
+  const orderSlice = useMemo(() => {
+    const start = (pageSafe - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, pageSafe]);
 
   const showingLabel = useMemo(() => {
     if (!total) return "Showing 0-0 from 0 data";
@@ -1072,7 +1172,17 @@ export default function GuestsPage() {
     return `Showing ${start}-${end} from ${total} data`;
   }, [total, pageSafe]);
 
-  const isLoading = guestsQ.isLoading;
+  const isLoading =
+    view === "guest" ? guestsQ.isLoading : eventOrdersQ.isLoading;
+
+  const activeError =
+    view === "guest"
+      ? guestsQ.error instanceof Error
+        ? guestsQ.error.message
+        : ""
+      : eventOrdersQ.error instanceof Error
+        ? eventOrdersQ.error.message
+        : "";
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0 px-4 md:px-6 lg:px-8">
@@ -1098,7 +1208,6 @@ export default function GuestsPage() {
               "bg-[radial-gradient(900px_320px_at_25%_0%,rgba(154,70,255,0.10),transparent_60%),radial-gradient(900px_320px_at_90%_110%,rgba(66,139,255,0.08),transparent_55%)]",
             )}
           >
-            {/* Header */}
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-base font-semibold tracking-[0.18em] text-neutral-300 uppercase">
@@ -1127,25 +1236,28 @@ export default function GuestsPage() {
                       "placeholder:text-neutral-500",
                       "outline-none border-none focus:ring-1 focus:ring-primary-500",
                     )}
-                    aria-label="Search guests"
+                    aria-label={
+                      view === "guest" ? "Search guests" : "Search orders"
+                    }
                   />
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    icon={<UserPlus className="h-4 w-4" />}
-                    onClick={() => setAddOpen(true)}
-                    animation
-                  >
-                    Add Guest
-                  </Button>
+                  {view === "guest" ? (
+                    <Button
+                      type="button"
+                      variant="primary"
+                      icon={<UserPlus className="h-4 w-4" />}
+                      onClick={() => setAddOpen(true)}
+                      animation
+                    >
+                      Add Guest
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
 
-            {/* Toggle */}
             <div className="mb-4 flex items-center justify-between gap-3">
               <div
                 ref={tabBarRef}
@@ -1187,12 +1299,13 @@ export default function GuestsPage() {
               </div>
 
               <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[12px] text-neutral-300">
-                <span className="text-neutral-400">Guests:</span>{" "}
+                <span className="text-neutral-400">
+                  {view === "guest" ? "Guests:" : "Orders:"}
+                </span>{" "}
                 <span className="font-semibold text-neutral-100">{total}</span>
               </div>
             </div>
 
-            {/* Column header */}
             <div
               className={clsx(
                 "hidden md:block mt-3",
@@ -1201,12 +1314,11 @@ export default function GuestsPage() {
               )}
             >
               <div className={view === "guest" ? GRID_GUEST : GRID_ORDER}>
-                {/* Shared */}
                 <div>Order</div>
-                <div>Name</div>
 
                 {view === "guest" ? (
                   <>
+                    <div>Name</div>
                     <div className="hidden lg:block">Gender</div>
                     <div className="hidden lg:block">Age</div>
                     <div className="hidden xl:block">Contact Info</div>
@@ -1217,19 +1329,18 @@ export default function GuestsPage() {
                   </>
                 ) : (
                   <>
-                    <div className="hidden xl:block">Gender</div>
-                    <div className="hidden lg:block">Referrer</div>
-                    <div className="hidden lg:block">Quantity</div>
+                    <div>Buyer</div>
+                    <div className="hidden lg:block">Tickets</div>
+                    <div>Qty</div>
                     <div>Amount</div>
                     <div>Date</div>
                     <div>Status</div>
-                    <div className="text-right">Edit</div>
+                    <div className="text-right">Info</div>
                   </>
                 )}
               </div>
             </div>
 
-            {/* List */}
             <div className="mt-3">
               {isLoading ? (
                 <div className="space-y-3">
@@ -1237,58 +1348,151 @@ export default function GuestsPage() {
                     <Skeleton key={i} className="h-[88px] rounded-[12px]" />
                   ))}
                 </div>
-              ) : slice.length ? (
-                <div className="space-y-3">
-                  {slice.map((g) => {
-                    const badge = initialsFromName(g.fullName);
-                    const followersLabel =
-                      typeof g.igFollowers === "number"
-                        ? fmtNum(g.igFollowers)
-                        : "—";
+              ) : activeError ? (
+                <div
+                  className={clsx(
+                    "rounded-2xl border border-red-500/20 bg-red-500/8 px-4 py-12",
+                    "text-center",
+                  )}
+                >
+                  <div className="text-[13px] font-semibold text-red-200">
+                    Failed to load {view === "guest" ? "guests" : "orders"}
+                  </div>
+                  <div className="mt-1 text-[12px] text-red-100/70">
+                    {activeError}
+                  </div>
+                </div>
+              ) : view === "guest" ? (
+                guestSlice.length ? (
+                  <div className="space-y-3">
+                    {guestSlice.map((g) => {
+                      const badge = initialsFromName(g.fullName);
+                      const followersLabel =
+                        typeof g.igFollowers === "number"
+                          ? fmtNum(g.igFollowers)
+                          : "—";
 
-                    return (
-                      <div
-                        key={g.id}
-                        className={clsx(
-                          "relative rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
-                          "hover:bg-white/7 transition-colors",
-                        )}
-                      >
-                        {/* Desktop row */}
-                        <div className="hidden md:block">
-                          <div
-                            className={
-                              view === "guest" ? GRID_GUEST : GRID_ORDER
-                            }
-                          >
-                            {/* Order */}
-                            <div className="text-[13px] font-semibold text-neutral-100">
-                              {g.orderNumber}
+                      return (
+                        <div
+                          key={g.id}
+                          className={clsx(
+                            "relative rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
+                            "hover:bg-white/7 transition-colors",
+                          )}
+                        >
+                          <div className="hidden md:block">
+                            <div className={GRID_GUEST}>
+                              <div className="text-[13px] font-semibold text-neutral-100">
+                                {g.orderNumber}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="relative shrink-0">
+                                    <div className="h-10 w-10 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10">
+                                      <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
+                                        {badge}
+                                      </div>
+                                    </div>
+
+                                    <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-[7px]">
+                                      <span
+                                        className={clsx(
+                                          "tikd-chip tikd-chip-primary rounded-md",
+                                          "px-1 py-[3px] text-[9px] font-semibold leading-none",
+                                          "gap-1",
+                                        )}
+                                        title={`${followersLabel} Instagram followers`}
+                                      >
+                                        <Instagram className="h-2.5 w-2.5 text-primary-200" />
+                                        <span className="tabular-nums text-neutral-0/95">
+                                          {followersLabel}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0">
+                                    <div className="truncate text-[14px] font-semibold text-neutral-0">
+                                      {g.fullName}
+                                    </div>
+                                    <div className="truncate text-[13px] text-neutral-500">
+                                      {g.handle ?? "—"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="hidden lg:block text-[13px] text-neutral-200">
+                                <span className="font-semibold text-neutral-100">
+                                  {g.gender ?? "—"}
+                                </span>
+                              </div>
+
+                              <div className="hidden lg:block text-[13px] text-neutral-200">
+                                <span className="font-semibold text-neutral-100">
+                                  {typeof g.age === "number" ? g.age : "—"}
+                                </span>
+                              </div>
+
+                              <div className="hidden xl:block min-w-0">
+                                <div className="truncate text-[13px] font-semibold text-neutral-100">
+                                  {g.phone ?? "—"}
+                                </div>
+                                <div className="truncate text-[13px] text-neutral-500">
+                                  {g.email ?? "—"}
+                                </div>
+                              </div>
+
+                              <div className="text-[13px] text-neutral-200">
+                                <span className="font-semibold text-neutral-100">
+                                  {fmtCurrency(g.amount)}
+                                </span>
+                              </div>
+
+                              <div className="min-w-0">
+                                <TicketPill label={g.ticketType} />
+                              </div>
+
+                              <div className="min-w-0">
+                                <GuestStatusPill status={g.status} />
+                              </div>
+
+                              <div className="flex justify-end">
+                                <GuestActionsMenu
+                                  guest={g}
+                                  onMarkCheckedIn={() =>
+                                    updateStatusMutation.mutate({
+                                      guestId: g.id,
+                                      status: "checked_in",
+                                    })
+                                  }
+                                  onMarkPending={() =>
+                                    updateStatusMutation.mutate({
+                                      guestId: g.id,
+                                      status: "pending_arrival",
+                                    })
+                                  }
+                                  onRemove={() => removeMutation.mutate(g.id)}
+                                />
+                              </div>
                             </div>
+                          </div>
 
-                            {/* Name */}
-                            <div className="min-w-0">
+                          <div className="md:hidden">
+                            <div className="flex items-start justify-between gap-3">
                               <div className="flex min-w-0 items-center gap-3">
-                                <div className="relative shrink-0">
-                                  <div className="h-10 w-10 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10">
+                                <div className="min-w-[52px]">
+                                  <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
                                     <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
                                       {badge}
                                     </div>
                                   </div>
 
-                                  <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-[7px]">
-                                    <span
-                                      className={clsx(
-                                        "tikd-chip tikd-chip-primary rounded-md",
-                                        "px-1 py-[3px] text-[9px] font-semibold leading-none",
-                                        "gap-1",
-                                      )}
-                                      title={`${followersLabel} Instagram followers`}
-                                    >
-                                      <Instagram className="h-2.5 w-2.5 text-primary-200" />
-                                      <span className="tabular-nums text-neutral-0/95">
-                                        {followersLabel}
-                                      </span>
+                                  <div className="mt-1 flex items-center justify-center gap-1 text-[11px] text-neutral-500">
+                                    <Instagram className="h-3.5 w-3.5" />
+                                    <span className="font-semibold text-neutral-400">
+                                      {followersLabel}
                                     </span>
                                   </div>
                                 </div>
@@ -1298,323 +1502,289 @@ export default function GuestsPage() {
                                     {g.fullName}
                                   </div>
                                   <div className="truncate text-[13px] text-neutral-500">
-                                    {g.handle ?? "—"}
+                                    {g.handle ?? "—"} •{" "}
+                                    <span className="text-neutral-400">
+                                      {g.orderNumber}
+                                    </span>
                                   </div>
                                 </div>
                               </div>
+
+                              <div className="flex items-center gap-2">
+                                <GuestStatusPill status={g.status} />
+                                <GuestActionsMenu
+                                  guest={g}
+                                  onMarkCheckedIn={() =>
+                                    updateStatusMutation.mutate({
+                                      guestId: g.id,
+                                      status: "checked_in",
+                                    })
+                                  }
+                                  onMarkPending={() =>
+                                    updateStatusMutation.mutate({
+                                      guestId: g.id,
+                                      status: "pending_arrival",
+                                    })
+                                  }
+                                  onRemove={() => removeMutation.mutate(g.id)}
+                                />
+                              </div>
                             </div>
 
-                            {view === "guest" ? (
-                              <>
-                                {/* Gender (lg+) */}
-                                <div className="hidden lg:block text-[13px] text-neutral-200">
-                                  <span className="font-semibold text-neutral-100">
+                            <div className="mt-3 grid gap-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                  <div className="text-[11px] text-neutral-500">
+                                    Gender
+                                  </div>
+                                  <div className="mt-1 text-[13px] font-semibold text-neutral-100">
                                     {g.gender ?? "—"}
-                                  </span>
+                                  </div>
                                 </div>
 
-                                {/* Age (lg+) */}
-                                <div className="hidden lg:block text-[13px] text-neutral-200">
-                                  <span className="font-semibold text-neutral-100">
+                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                  <div className="text-[11px] text-neutral-500">
+                                    Age
+                                  </div>
+                                  <div className="mt-1 text-[13px] font-semibold text-neutral-100">
                                     {typeof g.age === "number" ? g.age : "—"}
-                                  </span>
-                                </div>
-
-                                {/* Contact (xl+) */}
-                                <div className="hidden xl:block min-w-0">
-                                  <div className="truncate text-[13px] font-semibold text-neutral-100">
-                                    {g.phone ?? "—"}
-                                  </div>
-                                  <div className="truncate text-[13px] text-neutral-500">
-                                    {g.email ?? "—"}
                                   </div>
                                 </div>
+                              </div>
 
-                                {/* Amount */}
-                                <div className="text-[13px] text-neutral-200">
-                                  <span className="font-semibold text-neutral-100">
-                                    {fmtUsd(g.amount)}
-                                  </span>
+                              <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                <div className="text-[11px] text-neutral-500">
+                                  Contact Info
                                 </div>
+                                <div className="mt-1 text-[13px] font-semibold text-neutral-100">
+                                  {g.phone ?? "—"}
+                                </div>
+                                <div className="mt-0.5 text-[12px] text-neutral-500">
+                                  {g.email ?? "—"}
+                                </div>
+                              </div>
 
-                                {/* Ticket */}
-                                <div className="min-w-0">
-                                  <TicketPill label={g.ticketType} />
-                                </div>
-
-                                {/* Status */}
-                                <div className="min-w-0">
-                                  <StatusPill status={g.status} />
-                                </div>
-
-                                {/* Edit */}
-                                <div className="flex justify-end">
-                                  <GuestActionsMenu
-                                    guest={g}
-                                    onMarkCheckedIn={() =>
-                                      updateStatusMutation.mutate({
-                                        guestId: g.id,
-                                        status: "checked_in",
-                                      })
-                                    }
-                                    onMarkPending={() =>
-                                      updateStatusMutation.mutate({
-                                        guestId: g.id,
-                                        status: "pending_arrival",
-                                      })
-                                    }
-                                    onRemove={() => removeMutation.mutate(g.id)}
-                                  />
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                {/* Gender (xl+) */}
-                                <div className="hidden xl:block text-[13px] text-neutral-200">
-                                  <span className="font-semibold text-neutral-100">
-                                    {g.gender ?? "—"}
-                                  </span>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                  <div className="text-[11px] text-neutral-500">
+                                    Amount
+                                  </div>
+                                  <div className="mt-1 text-[13px] font-semibold text-neutral-100">
+                                    {fmtCurrency(g.amount)}
+                                  </div>
                                 </div>
 
-                                {/* Referrer (lg+) */}
-                                <div className="hidden lg:block min-w-0 text-[13px] text-neutral-200">
-                                  <span className="truncate block font-semibold text-neutral-100">
-                                    {g.referrer ?? "—"}
-                                  </span>
+                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                  <div className="text-[11px] text-neutral-500">
+                                    Ticket Type
+                                  </div>
+                                  <div className="mt-1">
+                                    <TicketPill label={g.ticketType} />
+                                  </div>
                                 </div>
+                              </div>
 
-                                {/* Quantity (lg+) */}
-                                <div className="hidden lg:block text-[13px] text-neutral-200">
-                                  <span className="font-semibold text-neutral-100">
-                                    {typeof g.quantity === "number"
-                                      ? g.quantity
-                                      : "—"}
-                                  </span>
+                              <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                <div className="text-[11px] text-neutral-500">
+                                  Status
                                 </div>
-
-                                {/* Amount */}
-                                <div className="text-[13px] text-neutral-200">
-                                  <span className="font-semibold text-neutral-100">
-                                    {fmtUsd(g.amount)}
-                                  </span>
+                                <div className="mt-1">
+                                  <GuestStatusPill status={g.status} />
                                 </div>
-
-                                {/* Date */}
-                                <div className="min-w-0 text-[13px] text-neutral-400">
-                                  <span className="truncate block">
-                                    {prettyDateTime(g.dateTimeISO)}
-                                  </span>
-                                </div>
-
-                                {/* Status */}
-                                <div className="min-w-0">
-                                  <StatusPill status={g.status} />
-                                </div>
-
-                                {/* Edit */}
-                                <div className="flex justify-end">
-                                  <GuestActionsMenu
-                                    guest={g}
-                                    onMarkCheckedIn={() =>
-                                      updateStatusMutation.mutate({
-                                        guestId: g.id,
-                                        status: "checked_in",
-                                      })
-                                    }
-                                    onMarkPending={() =>
-                                      updateStatusMutation.mutate({
-                                        guestId: g.id,
-                                        status: "pending_arrival",
-                                      })
-                                    }
-                                    onRemove={() => removeMutation.mutate(g.id)}
-                                  />
-                                </div>
-                              </>
-                            )}
+                              </div>
+                            </div>
                           </div>
                         </div>
+                      );
+                    })}
 
-                        {/* Mobile stacked */}
-                        <div className="md:hidden">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="min-w-[52px]">
-                                <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+                    <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="text-[12px] text-neutral-300">
+                        {showingLabel}
+                      </div>
+                      <Pagination
+                        page={pageSafe}
+                        totalPages={totalPages}
+                        onPage={setPage}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className={clsx(
+                      "rounded-2xl border border-white/10 bg-white/5 px-4 py-12",
+                      "text-center",
+                    )}
+                  >
+                    <div className="text-[13px] font-semibold text-neutral-100">
+                      No guests found
+                    </div>
+                    <div className="mt-1 text-[12px] text-neutral-500">
+                      Try a different search.
+                    </div>
+                  </div>
+                )
+              ) : orderSlice.length ? (
+                <div className="space-y-3">
+                  {orderSlice.map((order) => {
+                    const badge = initialsFromName(order.buyerName);
+
+                    return (
+                      <div
+                        key={order.id}
+                        className={clsx(
+                          "relative rounded-[12px] border border-white/10 bg-white/5 px-4 py-3",
+                          "hover:bg-white/7 transition-colors",
+                        )}
+                      >
+                        <div className="hidden md:block">
+                          <div className={GRID_ORDER}>
+                            <div className="text-[13px] font-semibold text-neutral-100">
+                              {order.orderNumber}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="h-10 w-10 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10">
                                   <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
                                     {badge}
                                   </div>
                                 </div>
 
-                                <div className="mt-1 flex items-center justify-center gap-1 text-[11px] text-neutral-500">
-                                  <Instagram className="h-3.5 w-3.5" />
-                                  <span className="font-semibold text-neutral-400">
-                                    {followersLabel}
-                                  </span>
+                                <div className="min-w-0">
+                                  <div className="truncate text-[14px] font-semibold text-neutral-0">
+                                    {order.buyerName}
+                                  </div>
+                                  <div className="truncate text-[13px] text-neutral-500">
+                                    {order.buyerEmail ?? "—"}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="hidden lg:block min-w-0">
+                              <TicketPill label={order.ticketSummary} />
+                            </div>
+
+                            <div className="text-[13px] text-neutral-200">
+                              <span className="font-semibold text-neutral-100">
+                                {order.quantity}
+                              </span>
+                            </div>
+
+                            <div className="text-[13px] text-neutral-200">
+                              <span className="font-semibold text-neutral-100">
+                                {fmtCurrency(order.amount, order.currency)}
+                              </span>
+                            </div>
+
+                            <div className="min-w-0 text-[13px] text-neutral-400">
+                              <span className="truncate block">
+                                {prettyDateTime(order.dateTimeISO)}
+                              </span>
+                            </div>
+
+                            <div className="min-w-0">
+                              <OrderStatusPill
+                                status={order.status}
+                                label={order.statusLabel}
+                              />
+                            </div>
+
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                disabled
+                                title="Order actions are not available here"
+                                className={clsx(
+                                  ICON_BTN_40,
+                                  "cursor-not-allowed opacity-40 hover:bg-white/5",
+                                )}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="md:hidden">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
+                                <div className="flex h-full w-full items-center justify-center text-[13px] font-extrabold text-neutral-200">
+                                  {badge}
                                 </div>
                               </div>
 
                               <div className="min-w-0">
                                 <div className="truncate text-[14px] font-semibold text-neutral-0">
-                                  {g.fullName}
+                                  {order.buyerName}
                                 </div>
                                 <div className="truncate text-[13px] text-neutral-500">
-                                  {g.handle ?? "—"} •{" "}
+                                  {order.buyerEmail ?? "—"} •{" "}
                                   <span className="text-neutral-400">
-                                    {g.orderNumber}
+                                    {order.orderNumber}
                                   </span>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              <StatusPill status={g.status} />
-                              <GuestActionsMenu
-                                guest={g}
-                                onMarkCheckedIn={() =>
-                                  updateStatusMutation.mutate({
-                                    guestId: g.id,
-                                    status: "checked_in",
-                                  })
-                                }
-                                onMarkPending={() =>
-                                  updateStatusMutation.mutate({
-                                    guestId: g.id,
-                                    status: "pending_arrival",
-                                  })
-                                }
-                                onRemove={() => removeMutation.mutate(g.id)}
-                              />
-                            </div>
+                            <OrderStatusPill
+                              status={order.status}
+                              label={order.statusLabel}
+                            />
                           </div>
 
                           <div className="mt-3 grid gap-2">
-                            {view === "guest" ? (
-                              <>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Gender
-                                    </div>
-                                    <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                      {g.gender ?? "—"}
-                                    </div>
-                                  </div>
+                            <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                              <div className="text-[11px] text-neutral-500">
+                                Ticket Summary
+                              </div>
+                              <div className="mt-1">
+                                <TicketPill label={order.ticketSummary} />
+                              </div>
+                            </div>
 
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Age
-                                    </div>
-                                    <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                      {typeof g.age === "number" ? g.age : "—"}
-                                    </div>
-                                  </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                <div className="text-[11px] text-neutral-500">
+                                  Quantity
                                 </div>
-
-                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                  <div className="text-[11px] text-neutral-500">
-                                    Contact Info
-                                  </div>
-                                  <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                    {g.phone ?? "—"}
-                                  </div>
-                                  <div className="mt-0.5 text-[12px] text-neutral-500">
-                                    {g.email ?? "—"}
-                                  </div>
+                                <div className="mt-1 text-[13px] font-semibold text-neutral-100">
+                                  {order.quantity}
                                 </div>
+                              </div>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Amount
-                                    </div>
-                                    <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                      {fmtUsd(g.amount)}
-                                    </div>
-                                  </div>
-
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Ticket Type
-                                    </div>
-                                    <div className="mt-1">
-                                      <TicketPill label={g.ticketType} />
-                                    </div>
-                                  </div>
+                              <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                                <div className="text-[11px] text-neutral-500">
+                                  Amount
                                 </div>
-
-                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                  <div className="text-[11px] text-neutral-500">
-                                    Status
-                                  </div>
-                                  <div className="mt-1">
-                                    <StatusPill status={g.status} />
-                                  </div>
+                                <div className="mt-1 text-[13px] font-semibold text-neutral-100">
+                                  {fmtCurrency(order.amount, order.currency)}
                                 </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Gender
-                                    </div>
-                                    <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                      {g.gender ?? "—"}
-                                    </div>
-                                  </div>
+                              </div>
+                            </div>
 
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Quantity
-                                    </div>
-                                    <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                      {typeof g.quantity === "number"
-                                        ? g.quantity
-                                        : "—"}
-                                    </div>
-                                  </div>
-                                </div>
+                            <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                              <div className="text-[11px] text-neutral-500">
+                                Date
+                              </div>
+                              <div className="mt-1 text-[13px] font-semibold text-neutral-100">
+                                {prettyDateTime(order.dateTimeISO)}
+                              </div>
+                            </div>
 
-                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                  <div className="text-[11px] text-neutral-500">
-                                    Referrer
-                                  </div>
-                                  <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                    {g.referrer ?? "—"}
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Amount
-                                    </div>
-                                    <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                      {fmtUsd(g.amount)}
-                                    </div>
-                                  </div>
-
-                                  <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                    <div className="text-[11px] text-neutral-500">
-                                      Date
-                                    </div>
-                                    <div className="mt-1 text-[13px] font-semibold text-neutral-100">
-                                      {prettyDateTime(g.dateTimeISO)}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
-                                  <div className="text-[11px] text-neutral-500">
-                                    Status
-                                  </div>
-                                  <div className="mt-1">
-                                    <StatusPill status={g.status} />
-                                  </div>
-                                </div>
-                              </>
-                            )}
+                            <div className="rounded-xl border border-white/10 bg-neutral-950/30 px-3 py-2">
+                              <div className="text-[11px] text-neutral-500">
+                                Status
+                              </div>
+                              <div className="mt-1">
+                                <OrderStatusPill
+                                  status={order.status}
+                                  label={order.statusLabel}
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1640,10 +1810,11 @@ export default function GuestsPage() {
                   )}
                 >
                   <div className="text-[13px] font-semibold text-neutral-100">
-                    No guests found
+                    No orders found
                   </div>
                   <div className="mt-1 text-[12px] text-neutral-500">
-                    Try a different search.
+                    This event does not have matching order records for the
+                    current search.
                   </div>
                 </div>
               )}

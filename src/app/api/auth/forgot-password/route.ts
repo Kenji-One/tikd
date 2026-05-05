@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   // Invalidate any existing tokens
   await ResetToken.updateMany(
     { userId: user._id, used: false },
-    { used: true }
+    { used: true },
   );
 
   // Generate 6-digit code
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   // Send email (implement sendMail yourself)
   await sendMail({
     to: user.email,
-    subject: "Your Tikd password reset code",
+    subject: "Your Tixsy password reset code",
     html: `<p>Your code is <strong>${token}</strong>. It expires in 15 minutes.</p>`,
   });
 

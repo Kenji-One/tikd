@@ -1037,6 +1037,28 @@ export default function FriendsClient() {
     };
   }, [requestsOpen]);
 
+  useEffect(() => {
+    if (!requestsOpen) return;
+
+    const isMobile = window.innerWidth < 640;
+    if (!isMobile) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollBarGap =
+      window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = "hidden";
+    if (scrollBarGap > 0) {
+      document.body.style.paddingRight = `${scrollBarGap}px`;
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
+  }, [requestsOpen]);
+
   function removeFriend(id: string) {
     removeMut.mutate(id);
   }
@@ -1102,6 +1124,213 @@ export default function FriendsClient() {
 
   const hasPending = requests.length > 0;
 
+  const renderRequestsControl = () => (
+    <div className="relative shrink-0">
+      <button
+        ref={requestsBtnRef}
+        type="button"
+        onClick={() => setRequestsOpen((v) => !v)}
+        aria-label="Friend requests"
+        aria-expanded={requestsOpen}
+        className={clsx(
+          "relative inline-flex h-10 w-10 items-center justify-center rounded-lg",
+          "border border-white/10 cursor-pointer",
+          requestsOpen
+            ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
+            : clsx(
+                "bg-[#121420] text-neutral-200 hover:bg-white/5 hover:border-white/14",
+                "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
+              ),
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+        )}
+      >
+        <Users2 className="h-4 w-4" />
+
+        {hasPending ? (
+          <span
+            className={clsx(
+              "absolute right-2 top-2 h-2 w-2 rounded-full",
+              "bg-red-500 ring-2 ring-neutral-950",
+            )}
+          />
+        ) : null}
+      </button>
+
+      {requestsOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close friend requests"
+            onClick={() => setRequestsOpen(false)}
+            className="fixed inset-0 z-[55] bg-black/60 backdrop-blur-[8px] sm:hidden"
+          />
+
+          <div
+            ref={requestsPanelRef}
+            className={clsx(
+              "z-[60] overflow-hidden border border-white/10 bg-neutral-950/90",
+              "shadow-[0_24px_90px_rgba(0,0,0,0.65)] backdrop-blur-[10px]",
+              "fixed inset-x-3 top-1/2 max-h-[min(82svh,680px)] -translate-y-1/2 rounded-[20px]",
+              "sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+10px)] sm:w-[360px] sm:max-h-none sm:translate-y-0 sm:rounded-2xl",
+            )}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+              <div className="text-[12px] font-semibold tracking-[0.18em] text-neutral-300">
+                FRIEND REQUESTS
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setRequestsOpen(false)}
+                aria-label="Close friend requests panel"
+                className={clsx(
+                  "inline-flex h-8 w-8 items-center justify-center rounded-full",
+                  "border border-white/10 bg-white/5 text-neutral-200",
+                  "hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                  "sm:hidden",
+                )}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {requestsQ.isLoading ? (
+              <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                <div
+                  className={clsx(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                    "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                  )}
+                >
+                  <Users2 className="h-5 w-5" />
+                </div>
+                <div className="text-[13px] font-semibold text-neutral-100">
+                  Loading requests…
+                </div>
+                <div className="text-[12px] text-neutral-500">
+                  Checking your inbox.
+                </div>
+              </div>
+            ) : requests.length === 0 ? (
+              <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                <div
+                  className={clsx(
+                    "inline-flex h-10 w-10 items-center justify-center rounded-xl",
+                    "bg-white/5 text-neutral-200 ring-1 ring-white/10",
+                  )}
+                >
+                  <Users2 className="h-5 w-5" />
+                </div>
+                <div className="text-[13px] font-semibold text-neutral-100">
+                  No pending friend requests
+                </div>
+                <div className="text-[12px] text-neutral-500">
+                  You’re all caught up.
+                </div>
+              </div>
+            ) : (
+              <div className="max-h-[calc(82svh-64px)] overflow-auto p-2 no-scrollbar sm:max-h-[420px]">
+                <div className="space-y-2">
+                  {requests.map((r) => {
+                    const badge = initialsFromName(r.name);
+                    const pendingAny =
+                      acceptMut.isPending || declineMut.isPending;
+
+                    return (
+                      <div
+                        key={r.id}
+                        className={clsx(
+                          "flex items-start gap-3 rounded-xl",
+                          "border border-white/10 bg-white/5 px-3 py-3",
+                          "hover:bg-white/7 transition-colors",
+                        )}
+                      >
+                        <div className="relative shrink-0">
+                          <div className="h-12 w-12 overflow-hidden rounded-lg">
+                            {r.avatarUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={r.avatarUrl}
+                                alt={r.name}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
+                                {badge}
+                              </div>
+                            )}
+                          </div>
+                          <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
+                            {badge}
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0 truncate font-semibold text-neutral-0">
+                              {r.name}
+                            </div>
+                            <div className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
+                              <Clock className="h-3.5 w-3.5" />
+                              {formatRelative(r.createdAt)}
+                            </div>
+                          </div>
+
+                          <div className="mt-1 text-[12px] text-neutral-400">
+                            Wants to be your friend
+                          </div>
+
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => acceptRequest(r.id)}
+                              disabled={pendingAny}
+                              className={clsx(
+                                "inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3",
+                                "border border-white/10 bg-primary-500/15 text-primary-200",
+                                "hover:bg-primary-500/20 transition-colors",
+                                "disabled:opacity-60",
+                                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                              )}
+                            >
+                              <Check className="h-4 w-4" />
+                              <span className="text-[11px] font-semibold">
+                                Accept
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => declineRequest(r.id)}
+                              disabled={pendingAny}
+                              className={clsx(
+                                "inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3",
+                                "border border-white/10 bg-white/5 text-neutral-200",
+                                "hover:bg-white/10 transition-colors",
+                                "disabled:opacity-60",
+                                "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
+                              )}
+                            >
+                              <UserX className="h-4 w-4" />
+                              <span className="text-[11px] font-semibold">
+                                Decline
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">
       <section className="pb-16">
@@ -1127,38 +1356,89 @@ export default function FriendsClient() {
                 </div>
               </div>
 
-              <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
-                <div
-                  className={clsx(
-                    "relative w-full sm:w-[420px]",
-                    "rounded-lg border border-white/10 h-10",
-                    "bg-[#12141f]",
-                    "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
-                    "hover:bg-white/5 hover:border-white/14",
-                    "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20",
-                  )}
-                >
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
-                  <input
-                    value={friendsQuery}
-                    onChange={(e) => setFriendsQuery(e.target.value)}
-                    placeholder="Search here"
+              <div className="w-full lg:w-auto">
+                {/* Mobile only */}
+                <div className="flex w-full flex-col gap-3 sm:hidden">
+                  <div
                     className={clsx(
-                      "h-10 w-full rounded-lg bg-transparent",
-                      "pl-10 pr-4 text-[12px] text-neutral-100",
-                      "placeholder:text-neutral-500",
-                      "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                      "relative w-full",
+                      "rounded-lg border border-white/10 h-10",
+                      "bg-[#12141f]",
+                      "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
+                      "hover:bg-white/5 hover:border-white/14",
+                      "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20",
                     )}
-                  />
+                  >
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
+                    <input
+                      value={friendsQuery}
+                      onChange={(e) => setFriendsQuery(e.target.value)}
+                      placeholder="Search here"
+                      className={clsx(
+                        "h-10 w-full rounded-lg bg-transparent",
+                        "pl-10 pr-4 text-[12px] text-neutral-100",
+                        "placeholder:text-neutral-500",
+                        "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0">
+                      <GridListToggle
+                        value={friendsView}
+                        onChange={(v) => setFriendsView(v)}
+                        ariaLabel="Friends view toggle"
+                      />
+                    </div>
+
+                    <div className="shrink-0">{renderRequestsControl()}</div>
+                  </div>
+
+                  <Button
+                    onClick={() => setAddOpen(true)}
+                    type="button"
+                    variant="primary"
+                    icon={<Users className="h-4 w-4" />}
+                    animation
+                    className="w-full justify-center"
+                  >
+                    Add Friend
+                  </Button>
                 </div>
 
-                <GridListToggle
-                  value={friendsView}
-                  onChange={(v) => setFriendsView(v)}
-                  ariaLabel="Friends view toggle"
-                />
+                {/* Desktop/tablet exactly as before */}
+                <div className="hidden w-full sm:flex sm:flex-row sm:items-center sm:gap-2 lg:w-auto">
+                  <div
+                    className={clsx(
+                      "relative w-full sm:w-[420px]",
+                      "rounded-lg border border-white/10 h-10",
+                      "bg-[#12141f]",
+                      "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
+                      "hover:bg-white/5 hover:border-white/14",
+                      "focus-within:border-primary-500/70 focus-within:ring-2 focus-within:ring-primary-500/20",
+                    )}
+                  >
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-300" />
+                    <input
+                      value={friendsQuery}
+                      onChange={(e) => setFriendsQuery(e.target.value)}
+                      placeholder="Search here"
+                      className={clsx(
+                        "h-10 w-full rounded-lg bg-transparent",
+                        "pl-10 pr-4 text-[12px] text-neutral-100",
+                        "placeholder:text-neutral-500",
+                        "outline-none border-none focus:ring-1 focus:ring-primary-500",
+                      )}
+                    />
+                  </div>
 
-                <div className="flex items-center gap-2">
+                  <GridListToggle
+                    value={friendsView}
+                    onChange={(v) => setFriendsView(v)}
+                    ariaLabel="Friends view toggle"
+                  />
+
                   <Button
                     onClick={() => setAddOpen(true)}
                     type="button"
@@ -1169,187 +1449,7 @@ export default function FriendsClient() {
                     Add Friend
                   </Button>
 
-                  <div className="relative">
-                    <button
-                      ref={requestsBtnRef}
-                      type="button"
-                      onClick={() => setRequestsOpen((v) => !v)}
-                      aria-label="Friend requests"
-                      aria-expanded={requestsOpen}
-                      className={clsx(
-                        "relative inline-flex h-10 w-10 items-center justify-center rounded-lg",
-                        "border border-white/10 cursor-pointer",
-                        requestsOpen
-                          ? "bg-primary-500/15 text-primary-200 ring-1 ring-primary-500/20"
-                          : clsx(
-                              "bg-[#121420] text-neutral-200 hover:bg-white/5 hover:border-white/14",
-                              "shadow-[0_12px_34px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.06)]",
-                            ),
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                      )}
-                    >
-                      <Users2 className="h-4 w-4" />
-
-                      {hasPending ? (
-                        <span
-                          className={clsx(
-                            "absolute right-2 top-2 h-2 w-2 rounded-full",
-                            "bg-red-500 ring-2 ring-neutral-950",
-                          )}
-                        />
-                      ) : null}
-                    </button>
-
-                    {requestsOpen ? (
-                      <div
-                        ref={requestsPanelRef}
-                        className={clsx(
-                          "absolute right-0 top-[calc(100%+10px)] z-[60] w-[360px]",
-                          "overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/90",
-                          "shadow-[0_24px_90px_rgba(0,0,0,0.65)] backdrop-blur-[10px]",
-                        )}
-                      >
-                        <div className="border-b border-white/10 px-4 py-3">
-                          <div className="text-[12px] font-semibold tracking-[0.18em] text-neutral-300">
-                            FRIEND REQUESTS
-                          </div>
-                        </div>
-
-                        {requestsQ.isLoading ? (
-                          <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-                            <div
-                              className={clsx(
-                                "inline-flex h-10 w-10 items-center justify-center rounded-xl",
-                                "bg-white/5 text-neutral-200 ring-1 ring-white/10",
-                              )}
-                            >
-                              <Users2 className="h-5 w-5" />
-                            </div>
-                            <div className="text-[13px] font-semibold text-neutral-100">
-                              Loading requests…
-                            </div>
-                            <div className="text-[12px] text-neutral-500">
-                              Checking your inbox.
-                            </div>
-                          </div>
-                        ) : requests.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-                            <div
-                              className={clsx(
-                                "inline-flex h-10 w-10 items-center justify-center rounded-xl",
-                                "bg-white/5 text-neutral-200 ring-1 ring-white/10",
-                              )}
-                            >
-                              <Users2 className="h-5 w-5" />
-                            </div>
-                            <div className="text-[13px] font-semibold text-neutral-100">
-                              No pending friend requests
-                            </div>
-                            <div className="text-[12px] text-neutral-500">
-                              You’re all caught up.
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="max-h-[420px] overflow-auto p-2 no-scrollbar">
-                            <div className="space-y-2">
-                              {requests.map((r) => {
-                                const badge = initialsFromName(r.name);
-                                const pendingAny =
-                                  acceptMut.isPending || declineMut.isPending;
-
-                                return (
-                                  <div
-                                    key={r.id}
-                                    className={clsx(
-                                      "flex items-start gap-3 rounded-xl",
-                                      "border border-white/10 bg-white/5 px-3 py-3",
-                                      "hover:bg-white/7 transition-colors",
-                                    )}
-                                  >
-                                    <div className="relative">
-                                      <div className="h-12 w-12 overflow-hidden rounded-lg">
-                                        {r.avatarUrl ? (
-                                          <>
-                                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                                            <img
-                                              src={r.avatarUrl}
-                                              alt={r.name}
-                                              className="h-full w-full object-cover"
-                                              loading="lazy"
-                                            />
-                                          </>
-                                        ) : (
-                                          <div className="flex h-full w-full items-center justify-center text-[12px] font-extrabold text-neutral-200">
-                                            {badge}
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="absolute -right-1.5 -bottom-1.5 flex h-6 w-6 items-center justify-center rounded-xl bg-primary-500/90 text-[10px] font-extrabold text-neutral-0 ring-1 ring-white/10">
-                                        {badge}
-                                      </div>
-                                    </div>
-
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <div className="truncate font-semibold text-neutral-0">
-                                          {r.name}
-                                        </div>
-                                        <div className="inline-flex items-center gap-1 text-[11px] text-neutral-500">
-                                          <Clock className="h-3.5 w-3.5" />
-                                          {formatRelative(r.createdAt)}
-                                        </div>
-                                      </div>
-                                      <div className="mt-1 text-[12px] text-neutral-400">
-                                        Wants to be your friend
-                                      </div>
-
-                                      <div className="mt-3 flex items-center gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => acceptRequest(r.id)}
-                                          disabled={pendingAny}
-                                          className={clsx(
-                                            "inline-flex h-7 flex-1 items-center justify-center gap-2 rounded-lg px-3",
-                                            "border border-white/10 bg-primary-500/15 text-primary-200",
-                                            "hover:bg-primary-500/20 transition-colors",
-                                            "disabled:opacity-60",
-                                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                                          )}
-                                        >
-                                          <Check className="h-4 w-4" />
-                                          <span className="text-[11px] font-semibold">
-                                            Accept
-                                          </span>
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => declineRequest(r.id)}
-                                          disabled={pendingAny}
-                                          className={clsx(
-                                            "inline-flex h-7 flex-1 items-center justify-center gap-2 rounded-lg px-3",
-                                            "border border-white/10 bg-white/5 text-neutral-200",
-                                            "hover:bg-white/10 transition-colors",
-                                            "disabled:opacity-60",
-                                            "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60",
-                                          )}
-                                        >
-                                          <UserX className="h-4 w-4" />
-                                          <span className="text-[11px] font-semibold">
-                                            Decline
-                                          </span>
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
+                  {renderRequestsControl()}
                 </div>
               </div>
             </div>

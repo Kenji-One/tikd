@@ -17,7 +17,7 @@ import SmallKpiChart from "@/components/dashboard/charts/SmallKpiChart";
 import RecentSalesTable from "@/components/dashboard/tables/RecentSalesTable";
 import TrackingLinksTable from "@/components/dashboard/tables/TrackingLinksTable";
 import MyTeamTable, {
-  DEMO_MY_TEAM,
+  type TeamMember,
 } from "@/components/dashboard/tables/MyTeamTable";
 import DateRangePicker, {
   type DateRangeValue,
@@ -255,6 +255,64 @@ type EventMetrics = {
   pageViews: number;
   revenue: number;
 };
+
+type TrackingMemberMetricRow = {
+  userId: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role?: string;
+  status?: string;
+  links: number;
+  views: number;
+  ticketsSold: number;
+  revenue: number;
+  lastLinkCreatedAt?: string | null;
+};
+
+type TrackingMembersResponse = {
+  rows: TrackingMemberMetricRow[];
+};
+
+function initialsFromName(name: string) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "MB";
+
+  const a = parts[0]?.[0] ?? "";
+  const b = (parts.length > 1 ? parts[1]?.[0] : parts[0]?.[1]) ?? "";
+  return `${a}${b}`.toUpperCase() || "MB";
+}
+
+async function fetchEventTrackingMembers(
+  eventId: string,
+): Promise<TrackingMembersResponse> {
+  const res = await fetch(
+    `/api/tracking-links/members?scope=event&eventId=${encodeURIComponent(eventId)}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) {
+    let message = "Failed to load event members.";
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (typeof data?.error === "string" && data.error.trim()) {
+        message = data.error;
+      }
+    } catch {
+      // ignore non-json error bodies
+    }
+    throw new Error(message);
+  }
+
+  return (await res.json()) as TrackingMembersResponse;
+}
 
 function deriveEventMetrics(event?: EventWithMeta): EventMetrics {
   return {
@@ -635,9 +693,28 @@ export default function EventSummaryPage() {
     enabled: !!eventId,
   });
 
+  const eventTrackingMembersQuery = useQuery<TrackingMembersResponse>({
+    queryKey: ["event-tracking-members", eventId],
+    queryFn: () => fetchEventTrackingMembers(eventId!),
+    enabled: !!eventId,
+    staleTime: 30_000,
+  });
+
   const pageViewsAnalytics = pageViewsQuery.data;
   const ticketsSoldAnalytics = ticketsSoldQuery.data;
   const revenueAnalytics = revenueQuery.data;
+
+  const liveTeamMembers = useMemo<TeamMember[]>(() => {
+    return (eventTrackingMembersQuery.data?.rows ?? []).map((row) => ({
+      id: row.userId,
+      name: row.name || row.email || "Member",
+      avatarUrl: row.image ?? null,
+      avatarText: initialsFromName(row.name || row.email || "Member"),
+      tickets: Number.isFinite(row.ticketsSold) ? row.ticketsSold : 0,
+      views: Number.isFinite(row.views) ? row.views : 0,
+      earned: Number.isFinite(row.revenue) ? row.revenue : 0,
+    }));
+  }, [eventTrackingMembersQuery.data]);
 
   const baseMetrics = useMemo(() => deriveEventMetrics(event), [event]);
   const metrics = useMemo<EventMetrics>(
@@ -1084,7 +1161,7 @@ export default function EventSummaryPage() {
           </div>
         </div>
 
-        <RecentSalesTable />
+        <RecentSalesTable scope="event" eventId={eventId ?? null} />
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[3.10fr_1.51fr]">
@@ -1166,7 +1243,7 @@ export default function EventSummaryPage() {
         </div>
 
         <MyTeamTable
-          members={DEMO_MY_TEAM}
+          members={liveTeamMembers}
           onDetailedView={() => console.log("Team detailed view clicked")}
         />
       </section>

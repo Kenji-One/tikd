@@ -26,11 +26,11 @@ export function InfoRow({
   return (
     <div
       className={clsx(
-        "w-full flex items-start gap-[112px] border-b border-[#FFFFFF1A] py-8",
-        className
+        "w-full flex flex-col gap-4 border-b border-[#FFFFFF1A] py-6 md:flex-row md:items-start md:gap-[112px] md:py-8",
+        className,
       )}
     >
-      <h2 className="text-2xl font-medium leading-[90%] tracking-[-0.48px] text-neutral-0 text-right w-full max-w-[187px]">
+      <h2 className="w-full text-left text-[22px] font-medium leading-[95%] tracking-[-0.44px] text-neutral-0 md:max-w-[187px] md:text-right md:text-2xl md:tracking-[-0.48px]">
         {title.split(" ").length === 2 && splitTitle ? (
           <>
             {title.split(" ")[0]}
@@ -41,8 +41,11 @@ export function InfoRow({
           title
         )}
       </h2>
+
       {children && (
-        <div className={clsx("w-full max-w-[694px]", classNameCont)}>
+        <div
+          className={clsx("w-full max-w-none md:max-w-[694px]", classNameCont)}
+        >
           {children}
         </div>
       )}

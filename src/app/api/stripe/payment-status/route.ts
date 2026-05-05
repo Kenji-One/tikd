@@ -17,11 +17,15 @@ type SafeOrderLean = {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
   eventId: Types.ObjectId;
-  status: "pending" | "paid" | "refunded" | "cancelled";
+  status: "pending" | "paid" | "refunded" | "cancelled" | "expired";
   paymentIntentId?: string;
+  expiresAt?: Date | null;
   ticketIds: Types.ObjectId[];
   total: number;
   currency: string;
+  items: Array<{
+    ticketTypeId: Types.ObjectId;
+  }>;
 };
 
 function parsePaymentIntentId(input: string): string | null {
@@ -57,7 +61,7 @@ async function loadOrderForUser(input: {
       userId: new Types.ObjectId(input.userId),
     })
       .select(
-        "_id userId eventId status paymentIntentId ticketIds total currency",
+        "_id userId eventId status paymentIntentId expiresAt ticketIds total currency items.ticketTypeId",
       )
       .lean<SafeOrderLean | null>();
   }
@@ -71,9 +75,57 @@ async function loadOrderForUser(input: {
     userId: new Types.ObjectId(input.userId),
   })
     .select(
-      "_id userId eventId status paymentIntentId ticketIds total currency",
+      "_id userId eventId status paymentIntentId expiresAt ticketIds total currency items.ticketTypeId",
     )
     .lean<SafeOrderLean | null>();
+}
+
+async function expireOrderIfStale(input: {
+  order: SafeOrderLean;
+  paymentIntentStatus: string;
+}): Promise<SafeOrderLean> {
+  const { order, paymentIntentStatus } = input;
+
+  if (order.status !== "pending") {
+    return order;
+  }
+
+  if (!(order.expiresAt instanceof Date)) {
+    return order;
+  }
+
+  if (order.expiresAt.getTime() > Date.now()) {
+    return order;
+  }
+
+  /**
+   * Do not expire if Stripe already considers the payment successful
+   * or still processing.
+   */
+  if (
+    paymentIntentStatus === "succeeded" ||
+    paymentIntentStatus === "processing"
+  ) {
+    return order;
+  }
+
+  await Order.updateOne(
+    {
+      _id: order._id,
+      status: "pending",
+      expiresAt: { $lte: new Date() },
+    },
+    {
+      $set: {
+        status: "expired",
+      },
+    },
+  );
+
+  return {
+    ...order,
+    status: "expired",
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -108,14 +160,14 @@ export async function GET(req: NextRequest) {
         ? paymentIntent.metadata.orderId.trim()
         : null;
 
-    if (paymentIntent.status === "succeeded" && orderIdFromStripe) {
+    if (paymentIntent.status === "succeeded") {
       await finalizeOrderFromPayment({
         orderId: orderIdFromStripe,
         paymentIntentId: paymentIntent.id,
       });
     }
 
-    const order = await loadOrderForUser({
+    let order = await loadOrderForUser({
       userId: session.user.id,
       paymentIntentId: paymentIntent.id,
       orderIdFromStripe,
@@ -124,6 +176,11 @@ export async function GET(req: NextRequest) {
     if (!order) {
       return NextResponse.json({ error: "Order not found." }, { status: 404 });
     }
+
+    order = await expireOrderIfStale({
+      order,
+      paymentIntentStatus: paymentIntent.status,
+    });
 
     const finalized =
       order.status === "paid" &&
@@ -142,6 +199,9 @@ export async function GET(req: NextRequest) {
         total: order.total,
         currency: order.currency,
         eventId: String(order.eventId),
+        itemTicketTypeIds: Array.isArray(order.items)
+          ? order.items.map((item) => String(item.ticketTypeId))
+          : [],
       },
     });
   } catch (error: unknown) {

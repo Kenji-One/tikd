@@ -16,6 +16,10 @@ import EventTeam from "@/models/EventTeam";
 import TicketType from "@/models/TicketType";
 import type { HydratedDocument, Types } from "mongoose";
 import { createNotification } from "@/lib/notifications";
+import {
+  CHECKOUT_REQUIREMENTS_DEFAULTS,
+  type CheckoutRequirementsSnapshot,
+} from "@/types/checkout";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -123,7 +127,9 @@ export async function GET(
     ],
   })
     .sort({ sortOrder: 1, createdAt: 1 })
-    .select("name price currency feeMode totalQuantity soldCount design")
+    .select(
+      "name price currency feeMode totalQuantity soldCount design checkout",
+    )
     .lean<
       Array<{
         _id: Types.ObjectId;
@@ -134,6 +140,7 @@ export async function GET(
         totalQuantity: number | null;
         soldCount: number;
         design?: { backgroundUrl?: string | null } | null;
+        checkout?: Partial<CheckoutRequirementsSnapshot> | null;
       }>
     >()
     .exec();
@@ -147,6 +154,49 @@ export async function GET(
             0,
           );
 
+    const checkoutRequirements: CheckoutRequirementsSnapshot = {
+      requireFullName:
+        ticketType.checkout?.requireFullName ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requireFullName,
+
+      requireEmail:
+        ticketType.checkout?.requireEmail ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requireEmail,
+      requirePhone:
+        ticketType.checkout?.requirePhone ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requirePhone,
+      requireFacebook:
+        ticketType.checkout?.requireFacebook ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requireFacebook,
+      requireInstagram:
+        ticketType.checkout?.requireInstagram ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requireInstagram,
+      requireGender:
+        ticketType.checkout?.requireGender ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requireGender,
+      requireDob:
+        ticketType.checkout?.requireDob ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requireDob,
+      requireAge:
+        ticketType.checkout?.requireAge ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.requireAge,
+
+      subjectToApproval:
+        ticketType.checkout?.subjectToApproval ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.subjectToApproval,
+
+      addBuyerDetailsToOrder:
+        ticketType.checkout?.addBuyerDetailsToOrder ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.addBuyerDetailsToOrder,
+      addPurchasedTicketsToAttendeesCount:
+        ticketType.checkout?.addPurchasedTicketsToAttendeesCount ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.addPurchasedTicketsToAttendeesCount,
+
+      enableEmailAttachments:
+        ticketType.checkout?.enableEmailAttachments ??
+        CHECKOUT_REQUIREMENTS_DEFAULTS.enableEmailAttachments,
+    };
+
     return {
       _id: String(ticketType._id),
       label: ticketType.name,
@@ -155,6 +205,7 @@ export async function GET(
       currency: ticketType.currency,
       feesIncluded: ticketType.feeMode === "absorb",
       image: ticketType.design?.backgroundUrl || "",
+      checkoutRequirements,
     };
   });
 

@@ -32,6 +32,56 @@ function makeQrCodeValue(): string {
   return `tikd_${crypto.randomUUID()}`;
 }
 
+function buildTicketHolderSnapshot(order: {
+  userId: Types.ObjectId;
+  buyerSnapshot?: {
+    userId?: Types.ObjectId | null;
+    firstName?: string;
+    lastName?: string;
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    facebookProfile?: string;
+    instagramProfile?: string;
+    gender?: string | null;
+    dateOfBirth?: Date | null;
+    declaredAge?: number | null;
+  } | null;
+}) {
+  const snapshot = order.buyerSnapshot;
+
+  if (!snapshot) {
+    return {
+      userId: order.userId,
+      firstName: "",
+      lastName: "",
+      fullName: "",
+      email: "",
+      phone: "",
+      facebookProfile: "",
+      instagramProfile: "",
+      gender: null,
+      dateOfBirth: null,
+      declaredAge: null,
+    };
+  }
+
+  return {
+    userId: snapshot.userId ?? order.userId,
+    firstName: snapshot.firstName ?? "",
+    lastName: snapshot.lastName ?? "",
+    fullName: snapshot.fullName ?? "",
+    email: snapshot.email ?? "",
+    phone: snapshot.phone ?? "",
+    facebookProfile: snapshot.facebookProfile ?? "",
+    instagramProfile: snapshot.instagramProfile ?? "",
+    gender: snapshot.gender ?? null,
+    dateOfBirth: snapshot.dateOfBirth ?? null,
+    declaredAge:
+      typeof snapshot.declaredAge === "number" ? snapshot.declaredAge : null,
+  };
+}
+
 export async function finalizeOrderFromPayment(input: {
   orderId?: string | null;
   paymentIntentId: string;
@@ -86,7 +136,11 @@ export async function finalizeOrderFromPayment(input: {
         return;
       }
 
-      if (order.status === "cancelled" || order.status === "refunded") {
+      if (
+        order.status === "cancelled" ||
+        order.status === "refunded" ||
+        order.status === "expired"
+      ) {
         result = {
           ok: false,
           status: 409,
@@ -107,6 +161,7 @@ export async function finalizeOrderFromPayment(input: {
       const expectedTicketTypeIds = order.items.map(
         (item) => item.ticketTypeId,
       );
+
       const existingTicketTypes = await TicketType.find({
         _id: { $in: expectedTicketTypeIds },
         eventId: order.eventId,
@@ -123,6 +178,11 @@ export async function finalizeOrderFromPayment(input: {
         };
         return;
       }
+
+      const holderSnapshot = buildTicketHolderSnapshot({
+        userId: order.userId,
+        buyerSnapshot: order.buyerSnapshot ?? null,
+      });
 
       const ticketsToInsert: Array<Record<string, unknown>> = [];
 
@@ -149,6 +209,7 @@ export async function finalizeOrderFromPayment(input: {
                     order.tracking.trackingCreatorUserId ?? null,
                 }
               : null,
+            holderSnapshot,
           });
         }
       }
@@ -206,6 +267,7 @@ export async function finalizeOrderFromPayment(input: {
       order.ticketIds = createdTickets.map((ticket) => ticket._id);
       order.status = "paid";
       order.paymentIntentId = input.paymentIntentId;
+      order.expiresAt = null;
 
       if (input.checkoutSessionId) {
         order.checkoutSessionId = input.checkoutSessionId;

@@ -40,6 +40,7 @@ async function markOrderCancelledFromPaymentIntent(input: {
         $set: {
           status: "cancelled",
           paymentIntentId: input.paymentIntentId,
+          expiresAt: null,
         },
       },
     );
@@ -51,6 +52,7 @@ async function markOrderCancelledFromPaymentIntent(input: {
     {
       $set: {
         status: "cancelled",
+        expiresAt: null,
       },
     },
   );
@@ -95,10 +97,18 @@ export async function POST(req: NextRequest) {
         });
 
         if (!finalized.ok) {
-          return NextResponse.json(
-            { error: finalized.error },
-            { status: finalized.status >= 400 ? 500 : finalized.status },
-          );
+          /**
+           * Terminal business-state conflicts (expired/cancelled/refunded/already invalid)
+           * should not trigger Stripe webhook retries forever.
+           */
+          if (finalized.status === 409) {
+            return NextResponse.json(
+              { received: true, ignored: finalized.error },
+              { status: 200 },
+            );
+          }
+
+          return NextResponse.json({ error: finalized.error }, { status: 500 });
         }
 
         break;

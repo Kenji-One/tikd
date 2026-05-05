@@ -90,7 +90,7 @@ export function EventHero({
     <div className="relative">
       {/* Full-page blurred poster background (behind header too) */}
       <div
-        className="fixed inset-0 -z-10 blur-[26px] scale-[1.08] opacity-95"
+        className="fixed inset-0 -z-10 scale-[1.08] blur-[26px] opacity-95"
         style={{
           backgroundImage: `url(${poster})`,
           backgroundSize: "cover",
@@ -111,34 +111,34 @@ export function EventHero({
       {/* Content wrapper */}
       <div
         className={[
-          "mx-auto w-full max-w-[1360px] px-14 pt-[112px] md:pt-[124px] flex justify-center gap-8 lg:gap-x-8 xl:gap-x-10",
-          showCheckoutBar ? "pb-28" : "pb-16",
+          "mx-auto flex w-full max-w-[1360px] flex-col gap-6 px-4 pt-[96px] sm:gap-7 sm:px-6 sm:pt-[104px] md:px-8 md:pt-[124px] lg:flex-row lg:justify-center lg:gap-8 xl:gap-x-10 2xl:px-14",
+          showCheckoutBar ? "pb-28 sm:pb-32" : "pb-14 sm:pb-16",
         ].join(" ")}
       >
         {/* Left (sticky poster) */}
-        <div className="">
-          <div className="lg:sticky lg:top-[112px] md:lg:top-[124px] lg:flex lg:justify-end">
-            <div className="relative">
-              <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[28px] bg-black/20 blur-2xl" />
-              <div className="relative h-[275px] w-[220px] overflow-hidden rounded-xl sm:h-[325px] sm:w-[260px] md:h-[375px] md:w-[300px] lg:h-[428px] lg:w-[342px]">
+        <div className="w-full lg:w-auto">
+          <div className="flex justify-center lg:sticky lg:top-[112px] lg:justify-end md:lg:top-[124px]">
+            <div className="relative w-full max-w-[342px]">
+              <div className="pointer-events-none absolute -inset-4 -z-10 rounded-[28px] bg-black/20 blur-2xl sm:-inset-6" />
+              <div className="relative mx-auto h-[280px] w-[220px] overflow-hidden rounded-xl sm:h-[325px] sm:w-[260px] md:h-[375px] md:w-[300px] lg:h-[428px] lg:w-[342px]">
                 <Image
                   fill
                   src={poster}
                   alt={title}
                   priority
-                  sizes="(max-width: 640px) 220px,(max-width: 768px) 260px,(max-width: 1024px) 300px,342px"
-                  className="object-cover rounded-xl"
+                  sizes="(max-width: 640px) 220px, (max-width: 768px) 260px, (max-width: 1024px) 300px, 342px"
+                  className="rounded-xl object-cover"
                 />
-                <div className="pointer-events-none absolute inset-0 ring-1 ring-white/10 rounded-xl" />
+                <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-white/10" />
               </div>
             </div>
           </div>
         </div>
 
         {/* Right column */}
-        <div className="flex-1 max-w-[760px]">
+        <div className="w-full flex-1 lg:max-w-[760px]">
           {/* Title */}
-          <h1 className="text-3xl sm:text-4xl lg:text-[56px] font-black leading-[92%] tracking-[-1.04px] text-white uppercase italic">
+          <h1 className="text-[32px] font-black leading-[92%] tracking-[-0.72px] text-white uppercase italic sm:text-4xl sm:tracking-[-0.9px] lg:text-[56px] lg:tracking-[-1.04px]">
             {title}
           </h1>
 
@@ -148,24 +148,24 @@ export function EventHero({
               {organization.logo ? (
                 <Link
                   href={`/org/${organization.id}`}
-                  className="relative size-8 overflow-hidden rounded-full bg-white/10 border border-white/10"
+                  className="relative size-8 overflow-hidden rounded-full border border-white/10 bg-white/10"
                   aria-label={organization.name}
                 >
                   <Image
                     src={organization.logo}
                     alt=""
                     fill
-                    sizes="20px"
+                    sizes="32px"
                     className="object-cover"
                   />
                 </Link>
               ) : (
-                <span className="inline-block size-7 rounded-full bg-white/10 border border-white/10" />
+                <span className="inline-block size-8 rounded-full border border-white/10 bg-white/10" />
               )}
 
               <Link
                 href={`/org/${organization.id}`}
-                className="text-lg font-medium hover:text-primary-500 hover:underline transition"
+                className="text-base font-medium transition hover:text-primary-500 hover:underline sm:text-lg"
               >
                 {organization.name}
               </Link>
@@ -223,16 +223,14 @@ export function EventHero({
             />
           </div>
 
-          {/* ------------------------------------------------------------------ */}
-          {/* Tickets — ROWS ONLY (no wrapper/title/divider/CTA)                  */}
-          {/* ------------------------------------------------------------------ */}
-          <div className="mt-7">
+          {/* Tickets */}
+          <div className="mt-6 sm:mt-7">
             {!hasTickets ? (
               <p className="text-sm text-white/65">
                 Tickets are not available for this event.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {ticketOptions.map((t) => (
                   <TicketSelector
                     key={t.id}
@@ -249,23 +247,21 @@ export function EventHero({
           </div>
 
           {/* Right column remainder (Details/Lineup/etc) */}
-          <div className="mt-7">{children}</div>
+          <div className="mt-6 sm:mt-7">{children}</div>
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Fixed “Checkout — PRICE” bar (Tikd signature hover)                 */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Fixed “Checkout — PRICE” bar */}
       {showCheckoutBar ? (
-        <div className="fixed inset-x-0 bottom-6 z-[70] flex justify-center px-4">
+        <div className="fixed inset-x-0 bottom-4 z-[70] flex justify-center px-3 sm:bottom-6 sm:px-4">
           <div className="group relative w-full max-w-[780px]">
-            {/* Ambient “Tikd halo” behind the pill (brand uniqueness) */}
             <div
               aria-hidden="true"
               className={[
-                "pointer-events-none absolute -inset-8 -z-[1] rounded-[999px] opacity-70 blur-2xl",
+                "pointer-events-none absolute -inset-6 -z-[1] rounded-[999px] opacity-70 blur-2xl",
                 "transition-opacity duration-300",
                 "group-hover:opacity-95",
+                "sm:-inset-8",
               ].join(" ")}
               style={{
                 background:
@@ -279,28 +275,21 @@ export function EventHero({
               type="button"
               onClick={onCheckout}
               className={[
-                // shape / sizing
-                "w-full rounded-full",
+                "relative w-full overflow-hidden rounded-full",
                 "min-h-[56px] sm:min-h-[60px]",
-                // surface
                 "border border-white/12",
                 "bg-neutral-900/58 backdrop-blur-2xl",
+                "px-5 py-4 pr-[62px] sm:px-7 sm:pr-[76px]",
                 "shadow-[0_22px_70px_rgba(0,0,0,0.62)]",
-                // padding (extra right space for close button)
-                "px-7 py-4 pr-[70px] sm:pr-[76px]",
-                // interaction
                 "cursor-pointer",
-                "relative overflow-hidden",
                 "transition-[transform,filter,background-color,border-color,box-shadow] duration-200",
                 "hover:bg-neutral-800/62 hover:border-white/18",
-                // slightly more “premium” hover: lift + glow (still subtle)
                 "group-hover:shadow-[0_26px_84px_rgba(0,0,0,0.70)]",
                 "active:scale-[0.996]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
               ].join(" ")}
               aria-label={`Checkout — ${sym}${selectedTotal.toFixed(2)}`}
             >
-              {/* Tikd neon rim (only appears on hover) */}
               <span
                 aria-hidden="true"
                 className={[
@@ -314,13 +303,11 @@ export function EventHero({
                 }}
               />
 
-              {/* top sheen */}
               <span
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/22 to-transparent"
               />
 
-              {/* diagonal “scan” sheen (Tikd signature hover) */}
               <span
                 aria-hidden="true"
                 className={[
@@ -329,11 +316,10 @@ export function EventHero({
                   "bg-gradient-to-r from-transparent via-white/18 to-transparent",
                   "opacity-0 blur-[0.2px]",
                   "transition-[transform,opacity] duration-500 ease-out",
-                  "group-hover:opacity-100 group-hover:translate-x-[220%]",
+                  "group-hover:translate-x-[220%] group-hover:opacity-100",
                 ].join(" ")}
               />
 
-              {/* inner glow */}
               <span
                 aria-hidden="true"
                 className={[
@@ -349,9 +335,9 @@ export function EventHero({
                 }}
               />
 
-              <span className="relative z-[1] block text-center text-[15px] sm:text-[16px] font-extrabold tracking-[-0.15px] text-white/92">
+              <span className="relative z-[1] block text-center text-[14px] font-extrabold tracking-[-0.15px] text-white/92 sm:text-[16px]">
                 Checkout{" "}
-                <span className="text-white/55 font-black mx-1.5">—</span>
+                <span className="mx-1.5 font-black text-white/55">—</span>
                 <span className="tabular-nums">
                   {sym}
                   {selectedTotal.toFixed(2)}
@@ -367,9 +353,9 @@ export function EventHero({
                 setCheckoutDismissed(true);
               }}
               className={[
-                "absolute right-3 top-1/2 -translate-y-1/2",
-                "grid size-[42px] sm:size-[44px] place-items-center rounded-full cursor-pointer",
-                "text-white/72 hover:text-white",
+                "absolute right-2 top-1/2 -translate-y-1/2",
+                "grid size-10 place-items-center rounded-full sm:right-3 sm:size-[44px]",
+                "cursor-pointer text-white/72 hover:text-white",
                 "bg-white/0 hover:bg-white/8 active:bg-white/10",
                 "transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20",

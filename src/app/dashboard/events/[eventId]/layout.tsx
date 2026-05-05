@@ -189,8 +189,9 @@ function GalaxyPublishButton(props: {
   pending?: boolean;
   onClick: () => void;
   title?: string;
+  className?: string;
 }) {
-  const { disabled, pending, onClick, title } = props;
+  const { disabled, pending, onClick, title, className } = props;
 
   const ref = useRef<HTMLButtonElement | null>(null);
 
@@ -249,6 +250,7 @@ function GalaxyPublishButton(props: {
       className={clsx(
         "tikd-publish-pill",
         disabled && "tikd-publish-pill-disabled",
+        className,
       )}
       onClick={() => {
         triggerBurst();
@@ -267,7 +269,6 @@ function GalaxyPublishButton(props: {
       <span className="tikd-publish-sky" aria-hidden="true" />
       <span className="tikd-publish-stars" aria-hidden="true" />
 
-      {/* Border (base + aurora only) */}
       <span className="tikd-publish-border" aria-hidden="true">
         <svg
           className="tikd-publish-border-svg"
@@ -340,20 +341,15 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
   const [copied, setCopied] = useState(false);
 
-  // For nicer “page-change” feel when clicking tabs
   const [isPending, startTransition] = useTransition();
   const [pendingTab, setPendingTab] = useState<EventTabId | null>(null);
 
-  // Sticky styling when user scrolls
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Publish success popup
   const [publishSuccessOpen, setPublishSuccessOpen] = useState(false);
 
-  // Download CSV modal
   const [downloadOpen, setDownloadOpen] = useState(false);
 
-  // --- NEW: refs for animation + confetti (keeps design intact) ---
   const publishModalRef = useRef<HTMLDivElement | null>(null);
   const publishIconRef = useRef<HTMLDivElement | null>(null);
   const publishCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -402,7 +398,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     );
   }, [activeTab, basePath, pathname]);
 
-  // Prefetch the “heavy tabs” once we know the eventId.
   useEffect(() => {
     if (!eventId) return;
 
@@ -412,7 +407,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       staleTime: 5 * 60_000,
     });
 
-    // ✅ Prefetch rows (NOT raw API), so cache matches ticket-types page
     qc.prefetchQuery({
       queryKey: ["ticket-types", eventId],
       queryFn: () => fetchTicketTypesRows(eventId),
@@ -426,12 +420,10 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     });
   }, [eventId, qc]);
 
-  // Clear pending state after route actually changes
   useEffect(() => {
     setPendingTab(null);
   }, [pathname]);
 
-  // Track scroll to style the sticky header background when it becomes "stuck"
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -456,7 +448,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     };
   }, []);
 
-  // Close publish popup on ESC
   useEffect(() => {
     if (!publishSuccessOpen) return;
 
@@ -468,7 +459,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [publishSuccessOpen]);
 
-  // Close download modal on ESC (since it uses a fixed overlay)
   useEffect(() => {
     if (!downloadOpen) return;
 
@@ -480,12 +470,10 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [downloadOpen]);
 
-  // --- NEW: confetti + GSAP animation when modal opens ---
   useEffect(() => {
     if (!publishSuccessOpen) {
       hasFiredRef.current = false;
 
-      // cleanup any pending confetti burst
       if (confettiTimeoutRef.current != null) {
         window.clearTimeout(confettiTimeoutRef.current);
         confettiTimeoutRef.current = null;
@@ -493,13 +481,11 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       return;
     }
 
-    // Respect reduced motion
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (reduce) return;
 
-    // Build confetti instance bound to OUR canvas (fixes z-index issues)
     const canvas = publishCanvasRef.current;
     if (canvas) {
       confettiApiRef.current = confetti.create(canvas, { resize: true });
@@ -507,7 +493,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       confettiApiRef.current = null;
     }
 
-    // Make sure canvas fills overlay immediately
     const resizeCanvas = () => {
       const c = publishCanvasRef.current;
       if (!c) return;
@@ -732,7 +717,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
   const openPublicEvent = useCallback(() => {
     if (!eventId) return;
-    // Direct user gesture → reliably opens (no Link/asChild composition edge cases)
     window.open(`/events/${eventId}`, "_blank", "noreferrer");
   }, [eventId]);
 
@@ -771,7 +755,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
             className={clsx(
               "tikd-publish-modal",
               "tikd-publish-modal-anim",
-              "px-8 py-7 sm:px-10 sm:py-8",
+              "px-6 py-6 sm:px-10 sm:py-8",
             )}
           >
             <button
@@ -819,7 +803,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
       )}
 
       <section className="tikd-event-hero pb-14">
-        {/* Sticky TOP HEADER ONLY (tabs NOT included) */}
         <div className="sticky top-0 z-40">
           <header
             className={clsx(
@@ -828,33 +811,32 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
               "relative",
             )}
           >
-            {/* Full-width header always */}
-            <div className="relative z-50 p-4 md:p-6 lg:p-8 pointer-events-auto">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-start gap-3">
+            <div className="pointer-events-auto relative z-50 px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 md:flex-1">
+                  <div className="flex items-start gap-3 sm:gap-4">
                     <div className="mt-0.5 shrink-0">
                       {isLoading ? (
-                        <div className="h-16 w-16 animate-pulse rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60" />
+                        <div className="h-14 w-14 animate-pulse rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60 sm:h-16 sm:w-16" />
                       ) : posterUrl ? (
-                        <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60">
+                        <div className="relative h-14 w-14 overflow-hidden rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60 sm:h-16 sm:w-16">
                           <Image
                             src={posterUrl}
                             alt={`${event?.title ?? "Event"} poster`}
                             fill
-                            sizes="64px"
+                            sizes="(max-width: 640px) 56px, 64px"
                             className="object-cover"
                             priority
                           />
                         </div>
                       ) : (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-neutral-900 ring-1 ring-neutral-800/60 text-[14px] font-semibold text-neutral-200">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-neutral-900 text-[13px] font-semibold text-neutral-200 ring-1 ring-neutral-800/60 sm:h-16 sm:w-16 sm:text-[14px]">
                           {titleInitial(event?.title)}
                         </div>
                       )}
                     </div>
 
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <h1 className="tikd-event-title">
                         {isLoading
                           ? "Loading event…"
@@ -863,8 +845,8 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
 
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <span className="tikd-chip tikd-chip-primary">
-                          <CalendarDays className="h-3.5 w-3.5 text-primary-200" />
-                          <span>
+                          <CalendarDays className="h-3.5 w-3.5 shrink-0 text-primary-200" />
+                          <span className="truncate">
                             {event?.date
                               ? formatDateTime(event.date)
                               : "Date TBA"}
@@ -884,7 +866,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                         </span>
 
                         <span className="tikd-chip">
-                          <Users className="h-3.5 w-3.5 text-neutral-500" />
+                          <Users className="h-3.5 w-3.5 shrink-0 text-neutral-500" />
                           <span className="text-neutral-300">
                             {(event?.attendingCount ?? 0).toLocaleString()}{" "}
                             {(event?.attendingCount ?? 0) === 1
@@ -903,13 +885,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="tikd-action-icon tikdDownloadWrap"
+                    className="tikd-action-icon tikdDownloadWrap shrink-0"
                     title={actionsLocked ? "Loading event…" : "Download CSV"}
                     aria-label="Download CSV"
                     disabled={actionsLocked}
@@ -942,7 +923,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                     onClick={handleCopyPublicLink}
                     disabled={actionsLocked}
                     className={clsx(
-                      "tikd-action-icon",
+                      "tikd-action-icon shrink-0",
                       copied && "tikd-action-icon-success",
                       actionsLocked && "cursor-not-allowed",
                     )}
@@ -975,7 +956,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       variant="ghost"
                       size="md"
                       className={clsx(
-                        "tikd-action-pill",
+                        "tikd-action-pill flex-1 justify-center md:flex-none",
                         actionsLocked && "pointer-events-none opacity-60",
                       )}
                       title={
@@ -996,12 +977,12 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                   )}
 
                   {eventId && (
-                    <>
+                    <div className="w-full md:w-auto">
                       {isPublished ? (
                         <button
                           type="button"
                           className={clsx(
-                            "tikd-unpublish-btn",
+                            "tikd-unpublish-btn inline-flex w-full items-center justify-center md:w-auto",
                             isStatusBusy && "tikd-unpublish-btn-disabled",
                           )}
                           onClick={handleUnpublishClick}
@@ -1020,13 +1001,14 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                         </button>
                       ) : (
                         <GalaxyPublishButton
+                          className="w-full justify-center md:w-auto"
                           disabled={isStatusBusy}
                           pending={publishMutation.isPending}
                           onClick={handlePublishClick}
                           title="Publish event"
                         />
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -1034,16 +1016,15 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           </header>
         </div>
 
-        {/* Tabs */}
-        <div className="mt-5 px-4">
-          <div className="no-scrollbar overflow-x-auto overflow-y-visible">
-            <div className="flex w-full justify-center">
+        <div className="mt-4 px-4 sm:mt-5">
+          <div className="no-scrollbar -mx-4 overflow-x-auto overflow-y-visible px-4 sm:mx-0 sm:px-0">
+            <div className="flex w-max min-w-full justify-start md:w-full md:justify-center">
               <nav
                 aria-label="Event dashboard tabs"
                 role="tablist"
                 aria-busy={isPending ? "true" : "false"}
                 className={clsx(
-                  "tikd-tabs-shell relative inline-flex min-w-max items-center gap-3 px-2 py-2",
+                  "tikd-tabs-shell relative inline-flex min-w-max snap-x snap-mandatory items-center gap-2 px-1.5 py-1.5 sm:gap-3 sm:px-2 sm:py-2",
                   isPending && "tikd-tabs-pending",
                 )}
               >
@@ -1070,16 +1051,16 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
                       onClick={() => onTabClick(tab.id)}
                       onMouseEnter={() => prefetchForTab(tab.id)}
                       className={clsx(
-                        "relative z-10 min-h-[44px] px-3.5 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0",
+                        "relative z-10 min-h-[42px] shrink-0 snap-start px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary-500/35 focus-visible:ring-offset-0 sm:min-h-[44px] sm:px-3.5",
                         isVisuallyActive ? "tikd-tab-active" : "tikd-tab-icon",
                         isPending &&
                           pendingTab === tab.id &&
                           "tikd-tab-clicked",
                       )}
                     >
-                      <Icon className={clsx("shrink-0", "h-5.5 w-5.5")} />
+                      <Icon className="h-5 w-5 shrink-0 sm:h-[22px] sm:w-[22px]" />
                       {isVisuallyActive ? (
-                        <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.2px]">
+                        <span className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.2px] sm:text-[15px]">
                           {tab.label}
                         </span>
                       ) : (
@@ -1093,7 +1074,7 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-6 sm:mt-8">
           {isSummaryPage ? (
             <div>{children}</div>
           ) : (
@@ -1120,7 +1101,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           user-select: none;
           -webkit-tap-highlight-color: transparent;
           padding: 0px;
-
           pointer-events: none;
         }
 
@@ -1213,7 +1193,6 @@ export default function EventDashboardLayout({ children }: EventLayoutProps) {
           }
         }
 
-        /* ---------------- Publish success modal animations + confetti ---------------- */
         .tikd-publish-overlay-anim {
           animation: tikdPublishFadeIn 220ms ease-out both;
         }

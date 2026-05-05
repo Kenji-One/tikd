@@ -16,7 +16,7 @@ export default function DataLayout({ children }: { children: ReactNode }) {
 
       <div className="mx-auto w-full max-w-[1600px] py-4 sm:py-6">
         <DataTopbar />
-        <div className="mt-6">{children}</div>
+        <div className="mt-5 sm:mt-6">{children}</div>
       </div>
     </div>
   );

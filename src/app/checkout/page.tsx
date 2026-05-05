@@ -2,14 +2,195 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { signIn, useSession } from "next-auth/react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useCart } from "@/store/useCart";
 import { calcPrices } from "@/lib/pricing";
 import { Button } from "@/components/ui/Button";
 import PaymentModal from "@/components/checkout/PaymentModal";
 import SuccessModal from "@/components/checkout/SuccessModal";
+import CheckoutBuyerDetailsCard, {
+  type BuyerDetailsFormErrors,
+  type BuyerDetailsFormValues,
+} from "@/components/checkout/CheckoutBuyerDetailsCard";
+import type { CartItem, Coupon } from "@/types/cart";
+import {
+  CHECKOUT_REQUIREMENTS_DEFAULTS,
+  type CheckoutGender,
+  type CheckoutRequirementsSnapshot,
+} from "@/types/checkout";
+
+type CheckoutProfileResponse = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  instagramProfile: string;
+  facebookProfile: string;
+  gender: CheckoutGender | null;
+  dateOfBirth: string;
+};
+
+type CreatePaymentIntentBuyerProfile = {
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  facebookProfile: string;
+  instagramProfile: string;
+  gender: CheckoutGender | null;
+  dateOfBirth: string | null;
+  declaredAge: number | null;
+};
+
+const EMPTY_REQUIRED_FIELDS: CheckoutRequirementsSnapshot = {
+  requireFullName: false,
+  requireEmail: false,
+  requirePhone: false,
+  requireFacebook: false,
+  requireInstagram: false,
+  requireGender: false,
+  requireDob: false,
+  requireAge: false,
+  subjectToApproval: false,
+  addBuyerDetailsToOrder: CHECKOUT_REQUIREMENTS_DEFAULTS.addBuyerDetailsToOrder,
+  addPurchasedTicketsToAttendeesCount:
+    CHECKOUT_REQUIREMENTS_DEFAULTS.addPurchasedTicketsToAttendeesCount,
+  enableEmailAttachments: CHECKOUT_REQUIREMENTS_DEFAULTS.enableEmailAttachments,
+};
+
+const EMPTY_BUYER_DETAILS: BuyerDetailsFormValues = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  facebookProfile: "",
+  instagramProfile: "",
+  gender: "",
+  dateOfBirth: "",
+  declaredAge: "",
+};
+
+function normalizePhone(value: string): string {
+  const raw = value.trim();
+  const hasPlus = raw.startsWith("+");
+  const digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function isEmailLike(value: string): boolean {
+  const v = value.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+function isPhoneLike(value: string): boolean {
+  const digits = normalizePhone(value).replace(/^\+/, "");
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+function isPositiveIntegerLike(value: string): boolean {
+  if (!value.trim()) return false;
+  const num = Number(value);
+  return Number.isInteger(num) && num >= 0 && num <= 130;
+}
+
+function validateBuyerDetails(
+  values: BuyerDetailsFormValues,
+  requiredFields: CheckoutRequirementsSnapshot,
+): BuyerDetailsFormErrors {
+  const nextErrors: BuyerDetailsFormErrors = {};
+
+  if (requiredFields.requireFullName) {
+    const firstName = values.firstName.trim();
+    const lastName = values.lastName.trim();
+
+    if (!firstName) {
+      nextErrors.firstName = "First name is required.";
+    }
+
+    if (!lastName) {
+      nextErrors.lastName = "Last name is required.";
+    }
+  }
+
+  if (requiredFields.requireEmail) {
+    if (!values.email.trim()) {
+      nextErrors.email = "Email is required.";
+    } else if (!isEmailLike(values.email)) {
+      nextErrors.email = "Enter a valid email address.";
+    }
+  }
+
+  if (requiredFields.requirePhone) {
+    if (!values.phone.trim()) {
+      nextErrors.phone = "Phone number is required.";
+    } else if (!isPhoneLike(values.phone)) {
+      nextErrors.phone = "Enter a valid phone number.";
+    }
+  }
+
+  if (requiredFields.requireFacebook && !values.facebookProfile.trim()) {
+    nextErrors.facebookProfile = "Facebook profile is required.";
+  }
+
+  if (requiredFields.requireInstagram && !values.instagramProfile.trim()) {
+    nextErrors.instagramProfile = "Instagram profile is required.";
+  }
+
+  if (requiredFields.requireGender && !values.gender) {
+    nextErrors.gender = "Select a gender.";
+  }
+
+  if (requiredFields.requireDob && !values.dateOfBirth.trim()) {
+    nextErrors.dateOfBirth = "Date of birth is required.";
+  }
+
+  if (requiredFields.requireAge) {
+    if (!values.declaredAge.trim()) {
+      nextErrors.declaredAge = "Age is required.";
+    } else if (!isPositiveIntegerLike(values.declaredAge)) {
+      nextErrors.declaredAge = "Enter a valid age.";
+    }
+  }
+
+  return nextErrors;
+}
+
+function buildBuyerProfilePayload(input: {
+  values: BuyerDetailsFormValues;
+  fallbackEmail?: string | null;
+}): CreatePaymentIntentBuyerProfile {
+  const firstName = input.values.firstName.trim();
+  const lastName = input.values.lastName.trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  const email =
+    input.values.email.trim().toLowerCase() ||
+    String(input.fallbackEmail ?? "")
+      .trim()
+      .toLowerCase();
+
+  const declaredAge = isPositiveIntegerLike(input.values.declaredAge)
+    ? Number(input.values.declaredAge)
+    : null;
+
+  return {
+    firstName,
+    lastName,
+    fullName,
+    email,
+    phone: normalizePhone(input.values.phone),
+    facebookProfile: input.values.facebookProfile.trim(),
+    instagramProfile: input.values.instagramProfile.trim(),
+    gender: input.values.gender ? input.values.gender : null,
+    dateOfBirth: input.values.dateOfBirth.trim() || null,
+    declaredAge,
+  };
+}
 
 export default function CheckoutPage() {
   const { data: session, status: sessionStatus } = useSession();
@@ -18,6 +199,8 @@ export default function CheckoutPage() {
     useCart();
 
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const buyerDetailsRef = useRef<HTMLDivElement | null>(null);
+  const didHydrateProfileRef = useRef(false);
 
   useEffect(() => {
     const next: Record<string, boolean> = {};
@@ -35,16 +218,126 @@ export default function CheckoutPage() {
     [items, selected],
   );
 
+  const requiredBuyerFields = useMemo<CheckoutRequirementsSnapshot>(() => {
+    if (selectedItems.length === 0) return EMPTY_REQUIRED_FIELDS;
+
+    return selectedItems.reduce<CheckoutRequirementsSnapshot>(
+      (acc, item) => ({
+        requireFullName:
+          acc.requireFullName || item.checkoutRequirements.requireFullName,
+        requireEmail:
+          acc.requireEmail || item.checkoutRequirements.requireEmail,
+        requirePhone:
+          acc.requirePhone || item.checkoutRequirements.requirePhone,
+        requireFacebook:
+          acc.requireFacebook || item.checkoutRequirements.requireFacebook,
+        requireInstagram:
+          acc.requireInstagram || item.checkoutRequirements.requireInstagram,
+        requireGender:
+          acc.requireGender || item.checkoutRequirements.requireGender,
+        requireDob: acc.requireDob || item.checkoutRequirements.requireDob,
+        requireAge: acc.requireAge || item.checkoutRequirements.requireAge,
+
+        subjectToApproval:
+          acc.subjectToApproval || item.checkoutRequirements.subjectToApproval,
+
+        addBuyerDetailsToOrder:
+          acc.addBuyerDetailsToOrder ||
+          item.checkoutRequirements.addBuyerDetailsToOrder,
+        addPurchasedTicketsToAttendeesCount:
+          acc.addPurchasedTicketsToAttendeesCount ||
+          item.checkoutRequirements.addPurchasedTicketsToAttendeesCount,
+
+        enableEmailAttachments:
+          acc.enableEmailAttachments ||
+          item.checkoutRequirements.enableEmailAttachments,
+      }),
+      EMPTY_REQUIRED_FIELDS,
+    );
+  }, [selectedItems]);
+
   const allSelected =
     items.length > 0 && items.every((item) => selected[item.key]);
   const selectedCount = selectedItems.length;
 
   const [code, setCode] = useState("");
   const [couponError, setCouponError] = useState<string>("");
+  const [checkoutInitError, setCheckoutInitError] = useState<string>("");
 
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [showPayment, setShowPayment] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [startingPayment, setStartingPayment] = useState(false);
+
+  const [buyerDetails, setBuyerDetails] =
+    useState<BuyerDetailsFormValues>(EMPTY_BUYER_DETAILS);
+  const [buyerErrors, setBuyerErrors] = useState<BuyerDetailsFormErrors>({});
+
+  const [pendingPaymentItems, setPendingPaymentItems] = useState<CartItem[]>(
+    [],
+  );
+  const [pendingPaymentCoupon, setPendingPaymentCoupon] = useState<
+    Coupon | undefined
+  >(undefined);
+  const [paymentCustomerEmail, setPaymentCustomerEmail] = useState<
+    string | undefined
+  >(undefined);
+
+  const profileQuery = useQuery<CheckoutProfileResponse>({
+    queryKey: ["checkout-profile", session?.user?.id ?? null],
+    enabled: sessionStatus === "authenticated" && Boolean(session?.user?.id),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const res = await fetch("/api/checkout/profile", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Failed to load checkout profile.");
+      }
+
+      return (await res.json()) as CheckoutProfileResponse;
+    },
+  });
+
+  useEffect(() => {
+    if (
+      sessionStatus === "authenticated" &&
+      session?.user?.email &&
+      !didHydrateProfileRef.current
+    ) {
+      setBuyerDetails((prev) => ({
+        ...prev,
+        email: prev.email || session.user.email || "",
+      }));
+    }
+  }, [session?.user?.email, sessionStatus]);
+
+  useEffect(() => {
+    const profile = profileQuery.data;
+    if (!profile || didHydrateProfileRef.current) return;
+
+    setBuyerDetails((prev) => ({
+      ...prev,
+      firstName: profile.firstName || prev.firstName,
+      lastName: profile.lastName || prev.lastName,
+      email: profile.email || prev.email,
+      phone: profile.phone || prev.phone,
+      instagramProfile: profile.instagramProfile || prev.instagramProfile,
+      facebookProfile: profile.facebookProfile || prev.facebookProfile,
+      gender: (profile.gender ??
+        prev.gender) as BuyerDetailsFormValues["gender"],
+      dateOfBirth: profile.dateOfBirth || prev.dateOfBirth,
+    }));
+
+    didHydrateProfileRef.current = true;
+  }, [profileQuery.data]);
+
+  useEffect(() => {
+    setCheckoutInitError("");
+  }, [selectedItems, coupon?.code]);
 
   const price = useMemo(
     () => calcPrices(selectedItems, coupon),
@@ -114,8 +407,10 @@ export default function CheckoutPage() {
     }
   };
 
+  const hasAnyBuyerValidationError = Object.keys(buyerErrors).length > 0;
+
   async function startPayment() {
-    if (selectedItems.length === 0) return;
+    if (selectedItems.length === 0 || startingPayment) return;
 
     if (sessionStatus === "unauthenticated") {
       await signIn(undefined, { callbackUrl: "/checkout" });
@@ -123,60 +418,122 @@ export default function CheckoutPage() {
     }
 
     if (sessionStatus !== "authenticated" || !session?.user?.id) {
-      alert("Please sign in to complete your purchase.");
+      setCheckoutInitError("Please sign in to complete your purchase.");
       return;
     }
 
-    const res = await fetch("/api/stripe/create-payment-intent", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items: selectedItems,
-        couponCode: coupon?.code ?? null,
-        customerEmail: session.user.email ?? undefined,
-      }),
+    const nextErrors = validateBuyerDetails(buyerDetails, requiredBuyerFields);
+    setBuyerErrors(nextErrors);
+    setCheckoutInitError("");
+
+    if (Object.keys(nextErrors).length > 0) {
+      buyerDetailsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
+
+    const buyerProfile = buildBuyerProfilePayload({
+      values: buyerDetails,
+      fallbackEmail: session.user.email ?? null,
     });
 
-    if (!res.ok) {
-      let message = "Failed to initialize payment.";
-      try {
-        const data = (await res.json()) as { error?: string };
-        if (typeof data?.error === "string" && data.error.trim()) {
-          message = data.error;
+    setStartingPayment(true);
+
+    try {
+      const res = await fetch("/api/stripe/create-payment-intent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          items: selectedItems,
+          couponCode: coupon?.code ?? null,
+          customerEmail: buyerProfile.email || session.user.email || undefined,
+          buyerProfile,
+          persistProfileDefaults: true,
+        }),
+      });
+
+      if (!res.ok) {
+        let message = "Failed to initialize payment.";
+        try {
+          const data = (await res.json()) as { error?: string };
+          if (typeof data?.error === "string" && data.error.trim()) {
+            message = data.error;
+          }
+        } catch {
+          // ignore parse failure
         }
-      } catch {
-        // ignore parse failure
+
+        setCheckoutInitError(message);
+        return;
       }
-      alert(message);
-      return;
+
+      const data = (await res.json()) as {
+        clientSecret: string;
+        orderId: string;
+      };
+
+      if (!data.clientSecret) {
+        setCheckoutInitError("Failed to initialize payment.");
+        return;
+      }
+
+      setPendingPaymentItems(selectedItems);
+      setPendingPaymentCoupon(coupon);
+      setPaymentCustomerEmail(
+        buyerProfile.email || session.user.email || undefined,
+      );
+
+      setClientSecret(data.clientSecret);
+      setShowPayment(true);
+    } catch {
+      setCheckoutInitError("Failed to initialize payment.");
+    } finally {
+      setStartingPayment(false);
     }
-
-    const data = (await res.json()) as {
-      clientSecret: string;
-      orderId: string;
-    };
-
-    if (!data.clientSecret) {
-      alert("Failed to initialize payment.");
-      return;
-    }
-
-    setClientSecret(data.clientSecret);
-    setShowPayment(true);
   }
 
   function handleSuccess() {
-    clear();
+    const keysToRemove = Array.from(
+      new Set(pendingPaymentItems.map((item) => item.key)),
+    );
+
+    if (keysToRemove.length > 0) {
+      for (const key of keysToRemove) {
+        removeItem(key);
+      }
+    } else {
+      clear();
+    }
+
+    setPendingPaymentItems([]);
+    setPendingPaymentCoupon(undefined);
+    setPaymentCustomerEmail(undefined);
     setShowPayment(false);
     setShowSuccess(true);
+  }
+
+  function updateBuyerField<K extends keyof BuyerDetailsFormValues>(
+    field: K,
+    value: BuyerDetailsFormValues[K],
+  ) {
+    setBuyerDetails((prev) => ({ ...prev, [field]: value }));
+    setCheckoutInitError("");
+    setBuyerErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   }
 
   if (items.length === 0) {
     return (
       <main className="mx-auto w-full max-w-[1232px] px-4 py-10">
-        <h1 className="mb-6 text-center text-2xl lg:text-4xl font-extrabold uppercase tracking-tight text-neutral-0">
+        <h1 className="mb-6 text-center text-2xl font-extrabold uppercase tracking-tight text-neutral-0 lg:text-4xl">
           CHECKOUT
         </h1>
         <div className="rounded-2xl bg-neutral-900 p-8 text-center text-neutral-200">
@@ -191,19 +548,19 @@ export default function CheckoutPage() {
 
   return (
     <main className="mx-auto w-full max-w-[1232px] px-4 py-10">
-      <h1 className="mb-8 lg:mb-14 text-center uppercase italic text-2xl sm:text-3xl lg:text-[40px] font-extrabold tracking-[-0.8px] leading-[90%] text-neutral-0">
+      <h1 className="mb-8 text-center text-2xl font-extrabold uppercase italic leading-[90%] tracking-[-0.8px] text-neutral-0 sm:text-3xl lg:mb-14 lg:text-[40px]">
         CHECKOUT
       </h1>
 
-      <div className="grid gap-6 sm:gap-10 lg:gap-18 lg:grid-cols-[1fr_380px]">
-        <section>
+      <div className="grid gap-6 sm:gap-10 lg:grid-cols-[1fr_380px] lg:gap-18">
+        <section className="space-y-6">
           <div className="mb-6 flex items-center justify-between px-1">
             <label className="flex select-none items-center gap-3 text-neutral-0">
               <input
                 type="checkbox"
                 checked={allSelected}
                 onChange={toggleAll}
-                className="size-6 accent-primary-952 rounded-md"
+                className="size-6 rounded-md accent-primary-952"
                 aria-label="Select all"
               />
               <span className="text-lg tracking-[-0.36px]">
@@ -213,13 +570,13 @@ export default function CheckoutPage() {
 
             <button
               onClick={() => clear()}
-              className="text-neutral-300 transition hover:text-neutral-0 cursor-pointer"
+              className="cursor-pointer text-neutral-300 transition hover:text-neutral-0"
             >
               Clear Cart
             </button>
           </div>
 
-          <div className="rounded-2xl border border-white/12 overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-white/12">
             {items.map((item, index) => (
               <div
                 key={item.key}
@@ -227,7 +584,7 @@ export default function CheckoutPage() {
                   index ? "border-t border-white/12" : ""
                 }`}
               >
-                <div className="relative w-[165.815px] aspect-[121/108] overflow-hidden">
+                <div className="relative aspect-[121/108] w-[165.815px] overflow-hidden">
                   <Image
                     src={item.image || "/dummy/event.png"}
                     alt=""
@@ -264,11 +621,11 @@ export default function CheckoutPage() {
                   </button>
                 </div>
 
-                <div className="min-w-0 my-auto pl-4">
+                <div className="my-auto min-w-0 pl-4">
                   <h3 className="text-sm font-bold leading-[90%] tracking-[-0.32px] text-white md:text-base">
                     {item.ticketLabel}
                   </h3>
-                  <p className="mt-[6px] italic text-sm font-semibold leading-[90%] tracking-[-0.32px] text-white md:text-base">
+                  <p className="mt-[6px] text-sm font-semibold italic leading-[90%] tracking-[-0.32px] text-white md:text-base">
                     {fmtItem(item.unitPrice, item.currency)}
                   </p>
                   <p className="mt-[6px] text-xs text-neutral-400">
@@ -276,7 +633,7 @@ export default function CheckoutPage() {
                   </p>
                 </div>
 
-                <div className="ml-auto self-end flex items-center justify-end gap-6 md:flex-col md:items-end md:justify-center py-4 sm:py-6 pr-4 sm:pr-6">
+                <div className="ml-auto self-end flex items-center justify-end gap-6 py-4 pr-4 sm:py-6 sm:pr-6 md:flex-col md:items-end md:justify-center">
                   <div className="flex items-center gap-[10px] rounded-full bg-white p-2 text-neutral-950">
                     <button
                       aria-label="Decrease quantity"
@@ -322,7 +679,7 @@ export default function CheckoutPage() {
                   <button
                     aria-label="Remove item"
                     onClick={() => removeItem(item.key)}
-                    className="absolute right-3 top-3 sm:right-6 sm:top-6 text-2xl leading-none text-white/90 hover:text-white cursor-pointer"
+                    className="absolute right-3 top-3 cursor-pointer text-2xl leading-none text-white/90 hover:text-white sm:right-6 sm:top-6"
                     title="Remove"
                   >
                     <svg
@@ -344,6 +701,18 @@ export default function CheckoutPage() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div ref={buyerDetailsRef}>
+            <CheckoutBuyerDetailsCard
+              requiredFields={requiredBuyerFields}
+              values={buyerDetails}
+              errors={buyerErrors}
+              isAuthenticated={sessionStatus === "authenticated"}
+              isProfileLoading={profileQuery.isLoading}
+              hasAnyValidationError={hasAnyBuyerValidationError}
+              onChange={updateBuyerField}
+            />
           </div>
         </section>
 
@@ -423,12 +792,12 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          <div className="rounded-xl bg-neutral-800 text-base p-4 pb-8 mx-2">
-            <h4 className="mb-4 text-lg tracking-[-0.36px] leading-[80%]">
+          <div className="mx-2 rounded-xl bg-neutral-800 p-4 pb-8 text-base">
+            <h4 className="mb-4 text-lg leading-[80%] tracking-[-0.36px]">
               Price Details
             </h4>
 
-            <p className="mb-8 text-base tracking-[-0.36px] leading-[80%]">
+            <p className="mb-8 text-base leading-[80%] tracking-[-0.36px]">
               {selectedItems.reduce((count, item) => count + item.qty, 0)}{" "}
               Ticket
               {selectedItems.reduce((count, item) => count + item.qty, 0) === 1
@@ -467,6 +836,12 @@ export default function CheckoutPage() {
           </div>
 
           <div className="px-4">
+            {checkoutInitError ? (
+              <div className="mt-6 rounded-xl border border-error-500/20 bg-error-500/10 px-4 py-3 text-sm text-error-200">
+                {checkoutInitError}
+              </div>
+            ) : null}
+
             {sessionStatus === "unauthenticated" ? (
               <Button
                 onClick={() =>
@@ -485,10 +860,16 @@ export default function CheckoutPage() {
                 size="lg"
                 variant="brand"
                 disabled={
-                  selectedItems.length === 0 || sessionStatus === "loading"
+                  selectedItems.length === 0 ||
+                  sessionStatus === "loading" ||
+                  startingPayment
                 }
               >
-                {selectedItems.length === 0 ? "Select Tickets" : "Place Order"}{" "}
+                {startingPayment
+                  ? "Preparing payment..."
+                  : selectedItems.length === 0
+                    ? "Select Tickets"
+                    : "Place Order"}{" "}
                 &nbsp;
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -515,7 +896,9 @@ export default function CheckoutPage() {
           onClose={() => setShowPayment(false)}
           onSuccess={handleSuccess}
           currencyCode={currencyCode}
-          customerEmail={session?.user?.email ?? undefined}
+          customerEmail={paymentCustomerEmail}
+          items={pendingPaymentItems}
+          coupon={pendingPaymentCoupon}
         />
       )}
 

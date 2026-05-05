@@ -15,6 +15,13 @@ import {
 import Event from "@/models/Event";
 import TicketType from "@/models/TicketType";
 import Order from "@/models/Order";
+import User from "@/models/User";
+import {
+  CHECKOUT_GENDER_VALUES,
+  CHECKOUT_REQUIREMENTS_DEFAULTS,
+  type CheckoutGender,
+  type CheckoutRequirementsSnapshot,
+} from "@/types/checkout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,10 +40,30 @@ const CartItemSchema = z.object({
   qty: z.number().int().min(1).max(20),
 });
 
+const BuyerProfileSchema = z.object({
+  firstName: z.string().trim().max(120).default(""),
+  lastName: z.string().trim().max(120).default(""),
+  fullName: z.string().trim().max(240).default(""),
+  email: z.string().trim().email().default(""),
+  phone: z.string().trim().max(40).default(""),
+  facebookProfile: z.string().trim().max(280).default(""),
+  instagramProfile: z.string().trim().max(280).default(""),
+  gender: z.enum(CHECKOUT_GENDER_VALUES).nullable().optional(),
+  dateOfBirth: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+  declaredAge: z.number().int().min(0).max(130).nullable().optional(),
+});
+
 const BodySchema = z.object({
   items: z.array(CartItemSchema).min(1).max(20),
   couponCode: z.string().trim().max(80).nullable().optional(),
   customerEmail: z.string().email().nullable().optional(),
+  buyerProfile: BuyerProfileSchema,
+  persistProfileDefaults: z.boolean().optional().default(false),
 });
 
 type AuthoritativeCartLine = {
@@ -49,6 +76,7 @@ type AuthoritativeCartLine = {
   currency: string;
   image?: string;
   qty: number;
+  checkoutRequirements: CheckoutRequirementsSnapshot;
 };
 
 type EventLean = {
@@ -73,7 +101,28 @@ type TicketTypeLean = {
   salesStartAt?: Date | null;
   salesEndAt?: Date | null;
   accessMode: "public" | "restricted" | "password";
+  checkout?: Partial<CheckoutRequirementsSnapshot> | null;
 };
+
+type NormalizedBuyerProfile = {
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  facebookProfile: string;
+  instagramProfile: string;
+  gender: CheckoutGender | null;
+  dateOfBirth: Date | null;
+  dateOfBirthInput: string | null;
+  declaredAge: number | null;
+};
+
+const ORDER_PENDING_TTL_MS = 15 * 60 * 1000;
+
+function buildPendingOrderExpiresAt(now: Date = new Date()): Date {
+  return new Date(now.getTime() + ORDER_PENDING_TTL_MS);
+}
 
 function normalizeCurrencyCode(input: string): string {
   const raw = String(input || "")
@@ -102,19 +151,241 @@ function isOnSaleNow(
   now: Date,
 ): boolean {
   if (ticketType.availabilityStatus !== "on_sale") return false;
+
   if (
     ticketType.salesStartAt &&
     ticketType.salesStartAt.getTime() > now.getTime()
   ) {
     return false;
   }
+
   if (
     ticketType.salesEndAt &&
     ticketType.salesEndAt.getTime() < now.getTime()
   ) {
     return false;
   }
+
   return true;
+}
+
+function normalizePhone(input: string): string {
+  const raw = String(input || "").trim();
+  const hasPlus = raw.startsWith("+");
+  const digits = raw.replace(/[^\d]/g, "");
+
+  if (!digits) return "";
+
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function isPhoneLike(input: string): boolean {
+  const digits = normalizePhone(input).replace(/^\+/, "");
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+function normalizeCheckoutRequirements(
+  value: Partial<CheckoutRequirementsSnapshot> | null | undefined,
+): CheckoutRequirementsSnapshot {
+  return {
+    requireFullName:
+      value?.requireFullName ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireFullName,
+
+    requireEmail:
+      value?.requireEmail ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireEmail,
+    requirePhone:
+      value?.requirePhone ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requirePhone,
+    requireFacebook:
+      value?.requireFacebook ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireFacebook,
+    requireInstagram:
+      value?.requireInstagram ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.requireInstagram,
+    requireGender:
+      value?.requireGender ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireGender,
+    requireDob: value?.requireDob ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireDob,
+    requireAge: value?.requireAge ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireAge,
+
+    subjectToApproval:
+      value?.subjectToApproval ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.subjectToApproval,
+
+    addBuyerDetailsToOrder:
+      value?.addBuyerDetailsToOrder ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.addBuyerDetailsToOrder,
+    addPurchasedTicketsToAttendeesCount:
+      value?.addPurchasedTicketsToAttendeesCount ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.addPurchasedTicketsToAttendeesCount,
+
+    enableEmailAttachments:
+      value?.enableEmailAttachments ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.enableEmailAttachments,
+  };
+}
+
+function mergeCheckoutRequirements(
+  items: CheckoutRequirementsSnapshot[],
+): CheckoutRequirementsSnapshot {
+  return items.reduce<CheckoutRequirementsSnapshot>(
+    (acc, item) => ({
+      requireFullName: acc.requireFullName || item.requireFullName,
+      requireEmail: acc.requireEmail || item.requireEmail,
+      requirePhone: acc.requirePhone || item.requirePhone,
+      requireFacebook: acc.requireFacebook || item.requireFacebook,
+      requireInstagram: acc.requireInstagram || item.requireInstagram,
+      requireGender: acc.requireGender || item.requireGender,
+      requireDob: acc.requireDob || item.requireDob,
+      requireAge: acc.requireAge || item.requireAge,
+
+      subjectToApproval: acc.subjectToApproval || item.subjectToApproval,
+
+      addBuyerDetailsToOrder:
+        acc.addBuyerDetailsToOrder || item.addBuyerDetailsToOrder,
+      addPurchasedTicketsToAttendeesCount:
+        acc.addPurchasedTicketsToAttendeesCount ||
+        item.addPurchasedTicketsToAttendeesCount,
+
+      enableEmailAttachments:
+        acc.enableEmailAttachments || item.enableEmailAttachments,
+    }),
+    {
+      requireFullName: false,
+      requireEmail: false,
+      requirePhone: false,
+      requireFacebook: false,
+      requireInstagram: false,
+      requireGender: false,
+      requireDob: false,
+      requireAge: false,
+      subjectToApproval: false,
+      addBuyerDetailsToOrder:
+        CHECKOUT_REQUIREMENTS_DEFAULTS.addBuyerDetailsToOrder,
+      addPurchasedTicketsToAttendeesCount:
+        CHECKOUT_REQUIREMENTS_DEFAULTS.addPurchasedTicketsToAttendeesCount,
+      enableEmailAttachments:
+        CHECKOUT_REQUIREMENTS_DEFAULTS.enableEmailAttachments,
+    },
+  );
+}
+
+function buildNormalizedBuyerProfile(input: {
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  facebookProfile: string;
+  instagramProfile: string;
+  gender?: CheckoutGender | null;
+  dateOfBirth?: string | null;
+  declaredAge?: number | null;
+  fallbackEmail?: string | null;
+}): NormalizedBuyerProfile {
+  const firstName = String(input.firstName || "").trim();
+  const lastName = String(input.lastName || "").trim();
+
+  const explicitFullName = String(input.fullName || "").trim();
+  const fullName = explicitFullName || `${firstName} ${lastName}`.trim();
+
+  const email = String(input.email || input.fallbackEmail || "")
+    .trim()
+    .toLowerCase();
+
+  const phone = normalizePhone(input.phone);
+  const facebookProfile = String(input.facebookProfile || "").trim();
+  const instagramProfile = String(input.instagramProfile || "").trim();
+
+  const dateOfBirthInput = String(input.dateOfBirth || "").trim() || null;
+  const dateOfBirth =
+    dateOfBirthInput !== null
+      ? new Date(`${dateOfBirthInput}T00:00:00.000Z`)
+      : null;
+
+  return {
+    firstName,
+    lastName,
+    fullName,
+    email,
+    phone,
+    facebookProfile,
+    instagramProfile,
+    gender: input.gender ?? null,
+    dateOfBirth:
+      dateOfBirth instanceof Date && !Number.isNaN(dateOfBirth.getTime())
+        ? dateOfBirth
+        : null,
+    dateOfBirthInput,
+    declaredAge:
+      typeof input.declaredAge === "number" &&
+      Number.isInteger(input.declaredAge)
+        ? input.declaredAge
+        : null,
+  };
+}
+
+function validateBuyerProfileAgainstRequirements(input: {
+  buyerProfile: NormalizedBuyerProfile;
+  requirements: CheckoutRequirementsSnapshot;
+}): string | null {
+  const { buyerProfile, requirements } = input;
+
+  if (requirements.requireFullName) {
+    if (
+      !buyerProfile.firstName ||
+      !buyerProfile.lastName ||
+      !buyerProfile.fullName
+    ) {
+      return "Full name is required for the selected ticket type.";
+    }
+  }
+
+  if (requirements.requireEmail && !buyerProfile.email) {
+    return "Email is required for the selected ticket type.";
+  }
+
+  if (requirements.requirePhone) {
+    if (!buyerProfile.phone || !isPhoneLike(buyerProfile.phone)) {
+      return "A valid phone number is required for the selected ticket type.";
+    }
+  }
+
+  if (requirements.requireFacebook && !buyerProfile.facebookProfile) {
+    return "Facebook profile is required for the selected ticket type.";
+  }
+
+  if (requirements.requireInstagram && !buyerProfile.instagramProfile) {
+    return "Instagram profile is required for the selected ticket type.";
+  }
+
+  if (requirements.requireGender && !buyerProfile.gender) {
+    return "Gender is required for the selected ticket type.";
+  }
+
+  if (requirements.requireDob) {
+    if (!buyerProfile.dateOfBirthInput || !buyerProfile.dateOfBirth) {
+      return "Date of birth is required for the selected ticket type.";
+    }
+
+    if (buyerProfile.dateOfBirth.getTime() > Date.now()) {
+      return "Date of birth cannot be in the future.";
+    }
+  }
+
+  if (requirements.requireAge) {
+    if (
+      buyerProfile.declaredAge === null ||
+      !Number.isInteger(buyerProfile.declaredAge) ||
+      buyerProfile.declaredAge < 0 ||
+      buyerProfile.declaredAge > 130
+    ) {
+      return "A valid age is required for the selected ticket type.";
+    }
+  }
+
+  if (!buyerProfile.email) {
+    return "Buyer email is required to continue checkout.";
+  }
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -142,11 +413,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { items, couponCode, customerEmail } = parsed.data;
+  const {
+    items,
+    couponCode,
+    customerEmail,
+    buyerProfile: rawBuyerProfile,
+    persistProfileDefaults,
+  } = parsed.data;
 
   const distinctEventIds = Array.from(
     new Set(items.map((item) => item.eventId)),
   );
+
   if (distinctEventIds.length !== 1) {
     return NextResponse.json(
       { error: "Checkout must contain ticket types from a single event." },
@@ -156,6 +434,7 @@ export async function POST(req: NextRequest) {
 
   const distinctTicketTypeIds = items.map((item) => item.ticketTypeId);
   const distinctTicketTypeIdSet = new Set(distinctTicketTypeIds);
+
   if (distinctTicketTypeIdSet.size !== distinctTicketTypeIds.length) {
     return NextResponse.json(
       { error: "Duplicate ticket types are not allowed in checkout." },
@@ -166,6 +445,7 @@ export async function POST(req: NextRequest) {
   const distinctCurrencies = Array.from(
     new Set(items.map((item) => normalizeCurrencyCode(item.currency))),
   );
+
   if (distinctCurrencies.length !== 1) {
     return NextResponse.json(
       { error: "Mixed currencies are not supported." },
@@ -200,7 +480,7 @@ export async function POST(req: NextRequest) {
     eventId: event._id,
   })
     .select(
-      "_id eventId organizationId name price currency soldCount totalQuantity minPerOrder maxPerOrder availabilityStatus salesStartAt salesEndAt accessMode",
+      "_id eventId organizationId name price currency soldCount totalQuantity minPerOrder maxPerOrder availabilityStatus salesStartAt salesEndAt accessMode checkout",
     )
     .lean<TicketTypeLean[]>();
 
@@ -217,9 +497,11 @@ export async function POST(req: NextRequest) {
 
   const now = new Date();
   const authoritativeItems: AuthoritativeCartLine[] = [];
+  const perTicketRequirements: CheckoutRequirementsSnapshot[] = [];
 
   for (const item of items) {
     const ticketType = ticketTypeById.get(item.ticketTypeId);
+
     if (!ticketType) {
       return NextResponse.json(
         { error: "Ticket type not found." },
@@ -266,6 +548,7 @@ export async function POST(req: NextRequest) {
         ticketType.totalQuantity - ticketType.soldCount,
         0,
       );
+
       if (item.qty > remaining) {
         return NextResponse.json(
           {
@@ -294,6 +577,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const normalizedRequirements = normalizeCheckoutRequirements(
+      ticketType.checkout,
+    );
+
     authoritativeItems.push({
       key: item.key,
       eventId,
@@ -304,7 +591,28 @@ export async function POST(req: NextRequest) {
       currency: authoritativeCurrency,
       image: item.image,
       qty: item.qty,
+      checkoutRequirements: normalizedRequirements,
     });
+
+    perTicketRequirements.push(normalizedRequirements);
+  }
+
+  const checkoutRequirementsSnapshot = mergeCheckoutRequirements(
+    perTicketRequirements,
+  );
+
+  const normalizedBuyerProfile = buildNormalizedBuyerProfile({
+    ...rawBuyerProfile,
+    fallbackEmail: customerEmail || session.user.email || null,
+  });
+
+  const buyerProfileError = validateBuyerProfileAgainstRequirements({
+    buyerProfile: normalizedBuyerProfile,
+    requirements: checkoutRequirementsSnapshot,
+  });
+
+  if (buyerProfileError) {
+    return NextResponse.json({ error: buyerProfileError }, { status: 400 });
   }
 
   const normalizedCouponCode = String(couponCode ?? "").trim();
@@ -350,7 +658,22 @@ export async function POST(req: NextRequest) {
       qty: item.qty,
       currency: item.currency,
     })),
+    buyerSnapshot: {
+      userId: new Types.ObjectId(session.user.id),
+      firstName: normalizedBuyerProfile.firstName,
+      lastName: normalizedBuyerProfile.lastName,
+      fullName: normalizedBuyerProfile.fullName,
+      email: normalizedBuyerProfile.email,
+      phone: normalizedBuyerProfile.phone,
+      facebookProfile: normalizedBuyerProfile.facebookProfile,
+      instagramProfile: normalizedBuyerProfile.instagramProfile,
+      gender: normalizedBuyerProfile.gender,
+      dateOfBirth: normalizedBuyerProfile.dateOfBirth,
+      declaredAge: normalizedBuyerProfile.declaredAge,
+    },
+    checkoutRequirementsSnapshot,
     status: "pending",
+    expiresAt: buildPendingOrderExpiresAt(),
     subtotal: pricing.subtotal,
     fees: pricing.fees,
     discount: pricing.discount,
@@ -377,13 +700,36 @@ export async function POST(req: NextRequest) {
       : null,
   });
 
+  if (persistProfileDefaults) {
+    await User.updateOne(
+      { _id: new Types.ObjectId(session.user.id) },
+      {
+        $set: {
+          firstName: normalizedBuyerProfile.firstName,
+          lastName: normalizedBuyerProfile.lastName,
+          phone: normalizedBuyerProfile.phone,
+          instagram: normalizedBuyerProfile.instagramProfile,
+          "checkoutProfile.facebookProfile":
+            normalizedBuyerProfile.facebookProfile,
+          "checkoutProfile.gender": normalizedBuyerProfile.gender,
+          "checkoutProfile.dateOfBirth": normalizedBuyerProfile.dateOfBirth,
+          "checkoutProfile.updatedAt": new Date(),
+        },
+      },
+    );
+  }
+
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amountInCents,
       currency: pricing.currency.toLowerCase(),
-      description: `Tikd order for ${event.title}`,
+      description: `Tixsy order for ${event.title}`,
       automatic_payment_methods: { enabled: true },
-      receipt_email: customerEmail || session.user.email || undefined,
+      receipt_email:
+        normalizedBuyerProfile.email ||
+        customerEmail ||
+        session.user.email ||
+        undefined,
       metadata: {
         orderId: String(order._id),
         eventId: String(event._id),
@@ -407,11 +753,15 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     await Order.updateOne(
       { _id: order._id },
-      { $set: { status: "cancelled" } },
+      {
+        $set: {
+          status: "cancelled",
+          expiresAt: null,
+        },
+      },
     ).catch(() => {
       // best-effort cleanup only
     });
-
     const message =
       error instanceof Error
         ? error.message

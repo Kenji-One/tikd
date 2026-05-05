@@ -4,6 +4,10 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { CartItem, CartState, Coupon } from "@/types/cart";
 import { findCoupon } from "@/lib/coupons";
+import {
+  CHECKOUT_REQUIREMENTS_DEFAULTS,
+  type CheckoutRequirementsSnapshot,
+} from "@/types/checkout";
 
 type Actions = {
   addItem: (payload: Omit<CartItem, "key">) => void;
@@ -20,6 +24,86 @@ function normalizeQty(value: number | undefined): number {
   return Math.max(1, Math.floor(value ?? 1));
 }
 
+function normalizeCheckoutRequirements(
+  value: unknown,
+): CheckoutRequirementsSnapshot {
+  const record =
+    value && typeof value === "object"
+      ? (value as Partial<CheckoutRequirementsSnapshot>)
+      : {};
+
+  return {
+    requireFullName:
+      record.requireFullName ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireFullName,
+
+    requireEmail:
+      record.requireEmail ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireEmail,
+    requirePhone:
+      record.requirePhone ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requirePhone,
+    requireFacebook:
+      record.requireFacebook ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireFacebook,
+    requireInstagram:
+      record.requireInstagram ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.requireInstagram,
+    requireGender:
+      record.requireGender ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireGender,
+    requireDob: record.requireDob ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireDob,
+    requireAge: record.requireAge ?? CHECKOUT_REQUIREMENTS_DEFAULTS.requireAge,
+
+    subjectToApproval:
+      record.subjectToApproval ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.subjectToApproval,
+
+    addBuyerDetailsToOrder:
+      record.addBuyerDetailsToOrder ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.addBuyerDetailsToOrder,
+    addPurchasedTicketsToAttendeesCount:
+      record.addPurchasedTicketsToAttendeesCount ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.addPurchasedTicketsToAttendeesCount,
+
+    enableEmailAttachments:
+      record.enableEmailAttachments ??
+      CHECKOUT_REQUIREMENTS_DEFAULTS.enableEmailAttachments,
+  };
+}
+
+function normalizeCartItem(input: unknown): CartItem | null {
+  if (!input || typeof input !== "object") return null;
+
+  const item = input as Partial<CartItem>;
+
+  if (
+    typeof item.eventId !== "string" ||
+    typeof item.eventTitle !== "string" ||
+    typeof item.ticketTypeId !== "string" ||
+    typeof item.ticketLabel !== "string" ||
+    typeof item.unitPrice !== "number" ||
+    typeof item.currency !== "string"
+  ) {
+    return null;
+  }
+
+  const key =
+    typeof item.key === "string" && item.key.trim()
+      ? item.key
+      : `${item.eventId}:${item.ticketTypeId}`;
+
+  return {
+    key,
+    eventId: item.eventId,
+    eventTitle: item.eventTitle,
+    ticketTypeId: item.ticketTypeId,
+    ticketLabel: item.ticketLabel,
+    unitPrice: item.unitPrice,
+    currency: item.currency,
+    image: typeof item.image === "string" ? item.image : undefined,
+    qty: normalizeQty(item.qty),
+    checkoutRequirements: normalizeCheckoutRequirements(
+      item.checkoutRequirements,
+    ),
+  };
+}
+
 export const useCart = create<CartStore>()(
   persist(
     (set) => ({
@@ -31,18 +115,39 @@ export const useCart = create<CartStore>()(
           const key = `${payload.eventId}:${payload.ticketTypeId}`;
           const nextQty = normalizeQty(payload.qty);
 
+          const normalizedPayload: Omit<CartItem, "key" | "qty"> & {
+            qty: number;
+          } = {
+            ...payload,
+            qty: nextQty,
+            checkoutRequirements: normalizeCheckoutRequirements(
+              payload.checkoutRequirements,
+            ),
+          };
+
           const existing = state.items.find((item) => item.key === key);
           if (existing) {
             return {
               items: state.items.map((item) =>
-                item.key === key ? { ...item, qty: item.qty + nextQty } : item,
+                item.key === key
+                  ? {
+                      ...item,
+                      qty: item.qty + nextQty,
+                      unitPrice: normalizedPayload.unitPrice,
+                      currency: normalizedPayload.currency,
+                      image: normalizedPayload.image,
+                      ticketLabel: normalizedPayload.ticketLabel,
+                      checkoutRequirements:
+                        normalizedPayload.checkoutRequirements,
+                    }
+                  : item,
               ),
             };
           }
 
           const existingEventId = state.items[0]?.eventId ?? null;
 
-          const { qty: _ignoredQty = 1, ...rest } = payload;
+          const { qty: _ignoredQty = 1, ...rest } = normalizedPayload;
 
           const nextItem: CartItem = {
             key,
@@ -108,7 +213,7 @@ export const useCart = create<CartStore>()(
     {
       name: "tikd-cart",
       storage: createJSONStorage(() => localStorage),
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         items: state.items,
         coupon: state.coupon,
@@ -119,7 +224,11 @@ export const useCart = create<CartStore>()(
             ? (persistedState as Partial<CartState>)
             : {};
 
-        const items = Array.isArray(state.items) ? state.items : [];
+        const rawItems = Array.isArray(state.items) ? state.items : [];
+        const items = rawItems
+          .map((item) => normalizeCartItem(item))
+          .filter((item): item is CartItem => item !== null);
+
         const coupon = state.coupon;
 
         if (items.length <= 1) {

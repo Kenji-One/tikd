@@ -1,6 +1,20 @@
+// src/models/Order.ts
 import { Schema, model, models, Types, Document, Model } from "mongoose";
 
-export type OrderStatus = "pending" | "paid" | "refunded" | "cancelled";
+import {
+  CHECKOUT_GENDER_VALUES,
+  CHECKOUT_REQUIREMENTS_DEFAULTS,
+  type CheckoutPartyDetails,
+  type CheckoutRequirementsSnapshot,
+} from "@/types/checkout";
+
+export type OrderStatus =
+  | "pending"
+  | "paid"
+  | "refunded"
+  | "cancelled"
+  | "expired";
+
 export type OrderTrackingDestinationKind = "Event" | "Organization";
 
 export interface IOrderItemSnapshot {
@@ -20,6 +34,10 @@ export interface IOrderTrackingSnapshot {
   trackingDestinationId?: Types.ObjectId | null;
 }
 
+export interface IOrderBuyerSnapshot extends CheckoutPartyDetails {
+  userId?: Types.ObjectId | null;
+}
+
 export interface IOrder extends Document {
   _id: Types.ObjectId;
 
@@ -31,10 +49,28 @@ export interface IOrder extends Document {
 
   items: IOrderItemSnapshot[];
 
+  /**
+   * Immutable purchase-time buyer snapshot.
+   * This must not be rebuilt later from the current User document.
+   */
+  buyerSnapshot?: IOrderBuyerSnapshot | null;
+
+  /**
+   * Immutable purchase-time requirements snapshot resolved from the selected
+   * ticket types at checkout.
+   */
+  checkoutRequirementsSnapshot?: CheckoutRequirementsSnapshot | null;
+
   status: OrderStatus;
 
   paymentIntentId?: string;
   checkoutSessionId?: string;
+
+  /**
+   * Expiration timestamp for unpaid checkout attempts.
+   * Used only while the order is still in a pending checkout lifecycle.
+   */
+  expiresAt?: Date | null;
 
   subtotal: number;
   fees: number;
@@ -125,6 +161,140 @@ const OrderTrackingSnapshotSchema = new Schema<IOrderTrackingSnapshot>(
   { _id: false },
 );
 
+const OrderBuyerSnapshotSchema = new Schema<IOrderBuyerSnapshot>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    firstName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    lastName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    fullName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 240,
+    },
+
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+      maxlength: 320,
+    },
+    phone: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 40,
+    },
+
+    facebookProfile: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 280,
+    },
+    instagramProfile: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 280,
+    },
+
+    gender: {
+      type: String,
+      enum: [...CHECKOUT_GENDER_VALUES, null],
+      default: null,
+    },
+    dateOfBirth: {
+      type: Date,
+      default: null,
+    },
+
+    declaredAge: {
+      type: Number,
+      min: 0,
+      max: 130,
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
+const CheckoutRequirementsSnapshotSchema =
+  new Schema<CheckoutRequirementsSnapshot>(
+    {
+      requireFullName: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requireFullName,
+      },
+
+      requireEmail: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requireEmail,
+      },
+      requirePhone: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requirePhone,
+      },
+      requireFacebook: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requireFacebook,
+      },
+      requireInstagram: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requireInstagram,
+      },
+      requireGender: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requireGender,
+      },
+      requireDob: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requireDob,
+      },
+      requireAge: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.requireAge,
+      },
+
+      subjectToApproval: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.subjectToApproval,
+      },
+
+      addBuyerDetailsToOrder: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.addBuyerDetailsToOrder,
+      },
+      addPurchasedTicketsToAttendeesCount: {
+        type: Boolean,
+        default:
+          CHECKOUT_REQUIREMENTS_DEFAULTS.addPurchasedTicketsToAttendeesCount,
+      },
+
+      enableEmailAttachments: {
+        type: Boolean,
+        default: CHECKOUT_REQUIREMENTS_DEFAULTS.enableEmailAttachments,
+      },
+    },
+    { _id: false },
+  );
+
 const OrderSchema = new Schema<IOrder>(
   {
     userId: {
@@ -167,9 +337,19 @@ const OrderSchema = new Schema<IOrder>(
       },
     },
 
+    buyerSnapshot: {
+      type: OrderBuyerSnapshotSchema,
+      default: null,
+    },
+
+    checkoutRequirementsSnapshot: {
+      type: CheckoutRequirementsSnapshotSchema,
+      default: null,
+    },
+
     status: {
       type: String,
-      enum: ["pending", "paid", "refunded", "cancelled"],
+      enum: ["pending", "paid", "refunded", "cancelled", "expired"],
       default: "pending",
       index: true,
     },
@@ -186,6 +366,11 @@ const OrderSchema = new Schema<IOrder>(
       default: "",
       trim: true,
       index: true,
+    },
+
+    expiresAt: {
+      type: Date,
+      default: null,
     },
 
     subtotal: {
@@ -240,6 +425,7 @@ const OrderSchema = new Schema<IOrder>(
 OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ eventId: 1, status: 1, createdAt: -1 });
 OrderSchema.index({ organizationId: 1, status: 1, createdAt: -1 });
+OrderSchema.index({ status: 1, expiresAt: 1 });
 OrderSchema.index(
   { paymentIntentId: 1 },
   {

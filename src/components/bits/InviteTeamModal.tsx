@@ -57,7 +57,7 @@ import DateRangePicker, {
 import TimePicker from "@/components/ui/TimePicker";
 
 /* ----------------------------- Types ----------------------------- */
-export type Role = "admin" | "promoter" | "scanner" | "collaborator";
+export type Role = "admin" | "promoter" | "scanner" | "collaborator" | "member";
 
 /**
  * Backwards compatible:
@@ -103,12 +103,22 @@ type OrgRoleRow = {
   membersCount: number;
 };
 
+type InviteScope = "organization" | "team" | "event";
+
 type Props = {
   open: boolean;
   onClose: () => void;
   onInvite: (payload: InvitePayload) => void;
   isSubmitting?: boolean;
-  orgId: string;
+
+  /** Required only for organization role loading */
+  orgId?: string;
+
+  /** organization = org roles/custom roles, team/event = system roles only */
+  scope?: InviteScope;
+
+  /** Whether to show "Apply to existing/future events" step controls */
+  showApplyTo?: boolean;
 };
 
 /* ----------------------------- Helpers --------------------------- */
@@ -355,16 +365,33 @@ function resolveRoleIconNode(role: OrgRoleRow): ReactNode {
 }
 
 /* ---------------------------- System roles (API-driven) ----------------------- */
-const ALLOWED_SYSTEM_KEYS = [
+const TEAM_OR_ORG_SYSTEM_KEYS = [
+  "admin",
+  "promoter",
+  "scanner",
+  "collaborator",
+  "member",
+] as const;
+
+const EVENT_SYSTEM_KEYS = [
   "admin",
   "promoter",
   "scanner",
   "collaborator",
 ] as const;
-type AllowedSystemKey = (typeof ALLOWED_SYSTEM_KEYS)[number];
 
-function isAllowedSystemKey(key: string): key is AllowedSystemKey {
-  return (ALLOWED_SYSTEM_KEYS as readonly string[]).includes(key);
+type AllowedSystemKey =
+  | (typeof TEAM_OR_ORG_SYSTEM_KEYS)[number]
+  | (typeof EVENT_SYSTEM_KEYS)[number];
+
+function isAllowedSystemKeyForScope(
+  key: string,
+  scope: InviteScope,
+): key is AllowedSystemKey {
+  const allowed =
+    scope === "event" ? EVENT_SYSTEM_KEYS : TEAM_OR_ORG_SYSTEM_KEYS;
+
+  return (allowed as readonly string[]).includes(key);
 }
 
 const SYSTEM_FALLBACK_UI: Record<
@@ -372,26 +399,94 @@ const SYSTEM_FALLBACK_UI: Record<
   { subtitle: string; hint: string; color: string }
 > = {
   admin: {
-    subtitle: "Full organization control",
-    hint: "Best for owners / managers",
+    subtitle: "Full management access",
+    hint: "Best for owners and leads",
     color: "#9A46FF",
   },
   promoter: {
-    subtitle: "Links & promo tools",
-    hint: "Best for marketing",
+    subtitle: "Promotion and outreach",
+    hint: "Best for marketing roles",
     color: "#428BFF",
   },
   scanner: {
-    subtitle: "Door check-in (QR tools)",
-    hint: "Best for entry team",
+    subtitle: "Check-in and entry access",
+    hint: "Best for door staff",
     color: "#34D399",
   },
   collaborator: {
-    subtitle: "Limited collaboration",
+    subtitle: "Limited collaboration access",
     hint: "Best for helpers",
     color: "#A855F7",
   },
+  member: {
+    subtitle: "Basic membership access",
+    hint: "Best for standard members",
+    color: "#94A3B8",
+  },
 };
+
+const LOCAL_SYSTEM_ROLE_ROWS: OrgRoleRow[] = [
+  {
+    _id: "__system_admin__",
+    key: "admin",
+    name: "Admin",
+    color: "#9A46FF",
+    iconKey: "shield",
+    iconUrl: null,
+    isSystem: true,
+    order: 1,
+    permissions: {},
+    membersCount: 0,
+  },
+  {
+    _id: "__system_promoter__",
+    key: "promoter",
+    name: "Promoter",
+    color: "#428BFF",
+    iconKey: "megaphone",
+    iconUrl: null,
+    isSystem: true,
+    order: 2,
+    permissions: {},
+    membersCount: 0,
+  },
+  {
+    _id: "__system_scanner__",
+    key: "scanner",
+    name: "Scanner",
+    color: "#34D399",
+    iconKey: "scanner",
+    iconUrl: null,
+    isSystem: true,
+    order: 3,
+    permissions: {},
+    membersCount: 0,
+  },
+  {
+    _id: "__system_collaborator__",
+    key: "collaborator",
+    name: "Collaborator",
+    color: "#A855F7",
+    iconKey: "users",
+    iconUrl: null,
+    isSystem: true,
+    order: 4,
+    permissions: {},
+    membersCount: 0,
+  },
+  {
+    _id: "__system_member__",
+    key: "member",
+    name: "Member",
+    color: "#94A3B8",
+    iconKey: "user",
+    iconUrl: null,
+    isSystem: true,
+    order: 5,
+    permissions: {},
+    membersCount: 0,
+  },
+];
 
 /* --------------------------- a11y focus trap --------------------- */
 function useFocusTrap(
@@ -719,6 +814,8 @@ export default function InviteTeamModal({
   onInvite,
   isSubmitting,
   orgId,
+  scope = "organization",
+  showApplyTo = true,
 }: Props) {
   const [step, setStep] = useState<0 | 1 | 2>(0);
 
@@ -760,28 +857,34 @@ export default function InviteTeamModal({
   const panelRef = useRef<HTMLDivElement | null>(null);
   useFocusTrap(open, panelRef);
 
+  const allowCustomRoles = scope === "organization";
+  const usesOrgRoles = scope === "organization" && !!orgId;
+
   const { data: roles } = useQuery<OrgRoleRow[]>({
     queryKey: ["org-roles", orgId],
     queryFn: () => json<OrgRoleRow[]>(`/api/organizations/${orgId}/roles`),
-    enabled: open && !!orgId,
+    enabled: open && usesOrgRoles,
     staleTime: 30_000,
   });
 
   const sortedRoles = useMemo(() => {
-    const list = roles ?? [];
+    const list = usesOrgRoles ? (roles ?? []) : LOCAL_SYSTEM_ROLE_ROWS;
     return list.slice().sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
-  }, [roles]);
+  }, [roles, usesOrgRoles]);
 
   const systemRoles = useMemo(() => {
     return sortedRoles.filter(
       (r) =>
-        r.isSystem === true && r.key !== "owner" && isAllowedSystemKey(r.key),
+        r.isSystem === true &&
+        r.key !== "owner" &&
+        isAllowedSystemKeyForScope(r.key, scope),
     );
-  }, [sortedRoles]);
+  }, [scope, sortedRoles]);
 
   const customRoles = useMemo(() => {
+    if (!allowCustomRoles) return [];
     return sortedRoles.filter((r) => !r.isSystem);
-  }, [sortedRoles]);
+  }, [allowCustomRoles, sortedRoles]);
 
   useEffect(() => {
     if (!open) return;
@@ -797,10 +900,11 @@ export default function InviteTeamModal({
     const currentExists = systemRoles.some(
       (r) => r.key === selectedSystemRoleKey,
     );
+
     if (!currentExists) {
       setSelectedSystemRoleKey(preferred.key as Role);
     }
-  }, [open, systemRoles, selectedRoleId, selectedSystemRoleKey]);
+  }, [open, selectedRoleId, selectedSystemRoleKey, systemRoles]);
 
   const emailValid = validateEmail(email);
   const hasRoleSelection =
@@ -814,7 +918,7 @@ export default function InviteTeamModal({
     emailValid &&
     hasRoleSelection &&
     (!temporary || Boolean(expiresAt)) &&
-    (applyExisting || applyFuture);
+    (showApplyTo ? applyExisting || applyFuture : true);
 
   const goNext = () => setStep((s) => (s < 2 ? ((s + 1) as 0 | 1 | 2) : s));
   const goPrev = () => setStep((s) => (s > 0 ? ((s - 1) as 0 | 1 | 2) : s));
@@ -896,7 +1000,9 @@ export default function InviteTeamModal({
         : { role: selectedSystemRoleKey }),
       temporaryAccess: temporary,
       expiresAt: temporary ? expiresAt || undefined : undefined,
-      applyTo: { existing: applyExisting, future: applyFuture },
+      ...(showApplyTo
+        ? { applyTo: { existing: applyExisting, future: applyFuture } }
+        : {}),
     });
 
   useEffect(() => {
@@ -949,10 +1055,12 @@ export default function InviteTeamModal({
   const title = stepTitles[step];
   const subtitle =
     step === 0
-      ? "Pick the permissions level (owner is hidden)."
+      ? "Pick the permissions level."
       : step === 1
         ? "We’ll send an invite link immediately."
-        : "Set duration + how it applies to events.";
+        : showApplyTo
+          ? "Set duration + how it applies to events."
+          : "Set duration and send the invite.";
 
   const onEmailKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
@@ -1176,10 +1284,17 @@ export default function InviteTeamModal({
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[12px] text-neutral-500">
-                    System roles + your custom roles. Owner is hidden.
+                    {scope === "organization"
+                      ? "System roles + your custom roles. Owner is hidden."
+                      : scope === "team"
+                        ? "System team roles only."
+                        : "System event roles only."}
                   </div>
+
                   <div className="text-[11px] text-neutral-600">
-                    From Roles & Permissions
+                    {scope === "organization"
+                      ? "From Roles & Permissions"
+                      : "Fixed system roles"}
                   </div>
                 </div>
 
@@ -1216,51 +1331,54 @@ export default function InviteTeamModal({
 
                 {systemRoles.length === 0 && (
                   <div className="rounded-xl border border-white/10 bg-neutral-950/35 px-3 py-2.5 text-[12px] text-neutral-400">
-                    No system roles returned from the API (owner is hidden).
-                    Create or check your default roles in Roles & Permissions.
+                    {scope === "organization"
+                      ? "No system roles returned from the API. Check default roles in Roles & Permissions."
+                      : "No system roles are available for this scope."}
                   </div>
                 )}
 
-                <div className="pt-1">
-                  <div className="mb-2 flex items-center justify-between">
-                    <div className="text-[12px] font-semibold text-neutral-200">
-                      Custom roles
+                {allowCustomRoles ? (
+                  <div className="pt-1">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-[12px] font-semibold text-neutral-200">
+                        Custom roles
+                      </div>
+                      <div className="text-[11px] text-neutral-500">
+                        {customRoles.length} role
+                        {customRoles.length === 1 ? "" : "s"}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-neutral-500">
-                      {customRoles.length} role
-                      {customRoles.length === 1 ? "" : "s"}
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {customRoles.map((r) => {
-                      const iconNode = resolveRoleIconNode(r);
-                      const active = selectedRoleId === r._id;
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                      {customRoles.map((r) => {
+                        const iconNode = resolveRoleIconNode(r);
+                        const active = selectedRoleId === r._id;
 
-                      return (
-                        <RoleTile
-                          key={r._id}
-                          active={active}
-                          title={r.name}
-                          subtitle="Custom permissions role"
-                          icon={iconNode}
-                          accentHex={r.color}
-                          metaRight={
-                            <div className="text-[11px] leading-tight">
-                              <div className="text-neutral-500">Members</div>
-                              <div className="mt-0.5 font-semibold text-neutral-200">
-                                {r.membersCount ?? 0}
+                        return (
+                          <RoleTile
+                            key={r._id}
+                            active={active}
+                            title={r.name}
+                            subtitle="Custom permissions role"
+                            icon={iconNode}
+                            accentHex={r.color}
+                            metaRight={
+                              <div className="text-[11px] leading-tight">
+                                <div className="text-neutral-500">Members</div>
+                                <div className="mt-0.5 font-semibold text-neutral-200">
+                                  {r.membersCount ?? 0}
+                                </div>
                               </div>
-                            </div>
-                          }
-                          onPick={() => {
-                            setSelectedRoleId(r._id);
-                          }}
-                        />
-                      );
-                    })}
+                            }
+                            onPick={() => {
+                              setSelectedRoleId(r._id);
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             )}
 
@@ -1410,74 +1528,76 @@ export default function InviteTeamModal({
                   )}
                 </div>
 
-                <div className="rounded-xl border border-white/10 bg-white/4 p-3">
-                  <div className="mb-2">
-                    <h4 className="text-[12.5px] font-semibold text-neutral-0">
-                      Apply to events
-                    </h4>
-                    <p className="mt-1 text-[12px] text-neutral-500">
-                      Keep at least one checked.
-                    </p>
+                {showApplyTo ? (
+                  <div className="rounded-xl border border-white/10 bg-white/4 p-3">
+                    <div className="mb-2">
+                      <h4 className="text-[12.5px] font-semibold text-neutral-0">
+                        Apply to events
+                      </h4>
+                      <p className="mt-1 text-[12px] text-neutral-500">
+                        Keep at least one checked.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={applyExisting}
+                          onChange={(e) => setApplyExisting(e.target.checked)}
+                          className="peer sr-only"
+                        />
+                        <span
+                          className={clsx(
+                            "grid size-5 place-items-center rounded-[6px] bg-neutral-950 ring-1 ring-inset ring-white/15 transition",
+                            "peer-checked:bg-primary-900/25 peer-checked:ring-primary-500",
+                            "[&>svg]:opacity-0 [&>svg]:scale-75 [&>svg]:-rotate-6",
+                            "peer-checked:[&>svg]:opacity-100 peer-checked:[&>svg]:scale-100 peer-checked:[&>svg]:rotate-0",
+                          )}
+                        >
+                          <Check className="h-3.5 w-3.5 text-primary-400 transition-all duration-200 ease-out" />
+                        </span>
+                        <span className="text-[14px] font-semibold text-neutral-100">
+                          Existing events
+                        </span>
+                        <span className="ml-auto text-[12px] text-neutral-500">
+                          Add to all current events
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={applyFuture}
+                          onChange={(e) => setApplyFuture(e.target.checked)}
+                          className="peer sr-only"
+                        />
+                        <span
+                          className={clsx(
+                            "grid size-5 place-items-center rounded-[6px] bg-neutral-950 ring-1 ring-inset ring-white/15 transition",
+                            "peer-checked:bg-primary-900/25 peer-checked:ring-primary-500",
+                            "[&>svg]:opacity-0 [&>svg]:scale-75 [&>svg]:-rotate-6",
+                            "peer-checked:[&>svg]:opacity-100 peer-checked:[&>svg]:scale-100 peer-checked:[&>svg]:rotate-0",
+                          )}
+                        >
+                          <Check className="h-3.5 w-3.5 text-primary-400 transition-all duration-200 ease-out" />
+                        </span>
+                        <span className="text-[14px] font-semibold text-neutral-100">
+                          Future events
+                        </span>
+                        <span className="ml-auto text-[12px] text-neutral-500">
+                          Auto-add to new events
+                        </span>
+                      </label>
+
+                      {!applyExisting && !applyFuture && (
+                        <div className="rounded-lg border border-white/10 bg-neutral-950/35 px-3 py-2 text-[12px] text-neutral-400">
+                          Pick at least one option (existing or future).
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                  <div className="space-y-2.5">
-                    <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={applyExisting}
-                        onChange={(e) => setApplyExisting(e.target.checked)}
-                        className="peer sr-only"
-                      />
-                      <span
-                        className={clsx(
-                          "grid size-5 place-items-center rounded-[6px] bg-neutral-950 ring-1 ring-inset ring-white/15 transition",
-                          "peer-checked:bg-primary-900/25 peer-checked:ring-primary-500",
-                          "[&>svg]:opacity-0 [&>svg]:scale-75 [&>svg]:-rotate-6",
-                          "peer-checked:[&>svg]:opacity-100 peer-checked:[&>svg]:scale-100 peer-checked:[&>svg]:rotate-0",
-                        )}
-                      >
-                        <Check className="h-3.5 w-3.5 text-primary-400 transition-all duration-200 ease-out" />
-                      </span>
-                      <span className="text-[14px] font-semibold text-neutral-100">
-                        Existing events
-                      </span>
-                      <span className="ml-auto text-[12px] text-neutral-500">
-                        Add to all current events
-                      </span>
-                    </label>
-
-                    <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-neutral-950/50 px-3 py-2.5 hover:border-primary-700/40 focus-within:ring-1 focus-within:ring-primary-500 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={applyFuture}
-                        onChange={(e) => setApplyFuture(e.target.checked)}
-                        className="peer sr-only"
-                      />
-                      <span
-                        className={clsx(
-                          "grid size-5 place-items-center rounded-[6px] bg-neutral-950 ring-1 ring-inset ring-white/15 transition",
-                          "peer-checked:bg-primary-900/25 peer-checked:ring-primary-500",
-                          "[&>svg]:opacity-0 [&>svg]:scale-75 [&>svg]:-rotate-6",
-                          "peer-checked:[&>svg]:opacity-100 peer-checked:[&>svg]:scale-100 peer-checked:[&>svg]:rotate-0",
-                        )}
-                      >
-                        <Check className="h-3.5 w-3.5 text-primary-400 transition-all duration-200 ease-out" />
-                      </span>
-                      <span className="text-[14px] font-semibold text-neutral-100">
-                        Future events
-                      </span>
-                      <span className="ml-auto text-[12px] text-neutral-500">
-                        Auto-add to new events
-                      </span>
-                    </label>
-
-                    {!applyExisting && !applyFuture && (
-                      <div className="rounded-lg border border-white/10 bg-neutral-950/35 px-3 py-2 text-[12px] text-neutral-400">
-                        Pick at least one option (existing or future).
-                      </div>
-                    )}
-                  </div>
-                </div>
+                ) : null}
               </div>
             )}
           </div>

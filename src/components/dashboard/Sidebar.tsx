@@ -284,6 +284,7 @@ function ReportBugIcon({ className }: IconProps): ReactElement {
 
 /* ------------------------------- Data ------------------------------ */
 type SidebarVariant = "dashboard" | "organization";
+type SidebarMode = "desktop" | "mobile";
 
 type OrgIconLike = (props: IconProps) => ReactElement;
 type IconLike = OrgIconLike | LucideIcon;
@@ -440,7 +441,7 @@ const DASH_FOOTER: DashNavItem = {
 
 const orgItems: OrgNavItem[] = [
   {
-    href: ".", // /dashboard/organizations/:id
+    href: ".",
     label: "Home",
     icon: DashboardIcon,
     match: (pathname) => {
@@ -455,8 +456,6 @@ const orgItems: OrgNavItem[] = [
 /* ----------------------------- Helpers ---------------------------- */
 
 const COLLAPSE_KEY = "ui:sidebar-collapsed";
-
-// Nice easing for width / layout transitions
 const EASE_OUT = "ease-[cubic-bezier(0.22,1,0.36,1)]";
 
 type MotionPhase = "opening" | "closing" | null;
@@ -479,11 +478,6 @@ function Divider({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/**
- * Tooltip:
- * - only visible on hover
- * - only rendered for collapsed mode
- */
 function TooltipBubble({ label }: { label: string }) {
   return (
     <div
@@ -509,6 +503,7 @@ function NavRow({
   disabled,
   motion,
   onClick,
+  onNavigate,
 }: {
   href?: string;
   label: string;
@@ -518,6 +513,7 @@ function NavRow({
   disabled?: boolean;
   motion: MotionClasses;
   onClick?: () => void;
+  onNavigate?: () => void;
 }) {
   const IconComp = Icon as ElementType<{ className?: string }>;
 
@@ -571,15 +567,13 @@ function NavRow({
 
       {collapsed && <TooltipBubble label={label} />}
 
-      {/* Active indicator rail */}
       {collapsed && active && (
         <span className="absolute -left-[10px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-primary-500" />
       )}
     </>
   );
 
-  // Clickable button-row (for modals)
-  if (onClick && !disabled) {
+  if (onClick && !href && !disabled) {
     return (
       <button type="button" onClick={onClick} className={base + " w-full"}>
         {content}
@@ -587,10 +581,12 @@ function NavRow({
     );
   }
 
-  if (disabled || !href) return <div className={base}>{content}</div>;
+  if (disabled || !href) {
+    return <div className={base}>{content}</div>;
+  }
 
   return (
-    <Link href={href} className={base}>
+    <Link href={href} className={base} onClick={onNavigate}>
       {content}
     </Link>
   );
@@ -620,10 +616,7 @@ function CollapsedGroupPopover({
         "shadow-[0_22px_70px_rgba(0,0,0,0.65)]",
       )}
     >
-      {/* wider hover-bridge so you can move into the popover without it collapsing */}
       <div className="absolute -left-10 top-0 h-full w-10" />
-
-      {/* subtle inner glow */}
       <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-neutral-800/30" />
 
       <div className="px-3 pb-2 pt-2.5">
@@ -701,11 +694,9 @@ function GroupRow({
   open: boolean;
   setOpen: (v: boolean) => void;
   collapsed: boolean;
-
   isPopoverOpen: boolean;
   openPopover: () => void;
   scheduleClosePopover: () => void;
-
   motion: MotionClasses;
 }) {
   const active = group.isActive(pathname);
@@ -783,7 +774,6 @@ function GroupRow({
         )}
       </button>
 
-      {/* Collapsed popover */}
       {collapsed && isPopoverOpen && (
         <CollapsedGroupPopover
           title={group.label}
@@ -801,19 +791,26 @@ function GroupRow({
 
 type SidebarProps = {
   variant?: SidebarVariant;
+  mode?: SidebarMode;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 };
 
-export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
+export default function Sidebar({
+  variant = "dashboard",
+  mode = "desktop",
+  mobileOpen = false,
+  onMobileClose,
+}: SidebarProps) {
   const pathnameRaw = usePathname();
   const pathname = pathnameRaw || "";
 
-  // Modal state for the 2 tasks
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [bugOpen, setBugOpen] = useState(false);
 
   const isOrg = variant === "organization";
+  const isMobileMode = mode === "mobile";
 
-  // Figure out /dashboard/organizations/:id base from the current URL
   let orgBase: string | null = null;
   if (isOrg && pathname) {
     const match = pathname.match(/^\/dashboard\/organizations\/([^\/]+)/);
@@ -837,17 +834,14 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     groupsActive.finances,
   );
 
-  // hover popover state (collapsed)
   const [hoveredGroup, setHoveredGroup] = useState<DashGroup["key"] | null>(
     null,
   );
   const hoverCloseTimer = useRef<number | null>(null);
 
-  // responsive mode flags
   const [isUnder1400, setIsUnder1400] = useState(false);
   const [isMdUp, setIsMdUp] = useState(false);
 
-  // animation phase
   const [motionPhase, setMotionPhase] = useState<MotionPhase>(null);
   const motionTimer = useRef<number | null>(null);
 
@@ -877,29 +871,34 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
   }, [motionPhase]);
 
   useEffect(() => {
+    if (isMobileMode) return;
+
     try {
       const v = localStorage.getItem(COLLAPSE_KEY);
       if (v === "1") setCollapsed(true);
     } catch {
       // ignore
     }
-  }, []);
+  }, [isMobileMode]);
 
   useEffect(() => {
+    if (isMobileMode) return;
+
     try {
       localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
     } catch {
       // ignore
     }
-  }, [collapsed]);
+  }, [collapsed, isMobileMode]);
 
   useEffect(() => {
     if (groupsActive.connections) setConnectionsOpen(true);
     if (groupsActive.finances) setFinancesOpen(true);
   }, [groupsActive.connections, groupsActive.finances]);
 
-  // media queries
   useEffect(() => {
+    if (isMobileMode) return;
+
     const mq1400 = window.matchMedia("(max-width: 1400px)");
     const mqMd = window.matchMedia("(min-width: 768px)");
 
@@ -917,13 +916,15 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
       mq1400.removeEventListener?.("change", apply);
       mqMd.removeEventListener?.("change", apply);
     };
-  }, []);
+  }, [isMobileMode]);
 
-  const isExpandedOverlay = !collapsed && isMdUp && isUnder1400;
+  const isExpandedOverlay =
+    !isMobileMode && !collapsed && isMdUp && isUnder1400;
   const pinOverlayDuringClose =
-    isMdUp && isUnder1400 && motionPhase === "closing";
+    !isMobileMode && isMdUp && isUnder1400 && motionPhase === "closing";
 
   const isOverlayPinned = isExpandedOverlay || pinOverlayDuringClose;
+  const effectiveCollapsed = isMobileMode ? false : collapsed;
 
   function cancelHoverClose() {
     if (hoverCloseTimer.current) {
@@ -946,12 +947,15 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
   }
 
   function toggleCollapsed() {
+    if (isMobileMode) return;
+
     const next = !collapsed;
 
     if (motionTimer.current) {
       window.clearTimeout(motionTimer.current);
       motionTimer.current = null;
     }
+
     setMotionPhase(next ? "closing" : "opening");
 
     motionTimer.current = window.setTimeout(
@@ -964,7 +968,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
 
     setHoveredGroup(null);
     cancelHoverClose();
-
     setCollapsed(next);
   }
 
@@ -980,7 +983,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     const body = document.body;
     const prevOverflow = body.style.overflow;
     const prevPaddingRight = body.style.paddingRight;
-
     const sbw = window.innerWidth - document.documentElement.clientWidth;
 
     body.style.overflow = "hidden";
@@ -993,9 +995,204 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
     };
   }, [isOverlayPinned]);
 
+  useEffect(() => {
+    if (!isMobileMode || !mobileOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onMobileClose?.();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+    const sbw = window.innerWidth - document.documentElement.clientWidth;
+
+    body.style.overflow = "hidden";
+    if (sbw > 0) body.style.paddingRight = `${sbw}px`;
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
+  }, [isMobileMode, mobileOpen, onMobileClose]);
+
+  const handleCloseMobile = () => {
+    if (isMobileMode) {
+      onMobileClose?.();
+    }
+  };
+
+  const handleOpenFeedback = () => {
+    handleCloseMobile();
+    setFeedbackOpen(true);
+  };
+
+  const handleOpenBug = () => {
+    handleCloseMobile();
+    setBugOpen(true);
+  };
+
+  const navContent = (
+    <>
+      <div className="space-y-2">
+        {DASH_ITEMS.map((item) => (
+          <NavRow
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            Icon={item.icon}
+            active={item.match(pathname)}
+            collapsed={effectiveCollapsed}
+            motion={motion}
+            onNavigate={handleCloseMobile}
+          />
+        ))}
+
+        <NavRow
+          href={DASH_FOOTER.href}
+          label={DASH_FOOTER.label}
+          Icon={DASH_FOOTER.icon}
+          active={DASH_FOOTER.match(pathname)}
+          collapsed={effectiveCollapsed}
+          motion={motion}
+          onNavigate={handleCloseMobile}
+        />
+      </div>
+
+      <Divider collapsed={effectiveCollapsed} />
+
+      <div className="space-y-2">
+        {DASH_COMING_SOON.map((item) => (
+          <NavRow
+            key={item.label}
+            label={item.label}
+            Icon={item.icon}
+            collapsed={effectiveCollapsed}
+            disabled
+            motion={motion}
+          />
+        ))}
+      </div>
+
+      <Divider collapsed={effectiveCollapsed} />
+
+      <div
+        className={clsx(
+          "mt-auto pb-1 space-y-2",
+          effectiveCollapsed ? "px-0" : "px-2",
+        )}
+      >
+        <NavRow
+          label="Give Feedback"
+          Icon={FeedbackIcon}
+          collapsed={effectiveCollapsed}
+          motion={motion}
+          onClick={handleOpenFeedback}
+        />
+        <NavRow
+          label="Report Bug"
+          Icon={ReportBugIcon}
+          collapsed={effectiveCollapsed}
+          motion={motion}
+          onClick={handleOpenBug}
+        />
+      </div>
+    </>
+  );
+
+  if (isMobileMode) {
+    return (
+      <>
+        <FeedbackBugModal
+          open={feedbackOpen}
+          onClose={() => setFeedbackOpen(false)}
+          variant="feedback"
+        />
+        <FeedbackBugModal
+          open={bugOpen}
+          onClose={() => setBugOpen(false)}
+          variant="bug"
+        />
+
+        <div
+          className={clsx(
+            "fixed inset-0 z-[90] md:hidden",
+            mobileOpen ? "" : "pointer-events-none",
+          )}
+          aria-hidden={!mobileOpen}
+        >
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            onClick={onMobileClose}
+            className={clsx(
+              "absolute inset-0 bg-black/60 transition-opacity duration-300",
+              mobileOpen ? "opacity-100" : "opacity-0",
+            )}
+          />
+
+          <aside
+            className={clsx(
+              "absolute left-0 top-0 h-dvh w-full max-w-[320px]",
+              "transform-gpu transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              mobileOpen ? "translate-x-0" : "-translate-x-full",
+            )}
+          >
+            <nav
+              className={clsx(
+                "flex h-full flex-col overflow-hidden",
+                "border-r border-neutral-800/70 bg-neutral-948",
+                "shadow-[0_22px_70px_rgba(0,0,0,0.55)]",
+              )}
+            >
+              <div className="flex items-center justify-between border-b border-neutral-800/70 px-5 py-4">
+                <Link
+                  href="/dashboard"
+                  className="flex h-10 items-center"
+                  onClick={handleCloseMobile}
+                >
+                  <Image
+                    src="/Logo.svg"
+                    alt="Tixsy"
+                    width={92}
+                    height={28}
+                    priority
+                  />
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={onMobileClose}
+                  aria-label="Close sidebar"
+                  className={clsx(
+                    "grid h-10 w-10 place-items-center rounded-full",
+                    "border border-neutral-800/80 bg-neutral-900",
+                    "text-neutral-200 shadow-[0_18px_60px_rgba(0,0,0,0.45)]",
+                    "transition hover:bg-neutral-800/60 hover:text-neutral-0",
+                    "active:scale-[0.98] cursor-pointer",
+                  )}
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-3 py-4">
+                <div className="flex min-h-full flex-col">{navContent}</div>
+              </div>
+            </nav>
+          </aside>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      {/* Modals for the two tasks */}
       <FeedbackBugModal
         open={feedbackOpen}
         onClose={() => setFeedbackOpen(false)}
@@ -1016,19 +1213,14 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
           type="button"
           aria-label="Close sidebar"
           onClick={toggleCollapsed}
-          className={clsx(
-            "fixed inset-0 z-40",
-            "bg-black/40 backdrop-blur-[1px]",
-          )}
+          className={clsx("fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]")}
         />
       )}
 
       <div
         className={clsx(
           isOverlayPinned ? "fixed left-0 top-0 z-50 h-dvh" : "relative h-full",
-          "shrink-0",
-          "will-change-[width]",
-          "transition-[width]",
+          "shrink-0 will-change-[width] transition-[width]",
           motion.shellWidth,
           EASE_OUT,
           "motion-reduce:transition-none",
@@ -1042,11 +1234,10 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
             collapsed ? "px-2 py-4" : "px-3 py-4",
           )}
         >
-          {/* Top / Logo */}
-          <div className={clsx("relative flex items-center px-2")}>
+          <div className="relative flex items-center px-2">
             <Link
               href="/dashboard"
-              className={clsx("flex items-center h-10", collapsed && "mx-auto")}
+              className={clsx("flex h-10 items-center", collapsed && "mx-auto")}
             >
               <div
                 className={clsx(
@@ -1065,7 +1256,6 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
               </div>
             </Link>
 
-            {/* Collapse / Expand toggle */}
             <button
               type="button"
               onClick={toggleCollapsed}
@@ -1092,70 +1282,9 @@ export default function Sidebar({ variant = "dashboard" }: SidebarProps) {
             </button>
           </div>
 
-          <Divider collapsed={collapsed} />
+          <Divider collapsed={effectiveCollapsed} />
 
-          {/* Dashboard sidebar */}
-          <div className={clsx("space-y-2")}>
-            {DASH_ITEMS.map((item) => (
-              <NavRow
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                Icon={item.icon}
-                active={item.match(pathname)}
-                collapsed={collapsed}
-                motion={motion}
-              />
-            ))}
-            <NavRow
-              href={DASH_FOOTER.href}
-              label={DASH_FOOTER.label}
-              Icon={DASH_FOOTER.icon}
-              active={DASH_FOOTER.match(pathname)}
-              collapsed={collapsed}
-              motion={motion}
-            />
-          </div>
-
-          <Divider collapsed={collapsed} />
-
-          <div className={clsx("space-y-2")}>
-            {DASH_COMING_SOON.map((x) => (
-              <NavRow
-                key={x.label}
-                label={x.label}
-                Icon={x.icon}
-                collapsed={collapsed}
-                disabled
-                motion={motion}
-              />
-            ))}
-          </div>
-
-          <Divider collapsed={collapsed} />
-
-          {/* Bottom actions */}
-          <div
-            className={clsx(
-              "mt-auto pb-1 space-y-2",
-              collapsed ? "px-0" : "px-2",
-            )}
-          >
-            <NavRow
-              label="Give Feedback"
-              Icon={FeedbackIcon}
-              collapsed={collapsed}
-              motion={motion}
-              onClick={() => setFeedbackOpen(true)}
-            />
-            <NavRow
-              label="Report Bug"
-              Icon={ReportBugIcon}
-              collapsed={collapsed}
-              motion={motion}
-              onClick={() => setBugOpen(true)}
-            />
-          </div>
+          {navContent}
         </nav>
       </div>
     </>

@@ -1,3 +1,4 @@
+// src\models\TrackingLink.ts
 import { Schema, model, models, Document, Types } from "mongoose";
 
 export type TrackingDestinationKind = "Event" | "Organization";

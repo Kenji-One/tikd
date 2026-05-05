@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/*  src/components/dashboard/data/RecentActivityStrip.tsx              */
+/*  src/components/dashboard/data/RecentActivityStrip.tsx             */
 /* ------------------------------------------------------------------ */
 "use client";
 
@@ -68,18 +68,22 @@ const ITEMS: Item[] = [
 function lower(u?: string) {
   return (u || "").toLowerCase().trim();
 }
+
 function isPdfFile(url?: string) {
   const u = lower(url);
   return u.endsWith(".pdf") || u.includes(".pdf?");
 }
+
 function isCsvFile(url?: string) {
   const u = lower(url);
   return u.endsWith(".csv") || u.includes(".csv?");
 }
+
 function isDocxFile(url?: string) {
   const u = lower(url);
   return u.endsWith(".docx") || u.includes(".docx?");
 }
+
 function isImageFile(url?: string) {
   const u = lower(url);
   return (
@@ -186,7 +190,7 @@ function FilePreview({ item }: { item: Item }) {
             src={src}
             alt=""
             fill
-            sizes="240px"
+            sizes="(max-width: 640px) 82vw, 240px"
             className="object-cover"
             unoptimized
           />
@@ -200,7 +204,6 @@ function FilePreview({ item }: { item: Item }) {
 
 /* ------------------------------ CSV Preview ------------------------------ */
 function parseCsv(text: string) {
-  // Lightweight CSV parser (handles commas, quotes minimally; good enough for dummy files)
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   const rows: string[][] = [];
 
@@ -215,7 +218,6 @@ function parseCsv(text: string) {
       const ch = line[i];
 
       if (ch === '"') {
-        // double quote inside quotes -> literal quote
         if (inQuotes && line[i + 1] === '"') {
           cur += '"';
           i++;
@@ -233,6 +235,7 @@ function parseCsv(text: string) {
 
       cur += ch;
     }
+
     out.push(cur);
     rows.push(out.map((c) => c.trim()));
   }
@@ -282,7 +285,6 @@ function PreviewModal({
 
   useEffect(() => {
     if (!open) return;
-    // lock scroll
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -293,7 +295,6 @@ function PreviewModal({
   useEffect(() => {
     if (!open || !item) return;
 
-    // reset
     setCsvRows(null);
     setCsvError(null);
     setDocxError(null);
@@ -307,7 +308,6 @@ function PreviewModal({
           const text = await res.text();
           const parsed = parseCsv(text);
 
-          // keep it readable in a modal: cap rows/cols
           const maxRows = 50;
           const maxCols = 12;
 
@@ -325,8 +325,6 @@ function PreviewModal({
 
     if (isDocx) {
       (async () => {
-        // For local dummy stage, we can render docx with docx-preview
-        // Install once: npm i docx-preview
         try {
           setDocxLoading(true);
 
@@ -340,7 +338,6 @@ function PreviewModal({
 
           const buf = await res.arrayBuffer();
 
-          // dynamic import so SSR doesn't choke
           const mod = (await import(
             "docx-preview"
           )) as unknown as DocxPreviewModule;
@@ -363,7 +360,6 @@ function PreviewModal({
           );
         }
       })();
-      return;
     }
   }, [open, item, isCsv, isDocx]);
 
@@ -380,20 +376,28 @@ function PreviewModal({
       aria-modal="true"
       aria-label="File preview"
       onMouseDown={(e) => {
-        // click outside closes
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      <div className="relative mx-auto mt-10 w-[min(980px,calc(100%-32px))] overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 shadow-[0_30px_90px_rgba(0,0,0,0.75)]">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-700 px-4 py-3">
-          <div className="min-w-0">
+      <div className="relative mx-auto mt-2 flex max-h-[calc(100dvh-16px)] w-[calc(100%-16px)] flex-col overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 shadow-[0_30px_90px_rgba(0,0,0,0.75)] sm:mt-10 sm:w-[min(980px,calc(100%-32px))] sm:max-h-[90vh]">
+        <div className="relative border-b border-neutral-700 px-3 py-3 sm:px-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 grid h-9 w-9 place-items-center text-neutral-200 hover:text-neutral-0"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+
+          <div className="min-w-0 pr-10">
             <div className="truncate text-sm font-semibold text-neutral-0">
               {item.title}
             </div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-neutral-300">
+
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-300">
               <span className="rounded-full border border-white/10 bg-neutral-900/40 px-2 py-0.5">
                 {isPdf
                   ? "PDF"
@@ -405,6 +409,7 @@ function PreviewModal({
                         ? "IMAGE"
                         : item.kind.toUpperCase()}
               </span>
+
               <button
                 type="button"
                 onClick={openInNewTab}
@@ -413,6 +418,7 @@ function PreviewModal({
                 <ExternalLink className="h-3.5 w-3.5" />
                 Open
               </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -425,24 +431,14 @@ function PreviewModal({
               </button>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-9 w-9 place-items-center text-neutral-200 hover:text-neutral-0"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
-        {/* Body */}
-        <div className="max-h-[72vh] overflow-auto bg-neutral-950/30 p-4">
+        <div className="min-h-0 flex-1 overflow-auto bg-neutral-950/30 p-3 sm:p-4">
           {isPdf && (
             <div className="overflow-hidden rounded-lg border border-neutral-700 bg-neutral-0">
               <iframe
                 src={`${item.fileUrl}#page=1&view=FitH`}
-                className="h-[68vh] w-full"
+                className="h-[58dvh] w-full sm:h-[68vh]"
                 title={item.title}
               />
             </div>
@@ -450,7 +446,7 @@ function PreviewModal({
 
           {isImg && (
             <div className="overflow-hidden rounded-lg border border-neutral-700 bg-neutral-950/30">
-              <div className="relative h-[68vh] w-full">
+              <div className="relative h-[58dvh] w-full sm:h-[68vh]">
                 <Image
                   src={item.thumbUrl || item.fileUrl}
                   alt={item.title}
@@ -471,7 +467,7 @@ function PreviewModal({
                 <div className="p-4 text-sm text-neutral-100">Loading…</div>
               ) : (
                 <div className="overflow-auto">
-                  <table className="w-full border-collapse text-sm">
+                  <table className="w-full border-collapse text-xs sm:text-sm">
                     <tbody>
                       {csvRows.map((r, ri) => (
                         <tr key={ri} className="border-b border-white/10">
@@ -479,7 +475,7 @@ function PreviewModal({
                             <td
                               key={ci}
                               className={clsx(
-                                "whitespace-nowrap px-3 py-2",
+                                "whitespace-nowrap px-2 py-2 sm:px-3",
                                 ri === 0
                                   ? "font-semibold text-neutral-0"
                                   : "text-neutral-100",
@@ -527,9 +523,11 @@ function ThumbCard({
   onOpenPreview: (item: Item) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
-    null,
-  );
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const dotsRef = useRef<HTMLButtonElement | null>(null);
@@ -545,12 +543,13 @@ function ThumbCard({
   const syncMenuPos = useCallback(() => {
     const btn = dotsRef.current;
     if (!btn) return;
+
     const r = btn.getBoundingClientRect();
-    // fixed-position menu, aligned to the 3-dot button
-    const width = 220;
+    const width = Math.min(220, window.innerWidth - 24);
     const left = clamp(r.right - width, 12, window.innerWidth - width - 12);
     const top = clamp(r.bottom + 8, 12, window.innerHeight - 12);
-    setMenuPos({ top, left });
+
+    setMenuPos({ top, left, width });
   }, []);
 
   useEffect(() => {
@@ -588,13 +587,11 @@ function ThumbCard({
     <div
       ref={rootRef}
       className={clsx(
-        // ✅ fills slide width (slide decides sizing)
         "relative w-full rounded-lg border border-neutral-700 bg-neutral-900",
         "shadow-[0_18px_56px_rgba(0,0,0,0.48),inset_0_1px_0_rgba(255,255,255,0.05)]",
       )}
     >
-      <div className="p-3">
-        {/* Keep your sizing/colors; open PREVIEW modal on click */}
+      <div className="p-2.5 sm:p-3">
         <div
           role="button"
           tabIndex={0}
@@ -606,25 +603,21 @@ function ThumbCard({
             }
           }}
           className={clsx(
-            "group relative block w-full rounded-lg border border-neutral-700 text-left",
-            "overflow-hidden",
+            "group relative block w-full overflow-hidden rounded-lg border border-neutral-700 text-left",
           )}
           aria-label={`Preview ${item.title}`}
         >
-          {/* Preview area (KEEP your sizing/colors) */}
-          <div className={clsx("relative h-[121px] bg-neutral-950/35")}>
+          <div className="relative h-[112px] bg-neutral-950/35 sm:h-[121px]">
             <FilePreview item={item} />
 
-            {/* soft wash like Figma */}
             <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
               <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
             </div>
           </div>
 
-          {/* Bottom filename row INSIDE same container (KEEP your styling) */}
-          <div className="relative flex items-center justify-between bg-[#ececec] p-2 pt-3 rounded-b-lg border border-neutral-700 border-t-0">
+          <div className="relative flex items-center justify-between rounded-b-lg border border-neutral-700 border-t-0 bg-[#ececec] p-2 pt-3">
             <div className="flex min-w-0 items-center gap-2">
-              <FileText className="h-4 w-4 text-[#595959]" />
+              <FileText className="h-4 w-4 shrink-0 text-[#595959]" />
               <span className="truncate text-xs text-[#5d5d5d]">
                 {item.title}
               </span>
@@ -639,7 +632,7 @@ function ThumbCard({
                 setMenuOpen((v) => !v);
               }}
               className={clsx(
-                "relative grid h-4 w-4 place-items-center text-[#595959] transition",
+                "relative grid h-4 w-4 shrink-0 place-items-center text-[#595959] transition",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-951/35",
               )}
               aria-label="Options"
@@ -649,14 +642,17 @@ function ThumbCard({
           </div>
         </div>
 
-        {/* ✅ fixed-position menu so it never gets clipped by overflow-hidden */}
         {menuOpen && menuPos && (
           <div
             className={clsx(
-              "fixed z-[95] w-[220px] overflow-hidden rounded-lg border border-neutral-700 bg-black",
+              "fixed z-[95] overflow-hidden rounded-lg border border-neutral-700 bg-black",
               "shadow-[0_22px_70px_rgba(0,0,0,0.6)]",
             )}
-            style={{ top: menuPos.top, left: menuPos.left }}
+            style={{
+              top: menuPos.top,
+              left: menuPos.left,
+              width: menuPos.width,
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -742,7 +738,6 @@ export default function RecentActivityStrip() {
     if (!slide) return;
     const w = slide.getBoundingClientRect().width;
     if (!Number.isFinite(w) || w <= 0) return;
-    // + gap-4 (16px)
     setStep(Math.round(w + 16));
   }, []);
 
@@ -781,13 +776,12 @@ export default function RecentActivityStrip() {
 
   return (
     <section>
-      <div className="flex items-center justify-between">
-        <h2 className="text-[22px] font-semibold tracking-[-0.55px] text-neutral-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-[20px] font-semibold tracking-[-0.55px] text-neutral-0 sm:text-[22px]">
           Recent Activity
         </h2>
 
-        {/* ✅ arrows: ICON ONLY (no bg, no border) */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             type="button"
             onClick={() => scrollByDir("left")}
@@ -798,7 +792,7 @@ export default function RecentActivityStrip() {
             )}
             aria-label="Scroll left"
           >
-            <ChevronLeft className="h-6 w-6" />
+            <ChevronLeft className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
 
           <button
@@ -811,7 +805,7 @@ export default function RecentActivityStrip() {
             )}
             aria-label="Scroll right"
           >
-            <ChevronRight className="h-6 w-6" />
+            <ChevronRight className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
         </div>
       </div>
@@ -829,10 +823,10 @@ export default function RecentActivityStrip() {
             ref={idx === 0 ? firstSlideRef : undefined}
             className={clsx(
               "snap-start shrink-0",
-              // ✅ 5 slides fill the strip width on wide screens
-              // gap-4 => 4 gaps visible between 5 slides => 64px total
-              // Use min-w-[216px] as your floor; otherwise it expands.
-              "w-[calc((100%-64px)/5)] min-w-[216px]",
+              "w-[82vw] max-w-[280px]",
+              "sm:w-[calc((100%-16px)/2)] sm:max-w-none",
+              "lg:w-[calc((100%-32px)/3)]",
+              "2xl:w-[calc((100%-64px)/5)]",
             )}
           >
             <ThumbCard item={it} onOpenPreview={openPreview} />

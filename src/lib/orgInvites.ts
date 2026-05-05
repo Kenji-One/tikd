@@ -270,7 +270,7 @@ export async function sendOrganizationInviteEmail(input: {
 
     await sendMail({
       to: input.to,
-      subject: `You’ve been invited to join ${input.organizationName} on Tikd`,
+      subject: `You’ve been invited to join ${input.organizationName} on Tixsy`,
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
           <h2 style="margin:0 0 12px">Organization invitation</h2>
@@ -280,7 +280,7 @@ export async function sendOrganizationInviteEmail(input: {
                 ? `<strong>${safeInviterName}</strong> has`
                 : "You’ve"
             } invited you to join
-            <strong>${safeOrganizationName}</strong> on Tikd.
+            <strong>${safeOrganizationName}</strong> on Tixsy.
           </p>
           <p style="margin:0 0 12px">
             Assigned role: <strong>${safeRoleName}</strong>

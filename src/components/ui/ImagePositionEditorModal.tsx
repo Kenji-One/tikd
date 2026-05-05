@@ -341,40 +341,25 @@ export default function ImagePositionEditorModal({
     setOffset(clampOffset(nextOffset, nextZoom));
   }
 
-  function getCropBoxPx(): Box | null {
-    if (vpSize.w <= 0 || vpSize.h <= 0) return null;
-
-    // Banner + poster use full viewport.
-    if (mode === "banner" || mode === "poster") {
-      return { x: 0, y: 0, w: vpSize.w, h: vpSize.h };
-    }
-
-    // Logo: match the visual mask (72% of the viewport), centered.
-    const MASK = 0.72;
-    const size = Math.min(vpSize.w, vpSize.h) * MASK;
-
-    return {
-      x: (vpSize.w - size) / 2,
-      y: (vpSize.h - size) / 2,
-      w: size,
-      h: size,
-    };
-  }
-
-  function computeCrop(): {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  } | null {
+  const crop = useMemo(() => {
     if (!imgSize) return null;
     if (vpSize.w <= 0 || vpSize.h <= 0) return null;
 
-    const s = getScale(zoom);
-    if (!s || s <= 0) return null;
+    const s = Math.max(vpSize.w / imgSize.w, vpSize.h / imgSize.h) * zoom;
+    if (!Number.isFinite(s) || s <= 0) return null;
 
-    const box = getCropBoxPx();
-    if (!box) return null;
+    const box: Box =
+      mode === "banner" || mode === "poster"
+        ? { x: 0, y: 0, w: vpSize.w, h: vpSize.h }
+        : (() => {
+            const size = Math.min(vpSize.w, vpSize.h) * 0.72;
+            return {
+              x: (vpSize.w - size) / 2,
+              y: (vpSize.h - size) / 2,
+              w: size,
+              h: size,
+            };
+          })();
 
     // imageCoord = (viewportCoord - offset) / scale
     const cropX = (box.x - offset.x) / s;
@@ -386,21 +371,7 @@ export default function ImagePositionEditorModal({
     const y = Math.max(0, Math.min(imgSize.h - cropH, cropY));
 
     return { x, y, w: cropW, h: cropH };
-  }
-
-  const crop = useMemo(
-    () => computeCrop(),
-    [
-      mode,
-      zoom,
-      offset.x,
-      offset.y,
-      imgSize?.w,
-      imgSize?.h,
-      vpSize.w,
-      vpSize.h,
-    ],
-  );
+  }, [mode, zoom, offset.x, offset.y, imgSize, vpSize.w, vpSize.h]);
 
   const cropUrl = useMemo(() => {
     if (!crop) return assetSrc;
@@ -545,7 +516,6 @@ export default function ImagePositionEditorModal({
                     willChange: "transform",
                   }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={assetSrc}
                     alt=""
@@ -623,7 +593,6 @@ export default function ImagePositionEditorModal({
                         className="absolute left-0 top-0"
                         style={{ ...previewTransform, willChange: "transform" }}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={assetSrc}
                           alt=""
@@ -640,7 +609,6 @@ export default function ImagePositionEditorModal({
                         />
                       </div>
                     ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={assetSrc}
                         alt=""
@@ -659,7 +627,6 @@ export default function ImagePositionEditorModal({
                         className="absolute left-0 top-0"
                         style={{ ...previewTransform, willChange: "transform" }}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={assetSrc}
                           alt=""
@@ -676,7 +643,6 @@ export default function ImagePositionEditorModal({
                         />
                       </div>
                     ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={assetSrc}
                         alt=""
@@ -697,7 +663,6 @@ export default function ImagePositionEditorModal({
                         className="absolute left-0 top-0"
                         style={{ ...previewTransform, willChange: "transform" }}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={assetSrc}
                           alt=""
@@ -714,7 +679,6 @@ export default function ImagePositionEditorModal({
                         />
                       </div>
                     ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={assetSrc}
                         alt=""

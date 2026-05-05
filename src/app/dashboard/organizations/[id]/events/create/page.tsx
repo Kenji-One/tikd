@@ -872,7 +872,8 @@ export default function NewEventPage() {
   const categories = watchArr("categories", [] as unknown as string[]);
   const toggleCat = (c: string) => {
     const set = new Set(categories as string[]);
-    set.has(c) ? set.delete(c) : set.add(c);
+    if (set.has(c)) set.delete(c);
+    else set.add(c);
     setValue("categories", Array.from(set), { shouldDirty: true });
   };
 

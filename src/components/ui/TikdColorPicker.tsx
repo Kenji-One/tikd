@@ -4,6 +4,7 @@
 "use client";
 
 import React, {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -202,10 +203,10 @@ export default function TikdColorPicker({
 
   const [openInternal, setOpenInternal] = useState(false);
   const isOpen = openProp ?? openInternal;
-  const setOpen = (next: boolean) => {
+  const setOpen = useCallback((next: boolean) => {
     if (onOpenChange) onOpenChange(next);
     else setOpenInternal(next);
-  };
+  }, [onOpenChange]);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -388,7 +389,7 @@ export default function TikdColorPicker({
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("scroll", onScroll, true);
     };
-  }, [isOpen]);
+  }, [isOpen, setOpen]);
 
   function onPreviewPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     e.preventDefault();

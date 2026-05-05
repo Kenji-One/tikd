@@ -51,7 +51,6 @@ export default function TicketCard({
       <div className="relative overflow-hidden text-neutral-950">
         {/* Poster */}
         <div className="relative h-[123px] w-full overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={img}
             alt={title}

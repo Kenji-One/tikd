@@ -146,9 +146,8 @@ export default function MyTicketsPage() {
     staleTime: 15_000,
   });
 
-  const ticketsList = tickets ?? [];
-
   const filtered = useMemo(() => {
+    const ticketsList = tickets ?? [];
     const needle = q.trim().toLowerCase();
     if (!needle) return ticketsList;
 
@@ -167,7 +166,7 @@ export default function MyTicketsPage() {
         type.includes(needle)
       );
     });
-  }, [q, ticketsList]);
+  }, [q, tickets]);
 
   const countLabel = useMemo(() => {
     const n = filtered.length;

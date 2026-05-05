@@ -52,13 +52,6 @@ const FILTER_LABEL: Record<Filter, string> = {
   friend: "Friends",
 };
 
-const ITEM_LABEL: Record<ItemType, string> = {
-  event: "Events",
-  org: "Organizations",
-  team: "Teams",
-  friend: "Friends",
-};
-
 /* ────────────────────────────────────────────────────────────────
    Helpers
    ──────────────────────────────────────────────────────────────── */
@@ -775,7 +768,6 @@ export default function SearchModal({
                               )}
                             >
                               {item.image ? (
-                                // eslint-disable-next-line @next/next/no-img-element
                                 <img
                                   src={item.image}
                                   alt=""
@@ -835,7 +827,6 @@ export default function SearchModal({
                             )}
                           >
                             {item.image ? (
-                              // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={item.image}
                                 alt=""

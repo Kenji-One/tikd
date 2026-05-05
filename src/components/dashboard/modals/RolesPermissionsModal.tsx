@@ -573,7 +573,7 @@ export default function RolesPermissionsModal({
     staleTime: 15_000,
   });
 
-  const roles = rolesQuery.data ?? [];
+  const roles = useMemo(() => rolesQuery.data ?? [], [rolesQuery.data]);
 
   /* ---------------------- Display-only Owner role ---------------------- */
   const OWNER_PSEUDO_ID = "__owner__";

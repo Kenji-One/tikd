@@ -273,7 +273,7 @@ export default function FinancesTicketsSoldDetailedPage() {
 
   const analytics = analyticsQuery.data;
 
-  const chartSeries = analytics?.series ?? [];
+  const chartSeries = useMemo(() => analytics?.series ?? [], [analytics?.series]);
   const chartLabels = useMemo(() => buildXAxisLabels(analytics), [analytics]);
   const chartDates = useMemo(
     () => chartSeries.map((item) => new Date(item.date)),

@@ -97,7 +97,6 @@ const TrackingAttributionSessionSchema =
       expiresAt: {
         type: Date,
         required: true,
-        index: true,
       },
     },
     { timestamps: true, strict: true },

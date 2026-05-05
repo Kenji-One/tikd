@@ -11,7 +11,6 @@ import {
   FaYoutube,
   FaTelegram,
 } from "react-icons/fa";
-import { ChevronDown } from "lucide-react";
 
 const socialIcons = [
   { href: "https://discord.com", icon: <FaDiscord />, label: "Discord" },
@@ -78,66 +77,6 @@ function NavColumn({ title, links }: LinkGroup) {
         ))}
       </ul>
     </nav>
-  );
-}
-
-/** Branded select with hidden native/plug-in arrow */
-function SelectControl({
-  id,
-  options,
-  defaultValue,
-  ariaLabel,
-}: {
-  id: string;
-  options: { value: string; label: string }[];
-  defaultValue: string;
-  ariaLabel: string;
-}) {
-  return (
-    <div className="relative w-full">
-      <label htmlFor={id} className="sr-only">
-        {ariaLabel}
-      </label>
-      <select
-        id={id}
-        defaultValue={defaultValue}
-        className={[
-          // layout
-          "w-full rounded-2xl px-4 py-3 pr-10",
-          // hide native + plugin arrow
-          "appearance-none [-webkit-appearance:none] [-moz-appearance:none] !bg-none [background-image:none]",
-          // surface
-          "bg-neutral-900/80 text-neutral-200",
-          // borders
-          "border border-white/10 hover:border-white/20",
-          // focus brand
-          "focus-visible:outline-none focus-visible:border-primary-700 focus-visible:ring-4 focus-visible:ring-primary-700/25",
-          "transition-colors",
-        ].join(" ")}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-
-      {/* our only chevron */}
-      <svg
-        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden
-      >
-        <path
-          d="M6 9l6 6 6-6"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
   );
 }
 

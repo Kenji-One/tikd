@@ -257,6 +257,8 @@ function OrderStatusPill({
       "bg-primary-900/20 text-primary-200 ring-primary-700/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
     cancelled:
       "bg-red-500/10 text-red-200 ring-red-500/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+    expired:
+      "bg-neutral-800/40 text-neutral-300 ring-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
   };
 
   return (
@@ -1042,7 +1044,7 @@ export default function GuestsPage() {
     },
   });
 
-  const guests = guestsQ.data ?? [];
+  const guests = useMemo(() => guestsQ.data ?? [], [guestsQ.data]);
 
   const orderRows = useMemo<OrderInfoRow[]>(() => {
     return (eventOrdersQ.data ?? []).map((sale) => ({

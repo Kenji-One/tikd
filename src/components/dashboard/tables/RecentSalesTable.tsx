@@ -284,7 +284,10 @@ export default function RecentSalesTable({
     staleTime: 30_000,
   });
 
-  const baseRows = rows ?? liveQuery.data?.rows ?? [];
+  const baseRows = useMemo(
+    () => rows ?? liveQuery.data?.rows ?? [],
+    [rows, liveQuery.data?.rows],
+  );
   const isLoading = loading ?? liveQuery.isLoading;
   const errorMessage =
     error ??

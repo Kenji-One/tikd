@@ -46,10 +46,6 @@ function clampToDay(d: Date) {
   return x;
 }
 
-function daysInMonth(year: number, month0: number) {
-  return new Date(year, month0 + 1, 0).getDate();
-}
-
 function addDays(d: Date, delta: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + delta);

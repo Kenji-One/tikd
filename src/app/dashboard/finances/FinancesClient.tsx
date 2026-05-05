@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 import clsx from "clsx";
 import { useQuery } from "@tanstack/react-query";

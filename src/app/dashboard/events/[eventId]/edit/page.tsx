@@ -872,7 +872,7 @@ export default function EditEventPage() {
   const selectedOrgImage = (orgInfo?.logo || orgInfo?.image || "").trim();
 
   /* ---------- Load organization members (kept for parity) ---------- */
-  const [members, setMembers] = useState<OrgMember[]>([]);
+  const [, setMembers] = useState<OrgMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
 
   useEffect(() => {

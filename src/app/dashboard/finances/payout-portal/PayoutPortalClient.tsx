@@ -68,10 +68,6 @@ function clampToDay(d: Date) {
   return x;
 }
 
-function sameDay(a: Date, b: Date) {
-  return clampToDay(a).getTime() === clampToDay(b).getTime();
-}
-
 function inDayRange(d: Date, start: Date, end: Date) {
   const t = clampToDay(d).getTime();
   const a = clampToDay(start).getTime();

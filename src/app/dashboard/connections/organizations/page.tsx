@@ -34,23 +34,6 @@ type Org = {
   website?: string;
 };
 
-type MyEvent = {
-  _id: string;
-  title: string;
-  image?: string;
-  date: string; // ISO string
-  location: string;
-  category?: string;
-  status?: "draft" | "published";
-  pinned?: boolean;
-
-  revenue?: number;
-  revenueTotal?: number;
-  grossRevenue?: number;
-  ticketsSold?: number;
-  sold?: number;
-};
-
 /* ---------------------------- Helpers ------------------------------ */
 async function fetchJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -90,11 +73,6 @@ function joinLabel(iso?: string) {
   }
 }
 
-function revenueOf(e: MyEvent) {
-  const raw = e.revenue ?? e.revenueTotal ?? e.grossRevenue ?? 0;
-  return typeof raw === "number" ? raw : 0;
-}
-
 /* ----------------------------- Page -------------------------------- */
 export default function DashboardOrganizationsPage() {
   const { data: session } = useSession();
@@ -105,19 +83,7 @@ export default function DashboardOrganizationsPage() {
     enabled: !!session,
   });
 
-  const { data: allEvents } = useQuery<MyEvent[]>({
-    queryKey: ["myEvents", "connections-organizations"],
-    queryFn: () => fetchJSON<MyEvent[]>("/api/events?owned=1"),
-    enabled: !!session,
-  });
-
   const orgsList = useMemo<Org[]>(() => orgs ?? [], [orgs]);
-  const events = useMemo<MyEvent[]>(() => allEvents ?? [], [allEvents]);
-
-  const totalOrgRevenue = useMemo(() => {
-    const published = events.filter((e) => e.status !== "draft");
-    return published.reduce((acc, e) => acc + revenueOf(e), 0);
-  }, [events]);
 
   return (
     <div className="relative overflow-hidden bg-neutral-950 text-neutral-0">

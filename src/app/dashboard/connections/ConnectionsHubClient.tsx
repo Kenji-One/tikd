@@ -164,11 +164,6 @@ function titleForTab(t: TabKey) {
   }
 }
 
-function subtitleForTab(t: TabKey) {
-  if (t === "friends") return "Manage your friends and contacts";
-  return "";
-}
-
 function actionForTab(t: TabKey) {
   switch (t) {
     case "organizations":
@@ -423,7 +418,6 @@ function FriendsCard({
                 "bg-white/5 ring-1 ring-white/10"
               )}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               {friend.avatarUrl ? (
                 <img
                   src={friend.avatarUrl}
@@ -523,7 +517,6 @@ function FriendsRow({ friend }: { friend: Friend }) {
       <div className="flex min-w-0 items-center gap-3">
         <div className="relative">
           <div className="h-10 w-10 overflow-hidden rounded-[10px] bg-white/5 ring-1 ring-white/10">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             {friend.avatarUrl ? (
               <img
                 src={friend.avatarUrl}

@@ -150,8 +150,6 @@ function TicketTypeWizard({
   const logoUrl = watch("logoUrl");
   const backgroundUrl = watch("backgroundUrl");
 
-  const PRICE_STEP = 0.5;
-
   const handlePriceStep = (delta: number) => {
     const current = Number.isFinite(price as number) ? Number(price) : 0;
     let next = current + delta;

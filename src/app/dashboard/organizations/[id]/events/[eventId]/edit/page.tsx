@@ -405,7 +405,8 @@ export default function EditEventPage() {
   const categories = watch("categories") ?? [];
   const toggleCat = (c: string) => {
     const set = new Set(categories);
-    set.has(c) ? set.delete(c) : set.add(c);
+    if (set.has(c)) set.delete(c);
+    else set.add(c);
     setValue("categories", Array.from(set), { shouldDirty: true });
   };
 

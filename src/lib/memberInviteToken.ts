@@ -15,16 +15,14 @@ import { z } from "zod";
 export const InviteScopeZ = z.enum(["team", "event"]);
 export type InviteScope = z.infer<typeof InviteScopeZ>;
 
-const InviteTokenPayloadZ = z.object({
-  scope: InviteScopeZ,
-  resourceId: z.string().min(1),
-  membershipId: z.string().min(1),
-  email: z.string().email(),
-  iat: z.number().int().positive(),
-  exp: z.number().int().positive(),
-});
-
-export type InviteTokenPayload = z.infer<typeof InviteTokenPayloadZ>;
+export type InviteTokenPayload = {
+  scope: InviteScope;
+  resourceId: string;
+  membershipId: string;
+  email: string;
+  iat: number;
+  exp: number;
+};
 
 type CreateInviteTokenInput = {
   scope: InviteScope;

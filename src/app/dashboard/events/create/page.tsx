@@ -38,12 +38,6 @@ import PlacesAddressInput from "@/components/ui/PlacesAddressInput";
 
 /* ----------------------------- Types ------------------------------ */
 
-type OrgMember = {
-  _id: string;
-  name: string;
-  email: string;
-};
-
 type OrgInfo = {
   _id: string;
   name?: string;
@@ -460,22 +454,6 @@ export default function NewEventPage() {
     orgInfo?.name || orgInfo?.title || orgInfo?.organizationName || "";
   const selectedOrgImage = (orgInfo?.logo || orgInfo?.image || "").trim();
 
-  /* ---------- Load organization members for promoters ------------- */
-  const [members, setMembers] = useState<OrgMember[]>([]);
-  const [membersLoading, setMembersLoading] = useState(false);
-
-  useEffect(() => {
-    if (!orgIdFromRoute) return;
-    setMembersLoading(true);
-    fetch(`/api/organizations/${orgIdFromRoute}/members`)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data: OrgMember[]) => {
-        setMembers(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setMembers([]))
-      .finally(() => setMembersLoading(false));
-  }, [orgIdFromRoute]);
-
   /* ---------- Field arrays (artists) ------------------------------ */
   const {
     fields: artistFields,
@@ -601,17 +579,9 @@ export default function NewEventPage() {
   const categories = watchArr("categories", [] as unknown as string[]);
   const toggleCat = (c: string) => {
     const set = new Set(categories as string[]);
-    set.has(c) ? set.delete(c) : set.add(c);
+    if (set.has(c)) set.delete(c);
+    else set.add(c);
     setValue("categories", Array.from(set), { shouldDirty: true });
-  };
-
-  /* ---------- Promoters chips ------------------------------------- */
-  const promoters = watchArr("promoters", [] as unknown as string[]);
-  const togglePromoter = (email: string) => {
-    const set = new Set(promoters as string[]);
-    if (set.has(email)) set.delete(email);
-    else set.add(email);
-    setValue("promoters", Array.from(set), { shouldDirty: true });
   };
 
   const hasErrors = Object.keys(errors).length > 0;

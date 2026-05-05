@@ -265,7 +265,6 @@ function RevenueChart({
   valueSuffix = "K",
   showDateInTooltip = true,
   tooltipDateMode = "full",
-  tooltipVariant = "primary",
   gradientId,
 }: Props) {
   const [isMobile, setIsMobile] = useState(false);

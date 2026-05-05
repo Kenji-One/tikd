@@ -760,7 +760,6 @@ function EventInfoTooltip({ ev }: { ev: MyEvent }) {
                   )}
                 >
                   {orgLogo ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={orgLogo}
                       alt=""
@@ -1073,7 +1072,6 @@ function OrgPickerModal({
                                   )}
                                 >
                                   {org.logo ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
                                     <img
                                       src={org.logo}
                                       alt=""
@@ -1371,7 +1369,6 @@ function EventRowCard({
     >
       <div className="flex min-w-0 items-start gap-3 md:items-center">
         <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[12px] bg-white/5 ring-1 ring-white/10 md:h-11 md:w-11">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={rowImg}
             alt=""
@@ -1596,7 +1593,10 @@ export default function DashboardEventsPage() {
     refetchOnWindowFocus: true,
   });
 
-  const liveStatsMap = liveStatsQuery.data ?? {};
+  const liveStatsMap = useMemo(
+    () => liveStatsQuery.data ?? {},
+    [liveStatsQuery.data],
+  );
 
   const eventsWithLiveStats = useMemo<MyEvent[]>(() => {
     return events.map((event) => {
@@ -2040,7 +2040,6 @@ export default function DashboardEventsPage() {
                           <div className="relative z-10 flex flex-col gap-3 p-4 md:flex-row md:items-center md:gap-4 md:p-4">
                             <div className="flex min-w-0 items-start gap-3 md:items-center">
                               <div className="h-[58px] w-[58px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 md:h-[54px] md:w-[54px] md:rounded-lg">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={rowImg}
                                   alt=""
@@ -2185,7 +2184,6 @@ export default function DashboardEventsPage() {
                           <div className="relative z-10 flex flex-col gap-3 p-4 md:flex-row md:items-center md:gap-4 md:p-4">
                             <div className="flex min-w-0 items-start gap-3 md:items-center">
                               <div className="h-[58px] w-[58px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-neutral-900 md:h-[54px] md:w-[54px] md:rounded-lg">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={rowImg}
                                   alt=""

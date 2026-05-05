@@ -211,7 +211,6 @@ export function RoleBadge({ meta }: { meta: RoleBadgeMeta }) {
       : "rgba(245,245,245,0.95)";
 
   const iconNode = meta.iconUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={meta.iconUrl}
       alt=""
@@ -315,7 +314,6 @@ export default function ConnectionProfileCard({
   const Banner = (
     <div className="relative h-[112px] w-full overflow-hidden rounded-t-[12px]">
       {bannerUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={bannerUrl}
           alt=""
@@ -372,7 +370,6 @@ export default function ConnectionProfileCard({
         />
 
         {iconUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={iconUrl}
             alt=""

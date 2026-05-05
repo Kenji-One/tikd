@@ -632,7 +632,7 @@ export default function UpcomingEventsTable() {
     placeholderData: keepPreviousData,
   });
 
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
 
   const liveStatsQuery = useQuery({
     queryKey: [
@@ -646,7 +646,10 @@ export default function UpcomingEventsTable() {
     refetchOnWindowFocus: true,
   });
 
-  const liveStatsMap = liveStatsQuery.data ?? {};
+  const liveStatsMap = useMemo(
+    () => liveStatsQuery.data ?? {},
+    [liveStatsQuery.data],
+  );
 
   const enrichedRows = useMemo<Row[]>(() => {
     return rows.map((row) => {

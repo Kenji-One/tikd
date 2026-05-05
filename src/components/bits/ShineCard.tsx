@@ -22,7 +22,6 @@ export default function ShineCard({
   surfaceClassName,
   borderWidth = 1,
   enableGrid = true,
-  hoverLift = false, // ignored (no movement)
   ringSpin = false,
 }: PropsWithChildren<{
   className?: string;

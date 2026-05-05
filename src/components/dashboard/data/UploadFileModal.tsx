@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { X, File as FileIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -78,9 +78,9 @@ export default function UploadFileModal({
     if (!open) resetState();
   }, [open]);
 
-  function close() {
+  const close = useCallback(() => {
     onOpenChange(false);
-  }
+  }, [onOpenChange]);
 
   function pickFile() {
     fileInputRef.current?.click();
@@ -138,7 +138,7 @@ export default function UploadFileModal({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, close]);
 
   if (!open) return null;
 

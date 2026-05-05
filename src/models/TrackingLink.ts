@@ -91,7 +91,6 @@ const TrackingLinkSchema = new Schema<ITrackingLink>(
       minlength: 4,
       maxlength: 64,
       match: [/^[A-Za-z0-9_-]+$/, "Invalid tracking code"],
-      index: true,
     },
 
     path: {

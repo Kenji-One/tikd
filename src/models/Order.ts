@@ -358,7 +358,6 @@ const OrderSchema = new Schema<IOrder>(
       type: String,
       default: "",
       trim: true,
-      index: true,
     },
 
     checkoutSessionId: {

@@ -136,7 +136,7 @@ type OrgMemberLean = {
   email: string;
   userId?: Types.ObjectId | null;
   name?: string;
-  role: TeamRole;
+  role: OrgRoleKey;
   roleId?: Types.ObjectId | null;
   status: MemberStatus;
   temporaryAccess: boolean;
@@ -456,7 +456,6 @@ async function getAuthorizedEventDocs(input: {
   return merged;
 }
 
-function pickPrimaryScope(scopes: ScopeRecord): never;
 function pickPrimaryScope(scopes: ScopeRecord[]): ScopeRecord {
   return [...scopes].sort((a, b) => {
     const statusDiff = statusPriority(a.status) - statusPriority(b.status);

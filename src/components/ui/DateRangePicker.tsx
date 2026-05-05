@@ -1,7 +1,7 @@
 // src/components/ui/DateRangePicker.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import {
   Calendar as CalendarIcon,
@@ -253,7 +253,7 @@ export default function DateRangePicker({
   const isControlled = typeof openProp === "boolean";
   const open = isControlled ? (openProp as boolean) : openInternal;
 
-  const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
+  const setOpen = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
     const resolved =
       typeof next === "function"
         ? (next as (p: boolean) => boolean)(open)
@@ -261,13 +261,13 @@ export default function DateRangePicker({
 
     if (!isControlled) setOpenInternal(resolved);
     onOpenChange?.(resolved);
-  };
+  }, [isControlled, onOpenChange, open]);
 
-  const closePicker = () => {
+  const closePicker = useCallback(() => {
     setOpen(false);
     setMonthOpen(false);
     setYearOpen(false);
-  };
+  }, [setOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -299,7 +299,7 @@ export default function DateRangePicker({
     return () => {
       document.body.style.overflow = originalOverflow;
     };
-  }, [open, isMobileViewport]);
+  }, [open, isMobileViewport, closePicker]);
 
   const today = useMemo(() => clampToDay(new Date()), []);
   const currentYear = useMemo(() => today.getFullYear(), [today]);
@@ -368,7 +368,7 @@ export default function DateRangePicker({
 
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
-  }, [open, isMobileViewport]);
+  }, [open, isMobileViewport, closePicker]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -380,7 +380,7 @@ export default function DateRangePicker({
 
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, closePicker]);
 
   const label = useMemo(
     () => fmtRangeLabel(committedStart, committedEnd),

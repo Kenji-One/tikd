@@ -233,10 +233,6 @@ export async function GET(req: NextRequest) {
     archived: false,
   };
 
-  let scopedOrgId: ObjectId | null = null;
-  let scopedEventId: ObjectId | null = null;
-  let scopedTeamId: ObjectId | null = null;
-
   let scopedTeamMembers: MembershipMeta[] = [];
   const scopedUserIds: ObjectId[] = [];
   const scopedUserIdsSeen = new Set<string>();
@@ -265,7 +261,6 @@ export async function GET(req: NextRequest) {
     }
 
     const orgObjId = new mongoose.Types.ObjectId(organizationIdParam);
-    scopedOrgId = orgObjId;
     baseFilter.organizationId = orgObjId;
 
     const [orgDoc, members] = await Promise.all([
@@ -339,9 +334,6 @@ export async function GET(req: NextRequest) {
     baseFilter.organizationId = event.organizationId;
     baseFilter.destinationKind = "Event";
     baseFilter.destinationId = event._id;
-    scopedOrgId = event.organizationId;
-    scopedEventId = event._id;
-
     const members = await EventTeam.find({
       eventId: event._id,
       userId: { $ne: null },
@@ -393,7 +385,6 @@ export async function GET(req: NextRequest) {
     }
 
     const teamObjId = new mongoose.Types.ObjectId(teamIdParam);
-    scopedTeamId = teamObjId;
 
     const authorizedOrgIds = await listAuthorizedOrganizationIdsForUser({
       userId: session.user.id,

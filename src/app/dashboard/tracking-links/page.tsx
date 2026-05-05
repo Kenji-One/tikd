@@ -71,8 +71,6 @@ type MembersApiRow = {
   lastLinkCreatedAt?: string | null;
 };
 
-type MembersApiResponse = { rows: MembersApiRow[] } | MembersApiRow[];
-
 /* ----------------------------- Helpers ---------------------------- */
 function formatMoneyUSD(amount: number) {
   const n = Number.isFinite(amount) ? amount : 0;

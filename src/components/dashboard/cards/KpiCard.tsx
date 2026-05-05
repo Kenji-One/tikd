@@ -35,7 +35,6 @@ export default function KpiCard({
   value,
   valueIcon,
   delta,
-  accent = "from-[#7C3AED] to-[#9333EA]",
   className,
   toolbar,
   children,

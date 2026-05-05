@@ -7,9 +7,7 @@ import { UserRound, CalendarDays, Trophy, Ticket } from "lucide-react";
 
 import DetailedViewShell from "@/components/dashboard/finances/DetailedViewShell";
 import type { DonutSegment } from "@/components/dashboard/charts/DonutFull";
-import DateRangePicker, {
-  type DateRangeValue,
-} from "@/components/ui/DateRangePicker";
+import type { DateRangeValue } from "@/components/ui/DateRangePicker";
 import {
   fetchRevenueAnalytics,
   type RevenueAnalyticsResponse,
@@ -239,7 +237,7 @@ export default function FinancesRevenueDetailedPage() {
 
   const analytics = analyticsQuery.data as ExtendedAnalytics | undefined;
 
-  const chartSeries = analytics?.series ?? [];
+  const chartSeries = useMemo(() => analytics?.series ?? [], [analytics?.series]);
   const chartLabels = useMemo(() => buildXAxisLabels(analytics), [analytics]);
   const chartDates = useMemo(
     () => chartSeries.map((item) => new Date(item.date)),

@@ -23,7 +23,6 @@ import {
   Users as UsersIcon,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import ShineCard from "@/components/bits/ShineCard";
 import InviteTeamModal, {
@@ -131,6 +130,7 @@ const ROLE_ICONS: Record<Role, ReactNode> = {
   promoter: <Megaphone className="h-5 w-5" />,
   scanner: <ScanLine className="h-5 w-5" />,
   collaborator: <UsersIcon className="h-5 w-5" />,
+  member: <UsersIcon className="h-5 w-5" />,
 };
 
 function RoleSelect({
@@ -175,8 +175,9 @@ function RoleSelect({
           className="absolute z-50 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95 shadow-xl backdrop-blur-md"
           role="menu"
         >
-          {(["admin", "promoter", "scanner", "collaborator"] as Role[]).map(
-            (r) => (
+          {(
+            ["admin", "promoter", "scanner", "collaborator", "member"] as Role[]
+          ).map((r) => (
               <button
                 key={r}
                 className={clsx(
@@ -194,8 +195,7 @@ function RoleSelect({
                 {ROLE_ICONS[r]}
                 {r}
               </button>
-            )
-          )}
+            ))}
         </div>
       )}
     </div>
@@ -472,13 +472,12 @@ export default function EventTeamPage() {
         Add
       </button>
 
-      {/* Invite Modal */}
-      {/* <InviteTeamModal
+      <InviteTeamModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onInvite={(payload) => inviteMutation.mutate(payload)}
         isSubmitting={inviteMutation.isPending}
-      /> */}
+      />
     </div>
   );
 }

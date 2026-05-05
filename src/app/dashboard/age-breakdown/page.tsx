@@ -27,23 +27,6 @@ type PageProps = {
   searchParams?: Promise<SearchParamsShape>;
 };
 
-function KpiIcon({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className={[
-        "inline-flex h-7 w-7 items-center justify-center rounded-md",
-        "border border-white/10",
-        "bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0)_40%),rgba(154,70,255,0.18)]",
-        "shadow-[0_14px_32px_rgba(0,0,0,0.55)]",
-        "text-white/90",
-      ].join(" ")}
-      aria-hidden
-    >
-      {children}
-    </span>
-  );
-}
-
 export default async function AgeBreakdownDetailedPage({
   searchParams,
 }: PageProps) {

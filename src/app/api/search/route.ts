@@ -84,7 +84,6 @@ type SearchPayload = {
   };
 };
 
-type Kind = "event" | "org" | "team" | "friend" | "all";
 type Scope = "auto" | "public" | "dashboard";
 
 /* ---------- minimal lean projections (typed) ----------------------- */

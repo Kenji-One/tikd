@@ -672,32 +672,6 @@ function TikdTrashIcon() {
   );
 }
 
-function Chip({
-  children,
-  color = "primary",
-}: {
-  children: ReactNode;
-  color?: "primary" | "success" | "warning";
-}) {
-  const cls =
-    color === "success"
-      ? "bg-success-800 text-success-200 border-1 border-success-500"
-      : color === "warning"
-        ? "bg-warning-800 text-warning-200 border-1 border-warning-500"
-        : "bg-primary-800 text-primary-200 border-1 border-primary-500";
-
-  return (
-    <span
-      className={clsx(
-        "rounded-md px-3 py-1.5 text-xs font-semibold leading-[100%] flex items-center justify-center",
-        cls,
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
 function safeHexToRgb(hex: string) {
   const raw = hex.replace("#", "").trim();
   if (raw.length !== 6) return null;
@@ -743,7 +717,6 @@ function DestinationPill({
           rgb.g + 120,
         )},${Math.min(255, rgb.b + 120)},0.98)`
       : "rgba(231,222,255,0.98)";
-
   const Icon = kind === "Event" ? Ticket : Building2;
 
   return (
@@ -1194,33 +1167,12 @@ function DestinationThumb({
       aria-hidden
       title={title}
     >
-      {titleInitial(title)}
+      <Icon className="h-5 w-5 text-white/70" />
     </div>
   );
 }
 
 // ✅ Replace your existing KindBadge with this one
-function KindBadge({ kind }: { kind: DestinationKind }) {
-  const isEvent = kind === "Event";
-  const Icon = isEvent ? Ticket : Building2;
-  const label = isEvent ? "EVENT" : "ORG";
-
-  return (
-    <span
-      className={clsx(
-        "inline-flex items-center gap-1.5",
-        "h-8.5 rounded-md px-2",
-        "border border-white/10 bg-neutral-950/40",
-        "text-[12px] font-semibold tracking-[0.14em] text-white/70",
-        "shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
-      )}
-    >
-      <Icon className="h-4 w-4 text-white/55" />
-      {label}
-    </span>
-  );
-}
-
 function SelectedDestinationCard({
   dest,
   disabled,
@@ -1858,24 +1810,27 @@ function TrackingLinkDialog({
     { value: "Disabled", label: "Disabled", desc: "Fully disabled" },
   ];
 
-  const presetIcons: Array<{ key: PresetIconKey; label: string }> = [
-    { key: "instagram", label: "Instagram" },
-    { key: "facebook", label: "Facebook" },
-    { key: "x", label: "X" },
-    { key: "linkedin", label: "LinkedIn" },
-    { key: "google", label: "Google" },
-    { key: "youtube", label: "YouTube" },
-    { key: "snapchat", label: "Snapchat" },
-    { key: "reddit", label: "Reddit" },
-    { key: "tiktok", label: "TikTok" },
-    { key: "telegram", label: "Telegram" },
-  ];
+  const presetIcons = useMemo<Array<{ key: PresetIconKey; label: string }>>(
+    () => [
+      { key: "instagram", label: "Instagram" },
+      { key: "facebook", label: "Facebook" },
+      { key: "x", label: "X" },
+      { key: "linkedin", label: "LinkedIn" },
+      { key: "google", label: "Google" },
+      { key: "youtube", label: "YouTube" },
+      { key: "snapchat", label: "Snapchat" },
+      { key: "reddit", label: "Reddit" },
+      { key: "tiktok", label: "TikTok" },
+      { key: "telegram", label: "Telegram" },
+    ],
+    [],
+  );
 
   const filteredPresetIcons = useMemo(() => {
     const q = iconQuery.trim().toLowerCase();
     if (!q) return presetIcons;
     return presetIcons.filter((p) => p.label.toLowerCase().includes(q));
-  }, [iconQuery]);
+  }, [iconQuery, presetIcons]);
 
   const handlePickDestination = (d: DestinationResult) => {
     setDraft((prev) => ({

@@ -59,9 +59,6 @@ function DonutHalf({
   const centerPrimary =
     typeof centerValue !== "undefined" ? centerValue : computedTotal;
 
-  // Softer caps but small enough to not swallow tiny slices
-  const cornerRadiusPx = Math.min(8, Math.floor(thickness * 0.28));
-
   return (
     <div
       className={clsx("relative w-full", className)}

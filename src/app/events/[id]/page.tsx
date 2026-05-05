@@ -59,6 +59,8 @@ interface ApiEvent {
   };
 }
 
+const EMPTY_QTY_MAP: Readonly<Record<string, number>> = Object.freeze({});
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
@@ -212,8 +214,6 @@ export default function EventDetailPage() {
   const eventId = event?._id?.toString() ?? "";
   const safeTicketTypes = event?.ticketTypes ?? [];
   const heroPoster = posterOrDefault(event?.image);
-
-  const EMPTY_QTY_MAP: Readonly<Record<string, number>> = Object.freeze({});
 
   const qtyByTicket = useMemo<Record<string, number>>(() => {
     if (!eventId) return EMPTY_QTY_MAP;

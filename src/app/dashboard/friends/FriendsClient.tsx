@@ -345,7 +345,6 @@ function FriendsCard({
                 >
                   {friend.avatarUrl ? (
                     <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={friend.avatarUrl}
                         alt={friend.name}
@@ -505,7 +504,6 @@ function FriendsRow({
           <div className="h-10 w-10 overflow-hidden rounded-[6px]">
             {friend.avatarUrl ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={friend.avatarUrl}
                   alt={friend.name}
@@ -1248,7 +1246,6 @@ export default function FriendsClient() {
                         <div className="relative shrink-0">
                           <div className="h-12 w-12 overflow-hidden rounded-lg">
                             {r.avatarUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={r.avatarUrl}
                                 alt={r.name}

@@ -10,6 +10,9 @@ function isPublicPath(pathname: string) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
+    pathname.startsWith("/auth") ||
+    pathname === "/login" ||
+    pathname === "/register" ||
     pathname.startsWith("/favicon.ico") ||
     pathname.startsWith("/robots.txt") ||
     pathname.startsWith("/sitemap.xml")
@@ -20,6 +23,8 @@ function isPublicPath(pathname: string) {
   // Allow common public assets you may have in /public
   if (
     pathname.startsWith("/assets/") ||
+    pathname.startsWith("/dummy/") ||
+    pathname.startsWith("/fonts/") ||
     pathname === "/Logo.svg" ||
     pathname === "/logo.svg"
   ) {

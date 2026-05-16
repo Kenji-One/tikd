@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 import { Button } from "@/components/ui/Button";
@@ -19,6 +19,7 @@ import clsx from "classnames";
 import RegisterLoginModal from "@/components/ui/RegisterLoginModal";
 import SearchModal from "@/components/search/SearchModal";
 import { useCart } from "@/store/useCart";
+import { USE_AUTH_PAGES } from "@/lib/authUiConfig";
 
 /**
  * Minimal typing for Zustand persist API so we avoid `any`.
@@ -36,6 +37,7 @@ type PersistableStore = {
 export default function Header() {
   /* ----- routing helpers ------------------------------------------------ */
   const pathname = usePathname();
+  const router = useRouter();
 
   // pages that have a hero behind the header (transparent on top)
   const hasHero =
@@ -109,6 +111,12 @@ export default function Header() {
   const mobileAvatarRef = useRef<HTMLDivElement | null>(null);
 
   const openModal = (mode: "login" | "register") => {
+    if (USE_AUTH_PAGES) {
+      setMobileOpen(false);
+      router.push(`/auth/${mode}`);
+      return;
+    }
+
     setModalMode(mode);
     setModalOpen(true);
     setMobileOpen(false);
@@ -698,7 +706,7 @@ export default function Header() {
       {!hasHero && <div className="h-[64px]" />}
 
       {/* register / login modal */}
-      {!loggedIn && (
+      {!loggedIn && !USE_AUTH_PAGES && (
         <RegisterLoginModal
           isOpen={modalOpen}
           onClose={() => setModalOpen(false)}

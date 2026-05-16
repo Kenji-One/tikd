@@ -14,7 +14,7 @@ export function MobileNav({ onClose }: { onClose(): void }) {
           </Link>
         </li>
         <li>
-          <Link href="/login" onClick={onClose}>
+          <Link href="/auth/login" onClick={onClose}>
             Login
           </Link>
         </li>

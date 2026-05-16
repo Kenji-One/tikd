@@ -12,8 +12,9 @@ export default function AppChrome({ children }: { children: ReactNode }) {
 
   const isDashboard = pathname.startsWith("/dashboard");
   const isGate = pathname.startsWith("/gate");
+  const isAuth = pathname.startsWith("/auth");
 
-  const hideChrome = isDashboard || isGate;
+  const hideChrome = isDashboard || isGate || isAuth;
 
   return (
     <>

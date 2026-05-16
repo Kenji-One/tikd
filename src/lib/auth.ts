@@ -29,6 +29,9 @@ type AuthUserLean = {
 export const authOptions: AuthOptions = {
   session: { strategy: "jwt" },
   secret: process.env.NEXTAUTH_SECRET,
+  pages: {
+    signIn: "/auth/login",
+  },
   providers: [
     CredentialsProvider({
       name: "Credentials",

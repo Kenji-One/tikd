@@ -4,9 +4,28 @@
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import clsx from "clsx";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
+  Music2,
+  ShieldCheck,
+  Sparkles,
+  Ticket,
+  TicketCheck,
+  Users,
+} from "lucide-react";
 import Image from "next/image";
-import { MotionConfig, motion, type Variants } from "framer-motion";
+import {
+  MotionConfig,
+  motion,
+  useScroll,
+  useTransform,
+  type MotionValue,
+  type Variants,
+} from "framer-motion";
 
 import { Button } from "@/components/ui/Button";
 
@@ -30,6 +49,36 @@ const faqItems: FaqItem[] = [
     a: "Create an organizer account, set up your event page, publish, and start selling. Tools included for promotion and check-in.",
   },
 ];
+
+const heroEvents = [
+  {
+    src: "/dummy/event-3.png",
+    title: "Midnight Signal",
+    venue: "Warehouse District",
+    date: "Fri, 11:30 PM",
+    accent: "#ff7b45",
+  },
+  {
+    src: "/dummy/event-avalon.png",
+    title: "Avalon Yacht",
+    venue: "Skyport Marina",
+    date: "Sat, 6:00 PM",
+    accent: "#9a46ff",
+  },
+  {
+    src: "/dummy/event-card-2.png",
+    title: "Skyline Session",
+    venue: "Brooklyn Rooftop",
+    date: "Sun, 8:00 PM",
+    accent: "#45ff79",
+  },
+] as const;
+
+const floatingTickets = [
+  { label: "VIP", left: "7%", top: "18%", rotate: -12, delay: 0.1 },
+  { label: "GA", left: "82%", top: "17%", rotate: 10, delay: 0.9 },
+  { label: "2x", left: "73%", top: "78%", rotate: -8, delay: 1.5 },
+] as const;
 
 /* ------------------------------------------------------------------ */
 /*  FAQ                                                                */
@@ -295,45 +344,54 @@ const heroContainer: Variants = {
   hidden: {},
   show: {
     transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.08,
+      staggerChildren: 0.1,
+      delayChildren: 0.05,
     },
   },
 };
 
 const heroItem: Variants = {
-  hidden: { opacity: 0, y: 12, scale: 0.995 },
+  hidden: { opacity: 0, y: 18, scale: 0.99 },
   show: {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.78, ease: EASE },
+    transition: { duration: 0.82, ease: EASE },
   },
 };
 
 const heroDeviceWrap: Variants = {
-  hidden: { opacity: 0, y: 18, scale: 0.97 },
+  hidden: { opacity: 0, y: 28, scale: 0.96 },
   show: {
     opacity: 1,
     y: 0,
     scale: 1,
-    transition: { duration: 0.9, ease: EASE },
+    transition: { duration: 1, ease: EASE },
   },
 };
 
 const scrollReveal: Variants = {
-  hidden: { opacity: 0, y: 18 },
+  hidden: { opacity: 0, y: 32 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.75, ease: EASE },
+    transition: { duration: 0.88, ease: EASE },
+  },
+};
+
+const scrollRevealSlow: Variants = {
+  hidden: { opacity: 0, y: 42 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 1, ease: EASE },
   },
 };
 
 /* ------------------------------------------------------------------ */
 /*  Procreate-style Devices block + “shine floor”                      */
 /* ------------------------------------------------------------------ */
-function ProcreateStyleHeroDevices() {
+function _ProcreateStyleHeroDevices() {
   return (
     <motion.div
       variants={heroDeviceWrap}
@@ -417,10 +475,229 @@ function ProcreateStyleHeroDevices() {
   );
 }
 
+function HeroStat({
+  icon,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="flex min-w-[132px] items-center gap-3 rounded-full border border-white/10 bg-white/[0.055] px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.24)] backdrop-blur-md">
+      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
+        {icon}
+      </span>
+      <span>
+        <span className="block text-lg font-black leading-none text-white">
+          {value}
+        </span>
+        <span className="mt-1 block text-xs leading-none text-white/55">
+          {label}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function FloatingTicket({
+  label,
+  left,
+  top,
+  rotate,
+  delay,
+}: {
+  label: string;
+  left: string;
+  top: string;
+  rotate: number;
+  delay: number;
+}) {
+  return (
+    <motion.div
+      aria-hidden
+      className="absolute hidden rounded-[14px] border border-white/10 bg-white/[0.08] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white/65 shadow-[0_22px_70px_rgba(0,0,0,0.32)] backdrop-blur-md sm:block"
+      style={{ left, top, rotate }}
+      animate={{ y: [0, -12, 0], opacity: [0.45, 0.85, 0.45] }}
+      transition={{
+        duration: 5.5,
+        delay,
+        repeat: Infinity,
+        ease: "easeInOut",
+      }}
+    >
+      <span className="mr-2 text-primary-300">●</span>
+      {label}
+    </motion.div>
+  );
+}
+
+function TicketPass() {
+  return (
+    <motion.div
+      className="absolute -bottom-8 left-3 z-30 w-[250px] rounded-2xl border border-white/12 bg-neutral-950/78 p-4 shadow-[0_34px_90px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:left-8 sm:w-[286px] lg:-bottom-4"
+      initial={{ opacity: 0, y: 22, rotate: -4 }}
+      animate={{ opacity: 1, y: 0, rotate: -4 }}
+      transition={{ duration: 0.88, ease: EASE, delay: 0.36 }}
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary-200">
+            Tixsy Pass
+          </p>
+          <p className="mt-2 text-xl font-black leading-none text-white">
+            02 Tickets
+          </p>
+        </div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-500 text-white">
+          <TicketCheck className="h-6 w-6" />
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-end justify-between gap-4">
+        <div className="space-y-1.5">
+          {["w-24", "w-20", "w-28"].map((width) => (
+            <div
+              key={width}
+              className={clsx("h-1.5 rounded-full bg-white/16", width)}
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-4 gap-1">
+          {Array.from({ length: 16 }).map((_, index) => (
+            <span
+              key={index}
+              className={clsx(
+                "h-1.5 w-1.5 rounded-[2px]",
+                index % 3 === 0 ? "bg-primary-300" : "bg-white/70",
+              )}
+            />
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function LandingHeroVisual({ y }: { y: MotionValue<number> }) {
+  return (
+    <motion.div
+      variants={heroDeviceWrap}
+      style={{ y }}
+      className="relative mx-auto mt-12 h-[470px] w-full max-w-[620px] lg:mt-0 lg:h-[610px]"
+    >
+      {floatingTickets.map((ticket) => (
+        <FloatingTicket key={ticket.label} {...ticket} />
+      ))}
+
+      <motion.div
+        className="absolute left-1/2 top-9 z-20 h-[330px] w-[240px] -translate-x-1/2 overflow-hidden rounded-[28px] border border-white/14 bg-neutral-900 shadow-[0_42px_120px_rgba(0,0,0,0.56)] sm:h-[390px] sm:w-[284px] lg:top-20 lg:h-[430px] lg:w-[314px]"
+        initial={{ opacity: 0, y: 34, rotate: -3 }}
+        animate={{ opacity: 1, y: 0, rotate: -3 }}
+        transition={{ duration: 1.02, ease: EASE, delay: 0.16 }}
+      >
+        <Image
+          src={heroEvents[0].src}
+          alt="Featured Tixsy event"
+          fill
+          priority
+          sizes="(min-width: 1024px) 314px, 284px"
+          className="object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/12 to-transparent" />
+        <div className="absolute inset-x-4 bottom-4">
+          <p className="rounded-full bg-white/12 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white/80 backdrop-blur">
+            Featured tonight
+          </p>
+          <h3 className="mt-3 text-3xl font-black italic uppercase leading-[0.86] text-white">
+            {heroEvents[0].title}
+          </h3>
+          <div className="mt-3 space-y-1.5 text-xs font-medium text-white/72">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-3.5 w-3.5 text-warning-400" />
+              {heroEvents[0].venue}
+            </div>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-3.5 w-3.5 text-primary-300" />
+              {heroEvents[0].date}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {heroEvents.slice(1).map((event, index) => (
+        <motion.div
+          key={event.title}
+          className={clsx(
+            "absolute z-10 overflow-hidden rounded-[24px] border border-white/12 bg-neutral-900 shadow-[0_34px_90px_rgba(0,0,0,0.44)]",
+            index === 0
+              ? "right-1 top-[118px] h-[210px] w-[154px] rotate-[10deg] sm:right-2 sm:h-[245px] sm:w-[178px] lg:right-3 lg:top-[165px]"
+              : "left-1 top-[190px] h-[190px] w-[142px] -rotate-[11deg] sm:left-1 sm:h-[226px] sm:w-[166px] lg:left-2 lg:top-[285px]",
+          )}
+          initial={{ opacity: 0, y: 26, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            duration: 0.95,
+            ease: EASE,
+            delay: index === 0 ? 0.28 : 0.42,
+          }}
+        >
+          <Image
+            src={event.src}
+            alt=""
+            fill
+            sizes="180px"
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/86 via-black/10 to-transparent" />
+          <div
+            className="absolute bottom-0 left-0 right-0 h-1"
+            style={{ backgroundColor: event.accent }}
+          />
+        </motion.div>
+      ))}
+
+      <motion.div
+        className="absolute right-5 top-8 z-30 hidden rounded-2xl border border-white/12 bg-neutral-950/72 p-4 text-white shadow-[0_26px_80px_rgba(0,0,0,0.44)] backdrop-blur-xl sm:block lg:right-2 lg:top-28"
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: EASE, delay: 0.52 }}
+      >
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Music2 className="h-4 w-4 text-warning-400" />
+          Live demand
+        </div>
+        <div className="mt-3 flex h-10 items-end gap-1.5">
+          {[18, 28, 20, 34, 26, 38, 30].map((height, index) => (
+            <motion.span
+              key={height}
+              className="w-2 rounded-full bg-gradient-to-t from-primary-700 to-warning-400"
+              animate={{ height: [height, height + 8, height] }}
+              transition={{
+                duration: 1.8,
+                delay: index * 0.1,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+          ))}
+        </div>
+      </motion.div>
+
+      <TicketPass />
+    </motion.div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 export default function LandingPage() {
+  const { scrollY } = useScroll();
+  const heroVisualY = useTransform(scrollY, [0, 760], [0, 72]);
+  const heroBackdropY = useTransform(scrollY, [0, 760], [0, 110]);
+
   const stats = useMemo(
     () => [
       { k: "+20", label: "Venues" },
@@ -434,58 +711,110 @@ export default function LandingPage() {
     <MotionConfig reducedMotion="user">
       <main className="relative overflow-hidden bg-neutral-950 text-neutral-0">
         {/* ------------------------------------------------------------------ */}
-        {/* HERO (Procreate-style: centered devices + centered copy)            */}
+        {/* HERO                                                               */}
         {/* ------------------------------------------------------------------ */}
         <motion.section
-          className="relative overflow-hidden"
+          className="relative min-h-[760px] overflow-hidden"
           initial="hidden"
           animate="show"
           variants={heroContainer}
         >
-          {/* Background wash (dark spotlight + faint Tikd purple) */}
-          <div aria-hidden className="pointer-events-none absolute inset-0">
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  "radial-gradient(900px 520px at 50% 18%, rgba(255,255,255,0.06), transparent 62%), radial-gradient(860px 520px at 50% 92%, rgba(0,0,0,0.65), transparent 60%)",
-              }}
+          <motion.div
+            aria-hidden
+            style={{ y: heroBackdropY }}
+            className="absolute inset-x-0 top-0 h-[840px]"
+          >
+            <Image
+              src="/dummy/event-3.png"
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="scale-110 object-cover opacity-[0.38]"
             />
-            <div
-              className="absolute inset-0 opacity-70"
-              style={{
-                background:
-                  "radial-gradient(820px 440px at 18% 30%, rgba(154,70,255,0.14), transparent 64%), radial-gradient(820px 440px at 82% 30%, rgba(154,70,255,0.10), transparent 66%)",
-              }}
-            />
-            <div className="absolute inset-0 bg-neutral-950/40" />
-          </div>
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,8,15,0.98)_0%,rgba(8,8,15,0.74)_42%,rgba(8,8,15,0.86)_100%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(900px_560px_at_78%_42%,rgba(154,70,255,0.28),transparent_66%)]" />
+            <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-b from-transparent to-neutral-950" />
+          </motion.div>
 
-          <div className="relative mx-auto max-w-[980px] px-4 pb-16 pt-20 sm:pb-20 sm:pt-24 lg:pb-24 lg:pt-28">
-            <div className="flex flex-col items-center text-center">
-              <ProcreateStyleHeroDevices />
+          <div
+            aria-hidden
+            className="absolute inset-0 opacity-[0.12]"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(255,255,255,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px)",
+              backgroundSize: "72px 72px",
+              maskImage:
+                "linear-gradient(to bottom, transparent, black 18%, black 72%, transparent)",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, transparent, black 18%, black 72%, transparent)",
+            }}
+          />
+
+          <div className="relative mx-auto grid max-w-[1232px] items-center gap-8 px-4 pb-16 pt-24 sm:pt-28 lg:grid-cols-[0.94fr_1.06fr] lg:pb-24 lg:pt-[120px]">
+            <div className="relative z-20 max-w-[680px] text-center lg:text-left">
+              <motion.div
+                variants={heroItem}
+                className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-white/75 backdrop-blur-md lg:mx-0"
+              >
+                <Sparkles className="h-4 w-4 text-warning-400" />
+                Tixsy event tickets
+              </motion.div>
 
               <motion.h1
                 variants={heroItem}
-                className="mt-10 text-balance text-[44px] font-extrabold leading-[1.02] tracking-[-1.2px] sm:mt-12 sm:text-[64px] sm:tracking-[-1.6px] lg:text-[76px]"
+                className="mt-6 text-balance text-[46px] font-black italic uppercase leading-[0.86] tracking-[-1.3px] text-white sm:text-[68px] sm:tracking-[-1.8px] lg:text-[86px]"
               >
-                Tickets Made Easy.
+                Your Night Starts Here
               </motion.h1>
 
               <motion.p
                 variants={heroItem}
-                className="mt-4 max-w-[620px] text-pretty text-[15px] leading-[1.55] text-white/70 sm:mt-5 sm:text-[20px]"
+                className="mx-auto mt-6 max-w-[590px] text-pretty text-[16px] leading-[1.65] text-white/72 sm:text-[20px] lg:mx-0"
               >
-                Buy, sell, and discover tickets effortlessly. Fast, secure, and
-                hassle-free, so you can focus on the event — not the process.
+                Discover the best parties, concerts, and private events around
+                you. Buy secure tickets in seconds and keep every pass ready at
+                the door.
               </motion.p>
 
-              <motion.div variants={heroItem} className="mt-8">
-                <Button asChild size="xl" variant="primary" animation>
-                  <Link href="/events">Browse Events</Link>
+              <motion.div
+                variants={heroItem}
+                className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row lg:justify-start"
+              >
+                <Button asChild size="xl" variant="premium" animation>
+                  <Link href="/events">
+                    Browse Events
+                    <ArrowRight className="h-5 w-5" />
+                  </Link>
+                </Button>
+                <Button asChild size="xl" variant="secondary">
+                  <Link href="/demo">Host an Event</Link>
                 </Button>
               </motion.div>
+
+              <motion.div
+                variants={heroItem}
+                className="mt-9 flex flex-wrap justify-center gap-3 lg:justify-start"
+              >
+                <HeroStat
+                  icon={<ShieldCheck className="h-4 w-4 text-success-400" />}
+                  value="Secure"
+                  label="checkout"
+                />
+                <HeroStat
+                  icon={<Ticket className="h-4 w-4 text-primary-300" />}
+                  value="Instant"
+                  label="tickets"
+                />
+                <HeroStat
+                  icon={<Users className="h-4 w-4 text-warning-400" />}
+                  value="Live"
+                  label="events"
+                />
+              </motion.div>
             </div>
+
+            <LandingHeroVisual y={heroVisualY} />
           </div>
         </motion.section>
 
@@ -496,8 +825,8 @@ export default function LandingPage() {
           className="mx-auto max-w-[1232px] px-4 py-16 sm:py-20"
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, amount: 0.25 }}
-          variants={scrollReveal}
+          viewport={{ once: true, amount: 0.22, margin: "0px 0px -80px" }}
+          variants={scrollRevealSlow}
         >
           <div className="grid items-center gap-12 lg:grid-cols-[1fr_1fr] lg:gap-24">
             <AllInOneCollage />
@@ -539,7 +868,7 @@ export default function LandingPage() {
           className="mx-auto max-w-[1232px] px-4 pb-16 sm:pb-20"
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, amount: 0.2 }}
+          viewport={{ once: true, amount: 0.18, margin: "0px 0px -90px" }}
           variants={scrollReveal}
         >
           <div className="grid gap-4">
@@ -582,8 +911,8 @@ export default function LandingPage() {
           className="mx-auto max-w-[1232px] px-4 pt-16 sm:pt-20 -mb-4.5"
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, amount: 0.22 }}
-          variants={scrollReveal}
+          viewport={{ once: true, amount: 0.18, margin: "0px 0px -90px" }}
+          variants={scrollRevealSlow}
         >
           <h2 className="text-center font-black italic uppercase leading-[0.9] tracking-[-1.04px] text-[36px] sm:text-[44px] lg:text-[52px]">
             UNLOCK YOUR FULL
@@ -594,15 +923,15 @@ export default function LandingPage() {
           <div className="relative mt-10 grid items-center gap-10 lg:mt-14 lg:grid-cols-[1fr_auto_1fr]">
             <div className="relative hidden h-[560px] lg:block">
               <UnlockLabel emphasize className="absolute left-0 top-[90px]">
-                FRIENDLY DASHBOARD
+                SELLER DASHBOARD
               </UnlockLabel>
 
               <UnlockLabel className="absolute left-[110px] top-[275px]">
-                SCORE STREAKS
+                FAST CHECK-IN
               </UnlockLabel>
 
               <UnlockLabel className="absolute left-[-40px] bottom-[40px]">
-                PERSONALIZED ACHIEVEMENTS
+                PROMO TOOLS
               </UnlockLabel>
             </div>
 
@@ -629,38 +958,38 @@ export default function LandingPage() {
 
             <div className="relative hidden h-[560px] text-right lg:block">
               <UnlockLabel className="absolute right-0 top-[90px]">
-                OPTIMIZE RECOVERY
+                SMART PAYOUTS
               </UnlockLabel>
 
               <UnlockLabel className="absolute right-0 top-[245px]">
-                DAILY VIDEOS TAILORED FOR YOU
+                EVENT INSIGHTS
               </UnlockLabel>
 
               <UnlockLabel className="absolute right-0 bottom-[70px]">
-                MONITOR YOUR PROGRESS
+                AUDIENCE GROWTH
               </UnlockLabel>
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2 lg:hidden">
               <UnlockLabel emphasize className="text-center sm:text-left">
-                FRIENDLY DASHBOARD
+                SELLER DASHBOARD
               </UnlockLabel>
               <UnlockLabel className="text-center sm:text-right">
-                OPTIMIZE RECOVERY
+                SMART PAYOUTS
               </UnlockLabel>
 
               <UnlockLabel className="text-center sm:text-left">
-                SCORE STREAKS
+                FAST CHECK-IN
               </UnlockLabel>
               <UnlockLabel className="text-center sm:text-right">
-                DAILY VIDEOS TAILORED FOR YOU
+                EVENT INSIGHTS
               </UnlockLabel>
 
               <UnlockLabel className="text-center sm:text-left">
-                PERSONALIZED ACHIEVEMENTS
+                PROMO TOOLS
               </UnlockLabel>
               <UnlockLabel className="text-center sm:text-right">
-                MONITOR YOUR PROGRESS
+                AUDIENCE GROWTH
               </UnlockLabel>
             </div>
           </div>
@@ -673,7 +1002,7 @@ export default function LandingPage() {
           className="relative isolate px-4 py-16 sm:py-20"
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, amount: 0.22 }}
+          viewport={{ once: true, amount: 0.18, margin: "0px 0px -90px" }}
           variants={scrollReveal}
         >
           <div
@@ -690,8 +1019,8 @@ export default function LandingPage() {
           className="relative isolate px-8 pb-16 sm:py-[80px]"
           initial="hidden"
           whileInView="show"
-          viewport={{ once: true, amount: 0.22 }}
-          variants={scrollReveal}
+          viewport={{ once: true, amount: 0.2, margin: "0px 0px -80px" }}
+          variants={scrollRevealSlow}
         >
           <div
             className="
